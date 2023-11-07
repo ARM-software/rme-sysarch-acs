@@ -1,0 +1,30 @@
+{
+    "component": "COMMON_FLAGS",
+    "n": 1,
+    "print_prefix": "",
+    "parameters": [
+            {
+            "name": "PAS",
+            "description": "Timer Flags Interrupt component attributes",
+            "parameters": [
+                {
+                    "name": "SECURE",
+                    "default_value": "0x0"
+                },
+                {
+                    "name": "NON_SECURE",
+                    "default_value": "0x1"
+		}
+                ,
+                {
+                    "name": "ROOT",
+                    "default_value": "0x2"
+                },
+                {
+                    "name": "REALM",
+                    "default_value": "0x3"
+                }
+            ]
+        }
+    ]
+}

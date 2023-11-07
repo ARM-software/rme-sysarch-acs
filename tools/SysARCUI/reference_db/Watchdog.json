@@ -1,0 +1,63 @@
+{
+    "component": "Watchdog",
+    "n": 1,
+    "print_prefix": "PLATFORM_OVERRIDE",
+    "parameters": [
+        {
+            "name": "WD",
+            "description": "Watchdog WD component attributes",
+            "parameters": [
+                {
+                    "name": "MODE",
+                    "default_value": "COMMON_FLAGS.INTERRUPT.IS_LEVEL_TRIGGERED",
+                    "description": "Watchdog Mode"
+                },
+                {
+                    "name": "POLARITY",
+                    "default_value": "COMMON_FLAGS.INTERRUPT.IS_ACTIVE_HIGH",
+                    "description": "Watchdog Polarity"
+                },
+                {
+                    "name": "IS_SECURE",
+                    "default_value": "0x1",
+                    "description": "Watchdog parameter is secure or not"
+                },
+                {
+                    "name": "TIMER_COUNT",
+                    "default_value": "0x2",
+                    "description": "Watchdog Timer count"
+                },
+                {
+                    "name": "REFRESH_BASE",
+                    "default_value": "0x2A450000",
+                    "description": "Watchdog Refresh base"
+                },
+                {
+                    "name": "CTRL_BASE",
+                    "default_value": "0x2A440000",
+                    "description": "Watchdog CTRL Base"
+                },
+                {
+                    "name": "GSIV_0",
+                    "default_value": "0x5D",
+                    "description": "Watchdog GSIV 0"
+                },
+                {
+                    "name": "FLAGS_0",
+                    "default_value": "((! Watchdog.WD.IS_SECURE << 2) | (Watchdog.WD.POLARITY << 1) | (Watchdog.WD.MODE << 0))",
+                    "description": "Watchdog FLAGS 0"
+                },
+                {
+                    "name": "GSIV_1",
+                    "default_value": "0x5E",
+                    "description": "Watchdog GSIV 1"
+                },
+                {
+                    "name": "FLAGS_1",
+                    "default_value": "((Watchdog.WD.IS_SECURE << 2) | (Watchdog.WD.POLARITY << 1) | (Watchdog.WD.MODE << 0))",
+                    "description": "Watchdog FLAGS 1"
+                }
+            ]
+        }
+    ]
+}

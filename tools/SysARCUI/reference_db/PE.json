@@ -1,0 +1,33 @@
+{
+    "component": "PE",
+    "n": 8,
+    "print_prefix": "PLATFORM_OVERRIDE",
+    "parameters": [
+          {
+            "name": "PE_CNT",
+            "default_value": "0x8",
+            "description": "PE Count"
+          },
+          {
+            "name": "PE<n>",
+            "description": "PE component attributes",
+            "parameters": [
+                {
+                    "name": "INDEX",
+                    "default_value": "0x0",
+                    "description": "PE Index"
+                },
+                {
+                    "name": "MPIDR",
+                    "default_value": "0x0",
+                    "description": "PE MPIDR"
+                },
+                {
+                    "name": "PMU_GSIV",
+                    "default_value": "0x17",
+                    "description": "PE PMU GSIV"
+                }
+            ]
+        }
+    ]
+}

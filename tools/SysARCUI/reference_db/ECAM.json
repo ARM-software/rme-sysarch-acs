@@ -1,0 +1,53 @@
+{
+    "component": "ECAM",
+    "n": 1,
+    "print_prefix": "PLATFORM_OVERRIDE",
+    "parameters": [
+          {
+            "name": "NUM_ECAM",
+            "default_value": "1",
+            "description": "ECAM Number"
+          },
+          {
+            "name": "PCIE",
+            "description": "ECAM PCIE platform config parameters",
+            "parameters": [
+                {
+                    "name": "ECAM_BASE_ADDR_0",
+                    "default_value": "0x60000000",
+                    "description": "ECAM PCIE Base Adder 0"
+                },
+                {
+                    "name": "SEGMENT_GRP_NUM_0",
+                    "default_value": "0x0",
+                    "description": "ECAM PCIE Segment Group Number 0"
+                },
+                {
+                    "name": "START_BUS_NUM_0",
+                    "default_value": "0x0",
+                    "description": "ECAM PCIE Start Bus Number 0"
+                },
+                {
+                    "name": "END_BUS_NUM_0",
+                    "default_value": "0xFF",
+                    "description": "ECAM PCIE End Bus Number 0"
+                },
+                {
+                    "name": "MAX_BUS",
+                    "default_value": "256",
+                    "description": "ECAM PCIE Maximum Bus"
+                },
+                {
+                    "name": "MAX_DEV",
+                    "default_value": "32",
+                    "description": "ECAM PCIE Maximum Dev"
+                },
+                {
+                    "name": "MAX_FUNC",
+                    "default_value": "8",
+                    "description": "ECAM PCIE Maximum Func"
+                }
+            ]
+        }
+    ]
+}

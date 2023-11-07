@@ -1,0 +1,33 @@
+{
+    "component": "COMMON_FLAGS",
+    "n": 1,
+    "print_prefix": "",
+    "parameters": [
+            {
+            "name": "INTERRUPT",
+            "description": "Timer Flags Interrupt component attributes",
+            "parameters": [
+                {
+                    "name": "IS_LEVEL_TRIGGERED",
+                    "default_value": "0x0",
+                    "description": "Value 1 is True and 0 is False"
+                },
+                {
+                    "name": "IS_EDGE_TRIGGERED",
+                    "default_value": "0x1",
+                    "description": "Value 1 is True and 0 is False"
+                },
+                {
+                    "name": "IS_ACTIVE_HIGH",
+                    "default_value": "0x0",
+                    "description": "Value 1 is True and 0 is False"
+                },
+                {
+                    "name": "IS_ACTIVE_LOW",
+                    "default_value": "0x1",
+                    "description": "Value 1 is True and 0 is False"
+                }
+            ]
+        }
+    ]
+}

@@ -1,0 +1,28 @@
+{
+    "component": "Timeout",
+    "n": 1,
+    "print_prefix": "PLATFORM_OVERRIDE",
+    "parameters": [
+        {
+            "name": "TIMEOUT",
+            "description": "Timeout component attributes",
+            "parameters": [
+                {
+                    "name": "LARGE",
+                    "default_value": "0x100000",
+                    "description": "Timeout Large"
+                },
+                {
+                    "name": "MEDIUM",
+                    "default_value": "0x10000",
+                    "description": "Timeout Medium"
+                },
+                {
+                    "name": "SMALL",
+                    "default_value": "0x100",
+                    "description": "Timeout Small"
+                }
+            ]
+        }
+    ]
+}

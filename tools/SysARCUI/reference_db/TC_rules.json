@@ -1,0 +1,16 @@
+{
+    "parameters": [
+        {
+            "name": "is_pcie_consistent",
+            "value": "PCIE.PCIE_P2P_NOT_SUPPORTED == 0x1 && PCIE.PCIE_DEV0.CLASSCODE != 0x2",
+            "expected_values": ["0x1"],
+            "description": "PCIE consistency rule"
+        },
+        {
+            "name": "is_pe_consistent",
+            "value": "PE.PE<n>.INDEX == 0x1 && PE.PE<n>.MPIDR <= 0x2",
+            "expected_values": ["0x1"],
+            "description": "PE consistency rule"
+        }
+    ]
+}

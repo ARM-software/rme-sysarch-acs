@@ -1,0 +1,178 @@
+{
+    "component": "Timer",
+    "n": 2,
+    "print_prefix": "PLATFORM_OVERRIDE",
+    "parameters": [
+        {
+            "name": "TIMER",
+            "description": "Timer flags component attributes",
+            "parameters": [
+                {
+                    "name": "MODE",
+                    "default_value": "COMMON_FLAGS.INTERRUPT.IS_LEVEL_TRIGGERED",
+                    "description": "Timer Flags Mode"
+                },
+                {
+                    "name": "POLARITY",
+                    "default_value": "COMMON_FLAGS.INTERRUPT.IS_ACTIVE_LOW",
+                    "description": "Timer Flags Polarity"
+                },
+                {
+                    "name": "IS_SECURE",
+                    "default_value": "0x1",
+                    "description": "Timer Flags is Secure or not."
+                },
+                {
+                    "name": "IS_ALWAYS_ON_CAPABLE",
+                    "default_value": "0x1",
+                    "description": "Timer Flags is always on Capable or not."
+                }
+            ]
+        },
+        {
+            "name": "S_EL1_TIMER",
+            "description": "S_EL1 Timer component attributes",
+            "parameters": [
+                {
+                    "name": "FLAGS",
+                    "default_value": "((Timer.TIMER.POLARITY << 1) | (Timer.TIMER.MODE << 0))",
+                    "description": "S EL1 Timer Flags"
+                },
+                {
+                    "name": "GSIV",
+                    "default_value": "0x1D",
+                    "description": "S EL1 Timer GSIV"
+                }
+            ]
+        },
+        {
+            "name": "NS_EL1_TIMER",
+            "description": "NS_EL1 Timer component attributes",
+            "parameters": [
+                {
+                    "name": "FLAGS",
+                    "default_value": "((Timer.TIMER.POLARITY << 1) | (Timer.TIMER.MODE << 0))",
+                    "description": "NS EL1 Timer Flags"
+                },
+                {
+                    "name": "GSIV",
+                    "default_value": "0x1E",
+                    "description": "NS EL1 Timer GSIV"
+                }
+            ]
+        },
+        {
+            "name": "NS_EL2_TIMER",
+            "description": "NS_EL2 Timer component attributes",
+            "parameters": [
+                {
+                    "name": "FLAGS",
+                    "default_value": "((Timer.TIMER.POLARITY << 1) | (Timer.TIMER.MODE << 0))",
+                    "description": "NS EL2 Timer Flags"
+                },
+                {
+                    "name": "GSIV",
+                    "default_value": "0x1A",
+                    "description": "NS EL2 Timer GSIV"
+                }
+            ]
+        },
+        {
+            "name": "VIRTUAL_TIMER",
+            "description": "VIRTUAL Timer component attributes",
+            "parameters": [
+                {
+                    "name": "FLAGS",
+                    "default_value": "((Timer.TIMER.POLARITY << 1) | (Timer.TIMER.MODE << 0))",
+                    "description": "Virtual Timer Flags"
+                },
+                {
+                    "name": "GSIV",
+                    "default_value": "0x1B",
+                    "description": "Virtual Timer GSIV"
+                }
+            ]
+        },
+        {
+            "name": "EL2_VIR_TIMER_GSIV",
+            "default_value": "28",
+            "description": "EL2 VIR Timer GSIV"
+        },
+        {
+            "name": "PLATFORM_TIMER_COUNT",
+            "default_value": "0x2",
+            "description": "Platform Timer Count"
+        },
+        {
+            "name": "SYS_TIMER_TYPE",
+            "default_value": "0x2001",
+            "description": "Sys Timer Type"
+        },
+        {
+            "name": "TIMER_TYPE",
+            "default_value": "Timer.SYS_TIMER_TYPE",
+            "description": "Timer Type"
+        },
+        {
+            "name": "TIMER_COUNT",
+            "default_value": "0x2",
+            "description": "Timer Count"
+        },
+        {
+            "name": "TIMER_CNTCTL_BASE",
+            "default_value": "0x2a810000",
+            "description": "Timer CNTCTL Base"
+        },
+        {
+            "name": "TIMER_<n>",
+            "description": "Timer component attributes",
+            "parameters": [
+                {
+                    "name": "CNTBASE",
+                    "default_value": "0x2a830000",
+                    "description": "Timer CNTBASE 0"
+                },
+                {
+                    "name": "CNTEL0BASE",
+                    "default_value": "0xFFFFFFFFFFFFFFFF",
+                    "description": "Timer CNTEL0BASE 0"
+                },
+                {
+                    "name": "GSIV",
+                    "default_value": "0x5c",
+                    "description": "Timer GSIV 0"
+                },
+                {
+                    "name": "VIRT_GSIV",
+                    "default_value": "0x0",
+                    "description": "Timer Virtual GSIV 0"
+                },
+                {
+                    "name": "PHY_FLAGS",
+                    "default_value": "0x0",
+                    "description": "Timer Physical Flags 0"
+                },
+                {
+                    "name": "VIRT_FLAGS",
+                    "default_value": "0x0",
+                    "description": "Timer Virtual Flags 0"
+                },
+                {
+                    "name": "CMN_FLAGS",
+                    "default_value": "((Timer.TIMER.IS_ALWAYS_ON_CAPABLE << 1) | (! Timer.TIMER.IS_SECURE << 0))",
+                    "description": "Timer Common Flags 0"
+                },
+                {
+                    "name": "FLAGS",
+                    "default_value": "((Timer.TIMER_<n>.CMN_FLAGS << 16) | (Timer.TIMER_<n>.VIRT_FLAGS << 8) | (Timer.TIMER_<n>.PHY_FLAGS))",
+                    "description": "Timer Flags 0"
+                }
+            ]
+        },
+        {
+            "name": "TIMER_CNTFRQ",
+            "default_value": "0x0",
+            "description": "Timer CNTFRQ"
+        }
+    ]
+}

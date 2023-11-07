@@ -1,0 +1,38 @@
+{
+    "component": "PCIe_Space_Offset",
+    "n": 1,
+    "print_prefix": "",
+    "parameters": [
+          {
+            "name": "BAR0_OFFSET",
+            "default_value": "0x10",
+            "description": "PCIe Space BAR0 Offset"
+          },
+          {
+            "name": "COMMAND_REG_OFFSET",
+            "default_value": "0x04",
+            "description": "PCIe Space Command REG Offset"
+          },
+          {
+            "name": "CAP_PTR_OFFSET",
+            "default_value": "0x34",
+            "description": "PCIe Space CAP PTR Offset"
+          },
+          {
+            "name": "PCIE_CAP",
+            "description": "PCIE CAP Space Offset component attributes",
+            "parameters": [
+                {
+                    "name": "OFFSET",
+                    "default_value": "0x100",
+                    "description": "PCIE CAP Space Offset"
+                },
+                {
+                    "name": "CTRL_OFFSET",
+                    "default_value": "0x4",
+                    "description": "PCIE CAP CTRL Space Offset"
+                }
+            ]
+        }
+    ]
+}

@@ -1,0 +1,37 @@
+{
+    "component": "Features",
+    "n": 1,
+    "print_prefix": "",
+    "parameters": [
+            {
+            "name": "IS_LEGACY_TZ",
+            "description": "Value '0' for Disabled, '1' for enabled",
+            "parameters": [
+                {
+                    "name": "ENABLED",
+                    "default_value": "0x0"
+                }
+            ]
+        },
+	     {
+             "name": "IS_NS_ENCRYPTION",
+	     "description":"Value '0' for not programmable, '1' for Programmable" ,
+             "parameters": [
+                {
+                    "name": "PROGRAMMABLE",
+                    "default_value": "0x0"
+                }
+            ]
+	},
+             {
+             "name": "IS_PAS_FILTER_MODE",
+             "description":"Value '0' for not programmable, '1' for Programmable" ,
+             "parameters": [
+                {
+                    "name": "PROGRAMMABLE",
+                    "default_value": "0x0"
+                }
+             ]
+        }
+    ]
+}

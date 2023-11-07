@@ -1,0 +1,168 @@
+{
+    "component": "IOVIRT",
+    "n": 2,
+    "print_prefix": "",
+    "parameters": [
+        {
+            "name": "IOVIRT",
+            "description": "IOVIRT component attributes",
+            "parameters": [
+                {
+                    "name": "ADDRESS",
+                    "default_value": "0xF9780000",
+                    "description": "IOVIRT Address"
+                },
+                {
+                    "name": "ITS_COUNT",
+                    "default_value": "1",
+                    "description": "IOVIRT ITS Count"
+                },
+                {
+                    "name": "SMMUV2_COUNT",
+                    "default_value": "0",
+                    "description": "IOVIRT SMMUV2 Count"
+                },
+                {
+                    "name": "NAMED_COMPONENT_COUNT",
+                    "default_value": "0",
+                    "description": "IOVIRT Named Component Count"
+                },
+                {
+                    "name": "PMCG_COUNT",
+                    "default_value": "0",
+                    "description": "IOVIRT PMCG Count"
+                },
+                {
+                    "name": "MAX_NUM_MAP",
+                    "default_value": "3",
+                    "description": "IOVIRT Maximum Number MAP"
+                }
+            ]
+        },
+        {
+            "name": "IORT_NODE_COUNT",
+            "default_value": "3",
+            "description": "IORT Node Count"
+        },
+        {
+            "name": "IOVIRT_SMMUV3",
+            "description": "IOVIRT SMMUV3 component attributes",
+            "parameters": [
+                {
+                    "name": "COUNT",
+                    "default_value": "1",
+                    "description": "IOVIRT SMMUV3 Count"
+                },
+                {
+                    "name": "BASE_ADDRESS",
+                    "default_value": "0x4F000000",
+                    "description": "IOVIRT SMMUV3 Base Address"
+                },
+                {
+                    "name": "NUM_MAP",
+                    "default_value": "2",
+                    "description": "IOVIRT SMMUV3 Number MAP"
+                }
+            ]
+        },
+        {
+            "name": "IOVIRT_RC",
+            "description": "IOVIRT RC component attributes",
+            "parameters": [
+                {
+                    "name": "COUNT",
+                    "default_value": "1",
+                    "description": "IOVIRT RC Count"
+                },
+                {
+                    "name": "PCI_SEG_NUM",
+                    "default_value": "0x0",
+                    "description": "IOVIRT RC PCI Segment Number"
+                },
+                {
+                    "name": "MEMORY_PROPERTIES",
+                    "default_value": "0x1",
+                    "description": "IOVIRT RC Memory Properties"
+                },
+                {
+                    "name": "ATS_ATTRIBUTE",
+                    "default_value": "0x0",
+                    "description": "IOVIRT RC ATS Attribute"
+                },
+                {
+                    "name": "NUM_MAP",
+                    "default_value": "1",
+                    "description": "IOVIRT RC Number MAP"
+                }
+            ]
+        },
+        {
+            "name": "IOVIRT_SMMU_CTX_INT",
+            "description": "IOVIRT SMMU CTX INT component attributes",
+            "parameters": [
+                {
+                    "name": "COUNT",
+                    "default_value": "0x0",
+                    "description": "IOVIRT SMMU CTX INT Count"
+                },
+                {
+                    "name": "CNT",
+                    "default_value": "0x0",
+                    "description": "IOVIRT SMMU CTX INT CNT"
+                }
+            ]
+        },
+        {
+            "name": "RC_MAP0",
+            "description": "IOVIRT RC MAP0 component attributes",
+            "parameters": [
+                {
+                    "name": "INPUT_BASE",
+                    "default_value": "0x0",
+                    "description": "IOVIRT RC MAP0 Input Base"
+                },
+                {
+                    "name": "ID_COUNT",
+                    "default_value": "0xFFFF",
+                    "description": "IOVIRT RC MAP0 ID Count"
+                },
+                {
+                    "name": "OUTPUT_BASE",
+                    "default_value": "0x0",
+                    "description": "IOVIRT RC MAP0 Output Base"
+                },
+                {
+                    "name": "OUTPUT_REF",
+                    "default_value": "0x134",
+                    "description": "IOVIRT RC MAP0 Output REF"
+                }
+            ]
+        },
+        {
+            "name": "SMMUV3_ID_MAP<n>",
+            "description": "IOVIRT SMMUV3 ID MAP component attributes",
+            "parameters": [
+                {
+                    "name": "INPUT_BASE",
+                    "default_value": "0x0",
+                    "description": "IOVIRT SMMUV3 ID MAP Input Base"
+                },
+                {
+                    "name": "ID_COUNT",
+                    "default_value": "0xFFFF",
+                    "description": "IOVIRT SMMUV3 ID MAP ID Count"
+                },
+                {
+                    "name": "OUTPUT_BASE",
+                    "default_value": "0x0",
+                    "description": "IOVIRT SMMUV3 ID MAP Output Base"
+                },
+                {
+                    "name": "OUTPUT_REF",
+                    "default_value": "0x30",
+                    "description": "IOVIRT SMMUV3 ID MAP Output REF"
+                }
+            ]
+        }
+    ]
+}

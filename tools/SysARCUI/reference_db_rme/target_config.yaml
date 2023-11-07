@@ -1,0 +1,39 @@
+COMMON_FLAGS:
+    PAS:
+        SECURE: '0x0'
+        NON_SECURE: '0x1'
+        ROOT: '0x2'
+        REALM: '0x3'
+FeatureSupport:
+    LEGACY_TZ:
+        ENABLED: '0x0'
+    IS_NS_ENCRYPTION:
+        PROGRAMMABLE: '0x0'
+GpcRegions:
+    CNT: '0x4'
+    '0':
+        START_ADDR: '0xC000000'
+        SIZE: '0xC000000'
+    '1':
+        START_ADDR: '0xC000000'
+        SIZE: '0xC000000'
+    '2':
+        START_ADDR: '0xC000000'
+        SIZE: '0xC000000'
+    '3':
+        START_ADDR: '0xC000000'
+        SIZE: '0xC000000'
+MemoryMap:
+    CNT: '0x4'
+    '0':
+        START_ADDR: '0xC000000'
+        SIZE: '0xC000000'
+    '1':
+        START_ADDR: '0xC000000'
+        SIZE: '0xC000000'
+    '2':
+        START_ADDR: '0xC000000'
+        SIZE: '0xC000000'
+    '3':
+        START_ADDR: '0xC000000'
+        SIZE: '0xC000000'
