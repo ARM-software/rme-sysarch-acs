@@ -1,0 +1,88 @@
+{
+    "component": "PCIE",
+    "n": 21,
+    "print_prefix": "PLATFORM",
+    "parameters": [
+        {
+            "name": "PCIE_NUM_ENTRIES",
+            "default_value": "21",
+            "description": "PCIE Number Entries"
+        },
+        {
+            "name": "PCIE_P2P_NOT_SUPPORTED",
+            "default_value": "0x1",
+            "description": "PCIE P2P supported/not supported"
+        },
+        {
+            "name": "PCIE_DEV<n>",
+            "description": "PCIE DEV component attributes",
+            "parameters": [
+                {
+                    "name": "CLASSCODE",
+                    "default_value": "0x6040000",
+                    "description": "PCIE DEV Classcode"
+                },
+                {
+                    "name": "VENDOR_ID",
+                    "default_value": "0x13B5",
+                    "description": "PCIE DEV Vendor ID"
+                },
+                {
+                    "name": "DEV_ID",
+                    "default_value": "0xDEF",
+                    "description": "PCIE DEV Dev ID"
+                },
+                {
+                    "name": "BUS_NUM",
+                    "default_value": "0x0",
+                    "description": "PCIE DEV Bus Num"
+                },
+                {
+                    "name": "DEV_NUM",
+                    "default_value": "0x1",
+                    "description": "PCIE DEV Dev Num"
+                },
+                {
+                    "name": "FUNC_NUM",
+                    "default_value": "0x0",
+                    "description": "PCIE DEV Func Num"
+                },
+                {
+                    "name": "SEG_NUM",
+                    "default_value": "0x0",
+                    "description": "PCIE DEV Seg Num"
+                },
+                {
+                    "name": "DMA_SUPPORT",
+                    "default_value": "0x0",
+                    "description": "PCIE DEV DMA Support"
+                },
+                {
+                    "name": "DMA_COHERENT",
+                    "default_value": "0x0",
+                    "description": "PCIE DEV DMA Coherent"
+                },
+                {
+                    "name": "P2P_SUPPORT",
+                    "default_value": "0x1",
+                    "description": "PCIE DEV P2P Support"
+                },
+                {
+                    "name": "DMA_64BIT",
+                    "default_value": "0x0",
+                    "description": "PCIE DEV DMA 64 Bit"
+                },
+                {
+                    "name": "BEHIND_SMMU",
+                    "default_value": "0x1",
+                    "description": "PCIE DEV Behind SMMU"
+                },
+                {
+                    "name": "ATC_SUPPORT",
+                    "default_value": "0x0",
+                    "description": "PCIE DEV ATC Support"
+                }
+            ]
+        }
+    ]
+}

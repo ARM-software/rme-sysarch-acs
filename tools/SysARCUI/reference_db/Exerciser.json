@@ -1,0 +1,94 @@
+{
+    "component": "Exerciser",
+    "n": 1,
+    "print_prefix": "",
+    "parameters": [
+          {
+            "name": "TEST_REG_COUNT",
+            "default_value": "10",
+            "description": "Exerciser Test Register Count"
+          },
+          {
+            "name": "EXERCISER_ID",
+            "default_value": "0xED0113B5",
+            "description": "Exercider ID"
+          },
+          {
+            "name": "PCIE_CAP_CTRL_OFFSET",
+            "default_value": "0x4",
+            "description": "Exerciser PCIE CAP Control Offset"
+          },
+          {
+            "name": "INTXCTL",
+            "default_value": "0x004",
+            "description": "Exerciser INTXCTL"
+          },
+          {
+            "name": "MSICTL",
+            "default_value": "0x000",
+            "description": "Exerciser MSICTL"
+          },
+          {
+            "name": "DMACTL1",
+            "default_value": "0x08",
+            "description": "Exerciser DMACTL1"
+          },
+         {
+            "name": "DMA",
+            "description": "Exerciser DMA component attributes",
+            "parameters": [
+                {
+                    "name": "BUS_ADDR",
+                    "default_value": "0x010",
+                    "description": "Exerciser DMA Bus Adder"
+                },
+                {
+                    "name": "LEN",
+                    "default_value": "0x018",
+                    "description": "Exerciser DMA Length"
+                }
+            ]
+        },
+        {
+            "name": "DMASTATUS",
+            "default_value": "0x01C",
+            "description": "Exerciser DMA Status"
+        },
+        {
+            "name": "PCI_MAX",
+            "description": "Exerciser PCI MAX component attributes",
+            "parameters": [
+                {
+                    "name": "BUS",
+                    "default_value": "255",
+                    "description": "Exerciser PCI MAX Bus"
+                },
+                {
+                    "name": "DEVICE",
+                    "default_value": "31",
+                    "description": "Exerciser PCI MAX Device"
+                }
+            ]
+        },
+        {
+            "name": "PCI_EXT_CAP_ID",
+            "default_value": "0x10",
+            "description": "Exerciser PCI EXT CAP ID"
+        },
+        {
+            "name": "PASID",
+            "default_value": "0x1B",
+            "description": "Exerciser PASID"
+        },
+        {
+            "name": "PCIE",
+            "default_value": "0x1",
+            "description": "Exerciser PCIE"
+        },
+        {
+            "name": "PCI",
+            "default_value": "0x0",
+            "description": "Exerciser PCI"
+        }
+    ]
+}

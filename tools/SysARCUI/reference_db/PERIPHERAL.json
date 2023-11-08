@@ -1,0 +1,110 @@
+{
+    "component": "PERIPHERAL",
+    "n": 1,
+    "print_prefix": "",
+    "parameters": [
+          {
+            "name": "PLATFORM_OVERRIDE_PERIPHERAL_COUNT",
+            "default_value": "3",
+            "description": "PERIPHERAL Count"
+          },
+          {
+            "name": "UART",
+            "description": "PERIPHERAL UART component attributes",
+            "parameters": [
+                {
+                    "name": "ADDRESS",
+                    "default_value": "0xF9750000",
+                    "description": "PERIPHERAL UART Address"
+                },
+                {
+                    "name": "INTERRUPT_TYPE",
+                    "default_value": "8",
+                    "description": "PERIPHERAL UART Interrupt Type"
+                },
+                {
+                    "name": "IRQ",
+                    "default_value": "0",
+                    "description": "PERIPHERAL UART IRQ"
+                },
+                {
+                    "name": "GLOBAL_SYSTEM_INTERRUPT",
+                    "default_value": "0x93",
+                    "description": "PERIPHERAL UART Global System Interrupt"
+                }
+            ]
+        },
+        {
+            "name": "BASE_ADDRESS",
+            "description": "PERIPHERAL Base Address component attributes",
+            "parameters": [
+                {
+                    "name": "ADDRESS_SPACE_ID",
+                    "default_value": "0x0",
+                    "description": "Base Address Space ID"
+                },
+                {
+                    "name": "REGISTER_BIT_WIDTH",
+                    "default_value": "0x20",
+                    "description": "Base Address Register Bit width"
+                },
+                {
+                    "name": "REGISTER_BIT_OFFSET",
+                    "default_value": "0x0",
+                    "description": "Base Address Resgister Bit offset"
+                },
+                {
+                    "name": "ADDRESS_SIZE",
+                    "default_value": "0x3",
+                    "description": "Base Address Size"
+                },
+                {
+                    "name": "ADDRESS",
+                    "default_value": "0x7FF80000",
+                    "description": "Base Address Address"
+                }
+            ]
+        },
+        {
+            "name": "UART_PCI",
+            "description": "PERIPHERAL UART PCI component attributes",
+            "parameters": [
+                {
+                    "name": "DEVICE_ID",
+                    "default_value": "0xFFFF",
+                    "description": "PERIPHERAL UART PCI Device ID"
+                },
+                {
+                    "name": "VENDOR_ID",
+                    "default_value": "0xFFFF",
+                    "description": "PERIPHERAL UART PCI Vendor ID"
+                },
+                {
+                    "name": "BUS_NUMBER",
+                    "default_value": "0x0",
+                    "description": "PERIPHERAL UART PCI Bus Number"
+                },
+                {
+                    "name": "DEV_NUMBER",
+                    "default_value": "0x0",
+                    "description": "PERIPHERAL UART PCI Dev Number"
+                },
+                {
+                    "name": "FUNC_NUMBER",
+                    "default_value": "0x0",
+                    "description": "PERIPHERAL UART PCI Func Number"
+                },
+                {
+                    "name": "FLAGS",
+                    "default_value": "0x0",
+                    "description": "PERIPHERAL UART PCI Flags"
+                },
+                {
+                    "name": "SEGMENT",
+                    "default_value": "0x0",
+                    "description": "PERIPHERAL UART PCI Segment"
+                }
+            ]
+        }
+    ]
+}

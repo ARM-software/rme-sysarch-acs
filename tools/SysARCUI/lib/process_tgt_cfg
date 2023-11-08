@@ -1,0 +1,268 @@
+#!/bin/env python3
+
+# @file
+# Copyright (c) 2023, Arm Limited or its affiliates. All rights reserved.
+# SPDX-License-Identifier : Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#  http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+""" Generation of System configuration header files """
+
+# ------------------------------------------------------------------------
+import argparse
+import os
+import yaml
+import datetime
+import json
+import re
+import sys
+from sys_acs_arcui import SysAcsArcui
+from sys_acs_arcui_data import PROCESS_TGT_CFG_DATA, SYS_CFG_HEADER_FILE_NAME, COPYRIGHT_HEADER, ERROR_LOG_FILE_NAME
+
+
+class ProcessTgtCfg(SysAcsArcui):
+    """ Class for processing Target config and creating System config header file """
+
+    def __init__(self):
+        """ Constructor """
+        SysAcsArcui.__init__(self)
+        self.process = []
+        self.odir = ""
+        self.input_tgt_cfg = ""
+        self.straight_param_format = ""
+        self.updated_tgt_cfg = {}
+        self.parameters_format = {}
+
+    def process_arguments(self):
+        """ Processes command line arguments for the tool """
+        nr_errors = SysAcsArcui.set_ref_db_path(self)
+        parser = SysAcsArcui.get_parser(self, PROCESS_TGT_CFG_DATA)
+        args = parser.parse_args()
+
+        self.process = args.process
+        if not args.odir:
+            self.odir = os.path.join(self.acs_home +
+                                     '/tools/SysARCUI/sys_configs/')
+        else:
+            self.odir = args.odir
+
+        if not args.itgt_cfg:
+            self.input_tgt_cfg = os.path.join(
+                self.acs_home + '/tools/SysARCUI/tgt_cfg/target_config.yaml')
+        else:
+            self.input_tgt_cfg = args.itgt_cfg
+
+        if not os.path.exists(self.odir):
+            try:
+                os.makedirs(self.odir)
+            except Exception as error:
+                print(
+                    "ERROR:: Failed to create the directory for System config files. "
+                    + str(error))
+                nr_errors += 1
+
+        if not os.path.isfile(self.input_tgt_cfg):
+            print("ERROR:: Input target config file not found in the path: " +
+                  self.input_tgt_cfg)
+            nr_errors += 1
+
+        return nr_errors
+
+    def populate_parameters_format_dict(self):
+        """ Create and populate 'parameters_format' dictionary from Target config file, for facilitating in evaluation of parameter expressions """
+        nr_errors = 0
+        self.straight_param_format = "{0}__{1}"
+        nested_param_format = "{0}__{1}__{2}"
+
+        try:
+            with open(self.input_tgt_cfg, 'r') as target_config:
+                self.updated_tgt_cfg = yaml.safe_load(target_config)
+        except Exception as exception:
+            print("ERROR:: Unable to parse the Target config yaml file: " +
+                  self.input_tgt_cfg + ". " + str(exception))
+            nr_errors += 1
+            return nr_errors
+
+        for component, component_cfg in self.updated_tgt_cfg.items():
+            for parameter, value in component_cfg.items():
+                if (isinstance(value, str)):
+                    self.parameters_format[self.straight_param_format.format(
+                        component, parameter)] = int(value, 16)
+                else:
+                    for sub_parameter, val in value.items():
+                        self.parameters_format[nested_param_format.format(
+                            component, parameter, sub_parameter)] = int(
+                                val, 16)
+        return nr_errors
+
+    def print_sys_cfg_file(self):
+        """ Generation of config header file in the required format and printing the values of expressions after evaluating from ref. db """
+        nr_errors = self.populate_parameters_format_dict()
+        if nr_errors:
+            return nr_errors
+        SysAcsArcui.tgt_cfg_gen(self)
+
+        op_file_path = os.path.join(self.odir, SYS_CFG_HEADER_FILE_NAME)
+        try:
+            output = open(op_file_path, 'w')
+        except Exception as exception:
+            print("ERROR:: Unable to write to the file: " +
+                  SYS_CFG_HEADER_FILE_NAME + ". " + str(exception))
+            nr_errors += 1
+            return nr_errors
+
+        current_year = str(datetime.datetime.now().year)
+        cr_header = COPYRIGHT_HEADER.format(current_year)
+        output.write(cr_header)
+
+        for component, component_cfg in self.updated_tgt_cfg.items():
+            prefix = self.prefix[component]
+            for parameter, value in component_cfg.items():
+                if isinstance(value, str):
+                    param_name = parameter if prefix == "" else prefix + "_" + parameter
+                    output.write("#define " + param_name + " " + str(value) +
+                                 '\n')
+                    output.write('\n')
+                else:
+                    for sub_parameter, val in value.items():
+                        param_name = parameter + "_" + sub_parameter if prefix == "" else prefix + "_" + parameter + "_" + sub_parameter
+                        output.write("#define " + param_name + " " + str(val) +
+                                     '\n')
+                    output.write('\n')
+
+            if component in self.expressions:
+                component_expr = self.expressions[component]
+                for parameter, expr_val in component_expr.items():
+                    try:
+                        expr_val = hex(eval(expr_val, self.parameters_format))
+                    except Exception as exception:
+                        actual_expr = expr_val.replace("__", ".")
+                        actual_param = parameter.replace("__", ".")
+                        revised_exception = str(exception).replace("__", ".")
+                        print(
+                            "ERROR:: Parameter(s) does not exist in the expression: "
+                            + actual_expr + ", for key parameter " +
+                            actual_param + ". " + revised_exception)
+                        nr_errors += 1
+                        continue
+                    self.parameters_format[self.straight_param_format.format(
+                        component, parameter)] = int(expr_val, 16)
+                    parameter = parameter.replace("__", "_")
+                    param_name = parameter if prefix == "" else prefix + "_" + parameter
+                    output.write("#define " + param_name + " " +
+                                 str(expr_val) + '\n')
+                output.write('\n')
+            output.write('\n')
+        output.close()
+        return nr_errors
+
+    def evaluate_tc_rule(self, rule_expr, nr_errors, expected_values,
+                         rule_name, expression, error_log):
+        """ Evaluate TC rule expressions securely and throws error upon check failure, if any """
+        try:
+            flag = eval(rule_expr, self.parameters_format)
+        except Exception as exception:
+            print("ERROR:: Invalid target consistency rule expression: " +
+                  expression + ". " + str(exception).replace("__", "."))
+            nr_errors += 1
+            return nr_errors
+
+        if hex(flag) not in expected_values:
+            error_msg = 'ERROR:: Target config consistency check failed for: ' + rule_name + '. Expression: ' + expression + ' Expected value(s): ' + str(
+                expected_values) + ' Actual value: ' + hex(flag)
+            error_log.write(error_msg + '\n')
+            print(error_msg)
+            sys.exit(-1)
+        else:
+            return nr_errors
+
+    def check_tc_rules(self):
+        """ Checking TC rules' expressions for Target config file """
+        nr_errors = self.populate_parameters_format_dict()
+        if nr_errors:
+            return nr_errors
+        SysAcsArcui.tgt_cfg_gen(self)
+
+        tc_rules_file_path = os.path.join(self.ref_db_path, 'TC_rules.json')
+        try:
+            with open(tc_rules_file_path, 'r') as tc_rules:
+                rules_file = json.load(tc_rules)
+        except Exception as exception:
+            print("ERROR:: Unable to parse TC rules json file: " +
+                  tc_rules_file_path + ". " + str(exception))
+            nr_errors += 1
+            return nr_errors
+
+        error_log_path = os.path.join(self.odir, ERROR_LOG_FILE_NAME)
+        try:
+            error_log = open(error_log_path, 'w')
+        except Exception as exception:
+            print("ERROR:: Unable to write to the file: " +
+                  ERROR_LOG_FILE_NAME + ". " + str(exception))
+            nr_errors += 1
+            return nr_errors
+
+        for rule in rules_file['parameters']:
+            expr = rule['value']
+            expected_flags = rule['expected_values']
+            rule_name = rule['name']
+
+            updated_expr = SysAcsArcui.replace_operators(self, expr)
+            component = updated_expr.split('__')[0].strip()
+            if "<n>" in updated_expr:
+                if component in self.instances.keys():
+                    for instance_num in range(0, self.instances[component]):
+                        sub_component_expr = updated_expr.replace(
+                            "<n>", str(instance_num))
+                        nr_errors = self.evaluate_tc_rule(
+                            sub_component_expr, nr_errors, expected_flags,
+                            rule_name, expr, error_log)
+                else:
+                    print(
+                        "ERROR:: Component name does not exist in the expression: "
+                        + updated_expr.replace("__", "."))
+                    nr_errors += 1
+            else:
+                nr_errors = self.evaluate_tc_rule(updated_expr, nr_errors,
+                                                  expected_flags, rule_name,
+                                                  expr, error_log)
+        error_log.close()
+        return nr_errors
+
+    def main(self):
+        """ Main function """
+        nr_errors = self.process_arguments()
+        if nr_errors:
+            print("INFO:: Process target config exited with error count " +
+                  str(nr_errors))
+            return nr_errors
+
+        if 'gen_sys_cfg' in self.process:
+            nr_errors = self.print_sys_cfg_file()
+            if nr_errors:
+                print("INFO:: Process target config exited with error count " + str(nr_errors))
+                return nr_errors
+
+        if 'check_tgt_consistency' in self.process:
+            nr_errors = self.check_tc_rules()
+
+        print("INFO:: Process target config exited with error count " +
+              str(nr_errors))
+        return nr_errors
+
+
+if __name__ == '__main__':
+
+    PROCESS_TGT_CFG = ProcessTgtCfg()
+
+    sys.exit(PROCESS_TGT_CFG.main())

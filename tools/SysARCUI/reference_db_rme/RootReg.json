@@ -1,0 +1,29 @@
+{
+    "component": "Root Registers",
+    "n": 4,
+    "print_prefix": "RT_REG",
+    "parameters": [
+          {
+            "name": "CNT",
+            "default_value": "0x4",
+            "description": "Memory Mapped Registers Accessible Only by ROOT PAS "
+          },
+          {
+            "name": "<n>",
+            "description": "Memory Entry component attributes",
+            "parameters": [
+                {
+                    "name": "START_ADDR",
+                    "default_value": "0xC000000",
+                    "description": "Register Physical address"
+                },
+                {
+                    "name": "SIZE",
+                    "default_value": "0xC000000",
+                    "description": "Memory Entry Virtual address"
+                }
+            ]
+        }
+    ]
+}
+

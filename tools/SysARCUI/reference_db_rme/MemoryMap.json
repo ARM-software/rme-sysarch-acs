@@ -1,0 +1,33 @@
+{
+    "component": "Memory",
+    "n": 4,
+    "print_prefix": "PAS_PROTECTED_REGION",
+    "parameters": [
+          {
+            "name": "CNT",
+            "default_value": "0x4",
+            "description": "PAS PROTECTED REGION COUNT"
+          },
+          {
+            "name": "<n>",
+            "description": "Memory Entry component attributes",
+            "parameters": [
+                {
+                    "name": "START_ADDR",
+                    "default_value": "0xC000000",
+                    "description": "Memory Entry Physical address"
+                },
+                {
+                    "name": "SIZE",
+                    "default_value": "0xC000000",
+                    "description": "Memory Entry Virtual address"
+                },
+                {
+                    "name": "PAS",
+                    "default_value": "0x0",
+                    "description": "Memory Entry Size"
+                }
+            ]
+        }
+    ]
+}

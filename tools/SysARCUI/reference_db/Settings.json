@@ -1,0 +1,17 @@
+{
+    "component": "Settings",
+    "n": 1,
+    "print_prefix": "PLATFORM_OVERRIDE",
+    "parameters": [
+        {
+            "name": "RME_LEVEL",
+            "default_value": "0x4",
+            "description": "Settings RME Level"
+        },
+        {
+             "name": "PRINT_LEVEL",
+            "default_value": "0x3",
+            "description": "Settings PRINT Level"
+        }
+    ]
+}

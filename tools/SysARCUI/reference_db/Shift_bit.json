@@ -1,0 +1,95 @@
+{
+    "component": "Shift_bit",
+    "n": 1,
+    "print_prefix": "",
+    "parameters": [
+          {
+            "name": "SHIFT",
+            "description": "SHIFT bit component attributes",
+            "parameters": [
+                {
+                    "name": "1BIT",
+                    "default_value": "1",
+                    "description": "Shift 1 Bit"
+                },
+                {
+                    "name": "2BIT",
+                    "default_value": "2",
+                    "description": "Shift 2 Bit"
+                },
+                {
+                    "name": "4BIT",
+                    "default_value": "4",
+                    "description": "Shift 4 Bit"
+                },
+                {
+                    "name": "8BIT",
+                    "default_value": "8",
+                    "description": "Shift 8 Bit"
+                }
+            ]
+        },
+        {
+            "name": "MASK_BIT",
+            "default_value": "1",
+            "description": "Shift Mask Bit"
+        },
+        {
+            "name": "PREFETCHABLE_BIT_SHIFT",
+            "default_value": "3",
+            "description": "Prefetchable Bit Shift"
+        },
+        {
+            "name": "PCI_CAP_PTR_OFFSET",
+            "default_value": "8",
+            "description": "Shift PCI CAP PTR Offset"
+        },
+        {
+            "name": "PCIE_CAP_PTR_OFFSET",
+            "default_value": "20",
+            "description": "Shift PCIE CAP PTR Offset"
+        },
+        {
+            "name": "MSI_GENERATION_MASK",
+            "default_value": "(1 << 31)",
+            "description": "Shift MSI Generation Mask"
+        },
+        {
+            "name": "NO_SNOOP",
+            "description": "Shift bit No Snoop component attributes",
+            "parameters": [
+                {
+                    "name": "START_MASK",
+                    "default_value": "0x20",
+                    "description": "No Snoop Start Mask"
+                },
+                {
+                    "name": "STOP_MASK",
+                    "default_value": "0xFFFFFFDF",
+                    "description": "No Snoop Stop Mask"
+                }
+            ]
+        },
+        {
+            "name": "PCIE_CAP",
+            "description": "Shift bit PCIE CAP component attributes",
+            "parameters": [
+                {
+                    "name": "DIS_MASK",
+                    "default_value": "0xFFFEFFFF",
+                    "description": "PCIE CAP DIS Mask"
+                },
+                {
+                    "name": "EN_MASK",
+                    "default_value": "(1 << 16)",
+                    "description": "PCIE CAP EN Mask"
+                }
+            ]
+        },
+        {
+            "name": "PASID_EN_MASK",
+            "default_value": "(1 << 6)",
+            "description": "Shift bit PASID EN Mask"
+        }
+    ]
+}

@@ -1,0 +1,22 @@
+{
+    "component": "PCIe_BAR",
+    "n": 1,
+    "print_prefix": "PLATFORM_OVERRIDE",
+    "parameters": [
+        {
+            "name": "PCIE_BAR64_VAL",
+            "default_value": "0x500000000",
+            "description": "PCIE BAR64 Value"
+        },
+        {
+            "name": "PCIE_BAR32NP_VAL",
+            "default_value": "0x70200000",
+            "description": "PCIE BAR32NP Value"
+        },
+        {
+            "name": "PCIE_BAR32P_VAL",
+            "default_value": "0x70000000",
+            "description": "PCIE BAR32P Value"
+        }
+    ]
+}

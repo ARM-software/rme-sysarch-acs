@@ -1,0 +1,38 @@
+{
+    "component": "Memory",
+    "n": 4,
+    "print_prefix": "PLATFORM_OVERRIDE",
+    "parameters": [
+          {
+            "name": "MEMORY_ENTRY_COUNT",
+            "default_value": "0x4",
+            "description": "Memory Entry Count"
+          },
+          {
+            "name": "MEMORY_ENTRY<n>",
+            "description": "Memory Entry component attributes",
+            "parameters": [
+                {
+                    "name": "PHY_ADDR",
+                    "default_value": "0xC000000",
+                    "description": "Memory Entry Physical address"
+                },
+                {
+                    "name": "VIRT_ADDR",
+                    "default_value": "0xC000000",
+                    "description": "Memory Entry Virtual address"
+                },
+                {
+                    "name": "SIZE",
+                    "default_value": "0x4000000",
+                    "description": "Memory Entry Size"
+                },
+                {
+                    "name": "TYPE",
+                    "default_value": "0x1000",
+                    "description": "Memory Entry Type"
+                }
+            ]
+        }
+    ]
+}

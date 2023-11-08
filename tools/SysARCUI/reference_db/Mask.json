@@ -1,0 +1,85 @@
+{
+    "component": "Mask",
+    "n": 1,
+    "print_prefix": "",
+    "parameters": [
+         {
+            "name": "PCIE",
+            "description": "PCIE Mask component attributes",
+            "parameters": [
+                {
+                    "name": "NXT_CAP_PTR_MASK",
+                    "default_value": "0x0FFF",
+                    "description": "PCIE Mask NXT CAP PTR Mask"
+                },
+                {
+                    "name": "CAP_ID_MASK",
+                    "default_value": "0xFFFF",
+                    "description": "PCIE Mask CAP ID Mask"
+                }
+            ]
+        },
+        {
+            "name": "PCI",
+            "description": "PCI Mask component attributes",
+            "parameters": [
+                {
+                    "name": "CAP_ID_MASK",
+                    "default_value": "0x00FF",
+                    "description": "PCI Mask CAP ID Mask"
+                },
+                {
+                    "name": "NXT_CAP_PTR_MASK",
+                    "default_value": "0x00FF",
+                    "description": "PCI Mask NXT CAP PTR Mask"
+                }
+            ]
+        },
+        {
+            "name": "CAP_PTR_MASK",
+            "default_value": "0x00FF",
+            "description": "CAP PTR Mask"
+        },
+        {
+            "name": "CLR_INTR_MASK",
+            "default_value": "0xFFFFFFFE",
+            "description": "CLR INTR Mask"
+        },
+        {
+            "name": "PASID",
+            "description": "PASID Mask component attributes",
+            "parameters": [
+                {
+                    "name": "TLP_STOP_MASK",
+                    "default_value": "0xFFFFFFBF",
+                    "description": "PASID TLP Stop Mask"
+                },
+                {
+                    "name": "VAL_MASK",
+                    "default_value": "((0x1 << 20) - 1)",
+                    "description": "PASID VAL Mask"
+                },
+                {
+                    "name": "VAL_SHIFT",
+                    "default_value": "12",
+                    "description": "PASID VAL Shift"
+                },
+                {
+                    "name": "LEN_SHIFT",
+                    "default_value": "7",
+                    "description": "PASID Length Shift"
+                },
+                {
+                    "name": "LEN_MASK",
+                    "default_value": "0x7",
+                    "description": "PASID Length Mask"
+                }
+            ]
+        },
+        {
+            "name": "DMA_TO_DEVICE_MASK",
+            "default_value": "0xFFFFFFEF",
+            "description": "DMA To Device Mask"
+        }
+    ]
+}

@@ -1,0 +1,10 @@
+{
+    "parameters": [
+        {
+            "name": "is_CNTControlBase_RT_only,
+            "value": "PCIE.PCIE_P2P_NOT_SUPPORTED == 0x1",
+            "expected_values": ["0x1"],
+            "description": "PCIE consistency rule"
+        }
+    ]
+}

@@ -1,0 +1,159 @@
+{
+    "component": "GIC",
+    "n": 1,
+    "print_prefix": "PLATFORM_OVERRIDE",
+    "parameters": [
+          {
+            "name": "GIC_VERSION",
+            "default_value": "0x3",
+            "description": "GIC Version"
+          },
+          {
+            "name": "CORE_COUNT",
+            "default_value": "0x4",
+            "description": "GIC Core count"
+          },
+          {
+            "name": "CLUSTER_COUNT",
+            "default_value": "0x2",
+            "description": "GIC Cluster count"
+          },
+          {
+            "name": "GICC",
+            "description": "GICC component attributes",
+            "parameters": [
+                {
+                    "name": "COUNT",
+                    "default_value": "(GIC.CORE_COUNT * GIC.CLUSTER_COUNT)",
+                    "description": "GICC Count"
+                },
+                {
+                    "name": "TYPE",
+                    "default_value": "0x1000",
+                    "description": "GICC Type"
+                },
+                {
+                    "name": "BASE",
+                    "default_value": "0x30000000",
+                    "description": "GICC Base"
+                }
+            ]
+          },
+          {
+            "name": "GICD",
+            "description": "GICD component attributes",
+            "parameters": [
+                {
+                    "name": "COUNT",
+                    "default_value": "0x1",
+                    "description": "GICD Count"
+                },
+                {
+                    "name": "TYPE",
+                    "default_value": "0x1001",
+                    "description": "GICD Type"
+                },
+                {
+                    "name": "BASE",
+                    "default_value": "0x30000000",
+                    "description": "GICD Base"
+                }
+            ]
+          },
+          {
+            "name": "GICRD",
+            "description": "GICRD component attributes",
+            "parameters": [
+                {
+                    "name": "COUNT",
+                    "default_value": "0x1",
+                    "description": "GICRD Count"
+                },
+                {
+                    "name": "TYPE",
+                    "default_value": "0x1002",
+                    "description": "GICRD Type"
+                },
+                {
+                    "name": "BASE",
+                    "default_value": "0x300C0000",
+                    "description": "GICRD Base"
+                }
+            ]
+          },
+          {
+                "name": "GICR_GICRD_TYPE",
+                "default_value": "0x1003",
+                "description": "GICR GICRD Type"
+
+          },
+          {
+            "name": "GICITS",
+            "description": "GICITS component attributes",
+            "parameters": [
+                {
+                    "name": "COUNT",
+                    "default_value": "0x1",
+                    "description": "GICITS Count"
+                },
+                {
+                    "name": "TYPE",
+                    "default_value": "0x1004",
+                    "description": "GICITS Type"
+                },
+                {
+                    "name": "BASE",
+                    "default_value": "0x30040000",
+                    "description": "GICITS Base"
+                },
+                {
+                    "name": "ID",
+                    "default_value": "0",
+                    "description": "GICITS ID"
+                }
+            ]
+          },
+          {
+            "name": "GICH",
+            "description": "GICH component attributes",
+            "parameters": [
+                {
+                    "name": "COUNT",
+                    "default_value": "0x1",
+                    "description": "GICH Count"
+                },
+                {
+                    "name": "TYPE",
+                    "default_value": "0x1006",
+                    "description": "GICH Type"
+                },
+                {
+                    "name": "BASE",
+                    "default_value": "0x2C010000",
+                    "description": "GICH Base"
+                }
+            ]
+          },
+          {
+            "name": "GICMISFRAME",
+            "description": "GICMISFRAME component attributes",
+            "parameters": [
+                {
+                    "name": "COUNT",
+                    "default_value": "0x0",
+                    "description": "GICMISFRAME Count"
+                },
+                {
+                    "name": "TYPE",
+                    "default_value": "0x1005",
+                    "description": "GICMISFRAME Type"
+                }
+             ]
+          },
+          {
+                "name": "GICIRD_LENGTH",
+                "default_value": "(0x20000*8)",
+                "description": "GICIRD Length"
+         }
+    ]
+}

@@ -1,0 +1,23 @@
+{
+    "component": "MEM",
+    "n": 1,
+    "print_prefix": "MEM",
+    "parameters": [
+        {
+            "name": "OFFSET",
+            "description": "Memory Offset component attributes",
+            "parameters": [
+                {
+                    "name": "SMALL",
+                    "default_value": "0x10",
+                    "description": "MEM Offset Small"
+                },
+                {
+                    "name": "MEDIUM",
+                    "default_value": "0x1000",
+                    "description": "MEM Offset Medium"
+                }
+            ]
+        }
+    ]
+}

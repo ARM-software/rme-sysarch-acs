@@ -1,0 +1,96 @@
+#!/bin/env python3
+
+# @file
+# Copyright (c) 2023, Arm Limited or its affiliates. All rights reserved.
+# SPDX-License-Identifier : Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#  http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+""" Auto-generation of Target configuration file from Reference database """
+
+# --------------------------------------------------------------------------
+import argparse
+import os
+import yaml
+import sys
+from sys_acs_arcui import SysAcsArcui
+from sys_acs_arcui_data import GEN_TGT_CFG_DATA, TGT_CFG_FILE_NAME
+
+
+class TgtCfgGenerator(SysAcsArcui):
+    """ Class for generating Target configuration file """
+
+    def __init__(self):
+        """ Constructor """
+        SysAcsArcui.__init__(self)
+        self.odir = ""
+
+    def process_argument(self):
+        """ Processes command line argument for the tool """
+        nr_errors = SysAcsArcui.set_ref_db_path(self)
+        parser = SysAcsArcui.get_parser(self, GEN_TGT_CFG_DATA)
+        args = parser.parse_args()
+
+        if not args.odir:
+            self.odir = os.path.join(self.acs_home +
+                                     '/tools/SysARCUI/tgt_cfg/')
+        else:
+            self.odir = args.odir
+
+        if not os.path.exists(self.odir):
+            try:
+                os.makedirs(self.odir)
+            except Exception as error:
+                print(
+                    "ERROR:: Failed to create the directory for Target config file. "
+                    + str(error))
+                nr_errors += 1
+
+        return nr_errors
+
+    def dump_tgt_cfg_dict(self):
+        """ Dumping the derived target config dictionary to yaml file format """
+        SysAcsArcui.tgt_cfg_gen(self)
+        nr_errors = 0
+
+        tgt_cfg_file_path = os.path.join(self.odir, TGT_CFG_FILE_NAME)
+        try:
+            with open(tgt_cfg_file_path, 'w') as target:
+                yaml.dump(self.tgt_cfg_dict, target, sort_keys=False, indent=4)
+        except Exception as exception:
+            print("ERROR:: Unable to write to the file " + TGT_CFG_FILE_NAME +
+                  ". " + str(exception))
+            nr_errors += 1
+        return nr_errors
+
+    def main(self):
+        """ Main function """
+        nr_errors = self.process_argument()
+        if nr_errors:
+            print(
+                "INFO:: Target Config File auto-generator exited with error count "
+                + str(nr_errors))
+            return nr_errors
+
+        nr_errors = self.dump_tgt_cfg_dict()
+        print(
+            "INFO:: Target Config File auto-generator exited with error count "
+            + str(nr_errors))
+        return nr_errors
+
+
+if __name__ == '__main__':
+
+    GEN_TGT_CFG = TgtCfgGenerator()
+
+    sys.exit(GEN_TGT_CFG.main())
