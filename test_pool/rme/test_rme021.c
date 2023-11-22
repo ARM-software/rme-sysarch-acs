@@ -26,7 +26,7 @@
 #include "val/include/mem_interface.h"
 
 #define TEST_NUM   (ACS_RME_TEST_NUM_BASE  +  21)
-#define TEST_DESC  "Check if Interconnect supports TLBI PA operation"
+#define TEST_DESC  "Check if Interconnect supports TLBI PA operation       "
 #define TEST_RULE  "PE_10"
 
 /*

@@ -19,7 +19,7 @@
 #include "val/include/val_interface.h"
 
 #define TEST_NUM   (ACS_RME_TEST_NUM_BASE  +  01)
-#define TEST_DESC  "Check for RME extensions"
+#define TEST_DESC  "Check for RME extensions                              "
 #define TEST_RULE  "PE_07"
 
 #define RME_EXTN_SHIFT 52

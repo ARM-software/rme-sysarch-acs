@@ -19,7 +19,7 @@
 #include "val/include/val_interface.h"
 
 #define TEST_NUM   (ACS_RME_TEST_NUM_BASE  +  03)
-#define TEST_DESC  "Check if all PEs implement FEAT_RNG or FEAT_RNG_TRAP"
+#define TEST_DESC  "Check if all PEs implement FEAT_RNG or FEAT_RNG_TRAP   "
 #define TEST_RULE  "PE_24"
 
 #define RNG_SHIFT      60

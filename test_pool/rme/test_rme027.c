@@ -24,7 +24,7 @@
 #include "val/include/sys_config.h"
 
 #define TEST_NUM   (ACS_RME_TEST_NUM_BASE + 27)
-#define TEST_DESC  "Check Root Watchdog interrupt from Root state"
+#define TEST_DESC  "Check Root Watchdog interrupt from Root state          "
 #define TEST_RULE  "PE_19"
 
 static uint32_t int_id;

@@ -98,19 +98,6 @@ createTimerInfoTable(
 }
 
 void
-createWatchdogInfoTable(
-)
-{
-  uint64_t *WdInfoTable;
-
-  WdInfoTable = val_aligned_alloc(SIZE_4K, sizeof(WD_INFO_TABLE)
-                + (PLATFORM_OVERRIDE_WD_TIMER_COUNT * sizeof(WD_INFO_BLOCK)));
-
-  val_wd_create_info_table(WdInfoTable);
-}
-
-
-void
 createPcieVirtInfoTable(
 )
 {
@@ -135,15 +122,10 @@ createPeripheralInfoTable(
 )
 {
   uint64_t   *PeripheralInfoTable;
-  uint64_t   *MemoryInfoTable;
 
   PeripheralInfoTable = val_aligned_alloc(SIZE_4K, sizeof(PERIPHERAL_INFO_TABLE)
                         + (PLATFORM_OVERRIDE_PERIPHERAL_COUNT * sizeof(PERIPHERAL_INFO_BLOCK)));
   val_peripheral_create_info_table(PeripheralInfoTable);
-
-  MemoryInfoTable = val_aligned_alloc(SIZE_4K, sizeof(MEMORY_INFO_TABLE)
-                    + (PLATFORM_OVERRIDE_MEMORY_ENTRY_COUNT * sizeof(MEM_INFO_BLOCK)));
-  val_memory_create_info_table(MemoryInfoTable);
 }
 
 void
@@ -153,7 +135,6 @@ freeRmeAcsMem()
   val_pe_free_info_table();
   val_gic_free_info_table();
   val_timer_free_info_table();
-  val_wd_free_info_table();
   val_pcie_free_info_table();
   val_iovirt_free_info_table();
   val_peripheral_free_info_table();
@@ -215,7 +196,6 @@ ShellAppMainrme(
   if (Status)
     return Status;
  createTimerInfoTable();
- createWatchdogInfoTable();
  createPcieVirtInfoTable();
  createPeripheralInfoTable();
 

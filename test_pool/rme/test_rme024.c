@@ -24,8 +24,7 @@
 #include "val/include/rme_test_entry.h"
 
 #define TEST_NUM   (ACS_RME_TEST_NUM_BASE + 24)
-#define TEST_DESC  "Check if the PE context is preservedafter an exit from low\
-                    power state from PE Suspension"
+#define TEST_DESC  "PE Context preserve check after exit from PE suspend   "
 #define TEST_RULE  "PE_15"
 
 static uint32_t intid;

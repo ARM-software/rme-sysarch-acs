@@ -25,7 +25,7 @@
 #include "val/include/mem_interface.h"
 
 #define TEST_NUM   (ACS_RME_TEST_NUM_BASE  +  10)
-#define TEST_DESC  "Checks whether the encryption feature is enabled in all PAS except Non-secure"
+#define TEST_DESC  "Encryption enable check for all PAS except Non-Secure  "
 #define TEST_RULE  "PE_11"
 
 /*

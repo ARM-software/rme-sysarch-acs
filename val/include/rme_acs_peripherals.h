@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2023, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,12 +18,6 @@
 #ifndef __RME_ACS_PERIPHERALS_H__
 #define __RME_ACS_PERIPHERALS_H__
 
-
-uint32_t d001_entry(uint32_t num_pe);
-uint32_t d002_entry(uint32_t num_pe);
-uint32_t d003_entry(uint32_t num_pe);
-
-
 #define WIDTH_BIT8     0x1
 #define WIDTH_BIT16    0x2
 #define WIDTH_BIT32    0x4
@@ -37,7 +31,5 @@ uint32_t d003_entry(uint32_t num_pe);
 #define RME_UARTRIS   0x3C
 #define RME_UARTMIS   0x40
 #define RME_UARTICR   0x44
-
-uint32_t m001_entry(uint32_t num_pe);
 
 #endif // __RME_ACS_PERIPHERAL_H__

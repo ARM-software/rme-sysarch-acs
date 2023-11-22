@@ -20,7 +20,6 @@
 #include "FVP/include/platform_override_struct.h"
 
 extern PLATFORM_OVERRIDE_UART_INFO_TABLE platform_uart_cfg;
-extern PLATFORM_OVERRIDE_MEMORY_INFO_TABLE  platform_mem_cfg;
 
 #define USB_CLASSCODE   0x0C0300
 #define SATA_CLASSCODE  0x010600
@@ -158,36 +157,6 @@ uint32_t pal_peripheral_is_pcie(uint32_t seg, uint32_t bus, uint32_t dev, uint32
   return 0;
 }
 
-/**
-  @brief  This API fills in the MEMORY_INFO_TABLE with information about memory in the
-          system.
-
-  @param  peripheralInfoTable  - Address where the Peripheral information needs to be filled.
-
-  @return  None
-**/
-void
-pal_memory_create_info_table(MEMORY_INFO_TABLE *memoryInfoTable)
-{
-    uint32_t index = 0;
-
-    if (memoryInfoTable == NULL) {
-        print(ACS_PRINT_ERR, "\nInput Memory Table Pointer is NULL", 0);
-        return;
-    }
-
-    for (index = 0; index < platform_mem_cfg.count; index++)
-    {
-        memoryInfoTable->info[index].phy_addr = platform_mem_cfg.info[index].phy_addr;
-        memoryInfoTable->info[index].virt_addr = platform_mem_cfg.info[index].virt_addr;
-        memoryInfoTable->info[index].size = platform_mem_cfg.info[index].size;
-        memoryInfoTable->info[index].type = platform_mem_cfg.info[index].type;
-    }
-
-    memoryInfoTable->info[index].type      = MEMORY_TYPE_LAST_ENTRY;
-
-}
-
 uint64_t
 pal_memory_ioremap(void *ptr, uint32_t size, uint32_t attr)
 {
@@ -200,39 +169,4 @@ pal_memory_unmap(void *ptr)
 {
 
   return;
-}
-
-/**
-  @brief  Return the address of unpopulated memory of requested
-          instance from the GCD memory map.
-
-  @param  addr      - Address of the unpopulated memory
-          instance  - Instance of memory
-
-  @return 0 - SUCCESS
-          1 - No unpopulated memory present
-          2 - FAILURE
-**/
-uint64_t
-pal_memory_get_unpopulated_addr(uint64_t *addr, uint32_t instance)
-{
-  uint32_t index = 0;
-  uint32_t memory_instance = 0;
-
-  for (index = 0; index < platform_mem_cfg.count; index++)
-  {
-      if (platform_mem_cfg.info[index].type == MEMORY_TYPE_NOT_POPULATED)
-      {
-          if (memory_instance == instance)
-          {
-              *addr =  platform_mem_cfg.info[index].virt_addr;
-              print(ACS_PRINT_INFO, "Unpopulated region with base address 0x%lX found\n", *addr);
-              return MEM_MAP_SUCCESS;
-          }
-
-          memory_instance++;
-      }
-  }
-
-  return MEM_MAP_NO_MEM;
 }

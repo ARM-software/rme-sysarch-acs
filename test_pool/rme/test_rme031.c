@@ -26,7 +26,7 @@
 #include "val/include/mem_interface.h"
 
 #define TEST_NUM   (ACS_RME_TEST_NUM_BASE + 31)
-#define TEST_DESC  "To Verify that RME system reset propagates to all application PEs"
+#define TEST_DESC  "RME system reset propagates to all application PEs     "
 #define TEST_RULE  "SYS_RST_03"
 
 #define WRITE_VAL_SCTLR_EL1 0x7ULL
@@ -126,7 +126,7 @@ reset_done:
     if (i != index) {
           timeout = TIMEOUT_LARGE;
           val_execute_on_pe(i, check_reg_val, 0);
-	  while ((--timeout) && (IS_RESULT_PENDING(val_get_status(i))))
+          while ((--timeout) && (IS_RESULT_PENDING(val_get_status(i))))
                   ;
 
           if (timeout == 0) {

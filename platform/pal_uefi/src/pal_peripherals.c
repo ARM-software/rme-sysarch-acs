@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2023, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -198,88 +198,6 @@ IsDeviceMemory(EFI_MEMORY_TYPE type)
   }
 }
 
-
-/**
-  @brief  This API fills in the MEMORY_INFO_TABLE with information about memory in the
-          system. This is achieved by parsing the UEFI memory map.
-
-  @param  peripheralInfoTable  - Address where the Peripheral information needs to be filled.
-
-  @return  None
-**/
-VOID
-pal_memory_create_info_table(MEMORY_INFO_TABLE *memoryInfoTable)
-{
-
-  UINTN                 MemoryMapSize;
-  EFI_MEMORY_DESCRIPTOR *MemoryMap = NULL;
-  EFI_MEMORY_DESCRIPTOR *MemoryMapPtr = NULL;
-  EFI_PHYSICAL_ADDRESS  Address;
-  UINTN                 MapKey;
-  UINTN                 DescriptorSize;
-  UINT32                DescriptorVersion;
-  UINTN                 Pages;
-  EFI_STATUS            Status;
-  UINT32                Index, i = 0;
-
-  if (memoryInfoTable == NULL) {
-    rme_print(ACS_PRINT_ERR, L" Input Memory Table Pointer is NULL. Cannot create Memory INFO \n");
-    return;
-  }
-
-// Retrieve the UEFI Memory Map
-
-  MemoryMap = NULL;
-  MemoryMapSize = 0;
-  Status = gBS->GetMemoryMap (&MemoryMapSize, MemoryMap, &MapKey, &DescriptorSize, &DescriptorVersion);
-  if (Status == EFI_BUFFER_TOO_SMALL) {
-    // The UEFI specification advises to allocate more memory for the MemoryMap buffer between successive
-    // calls to GetMemoryMap(), since allocation of the new buffer may potentially increase memory map size.
-    Pages = EFI_SIZE_TO_PAGES (MemoryMapSize) + 1;
-    gBS->AllocatePages (AllocateAnyPages, EfiBootServicesData, Pages, &Address);
-    MemoryMap = (EFI_MEMORY_DESCRIPTOR *)Address;
-    if (MemoryMap == NULL) {
-      Status = EFI_OUT_OF_RESOURCES;
-      return;
-    }
-    Status = gBS->GetMemoryMap (&MemoryMapSize, MemoryMap, &MapKey, &DescriptorSize, &DescriptorVersion);
-  }
-
-  // Go through the list and add the reserved region to the Device Tree
-  if (!EFI_ERROR (Status)) {
-    MemoryMapPtr = MemoryMap;
-    for (Index = 0; Index < (MemoryMapSize / DescriptorSize); Index++) {
-          rme_print(ACS_PRINT_INFO, L" Reserved region of type %d [0x%lX, 0x%lX]\n",
-            MemoryMapPtr->Type, (UINTN)MemoryMapPtr->PhysicalStart,
-            (UINTN)(MemoryMapPtr->PhysicalStart + MemoryMapPtr->NumberOfPages * EFI_PAGE_SIZE));
-      if (IsUefiMemory ((EFI_MEMORY_TYPE)MemoryMapPtr->Type)) {
-        memoryInfoTable->info[i].type      = MEMORY_TYPE_RESERVED;
-      } else {
-        if (IsNormalMemory ((EFI_MEMORY_TYPE)MemoryMapPtr->Type)) {
-          memoryInfoTable->info[i].type      = MEMORY_TYPE_NORMAL;
-        } else {
-          if (IsDeviceMemory ((EFI_MEMORY_TYPE)MemoryMapPtr->Type)) {
-            memoryInfoTable->info[i].type      = MEMORY_TYPE_DEVICE;
-          } else {
-            memoryInfoTable->info[i].type      = MEMORY_TYPE_NOT_POPULATED;
-          }
-        }
-      }
-      memoryInfoTable->info[i].phy_addr  = MemoryMapPtr->PhysicalStart;
-      memoryInfoTable->info[i].virt_addr = MemoryMapPtr->VirtualStart;
-      memoryInfoTable->info[i].size      = (MemoryMapPtr->NumberOfPages * EFI_PAGE_SIZE);
-      i++;
-      if (i >= MEM_INFO_TBL_MAX_ENTRY) {
-        rme_print(ACS_PRINT_DEBUG, L"Memory Info tbl limit exceeded, Skipping remaining\n", 0);
-        break;
-      }
-      MemoryMapPtr = (EFI_MEMORY_DESCRIPTOR*)((UINTN)MemoryMapPtr + DescriptorSize);
-    }
-    memoryInfoTable->info[i].type      = MEMORY_TYPE_LAST_ENTRY;
-  }
-
-}
-
 UINT64
 pal_memory_ioremap(VOID *ptr, UINT32 size, UINT32 attr)
 {
@@ -294,58 +212,4 @@ pal_memory_unmap(VOID *ptr)
 {
 
   return;
-}
-
-/**
-  @brief  Return the address of unpopulated memory of requested
-          instance from the GCD memory map.
-
-  @param  addr      - Address of the unpopulated memory
-          instance  - Instance of memory
-
-  @return 0 - SUCCESS
-          1 - No unpopulated memory present
-          2 - FAILURE
-**/
-UINT64
-pal_memory_get_unpopulated_addr(UINT64 *addr, UINT32 instance)
-{
-  EFI_STATUS                        Status;
-  EFI_GCD_MEMORY_SPACE_DESCRIPTOR  *MemorySpaceMap = NULL;
-  UINT32                            Index;
-  UINTN                             NumberOfDescriptors;
-  UINT32                            Memory_instance = 0;
-
-  /* Get the Global Coherency Domain Memory Space map table */
-  Status = gDS->GetMemorySpaceMap(&NumberOfDescriptors, &MemorySpaceMap);
-  if (Status != EFI_SUCCESS)
-  {
-    rme_print(ACS_PRINT_ERR, L" Failed to get GCD memory with error: %x\n", Status);
-    if (Status == EFI_NO_MAPPING)
-    {
-        return MEM_MAP_NO_MEM;
-    }
-
-    return MEM_MAP_FAILURE;
-  }
-
-  for (Index = 0; Index < NumberOfDescriptors; Index++, MemorySpaceMap++)
-  {
-    if (MemorySpaceMap->GcdMemoryType == EfiGcdMemoryTypeNonExistent)
-    {
-      if (Memory_instance == instance)
-      {
-        *addr = MemorySpaceMap->BaseAddress;
-        if (*addr == 0)
-          continue;
-
-        rme_print(ACS_PRINT_INFO, L" Unpopulated region with base address 0x%lX found\n", *addr);
-        return MEM_MAP_SUCCESS;
-      }
-
-      Memory_instance++;
-    }
-  }
-
-  return MEM_MAP_NO_MEM;
 }

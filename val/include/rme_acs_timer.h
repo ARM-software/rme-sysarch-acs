@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2023, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,12 +22,4 @@
 #define ARM_ARCH_TIMER_IMASK            (1 << 1)
 #define ARM_ARCH_TIMER_ISTATUS          (1 << 2)
 
-uint32_t t001_entry(uint32_t num_pe);
-uint32_t t002_entry(uint32_t num_pe);
-uint32_t t003_entry(uint32_t num_pe);
-uint32_t t004_entry(uint32_t num_pe);
-uint32_t t005_entry(uint32_t num_pe);
-uint32_t t006_entry(uint32_t num_pe);
-uint32_t t007_entry(uint32_t num_pe);
-uint32_t t008_entry(uint32_t num_pe);
 #endif // __RME_ACS_TIMER_H__

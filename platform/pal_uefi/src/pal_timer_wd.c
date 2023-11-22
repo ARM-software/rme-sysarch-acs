@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2023, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -150,85 +150,4 @@ UINT64
 pal_timer_get_counter_frequency(VOID)
 {
   return PLATFORM_OVERRIDE_TIMER_CNTFRQ;
-}
-
-/* Only one watchdog information can be assigned as an override */
-VOID
-pal_wd_platform_override(WD_INFO_TABLE *WdTable)
-{
-
-  if (PLATFORM_OVERRIDE_WD == 1) {
-      WdTable->header.num_wd              = 1;
-      WdTable->wd_info[0].wd_refresh_base = PLATFORM_OVERRIDE_WD_REFRESH_BASE;
-      WdTable->wd_info[0].wd_ctrl_base    = PLATFORM_OVERRIDE_WD_CTRL_BASE;
-      WdTable->wd_info[0].wd_gsiv         = PLATFORM_OVERRIDE_WD_GSIV;
-      WdTable->wd_info[0].wd_flags        = 0;
-  }
-
-  return;
-}
-
-/**
-  @brief  This API fills in the WD_INFO_TABLE with information about Watchdogs
-          in the system. This is achieved by parsing the ACPI - GTDT table.
-
-  @param  WdTable  - Address where the Timer information needs to be filled.
-
-  @return  None
-**/
-
-VOID
-pal_wd_create_info_table(WD_INFO_TABLE *WdTable)
-{
-
-  EFI_ACPI_6_1_GTDT_RME_GENERIC_WATCHDOG_STRUCTURE    *Entry = NULL;
-  WD_INFO_BLOCK               *WdEntry = NULL;
-  UINT32                      Length= 0;
-  UINT32                      num_of_entries;
-
-  if (WdTable == NULL) {
-    rme_print(ACS_PRINT_ERR,
-               L" Input Watchdog Table Pointer is NULL. Cannot create Watchdog INFO \n");
-    return;
-  }
-
-  WdEntry = WdTable->wd_info;
-  WdTable->header.num_wd = 0;
-  gGtdtHdr = (EFI_ACPI_6_1_GENERIC_TIMER_DESCRIPTION_TABLE *) pal_get_gtdt_ptr();
-
-  if (gGtdtHdr == NULL) {
-    rme_print(ACS_PRINT_ERR, L" GTDT not found \n");
-    return;
-  }
-
-  Length         = gGtdtHdr->PlatformTimerOffset;
-  Entry          = (EFI_ACPI_6_1_GTDT_RME_GENERIC_WATCHDOG_STRUCTURE *) ((UINT8 *)gGtdtHdr + Length);
-  Length         = sizeof (EFI_ACPI_6_1_GENERIC_TIMER_DESCRIPTION_TABLE);
-  num_of_entries = gGtdtHdr->PlatformTimerCount;
-
-  while(num_of_entries)
-  {
-
-    if (Entry->Type == EFI_ACPI_6_1_GTDT_GT_BLOCK) {
-      //Skip. this info is added in the timer info function
-    }
-
-    if (Entry->Type == EFI_ACPI_6_1_GTDT_RME_GENERIC_WATCHDOG) {
-      WdEntry->wd_refresh_base = Entry->RefreshFramePhysicalAddress;
-      WdEntry->wd_ctrl_base    = Entry->WatchdogControlFramePhysicalAddress;
-      WdEntry->wd_gsiv         = Entry->WatchdogTimerGSIV;
-      WdEntry->wd_flags        = Entry->WatchdogTimerFlags;
-      WdTable->header.num_wd++;
-      rme_print(ACS_PRINT_DEBUG,
-                 L" Watchdog base = 0x%llx INTID = 0x%x \n", WdEntry->wd_ctrl_base,
-                 WdEntry->wd_gsiv);
-      WdEntry++;
-    }
-    Entry = (EFI_ACPI_6_1_GTDT_RME_GENERIC_WATCHDOG_STRUCTURE *) ((UINT8 *)Entry + (Entry->Length));
-    num_of_entries--;
-
-  }
-
-  pal_wd_platform_override(WdTable);
-
 }

@@ -29,7 +29,7 @@
 #define NUM_SMEM_REGN 2
 
 #define TEST_NUM   (ACS_RME_TEST_NUM_BASE  +  32)
-#define TEST_DESC  "Verify that MSD SMEM is in ROOT PAS after reset"
+#define TEST_DESC  "Verify that MSD SMEM is in ROOT PAS after reset        "
 #define TEST_RULE  "SYS_RST_01"
 
 /**

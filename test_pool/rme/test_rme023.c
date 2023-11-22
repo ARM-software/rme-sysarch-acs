@@ -24,8 +24,7 @@
 #include "val/include/rme_test_entry.h"
 
 #define TEST_NUM   (ACS_RME_TEST_NUM_BASE + 23)
-#define TEST_DESC  "Check if the PE context is preserved after an exit from the \
-        low power state from WFI"
+#define TEST_DESC  "PE context preserve after exit from low pow state WFI  "
 #define TEST_RULE  "PE_15"
 
 static int irq_received;

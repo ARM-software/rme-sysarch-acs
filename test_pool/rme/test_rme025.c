@@ -27,7 +27,7 @@
 #define NUM_PAS 4
 
 #define TEST_NUM   (ACS_RME_TEST_NUM_BASE  +  25)
-#define TEST_DESC  "Verify that MSD Save/Restore location is in ROOT PAS only"
+#define TEST_DESC  "To check MSD Save/Restore location is in ROOT PAS only "
 #define TEST_RULE  "PE_16"
 
 /**

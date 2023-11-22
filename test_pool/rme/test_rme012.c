@@ -26,7 +26,7 @@
 #include "val/include/mem_interface.h"
 
 #define TEST_NUM   (ACS_RME_TEST_NUM_BASE + 12)
-#define TEST_DESC  "To Verify Realm SMEM does not reveal old data after system reset"
+#define TEST_DESC  "Realm SMEM does not reveal old data after system reset "
 #define TEST_RULE  "SYS_RST_02"
 
 /*

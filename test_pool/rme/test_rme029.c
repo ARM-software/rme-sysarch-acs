@@ -27,7 +27,7 @@
 #define NUM_PAS 4
 
 #define TEST_NUM   (ACS_RME_TEST_NUM_BASE  +  29)
-#define TEST_DESC  "Pas filter in In-Active mode doesn't service requests"
+#define TEST_DESC  "Pas filter in In-Active mode doesn't service requests  "
 #define TEST_RULE  "PAS_FLTR_01"
 
 /*
@@ -46,7 +46,7 @@ void payload(void)
   uint64_t VA, rd_data, size;
 
   if (!IS_PAS_FILTER_MODE_PROGRAMMABLE) {
-    val_print(ACS_PRINT_ERR, "\n   The pas filter mode is not programmable in this system", 0);
+    val_print(ACS_PRINT_ERR, "\n       The pas filter mode is not programmable in this system", 0);
     val_set_status(index, RESULT_SKIP(TEST_NUM, 01));
     return;
   }

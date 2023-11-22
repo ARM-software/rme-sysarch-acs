@@ -148,29 +148,6 @@ createTimerInfoTable(
 }
 
 EFI_STATUS
-createWatchdogInfoTable(
-)
-{
-  UINT64   *WdInfoTable;
-  EFI_STATUS Status;
-
-  Status = gBS->AllocatePool (EfiBootServicesData,
-                              WD_INFO_TBL_SZ,
-                              (VOID **) &WdInfoTable);
-
-  if (EFI_ERROR(Status))
-  {
-    Print(L"Allocate Pool failed %x \n", Status);
-    return Status;
-  }
-  val_wd_create_info_table(WdInfoTable);
-
-  return Status;
-
-}
-
-
-EFI_STATUS
 createPcieVirtInfoTable(
 )
 {
@@ -209,7 +186,6 @@ createPeripheralInfoTable(
 )
 {
   UINT64   *PeripheralInfoTable;
-  UINT64   *MemoryInfoTable;
 
   EFI_STATUS Status;
 
@@ -224,18 +200,6 @@ createPeripheralInfoTable(
   }
   val_peripheral_create_info_table(PeripheralInfoTable);
 
-  Status = gBS->AllocatePool (EfiBootServicesData,
-                              MEM_INFO_TBL_SZ,
-                              (VOID **) &MemoryInfoTable);
-
-  if (EFI_ERROR(Status))
-  {
-    Print(L"Allocate Pool failed %x \n", Status);
-    return Status;
-  }
-
-  val_memory_create_info_table(MemoryInfoTable);
-
   return Status;
 }
 
@@ -246,7 +210,6 @@ freeRmeAcsMem()
   val_pe_free_info_table();
   val_gic_free_info_table();
   val_timer_free_info_table();
-  val_wd_free_info_table();
   val_pcie_free_info_table();
   val_iovirt_free_info_table();
   val_peripheral_free_info_table();
@@ -390,7 +353,7 @@ ShellAppMainrme (
              EFI_FILE_MODE_WRITE | EFI_FILE_MODE_READ | EFI_FILE_MODE_CREATE, 0x0);
     if(EFI_ERROR(Status)) {
          Print(L"Failed to open log file %s\n", CmdLineArg);
-	 g_rme_log_file_handle = NULL;
+         g_rme_log_file_handle = NULL;
     }
   }
 
@@ -462,7 +425,6 @@ ShellAppMainrme (
     return Status;
 
   createTimerInfoTable();
-  createWatchdogInfoTable();
   createPeripheralInfoTable();
   createPcieVirtInfoTable();
 

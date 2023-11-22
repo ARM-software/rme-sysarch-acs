@@ -46,8 +46,8 @@ val_report_status(uint32_t index, uint32_t status, char8_t *ruleid)
       if (ruleid) {
             val_print(ACS_PRINT_ERR, "\n       ", 0);
             val_print(ACS_PRINT_ERR, ruleid, 0);
-            val_print(ACS_PRINT_ERR, "\n       Checkpoint -- %2d             ",
-                      status & STATUS_MASK);
+            val_print(ACS_PRINT_ERR, "\n       Checkpoint -- %2d             \
+                          ",status & STATUS_MASK);
       }
       val_print(ACS_PRINT_ERR, ": Result:  FAIL \n", 0);
     }
@@ -56,10 +56,10 @@ val_report_status(uint32_t index, uint32_t status, char8_t *ruleid)
           if (ruleid) {
               val_print(ACS_PRINT_WARN, "\n       ", 0);
               val_print(ACS_PRINT_WARN, ruleid, 0);
-              val_print(ACS_PRINT_WARN, "\n       Checkpoint -- %2d             ",
-                        status & STATUS_MASK);
+              val_print(ACS_PRINT_WARN, "\n       Checkpoint -- %2d             \
+                          ",status & STATUS_MASK);
           }
-          val_print(ACS_PRINT_WARN, "     : Result:  SKIPPED \n", 0);
+          val_print(ACS_PRINT_WARN, ": Result:  SKIPPED \n", 0);
       }
       else
         if (IS_TEST_START(status))

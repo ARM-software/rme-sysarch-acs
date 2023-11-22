@@ -29,7 +29,7 @@
 #define ALLEXCPTNS_MASK_BIT 6
 
 #define TEST_NUM   (ACS_RME_TEST_NUM_BASE  +  11)
-#define TEST_DESC  "An access to a resource is successful only when Access PAS & Resource PAS are same"
+#define TEST_DESC  "To check successful access to a resource               "
 #define TEST_RULE  "PAS_FLTR_02"
 
 /*
@@ -84,9 +84,9 @@ void payload(void)
         shared_data->pas_filter_flag = SET;
         shared_data->arg1 = VA;
         val_pe_access_mut_el3();    //Accessing MUT
-	rd_data = shared_data->shared_data_access[0].data;
-	shared_data->pas_filter_flag = CLEAR;
-	shared_data->exception_expected = CLEAR;
+        rd_data = shared_data->shared_data_access[0].data;
+        shared_data->pas_filter_flag = CLEAR;
+        shared_data->exception_expected = CLEAR;
 
         val_print(ACS_PRINT_DEBUG, "\n  The data read when res pas != acc pas is 0x%lx", rd_data);
         /* If fault is not generated, then the load of the address must not be updated */

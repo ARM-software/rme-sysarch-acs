@@ -24,7 +24,7 @@
 #include "val/include/sys_config.h"
 
 #define TEST_NUM   (ACS_RME_TEST_NUM_BASE  +  06)
-#define TEST_DESC  "To check if the address range of resources are aligned to page granularity"
+#define TEST_DESC  "To check if resources are aligned to page granularity  "
 #define TEST_RULE  "PE_22"
 
 /*

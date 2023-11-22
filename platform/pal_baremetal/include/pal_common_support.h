@@ -252,31 +252,6 @@ typedef struct {
 }TIMER_INFO_TABLE;
 
 /**
-  @brief  Watchdog Info header - Summary of Watchdog subsytem
-**/
-typedef struct {
-  uint32_t num_wd;  ///< number of Watchdogs present in the system
-}WD_INFO_HDR;
-
-/**
-  @brief  structure instance for Watchdog entry
-**/
-typedef struct {
-  uint64_t wd_ctrl_base;     ///< Watchdog Control Register Frame
-  uint64_t wd_refresh_base;  ///< Watchdog Refresh Register Frame
-  uint32_t wd_gsiv;          ///< Watchdog Interrupt ID
-  uint32_t wd_flags;
-}WD_INFO_BLOCK;
-
-/**
-  @brief Watchdog Info Table
-**/
-typedef struct {
-  WD_INFO_HDR    header;
-  WD_INFO_BLOCK  wd_info[];  ///< Array of Information blocks - instantiated for each WD Controller
-}WD_INFO_TABLE;
-
-/**
   @brief PCIe Info Table
 **/
 
@@ -496,35 +471,6 @@ typedef struct {
 
 #define IOVIRT_NEXT_BLOCK(b) (IOVIRT_BLOCK *)((uint8_t*)(&b->data_map[0]) + b->num_data_map * sizeof(NODE_DATA_MAP))
 #define IOVIRT_CCA_MASK ~((uint32_t)0)
-
-/* Memory INFO table */
-#define MEM_MAP_SUCCESS  0x0
-#define MEM_MAP_NO_MEM   0x1
-#define MEM_MAP_FAILURE  0x2
-
-typedef enum {
-  MEMORY_TYPE_DEVICE = 0x1000,
-  MEMORY_TYPE_NORMAL,
-  MEMORY_TYPE_RESERVED,
-  MEMORY_TYPE_NOT_POPULATED,
-  MEMORY_TYPE_LAST_ENTRY
-}MEM_INFO_TYPE_e;
-
-
-typedef struct {
-  MEM_INFO_TYPE_e type;
-  uint64_t        phy_addr;
-  uint64_t        virt_addr;
-  uint64_t        size;
-  uint64_t        flags;  //To Indicate Cacheablility etc..
-}MEM_INFO_BLOCK;
-
-
-typedef struct {
-  uint64_t  dram_base;
-  uint64_t  dram_size;
-  MEM_INFO_BLOCK  info[];
-} MEMORY_INFO_TABLE;
 
 /**
   @brief DMA controllers info structure

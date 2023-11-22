@@ -25,7 +25,7 @@
 #include "val/include/mem_interface.h"
 
 #define TEST_NUM   (ACS_RME_TEST_NUM_BASE  +  20)
-#define TEST_DESC  "Checks that the memory/PA that can be cached is associated with PAS until PoPA"
+#define TEST_DESC  "Cacheable memory/PA is associated with PAS until POPA  "
 #define TEST_RULE  "PE_02_A"
 
 /*

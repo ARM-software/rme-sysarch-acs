@@ -25,7 +25,7 @@
 #include "val/include/mem_interface.h"
 
 #define TEST_NUM   (ACS_RME_TEST_NUM_BASE  + 19)
-#define TEST_DESC  "Interconnect supports CMO to PoPA regardless of cacheability and shareability"
+#define TEST_DESC  "CMO to PoPA true for all cacheability and shareability "
 #define TEST_RULE  "PE_09"
 
 /*

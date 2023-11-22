@@ -27,7 +27,7 @@
 #define NUM_PAS 4
 
 #define TEST_NUM   (ACS_RME_TEST_NUM_BASE  +  04)
-#define TEST_DESC  "To validate if resources are protected by GPC as per system requirement"
+#define TEST_DESC  "To Check if resources are protected by GPC             "
 #define TEST_RULE  "PE_01"
 
 /*

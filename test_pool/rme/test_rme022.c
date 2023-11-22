@@ -26,7 +26,7 @@
 #include "val/include/mem_interface.h"
 
 #define TEST_NUM   (ACS_RME_TEST_NUM_BASE  +  22)
-#define TEST_DESC  "Check that the NS_Encryption is immutable once set"
+#define TEST_DESC  "Check that the NS_Encryption is immutable once set     "
 #define TEST_RULE  "PE_12"
 
 /*

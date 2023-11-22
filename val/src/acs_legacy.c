@@ -51,8 +51,8 @@ val_legacy_execute_tests(uint32_t num_pe)
     return ACS_STATUS_SKIP;
   }
   if (!IS_LEGACY_TZ_ENABLED) {
-    val_print(ACS_PRINT_TEST, " Skipping Legacy system tests \
-		    since the system doesn't support the feature \n", 0);
+    val_print(ACS_PRINT_TEST, " Skipping Legacy system tests since the system doesn't \
+support the feature \n", 0);
     return ACS_STATUS_SKIP;
   }
 

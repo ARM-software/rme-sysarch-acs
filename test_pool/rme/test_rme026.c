@@ -27,7 +27,7 @@
 #define NUM_PAS 4
 
 #define TEST_NUM   (ACS_RME_TEST_NUM_BASE  +  26)
-#define TEST_DESC  "Verify that RNVS programming functions can only be accessed from ROOT PAS"
+#define TEST_DESC  "RNVS prog functions can only be accessed from Root PAS "
 #define TEST_RULE  "PE_17"
 
 /**

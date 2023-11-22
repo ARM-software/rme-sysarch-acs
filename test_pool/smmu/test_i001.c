@@ -22,7 +22,7 @@
 #include"val/include/rme_acs_pcie.h"
 
 #define TEST_NUM  (ACS_SMMU_TEST_NUM_BASE + 1)
-#define TEST_DESC  "Check if SMMU implements RME"
+#define TEST_DESC  "Check if SMMU implements RME                           "
 #define TEST_RULE  "SMMU_01"
 
 #define BIT_30 30
