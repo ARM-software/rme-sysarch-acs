@@ -8,7 +8,7 @@ Level 3 (EL3) Secure Monitor.
 
 EL3 structure:
 --------------
-    - val_el3/ : This folder contains SmcHandlerAck.c, pgt_common.c, ack_include.h and
+    - val_el3/ : This folder contains plat_acs_smc_handler.c, pgt_common.c, ack_include.h and
                  asm_helper_function.S files that are responsible for the PGT modification in
                  EL3.
     - pal_el3/ : This folder contains the pal_el3_print.h file responsible for the abstraction
@@ -16,8 +16,8 @@ EL3 structure:
 
 Prerequisites:
 --------------
-- When Non-secure EL2 executes 'smc' with imm=0x100, EL3 Firmware is expected to branch to
-UserSmcCall function which is predefined in ACK.
+- When Non-secure EL2 executes 'smc' with SMC FID, 0xC2000060, EL3 Firmware is expected to branch to
+plat_arm_acs_user_smc_handler function which is predefined in ACK.
 - 2MB memory must be flat mapped in EL3-MMU with Root access PAS and GPI as ROOT/ALL_ACCESS.
 
 For more information, see Docs/Arm_RME_System_Architecture_Compliance_Suite_Validation_Methodology.pdf.
@@ -45,6 +45,8 @@ Steps:
    variable in configs.mk file.
 3. Set RDINFRA env variable with the rdinfra directory path and ACS_HOME env variable with the
    rme-acs path in the terminal being used.
+Note: Delete the file plat_acs_smc_handler.c along with it's object file from it;s build path,
+sw_stack/tf-a/build/rdfremont/debug/bl31/<plat_acs_smc_handler>
    export ACS_HOME=/local/path/to/rme-acs/
    export RDINFRA=/local/path/to/sw_stack/
 4. Run make command. This will build the object files for test files listed in EXTRA_SOURCES.

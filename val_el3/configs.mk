@@ -32,7 +32,7 @@ OBJ_COPY = ${RDINFRA}/tools/gcc/arm-gnu-toolchain-12.3.rel1-x86_64-aarch64-none-
 EXTRA_SOURCES = ${ACS_HOME}/val_el3/aarch64/ack_helper_functions.S  \
                 ${ACS_HOME}/val_el3/pgt_common.c  \
                 ${ACS_HOME}/pal_el3/acs_el3.c  \
-                ${ACS_HOME}/val_el3/SmcHandlerAck.c  \
+                ${ACS_HOME}/val_el3/plat_acs_smc_handler.c  \
                 ${ACS_HOME}/val_el3/ack_common.c
 
 INCDIRS = -I ${ACS_HOME}/ -I ${RDINFRA} -I ${RDINFRA}/tf-a/include -I ${RDINFRA}/tf-a/include/arch/aarch64 -I ${RDINFRA}/tf-a/include/lib/cpus/aarch64 -I ${RDINFRA}/tf-a/include/lib/el3_runtime/aarch64 -I ${RDINFRA}/tf-a/plat/arm/css/sgi/include -I ${RDINFRA}/tf-a/include/plat/arm/common/aarch64 -I ${RDINFRA}/tf-a/include/plat/arm/css/common/aarch64 -I ${RDINFRA}/tf-a/plat/arm/board/rdfremont/include/  -I ${RDINFRA}/tf-a/include/lib/libc -I ${RDINFRA}/tf-a/include/lib/libc/aarch64  -I ${RDINFRA}/tf-a/include/lib/libfdt

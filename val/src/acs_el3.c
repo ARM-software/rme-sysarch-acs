@@ -32,7 +32,7 @@
 void
 val_memory_set_el3(void *address, uint32_t size, uint8_t value)
 {
-  UserCallSMC(RME_MEM_SET, (uint64_t)address, size, value);
+  UserCallSMC(ARM_ACS_SMC_FID, RME_MEM_SET, (uint64_t)address, size, value);
 }
 
 /**
@@ -47,7 +47,7 @@ val_memory_set_el3(void *address, uint32_t size, uint8_t value)
 void
 val_data_cache_ops_by_va_el3(uint64_t address, uint32_t type)
 {
-  UserCallSMC(RME_DATA_CACHE_OPS, address, type, 0);
+  UserCallSMC(ARM_ACS_SMC_FID, RME_DATA_CACHE_OPS, address, type, 0);
 }
 
 /**
@@ -62,7 +62,7 @@ val_data_cache_ops_by_va_el3(uint64_t address, uint32_t type)
 void
 val_add_mmu_entry_el3(uint64_t VA, uint64_t PA, uint64_t acc_pas)
 {
-  UserCallSMC(RME_ADD_MMU_ENTRY, VA, PA, acc_pas);
+  UserCallSMC(ARM_ACS_SMC_FID, RME_ADD_MMU_ENTRY, VA, PA, acc_pas);
 }
 
 /**
@@ -76,7 +76,7 @@ val_add_mmu_entry_el3(uint64_t VA, uint64_t PA, uint64_t acc_pas)
 void
 val_add_gpt_entry_el3(uint64_t PA, uint64_t gpi)
 {
-  UserCallSMC(RME_ADD_GPT_ENTRY, PA, gpi, 0);
+  UserCallSMC(ARM_ACS_SMC_FID, RME_ADD_GPT_ENTRY, PA, gpi, 0);
 }
 
 /**
@@ -87,7 +87,7 @@ val_add_gpt_entry_el3(uint64_t PA, uint64_t gpi)
 void
 val_pe_access_mut_el3(void)
 {
-  UserCallSMC(RME_ACCESS_MUT, 0, 0, 0);
+  UserCallSMC(ARM_ACS_SMC_FID, RME_ACCESS_MUT, 0, 0, 0);
 }
 
 /**
@@ -102,7 +102,7 @@ val_pe_access_mut_el3(void)
 void
 val_data_cache_ops_by_pa_el3(uint64_t PA, uint64_t acc_pas)
 {
-  UserCallSMC(RME_CMO_POPA, PA, acc_pas, 0);
+  UserCallSMC(ARM_ACS_SMC_FID, RME_CMO_POPA, PA, acc_pas, 0);
 }
 
 /**
@@ -113,7 +113,7 @@ val_data_cache_ops_by_pa_el3(uint64_t PA, uint64_t acc_pas)
 void
 val_rme_install_handler_el3(void)
 {
-  UserCallSMC(RME_INSTALL_HANDLER, 0, 0, 0);
+  UserCallSMC(ARM_ACS_SMC_FID, RME_INSTALL_HANDLER, 0, 0, 0);
 }
 
 /**
@@ -124,7 +124,7 @@ val_rme_install_handler_el3(void)
 void
 val_enable_ns_encryption(void)
 {
-  UserCallSMC(RME_NS_ENCRYPTION, SET, 0, 0);
+  UserCallSMC(ARM_ACS_SMC_FID, RME_NS_ENCRYPTION, SET, 0, 0);
 }
 
 /**
@@ -135,7 +135,7 @@ val_enable_ns_encryption(void)
 void
 val_disable_ns_encryption(void)
 {
-  UserCallSMC(RME_NS_ENCRYPTION, CLEAR, 0, 0);
+  UserCallSMC(ARM_ACS_SMC_FID, RME_NS_ENCRYPTION, CLEAR, 0, 0);
 }
 
 /**
@@ -147,7 +147,7 @@ val_disable_ns_encryption(void)
 void
 val_read_pe_regs_bfr_low_pwr_el3(void)
 {
-  UserCallSMC(RME_READ_AND_CMPR_REG_MSD, CLEAR, 0, 0);
+  UserCallSMC(ARM_ACS_SMC_FID, RME_READ_AND_CMPR_REG_MSD, CLEAR, 0, 0);
 }
 
 /**
@@ -159,7 +159,7 @@ val_read_pe_regs_bfr_low_pwr_el3(void)
 void
 val_cmpr_pe_regs_aftr_low_pwr_el3(void)
 {
-  UserCallSMC(RME_READ_AND_CMPR_REG_MSD, SET, 0, 0);
+  UserCallSMC(ARM_ACS_SMC_FID, RME_READ_AND_CMPR_REG_MSD, SET, 0, 0);
 }
 /**
  *  @brief  This API is called to enable/disable the legacy tie-off input in EL3
@@ -169,7 +169,7 @@ val_cmpr_pe_regs_aftr_low_pwr_el3(void)
 void
 val_prog_legacy_tz(int enable)
 {
-  UserCallSMC(LEGACY_TZ_ENABLE, SET, 0, 0);
+  UserCallSMC(ARM_ACS_SMC_FID, LEGACY_TZ_ENABLE, SET, 0, 0);
 }
 
 /**
@@ -180,7 +180,7 @@ val_prog_legacy_tz(int enable)
 void
 val_wd_set_ws0_el3(uint64_t VA_RT_WDOG, uint32_t timeout, uint64_t counter_freq)
 {
-  UserCallSMC(ROOT_WATCHDOG, VA_RT_WDOG, timeout, counter_freq);
+  UserCallSMC(ARM_ACS_SMC_FID, ROOT_WATCHDOG, VA_RT_WDOG, timeout, counter_freq);
 }
 
 /**
@@ -190,7 +190,7 @@ val_wd_set_ws0_el3(uint64_t VA_RT_WDOG, uint32_t timeout, uint64_t counter_freq)
 **/
 void val_pas_filter_active_mode_el3(int enable)
 {
-  UserCallSMC(PAS_FILTER_SERVICE, enable, 0, 0);
+  UserCallSMC(ARM_ACS_SMC_FID, PAS_FILTER_SERVICE, enable, 0, 0);
 }
 
 /**
@@ -201,7 +201,7 @@ void val_pas_filter_active_mode_el3(int enable)
 **/
 void val_smmu_access_disable(void)
 {
-  UserCallSMC(SMMU_ROOT_SERVICE, 0, 0, 0);
+  UserCallSMC(ARM_ACS_SMC_FID, SMMU_ROOT_SERVICE, 0, 0, 0);
 }
 
 /**
@@ -212,5 +212,5 @@ void val_smmu_access_disable(void)
  */
 void val_change_security_state_el3(int sec_state)
 {
-  UserCallSMC(SEC_STATE_CHANGE, sec_state, 0, 0);
+  UserCallSMC(ARM_ACS_SMC_FID, SEC_STATE_CHANGE, sec_state, 0, 0);
 }

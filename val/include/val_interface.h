@@ -57,6 +57,7 @@
 #define SINGLE_MODULE_SENTINEL 10001
 
 #define USER_SMC_IMM    0x100
+#define ARM_ACS_SMC_FID 0xC2000060
 
 /* GENERIC VAL APIs */
 void val_allocate_shared_mem(void);
@@ -85,7 +86,8 @@ uint32_t val_pe_install_esr(uint32_t exception_type, void (*esr)(uint64_t, void 
 
 void     val_execute_on_pe(uint32_t index, void (*payload)(void), uint64_t args);
 int      val_suspend_pe(uint64_t entry, uint32_t context_id);
-void     UserCallSMC(uint64_t service, uint64_t arg0, uint64_t arg1, uint64_t arg2);
+void     UserCallSMC(uint64_t smc_fid, uint64_t service, uint64_t arg0,
+                     uint64_t arg1, uint64_t arg2);
 void     tlbi_alle2(void);
 
 /* VAL RME APIs */

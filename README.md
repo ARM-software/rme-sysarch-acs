@@ -19,7 +19,7 @@ This suite includes a set of examples of the invariant behaviors that are provid
 Most of the tests are executed from UEFI Shell by executing the RME UEFI shell application.
 
 ## Release details
-  - Code Quality: BETA v0.7.
+  - Code Quality: EAC v1.0.
   - The tests are written for version A.d of the Arm Realm Management Extension (RME) System Architecture.
   - The compliance suite is not a substitute for design verification.
 
@@ -42,9 +42,9 @@ Most of the tests are executed from UEFI Shell by executing the RME UEFI shell a
 
 ### Prerequisites
     ACK test requires to execute the code at EL3 for GPT/MMU modification, so ensure that the following requirements are met.
-- When Non-secure EL2 executes 'smc' with imm=0x100, EL3 Firmware is expected to branch to UserSmcCall function which is predefined in ACK.
+- When Non-secure EL2 executes 'smc' with SMC FID, 0xC2000060, EL3 Firmware is expected to branch to plat_arm_acs_user_smc_handler function which is predefined in ACK.
 - To generate binary file for EL3 code, follow the build steps in README of val_el3.
-- 2MB memory must be flat mapped in EL3-MMU with Root access PAS and GPI as ROOT/ALL_ACCESS, which is used for, a) MMU tables in EL3 and b) SP_EL3 by USerSmcCall.
+- 2MB memory must be flat mapped in EL3-MMU with Root access PAS and GPI as ROOT/ALL_ACCESS, which is used for MMU tables in EL3.
 - 2MB Free memory which is used as PA in tests.
 - 4KB/16KB/64KB shared memory that is used, a) as a structure, shared_data_el32 to share data between EL3 and EL2 domains, b) to save/restore registers and sp_el3, and tf-handler entry address.
 - 512MB Unused VA space (within 48bits) that is used in the tests as VA.
@@ -112,7 +112,7 @@ To start the ACS build, perform the following steps:
 
 ### Linux build environment
 If the build environment is Linux, perform the following steps:
-1.  export GCC49_AARCH64_PREFIX= GCC12.3 toolchain path pointing to /bin/aarch64-linux-gnu- in case of x86 machine. For aarch64 build it should point to /usr/bin/
+1.  export GCC49_AARCH64_PREFIX= GCC12.3 toolchain path pointing to /bin/aarch64-linux-gnu-
 2.  export PACKAGES_PATH= path pointing to edk2-libc
 3.  source edksetup.sh
 4.  make -C BaseTools/Source/C

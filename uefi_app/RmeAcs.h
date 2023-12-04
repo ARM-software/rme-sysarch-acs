@@ -20,8 +20,8 @@
 
 
 
-  #define RME_ACS_MAJOR_VER  0
-  #define RME_ACS_MINOR_VER  7
+  #define RME_ACS_MAJOR_VER  1
+  #define RME_ACS_MINOR_VER  0
 
   #define G_PRINT_LEVEL ACS_PRINT_TEST
 
