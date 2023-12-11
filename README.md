@@ -42,7 +42,7 @@ Most of the tests are executed from UEFI Shell by executing the RME UEFI shell a
 
 ### Prerequisites
     ACK test requires to execute the code at EL3 for GPT/MMU modification, so ensure that the following requirements are met.
-- When Non-secure EL2 executes 'smc' with SMC FID, 0xC2000060, EL3 Firmware is expected to branch to plat_arm_acs_user_smc_handler function which is predefined in ACK.
+- When Non-secure EL2 executes 'smc' with SMC FID, 0xC2000060, EL3 Firmware is expected to branch to plat_arm_acs_smc_handler function which is predefined in ACK.
 - To generate binary file for EL3 code, follow the build steps in README of val_el3.
 - 2MB memory must be flat mapped in EL3-MMU with Root access PAS and GPI as ROOT/ALL_ACCESS, which is used for MMU tables in EL3.
 - 2MB Free memory which is used as PA in tests.
@@ -61,8 +61,8 @@ For more information, see [arm RME System ACS Validation Methodology document](D
 - Partner can refer [RME_ACS_SysARCUI_Tool](tools/SysARCUI/README.md) for generating val/src/sys_config.c and val/include/platform_overrride_fvp.h files based on the memory mapping of their respective platform.
 - Partners are welcome to give their feedback on this tool improvement.
 - Any mainstream Linux based OS distribution running on a x86 or aarch64 machine.
-- git clone --branch edk2-stable202008 --depth 1 https://github.com/tianocore/edk2.
-- git clone https://github.com/tianocore/edk2-libc. [ Checkout SHA: 61687168fe02ac4d933a36c9145fdd242ac424d1].
+- git clone --branch edk2-stable202208 --depth 1 https://github.com/tianocore/edk2
+- git clone https://github.com/tianocore/edk2-libc [ Checkout SHA: 61687168fe02ac4d933a36c9145fdd242ac424d1]
 - Install GCC 12.3 or later toolchain for Linux from [here](https://developer.arm.com/downloads/-/arm-gnu-toolchain-downloads/12-3-rel1).
 - Install the build prerequisite packages to build EDK2.
 Note: The details of the packages are beyond the scope of this document.

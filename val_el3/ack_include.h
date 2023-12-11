@@ -153,7 +153,7 @@ void invalidate_cache(uint64_t *address);
 void val_data_cache_ops_by_va_el3(uint64_t address, uint32_t type);
 void val_memory_set_el3(void *buf, uint32_t size, uint8_t value);
 void cmo_cipapa(uint64_t PA);
-void plat_arm_acs_user_smc_handler(uint64_t services, uint64_t arg0, uint64_t arg1, uint64_t arg2);
+void plat_arm_acs_smc_handler(uint64_t services, uint64_t arg0, uint64_t arg1, uint64_t arg2);
 void branch_asm(uint64_t el3_handler);
 uint64_t modify_desc(uint64_t desc, uint8_t start_bit, uint64_t value_to_set, uint8_t num_bits);
 uint32_t log2_page_size(uint64_t size);

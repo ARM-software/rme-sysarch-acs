@@ -17,7 +17,7 @@ EL3 structure:
 Prerequisites:
 --------------
 - When Non-secure EL2 executes 'smc' with SMC FID, 0xC2000060, EL3 Firmware is expected to branch to
-plat_arm_acs_user_smc_handler function which is predefined in ACK.
+plat_arm_acs_smc_handler function which is predefined in ACK.
 - 2MB memory must be flat mapped in EL3-MMU with Root access PAS and GPI as ROOT/ALL_ACCESS.
 
 For more information, see Docs/Arm_RME_System_Architecture_Compliance_Suite_Validation_Methodology.pdf.
