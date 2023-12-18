@@ -1,0 +1,10 @@
+v23.12_REL1.0
+
+EL3 Code Integration into TF-A SMC Service:
+* Implemented custom SMC service handling within the EL3 codebase.
+* Defined a unique SMC service ID (ARM_SIP_ACS_SMC_HANDLER) for the new functionality.
+* Registered a custom SMC handler to process requests and provide appropriate responses.
+Log Formatting Enhancements:
+* Enhanced log formatting for improved readability and consistency.
+Code Cleanup:
+* Identified and removed unused code sections to streamline the codebase.
