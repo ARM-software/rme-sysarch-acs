@@ -28,7 +28,7 @@
 #include "val/include/sys_config.h"
 
 #define TEST_NUM   (ACS_RME_TEST_NUM_BASE  +  13)
-#define TEST_DESC  "Check whether if PCiE devices are subject to PAS protection check or not"
+#define TEST_DESC  "PCiE devices subjected to PAS protection check or not  "
 #define TEST_RULE  "EXRCR_01"
 
 #define TEST_DATA_NUM_PAGES  1

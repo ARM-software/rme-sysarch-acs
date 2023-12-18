@@ -28,7 +28,7 @@
 #define NUM_MTE_RGN 3
 
 #define TEST_NUM   (ACS_RME_TEST_NUM_BASE  +  9)
-#define TEST_DESC  "To verify that the MTE carve-out region can only be accessed from ROOT"
+#define TEST_DESC  "To check if MTE carve-out region has Root access only  "
 #define TEST_RULE  "PE_13"
 
 /*

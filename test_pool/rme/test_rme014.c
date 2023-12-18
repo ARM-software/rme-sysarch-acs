@@ -26,7 +26,7 @@
 #include "val/include/mem_interface.h"
 
 #define TEST_NUM   (ACS_RME_TEST_NUM_BASE  +  14)
-#define TEST_DESC  "Check whether the data is encrypted when written in memory/any shared cache beyond PoPA or not"
+#define TEST_DESC  "Check data encryption beyond PoPA in mem/shared cache  "
 #define TEST_RULE  "PE_03"
 
 /**

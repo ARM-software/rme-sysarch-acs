@@ -33,7 +33,7 @@
 #include "val/sys_arch_src/gic/its/rme_gic_its.h"
 
 #define TEST_NUM   (ACS_GIC_TEST_NUM_BASE + 01)
-#define TEST_DESC  "To check that GIC ITS memory accesses are only to non-secure memory"
+#define TEST_DESC  "To check if GIC ITS mem accesses are only to NS memory "
 #define TEST_RULE  "GIC_01"
 
 static uint32_t irq_pending;

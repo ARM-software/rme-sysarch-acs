@@ -28,7 +28,7 @@
 #define NUM_SMEM_REGN 2
 
 #define TEST_NUM   (ACS_RME_TEST_NUM_BASE  +  16)
-#define TEST_DESC  "Verify that MSD SMEM is in ROOT PAS only"
+#define TEST_DESC  "Verify that MSD SMEM is in ROOT PAS only               "
 #define TEST_RULE  "PE_05"
 
 /**
@@ -69,12 +69,12 @@ void payload(void)
           status_fail_cnt++;
         }
 
-	/* Also test for Top address within the minimum TG size to make sure
+        /* Also test for Top address within the minimum TG size to make sure
          * SMEM region is compliant with the page size supported
          **/
-	shared_data->exception_expected = CLEAR;
+        shared_data->exception_expected = CLEAR;
         shared_data->access_mut = SET;
-	VA_Top = VA + size - 8;
+        VA_Top = VA + size - 8;
         shared_data->arg1 = VA_Top;
         val_pe_access_mut_el3();    //Accessing MUT
 
@@ -88,7 +88,7 @@ void payload(void)
       } else {
         shared_data->exception_expected = SET;
         shared_data->access_mut = SET;
-	shared_data->pas_filter_flag = SET;
+        shared_data->pas_filter_flag = SET;
         shared_data->arg1 = VA;
         val_pe_access_mut_el3();    //Accessing MUT
         rd_data1 = shared_data->shared_data_access[0].data;
@@ -106,11 +106,11 @@ void payload(void)
         }
         shared_data->exception_generated = CLEAR;
 
-	/* Also test for Top address within the minimum TG size to make sure
-	 * SMEM region is compliant with the page size supported
-	 **/
-	VA_Top = VA + size - 8;
-	shared_data->exception_expected = SET;
+        /* Also test for Top address within the minimum TG size to make sure
+         * SMEM region is compliant with the page size supported
+         **/
+        VA_Top = VA + size - 8;
+        shared_data->exception_expected = SET;
         shared_data->access_mut = SET;
         shared_data->pas_filter_flag = SET;
         shared_data->arg1 = VA_Top;

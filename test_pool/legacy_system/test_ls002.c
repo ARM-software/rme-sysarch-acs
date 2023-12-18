@@ -25,7 +25,7 @@
 #include "val/include/sys_config.h"
 
 #define TEST_NUM  (ACS_LEGACY_TEST_NUM_BASE + 02)
-#define TEST_DESC  "Check that for LEGACY_TZ_EN=1, root PAS is driven to secure PAS"
+#define TEST_DESC  "Check if LEGACY_TZ_EN=1, root PAS is driven to sec PAS "
 #define TEST_RULE  "PE_23"
 
 /*

@@ -31,7 +31,7 @@
 #include "val/include/mem_interface.h"
 
 #define TEST_NUM   (ACS_SMMU_TEST_NUM_BASE + 2)
-#define TEST_DESC  "Check SMMU responds to GPT TLBI PAALLOS operation"
+#define TEST_DESC  "Check SMMU responds to GPT TLBI PAALLOS operation      "
 #define TEST_RULE  "SMMU_02"
 
 #define TEST_DATA_NUM_PAGES  1

@@ -26,7 +26,7 @@
 #include "val/include/mem_interface.h"
 
 #define TEST_NUM   (ACS_RME_TEST_NUM_BASE  +  15)
-#define TEST_DESC  "Check whether the data is encrypted with a different tweak in each 128-bit of data block or not"
+#define TEST_DESC  "Data encryption with different tweak in each data block"
 #define TEST_RULE  "PE_04"
 
 /*
@@ -91,7 +91,7 @@ void payload(void)
 
   val_print(ACS_PRINT_DEBUG, "  Data returned from Nonsecure Address = 0x%lx\n", data_rd_ns);
   val_print(ACS_PRINT_DEBUG, "  Data returned from next(128-bit) block Address = 0x%lx\n",
-		  data_rd_ns_nxt_blk);
+                  data_rd_ns_nxt_blk);
   val_print(ACS_PRINT_DEBUG, "  The test expects both the data to be unique\n", 0);
 
   if (data_rd_ns_nxt_blk != data_rd_ns)

@@ -34,9 +34,9 @@
 /* set G_PRINT_LEVEL to one of the below values in your application entry
   to control the verbosity of the prints */
 #define ACS_PRINT_ERR   5      /* Only Errors. use this to de-clutter the
-				  terminal and focus only on specifics */
+                                  terminal and focus only on specifics */
 #define ACS_PRINT_WARN  4      /* Only warnings & errors. use this to de-clutter
-				  the terminal and focus only on specifics */
+                                  the terminal and focus only on specifics */
 #define ACS_PRINT_TEST  3      /* Test description and result descriptions. THIS is DEFAULT */
 #define ACS_PRINT_DEBUG 2      /* For Debug statements. contains register dumps etc */
 #define ACS_PRINT_INFO  1      /* Print all statements. Do not use unless really needed */
@@ -57,6 +57,7 @@
 #define SINGLE_MODULE_SENTINEL 10001
 
 #define USER_SMC_IMM    0x100
+#define ARM_ACS_SMC_FID 0xC2000060
 
 /* GENERIC VAL APIs */
 void val_allocate_shared_mem(void);
@@ -85,7 +86,8 @@ uint32_t val_pe_install_esr(uint32_t exception_type, void (*esr)(uint64_t, void 
 
 void     val_execute_on_pe(uint32_t index, void (*payload)(void), uint64_t args);
 int      val_suspend_pe(uint64_t entry, uint32_t context_id);
-void     UserCallSMC(uint64_t service, uint64_t arg0, uint64_t arg1, uint64_t arg2);
+void     UserCallSMC(uint64_t smc_fid, uint64_t service, uint64_t arg0,
+                     uint64_t arg1, uint64_t arg2);
 void     tlbi_alle2(void);
 
 /* VAL RME APIs */
@@ -189,21 +191,6 @@ void val_platform_timer_get_entry_index(uint64_t instance, uint32_t *block, uint
 uint64_t val_get_phy_el2_timer_count(void);
 uint64_t val_get_phy_el1_timer_count(void);
 
-/* Watchdog VAL APIs */
-typedef enum {
-  WD_INFO_COUNT = 1,
-  WD_INFO_CTRL_BASE,
-  WD_INFO_REFRESH_BASE,
-  WD_INFO_GSIV,
-  WD_INFO_ISSECURE,
-  WD_INFO_IS_EDGE
-} WD_INFO_TYPE_e;
-
-void     val_wd_create_info_table(uint64_t *wd_info_table);
-void     val_wd_free_info_table(void);
-uint32_t val_wd_execute_tests(uint32_t level, uint32_t num_pe);
-uint64_t val_wd_get_info(uint32_t index, uint32_t info_type);
-uint32_t val_wd_set_ws0(uint32_t index, uint32_t timeout);
 uint64_t val_get_counter_frequency(void);
 
 
@@ -289,25 +276,6 @@ uint32_t val_smmu_execute_tests(uint32_t level, uint32_t num_pe);
 uint64_t val_smmu_get_info(SMMU_INFO_e type, uint32_t index);
 uint64_t val_iovirt_get_smmu_info(SMMU_INFO_e type, uint32_t index);
 
-typedef enum {
-    DMA_NUM_CTRL = 1,
-    DMA_HOST_INFO,
-    DMA_PORT_INFO,
-    DMA_TARGET_INFO,
-    DMA_HOST_COHERENT,
-    DMA_HOST_IOMMU_ATTACHED,
-    DMA_HOST_PCI
-} DMA_INFO_e;
-
-void     val_dma_create_info_table(uint64_t *dma_info_ptr);
-uint64_t val_dma_get_info(DMA_INFO_e type, uint32_t index);
-uint32_t val_dma_start_from_device(void *buffer, uint32_t length, uint32_t index);
-uint32_t val_dma_start_to_device(void *buffer, uint32_t length, uint32_t index);
-uint32_t val_dma_iommu_check_iova(uint32_t ctrl_index, addr_t dma_addr, addr_t cpu_addr);
-void     val_dma_device_get_dma_addr(uint32_t ctrl_index, void *dma_addr, uint32_t *cpu_len);
-int      val_dma_mem_get_attrs(void *buf, uint32_t *attr, uint32_t *sh);
-
-
 /* POWER and WAKEUP APIs */
 typedef enum {
     RME_POWER_SEM_B = 1,
@@ -357,15 +325,6 @@ uint32_t val_peripheral_execute_tests(uint32_t level, uint32_t num_pe);
 uint64_t val_peripheral_get_info(PERIPHERAL_INFO_e info_type, uint32_t index);
 uint32_t val_peripheral_is_pcie(uint32_t bdf);
 
-/* Memory Tests APIs */
-typedef enum {
-  MEM_TYPE_DEVICE = 0x1000,
-  MEM_TYPE_NORMAL,
-  MEM_TYPE_RESERVED,
-  MEM_TYPE_NOT_POPULATED,
-  MEM_TYPE_LAST_ENTRY
-} MEMORY_INFO_e;
-
 #define MEM_ATTR_UNCACHED  0x2000
 #define MEM_ATTR_CACHED    0x1000
 
@@ -375,12 +334,6 @@ typedef enum {
 #define MEM_NORMAL_NC_IN_OUT(attr) (attr == 0x44)
 #define MEM_DEVICE(attr) ((attr & 0xf0) == 0)
 #define MEM_SH_INNER(sh) (sh == 0x3)
-
-void     val_memory_create_info_table(uint64_t *memory_info_table);
-void     val_memory_free_info_table(void);
-uint32_t val_memory_execute_tests(uint32_t level, uint32_t num_pe);
-uint64_t val_memory_get_info(addr_t addr, uint64_t *attr);
-uint64_t val_memory_get_unpopulated_addr(addr_t *addr, uint32_t instance);
 
 /* Secure mode EL3 Firmware tests */
 
@@ -399,8 +352,4 @@ void     val_system_reset(void);
 
 /* PCIe Exerciser tests */
 uint32_t val_exerciser_execute_tests(uint32_t level);
-
-/* NIST Statistical tests */
-uint32_t val_nist_execute_tests(uint32_t level, uint32_t num_pe);
-uint32_t val_nist_generate_rng(uint32_t *rng_buffer);
 #endif

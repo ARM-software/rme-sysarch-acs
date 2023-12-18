@@ -25,7 +25,7 @@
 #include "val/include/mem_interface.h"
 
 #define TEST_NUM  (ACS_LEGACY_TEST_NUM_BASE + 03)
-#define TEST_DESC  "Check that LEGACY_TZ_EN takes effect only after reset"
+#define TEST_DESC  "Check that LEGACY_TZ_EN takes effect only after reset  "
 #define TEST_RULE  "SYS_RST_04"
 
 #define BIT_30 30

@@ -113,7 +113,7 @@ ASM_PFX(tlbi_alle2):
 
 ASM_PFX(UserCallSMC):
   stp x29, x30, [sp, #-0x10]!
-  smc #USER_SMC_IMM
+  smc #0
   ldp x29,x30, [sp] ,#0x10
   ret
 

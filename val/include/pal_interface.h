@@ -281,36 +281,6 @@ typedef struct {
 void pal_timer_create_info_table(TIMER_INFO_TABLE *timer_info_table);
 uint64_t pal_timer_get_counter_frequency(void);
 
-/** Watchdog tests related definitions **/
-
-/**
-  @brief  Watchdog Info header - Summary of Watchdog subsytem
-**/
-typedef struct {
-  uint32_t num_wd;  ///< number of Watchdogs present in the system
-} WD_INFO_HDR;
-
-/**
-  @brief  structure instance for Watchdog entry
-**/
-typedef struct {
-  uint64_t wd_ctrl_base;     ///< Watchdog Control Register Frame
-  uint64_t wd_refresh_base;  ///< Watchdog Refresh Register Frame
-  uint32_t wd_gsiv;          ///< Watchdog Interrupt ID
-  uint32_t wd_flags;
-} WD_INFO_BLOCK;
-
-/**
-  @brief Watchdog Info Table
-**/
-typedef struct {
-  WD_INFO_HDR    header;
-  WD_INFO_BLOCK  wd_info[];  ///< Array of Information blocks - instantiated for each WD Controller
-} WD_INFO_TABLE;
-
-void pal_wd_create_info_table(WD_INFO_TABLE  *wd_table);
-
-
 /* PCIe Tests related definitions */
 
 /**
@@ -573,71 +543,6 @@ uint32_t pal_pcie_device_driver_present(uint32_t seg, uint32_t bus, uint32_t dev
 uint32_t pal_pcie_scan_bridge_devices_and_check_memtype(uint32_t seg, uint32_t bus,
                                                             uint32_t dev, uint32_t fn);
 uint32_t pal_pcie_get_rp_transaction_frwd_support(uint32_t seg, uint32_t bus, uint32_t dev, uint32_t fn);
-/**
-  @brief DMA controllers info structure
-**/
-typedef enum {
-  DMA_TYPE_USB  =  0x2000,
-  DMA_TYPE_SATA,
-  DMA_TYPE_OTHER,
-} DMA_INFO_TYPE_e;
-
-typedef struct {
-  DMA_INFO_TYPE_e type;
-  void            *target;   ///< The actual info stored in these pointers is implementation specific.
-  void            *port;
-  void            *host;     // It will be used only by PAL. hence void.
-  uint32_t        flags;
-} DMA_INFO_BLOCK;
-
-typedef struct {
-  uint32_t         num_dma_ctrls;
-  DMA_INFO_BLOCK   info[];    ///< Array of information blocks - per DMA controller
-} DMA_INFO_TABLE;
-
-void pal_dma_create_info_table(DMA_INFO_TABLE *dma_info_table);
-uint32_t pal_dma_start_from_device(void *dma_target_buf, uint32_t length,
-                          void *host, void *dev);
-uint64_t
-pal_dma_mem_alloc(void **buffer, uint32_t length, void *dev, uint32_t flags);
-
-void
-pal_dma_mem_free(void *buffer, addr_t mem_dma, unsigned int length, void *port, unsigned int flags);
-
-uint32_t pal_dma_start_to_device(void *dma_source_buf, uint32_t length,
-                         void *host, void *target, uint32_t timeout);
-
-void pal_dma_scsi_get_dma_addr(void *port, void *dma_addr, uint32_t *dma_len);
-int pal_dma_mem_get_attrs(void *buf, uint32_t *attr, uint32_t *sh);
-
-
-/* Memory INFO table */
-typedef enum {
-  MEMORY_TYPE_DEVICE = 0x1000,
-  MEMORY_TYPE_NORMAL,
-  MEMORY_TYPE_RESERVED,
-  MEMORY_TYPE_NOT_POPULATED,
-  MEMORY_TYPE_LAST_ENTRY
-} MEM_INFO_TYPE_e;
-
-typedef struct {
-  MEM_INFO_TYPE_e type;
-  uint64_t        phy_addr;
-  uint64_t        virt_addr;
-  uint64_t        size;
-  uint64_t        flags;  //To Indicate Cacheablility etc..
-} MEM_INFO_BLOCK;
-
-typedef struct {
-  uint64_t  dram_base;
-  uint64_t  dram_size;
-  MEM_INFO_BLOCK  info[];
-} MEMORY_INFO_TABLE;
-
-void  pal_memory_create_info_table(MEMORY_INFO_TABLE *memoryInfoTable);
-uint64_t pal_memory_ioremap(void *addr, uint32_t size, uint32_t attr);
-void pal_memory_unmap(void *addr);
-uint64_t pal_memory_get_unpopulated_addr(uint64_t *addr, uint32_t instance);
 
 /* Common Definitions */
 void     pal_print(char8_t *string, uint64_t data);

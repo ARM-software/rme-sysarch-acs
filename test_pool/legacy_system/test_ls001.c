@@ -24,7 +24,7 @@
 #include "val/include/rme_acs_el32.h"
 
 #define TEST_NUM  (ACS_LEGACY_TEST_NUM_BASE + 01)
-#define TEST_DESC  "Check if the system supports LEGACY_TZ_EN tie-off"
+#define TEST_DESC  "Check if the system supports LEGACY_TZ_EN tie-off      "
 #define TEST_RULE  "PE_18"
 
 #define BIT_30 30

@@ -19,8 +19,6 @@
 #include "include/pal_common_support.h"
 
 extern PLATFORM_OVERRIDE_TIMER_INFO_TABLE platform_timer_cfg;
-extern WD_INFO_TABLE platform_wd_cfg;
-
 
 /**
   @brief  This API fills in the TIMER_INFO_TABLE with information about local and
@@ -79,36 +77,4 @@ uint64_t
 pal_timer_get_counter_frequency(void)
 {
   return PLATFORM_OVERRIDE_TIMER_CNTFRQ;
-}
-
-
-/**
-  @brief  This API fills in the WD_INFO_TABLE with information about Watchdogs
-          in the system from baremetal platform watchdog configuration
-
-  @param  WdTable  - Address where the Timer information needs to be filled.
-
-  @return  None
-**/
-
-void
-pal_wd_create_info_table(WD_INFO_TABLE *WdTable)
-{
-
-  uint32_t Index;
-
-  if (WdTable == NULL) {
-    return;
-  }
-
-  WdTable->header.num_wd = platform_wd_cfg.header.num_wd;
-
-  for (Index = 0; Index < platform_wd_cfg.header.num_wd; Index++)
-  {
-    WdTable->wd_info[Index].wd_refresh_base = platform_wd_cfg.wd_info[Index].wd_refresh_base;
-    WdTable->wd_info[Index].wd_ctrl_base    = platform_wd_cfg.wd_info[Index].wd_ctrl_base;
-    WdTable->wd_info[Index].wd_gsiv         = platform_wd_cfg.wd_info[Index].wd_gsiv;
-    WdTable->wd_info[Index].wd_flags        = platform_wd_cfg.wd_info[Index].wd_flags;
-
-  }
 }

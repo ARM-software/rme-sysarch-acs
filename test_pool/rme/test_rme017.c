@@ -28,7 +28,7 @@
 #define NUM_SMEM_REGN 2
 
 #define TEST_NUM   (ACS_RME_TEST_NUM_BASE  +  17)
-#define TEST_DESC  "Verify that Realm SMEM is in realm PAS"
+#define TEST_DESC  "Verify that Realm SMEM is in realm PAS                 "
 #define TEST_RULE  "PE_06"
 
 /**
@@ -68,7 +68,7 @@ void payload(void)
           status_fail_cnt++;
         }
 
-	/* Also test for Top address within the minimum TG size to make sure
+        /* Also test for Top address within the minimum TG size to make sure
          * SMEM region is compliant with the page size supported
          **/
         shared_data->exception_expected = CLEAR;
@@ -105,7 +105,7 @@ void payload(void)
         }
         shared_data->exception_generated = CLEAR;
 
-	/* Also test for Top address within the minimum TG size to make sure
+        /* Also test for Top address within the minimum TG size to make sure
          * SMEM region is compliant with the page size supported
          **/
         VA_Top = VA + size - 8;

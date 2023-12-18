@@ -23,7 +23,7 @@
 #include "val/include/rme_acs_el32.h"
 
 #define TEST_NUM   (ACS_RME_TEST_NUM_BASE  +  8)
-#define TEST_DESC  "To verify application PEs in an RME system do not have any architectural differences"
+#define TEST_DESC  "To check if PEs do not have architectural differences  "
 #define TEST_RULE  "PE_14"
 
 #define NUM_OF_REGISTERS  32

@@ -28,7 +28,7 @@
 #include "val/include/rme_acs_el32.h"
 
 #define TEST_NUM   (ACS_RME_TEST_NUM_BASE  +  30)
-#define TEST_DESC  "Check if SMMU control register values are same as reset values, it blocks all memory access request from it's devices"
+#define TEST_DESC  "SMMU blocks the access if its CNT REGs are under reset "
 #define TEST_RULE  "PAS_FLTR_03"
 
 #define TEST_DATA_BLK_SIZE  (4*1024)
@@ -109,7 +109,7 @@ payload(void)
 
     /* Find SMMU node index for this exerciser instance */
     smmu_index = val_iovirt_get_rc_smmu_index(PCIE_EXTRACT_BDF_SEG(e_bdf),
-		    PCIE_CREATE_BDF_PACKED(e_bdf));
+                    PCIE_CREATE_BDF_PACKED(e_bdf));
 
     /* Disable SMMU globally by writing reset values to SMMU_CR0.SMMUEN and
      * SMMU_ROOT_CR0.ACCESSEN thereby setting the SMMU in reset state.

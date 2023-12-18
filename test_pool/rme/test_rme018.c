@@ -26,7 +26,7 @@
 #include "val/include/mem_interface.h"
 
 #define TEST_NUM   (ACS_RME_TEST_NUM_BASE  +  18)
-#define TEST_DESC  "To validate that snoop filter considers PAS"
+#define TEST_DESC  "To validate that snoop filter considers PAS            "
 #define TEST_RULE  "PE_02_B"
 
 #define Data1 0xAD
@@ -111,7 +111,7 @@ void payload1(uint32_t num_pe)
   timeout = TIMEOUT_MEDIUM;
   val_execute_on_pe(sec_index, payload2, 0);
   while  ((--timeout) && (IS_RESULT_PENDING(val_get_status(sec_index))))
-	  ;
+          ;
   if (!timeout)
   {
     val_print(ACS_PRINT_ERR, "\n       **Timed out** for PE index = %d", sec_index);

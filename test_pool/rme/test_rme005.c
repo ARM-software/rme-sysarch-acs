@@ -25,7 +25,7 @@
 #include "val/include/mem_interface.h"
 
 #define TEST_NUM   (ACS_RME_TEST_NUM_BASE  +  05)
-#define TEST_DESC  "To check if coherent interconnect supports CMO to PoPA"
+#define TEST_DESC  "To check if coherent interconnect supports CMO to PoPA "
 #define TEST_RULE  "PE_08"
 
 /*

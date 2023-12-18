@@ -26,7 +26,7 @@
 #include "val/include/rme_acs_memory.h"
 
 #define TEST_NUM   (ACS_RME_TEST_NUM_BASE + 28)
-#define TEST_DESC  "Check Root Watchdog programming is unsuccessful in Non-Rooot state"
+#define TEST_DESC  "Check Root Watchdog programming fails in Non-Root state"
 #define TEST_RULE  "PE_20"
 
 static uint32_t int_id;
@@ -40,7 +40,8 @@ isr()
     uint32_t index = val_pe_get_index_mpid(val_pe_get_mpid());
     //Disable the root watchdog timer
     val_wd_set_ws0_el3(VA_RT_WDOG, CLEAR, counter_freq);
-    val_print(ACS_PRINT_DEBUG, "\n       Received WS0 interrupt                ", 0);
+    val_print(ACS_PRINT_DEBUG, "\n       Received WS0 interrupt                \
+                    ", 0);
     val_set_status(index, RESULT_FAIL(TEST_NUM, 1));
     val_gic_end_of_interrupt(int_id);
 }
@@ -93,7 +94,8 @@ payload()
     while ((--timeout > 0) && (IS_RESULT_PENDING(val_get_status(index))));
 
     if (timeout == 0) {
-            val_print(ACS_PRINT_ERR, "\n       WS0 Interrupt not received on %d   ", int_id);
+            val_print(ACS_PRINT_ERR, "\n       WS0 Interrupt not received on %d             \
+         ", int_id);
             val_set_status(index, RESULT_PASS(TEST_NUM, 4));
             return;
     }

@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2023, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -199,31 +199,6 @@ typedef struct {
 }TIMER_INFO_TABLE;
 
 /**
-  @brief  Watchdog Info header - Summary of Watchdog subsytem
-**/
-typedef struct {
-  UINT32 num_wd;  ///< number of Watchdogs present in the system
-}WD_INFO_HDR;
-
-/**
-  @brief  structure instance for Watchdog entry
-**/
-typedef struct {
-  UINT64 wd_ctrl_base;     ///< Watchdog Control Register Frame
-  UINT64 wd_refresh_base;  ///< Watchdog Refresh Register Frame
-  UINT32 wd_gsiv;          ///< Watchdog Interrupt ID
-  UINT32 wd_flags;
-}WD_INFO_BLOCK;
-
-/**
-  @brief Watchdog Info Table
-**/
-typedef struct {
-  WD_INFO_HDR    header;
-  WD_INFO_BLOCK  wd_info[];  ///< Array of Information blocks - instantiated for each WD Controller
-}WD_INFO_TABLE;
-
-/**
   @brief PCI Express Info Table
 **/
 typedef struct {
@@ -409,33 +384,6 @@ UINT32 pal_pcie_max_pasid_bits(UINT32 bdf);
 #define MEM_MAP_NO_MEM   0x1
 #define MEM_MAP_FAILURE  0x2
 #define MEM_INFO_TBL_MAX_ENTRY  500 /* Maximum entries to be added in Mem info table*/
-
-typedef enum {
-  MEMORY_TYPE_DEVICE = 0x1000,
-  MEMORY_TYPE_NORMAL,
-  MEMORY_TYPE_RESERVED,
-  MEMORY_TYPE_NOT_POPULATED,
-  MEMORY_TYPE_LAST_ENTRY
-}MEM_INFO_TYPE_e;
-
-
-typedef struct {
-  MEM_INFO_TYPE_e type;
-  UINT64        phy_addr;
-  UINT64        virt_addr;
-  UINT64        size;
-  UINT64        flags;  //To Indicate Cacheablility etc..
-}MEM_INFO_BLOCK;
-
-
-typedef struct {
-  UINT64  dram_base;
-  UINT64  dram_size;
-  MEM_INFO_BLOCK  info[];
-} MEMORY_INFO_TABLE;
-
-
-VOID  pal_memory_create_info_table(MEMORY_INFO_TABLE *memoryInfoTable);
 
 VOID    *pal_mem_alloc(UINT32 size);
 VOID    *pal_mem_calloc(UINT32 num, UINT32 size);

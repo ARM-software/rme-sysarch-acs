@@ -158,10 +158,11 @@ void access_mut(void)
  *  @param  arg2     -  The argument is specific to the test requirement
  *  @return None
 **/
-void UserSmcCall(uint64_t services, uint64_t arg0, uint64_t arg1, uint64_t arg2)
+void plat_arm_acs_smc_handler(uint64_t services, uint64_t arg0, uint64_t arg1, uint64_t arg2)
 {
 
-  INFO("UserSMCCall call started for service = 0x%lx arg0 = 0x%lx arg1 = 0x%lx arg2 = 0x%lx \n", services, arg0, arg1, arg2);
+  INFO("User SMC Call started for service = 0x%lx arg0 = 0x%lx arg1 = 0x%lx arg2 = 0x%lx \n",
+        services, arg0, arg1, arg2);
 
   switch (services)
   {
