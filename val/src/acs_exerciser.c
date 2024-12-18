@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022-2023, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2024, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,7 +20,8 @@
 #include "include/rme_acs_pcie.h"
 #include "include/rme_acs_smmu.h"
 
-EXERCISER_INFO_TABLE g_exercier_info_table;
+EXERCISER_INFO_TABLE g_exerciser_info_table;
+
 extern uint32_t pcie_bdf_table_list_flag;
 
 /**
@@ -60,13 +61,73 @@ void val_exerciser_create_info_table(void)
       /* Store the Function's BDF if there was a valid response */
       if (pal_is_bdf_exerciser(Bdf))
       {
-          g_exercier_info_table.e_info[g_exercier_info_table.num_exerciser].bdf = Bdf;
-          g_exercier_info_table.e_info[g_exercier_info_table.num_exerciser++].initialized = 0;
+          g_exerciser_info_table.e_info[g_exerciser_info_table.num_exerciser].bdf = Bdf;
+          g_exerciser_info_table.e_info[g_exerciser_info_table.num_exerciser++].initialized = 0;
           val_print(ACS_PRINT_DEBUG, "    exerciser Bdf %x\n", Bdf);
       }
   }
-  val_print(ACS_PRINT_DEBUG, "    exerciser cards in the system %x \n",
-            g_exercier_info_table.num_exerciser);
+  val_print(ACS_PRINT_TEST, "      PCIE_INFO: Number of exerciser cards : %4d\n",
+                                                             g_exerciser_info_table.num_exerciser);
+  return;
+}
+
+uint32_t val_get_exerciser_err_info(EXERCISER_ERROR_CODE type)
+{
+    switch (type) {
+    case CORR_RCVR_ERR:
+         return CORR_RCVR_ERR_OFFSET;
+    case CORR_BAD_TLP:
+         return CORR_BAD_TLP_OFFSET;
+    case CORR_BAD_DLLP:
+         return CORR_BAD_DLLP_OFFSET;
+    case CORR_RPL_NUM_ROLL:
+         return CORR_RPL_NUM_ROLL_OFFSET;
+    case CORR_RPL_TMR_TIMEOUT:
+         return CORR_RPL_TMR_TIMEOUT_OFFSET;
+    case CORR_ADV_NF_ERR:
+         return CORR_ADV_NF_ERR_OFFSET;
+    case CORR_INT_ERR:
+         return CORR_INT_ERR_OFFSET;
+    case CORR_HDR_LOG_OVRFL:
+         return CORR_HDR_LOG_OVRFL_OFFSET;
+    case UNCORR_DL_ERROR:
+         return UNCORR_DL_ERROR_OFFSET;
+    case UNCORR_SD_ERROR:
+         return UNCORR_SD_ERROR_OFFSET;
+    case UNCORR_PTLP_REC:
+         return UNCORR_PTLP_REC_OFFSET;
+    case UNCORR_FL_CTRL_ERR:
+         return UNCORR_FL_CTRL_ERR_OFFSET;
+    case UNCORR_CMPT_TO:
+         return UNCORR_CMPT_TO_OFFSET;
+    case UNCORR_AMPT_ABORT:
+         return UNCORR_AMPT_ABORT_OFFSET;
+    case UNCORR_UNEXP_CMPT:
+         return UNCORR_UNEXP_CMPT_OFFSET;
+    case UNCORR_RCVR_ERR:
+         return UNCORR_RCVR_ERR_OFFSET;
+    case UNCORR_MAL_TLP:
+         return UNCORR_MAL_TLP_OFFSET;
+    case UNCORR_ECRC_ERR:
+         return UNCORR_ECRC_ERR_OFFSET;
+    case UNCORR_UR:
+         return UNCORR_UR_OFFSET;
+    case UNCORR_ACS_VIOL:
+         return UNCORR_ACS_VIOL_OFFSET;
+    case UNCORR_INT_ERR:
+         return UNCORR_INT_ERR_OFFSET;
+    case UNCORR_MC_BLK_TLP:
+         return UNCORR_MC_BLK_TLP_OFFSET;
+    case UNCORR_ATOP_EGR_BLK:
+         return UNCORR_ATOP_EGR_BLK_OFFSET;
+    case UNCORR_TLP_PFX_EGR_BLK:
+         return UNCORR_TLP_PFX_EGR_BLK_OFFSET;
+    case UNCORR_PTLP_EGR_BLK:
+         return UNCORR_PTLP_EGR_BLK_OFFSET;
+    default:
+         val_print(ACS_PRINT_ERR, "\n   Invalid error offset ", 0);
+         return 0;
+    }
 }
 
 
@@ -80,7 +141,7 @@ uint32_t val_exerciser_get_info(EXERCISER_INFO_TYPE type, uint32_t instance)
 {
     switch (type) {
     case EXERCISER_NUM_CARDS:
-         return g_exercier_info_table.num_exerciser;
+         return g_exerciser_info_table.num_exerciser;
     default:
          return 0;
     }
@@ -98,12 +159,12 @@ uint32_t val_exerciser_set_param(EXERCISER_PARAM_TYPE type, uint64_t value1, uin
                                  uint32_t instance)
 {
     return pal_exerciser_set_param(type, value1, value2,
-                                   g_exercier_info_table.e_info[instance].bdf);
+                                   g_exerciser_info_table.e_info[instance].bdf);
 }
 
 uint32_t val_exerciser_get_bdf(uint32_t instance)
 {
-    return g_exercier_info_table.e_info[instance].bdf;
+    return g_exerciser_info_table.e_info[instance].bdf;
 }
 
 /**
@@ -118,7 +179,7 @@ uint32_t val_exerciser_get_param(EXERCISER_PARAM_TYPE type, uint64_t *value1, ui
                                  uint32_t instance)
 {
     return pal_exerciser_get_param(type, value1, value2,
-                                   g_exercier_info_table.e_info[instance].bdf);
+                                   g_exerciser_info_table.e_info[instance].bdf);
 
 }
 
@@ -131,7 +192,7 @@ uint32_t val_exerciser_get_param(EXERCISER_PARAM_TYPE type, uint64_t *value1, ui
 **/
 uint32_t val_exerciser_set_state(EXERCISER_STATE state, uint64_t *value, uint32_t instance)
 {
-    return pal_exerciser_set_state(state, value, g_exercier_info_table.e_info[instance].bdf);
+    return pal_exerciser_set_state(state, value, g_exerciser_info_table.e_info[instance].bdf);
 }
 
 /**
@@ -142,7 +203,7 @@ uint32_t val_exerciser_set_state(EXERCISER_STATE state, uint64_t *value, uint32_
 **/
 uint32_t val_exerciser_get_state(EXERCISER_STATE *state, uint32_t instance)
 {
-    return pal_exerciser_get_state(state, g_exercier_info_table.e_info[instance].bdf);
+    return pal_exerciser_get_state(state, g_exerciser_info_table.e_info[instance].bdf);
 }
 
 /**
@@ -157,9 +218,9 @@ uint32_t val_exerciser_init(uint32_t instance)
   uint64_t cfg_addr;
   EXERCISER_STATE state;
 
-  if (!g_exercier_info_table.e_info[instance].initialized)
+  if (!g_exerciser_info_table.e_info[instance].initialized)
   {
-      Bdf = g_exercier_info_table.e_info[instance].bdf;
+      Bdf = g_exerciser_info_table.e_info[instance].bdf;
       if (pal_exerciser_get_state(&state, Bdf) || (state != EXERCISER_ON)) {
           val_print(ACS_PRINT_ERR, "\n   Exerciser Bdf %lx not ready", Bdf);
           return 1;
@@ -176,7 +237,7 @@ uint32_t val_exerciser_init(uint32_t instance)
       pal_mmio_write((Ecam + cfg_addr + COMMAND_REG_OFFSET),
                   (pal_mmio_read((Ecam + cfg_addr) + COMMAND_REG_OFFSET) | BUS_MEM_EN_MASK));
 
-      g_exercier_info_table.e_info[instance].initialized = 1;
+      g_exerciser_info_table.e_info[instance].initialized = 1;
   } else
           val_print(ACS_PRINT_INFO, "\n  Already initialized %d", instance);
   return 0;
@@ -190,7 +251,7 @@ uint32_t val_exerciser_init(uint32_t instance)
 **/
 uint32_t val_exerciser_ops(EXERCISER_OPS ops, uint64_t param, uint32_t instance)
 {
-    return pal_exerciser_ops(ops, param, g_exercier_info_table.e_info[instance].bdf);
+    return pal_exerciser_ops(ops, param, g_exerciser_info_table.e_info[instance].bdf);
 }
 
 /**
@@ -203,7 +264,7 @@ uint32_t val_exerciser_ops(EXERCISER_OPS ops, uint64_t param, uint32_t instance)
 uint32_t val_exerciser_get_data(EXERCISER_DATA_TYPE type, exerciser_data_t *data,
                                 uint32_t instance)
 {
-    uint32_t bdf = g_exercier_info_table.e_info[instance].bdf;
+    uint32_t bdf = g_exerciser_info_table.e_info[instance].bdf;
     uint64_t ecam = val_pcie_get_ecam_base(bdf);
 
     return pal_exerciser_get_data(type, data, bdf, ecam);

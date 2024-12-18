@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022-2023, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2024, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,7 +21,6 @@
 /** Begin config **/
 
 /* Settings */
-#define PLATFORM_OVERRIDE_RME_LEVEL   0x4     //The permissible levels are 3,4,5 and 6
 #define PLATFORM_OVERRIDE_PRINT_LEVEL  0x3    //The permissible levels are 1,2,3,4 and 5
 
 /* PCIe BAR config parameters*/

@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2023, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2023-2024, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -31,6 +31,7 @@
 #define PAS_FILTER_SERVICE 0xD
 #define SMMU_ROOT_SERVICE 0xE
 #define SEC_STATE_CHANGE 0xF
+#define SMMU_ROOT_REG_CHK 0x10
 
 /* General Defines used by tests */
 #define INIT_DATA   0x11
@@ -46,25 +47,11 @@
 #define SET   1
 #define CLEAR 0
 
-/* Defines related to Memory attrinutes of an address */
-#define INNER_SHAREABLE  0x3ULL
-#define OUTER_SHAREABLE  0x2ULL
-#define NON_SHAREABLE    0x0ULL
-#define WRITE_BACK_NT    0xFFULL
-#define WRITE_THROUGH_NT 0xBBULL
-#define WRITE_BACK_TRSNT 0x77ULL
-#define NON_CACHEABLE    0x44ULL
+/* smmu root register configuration */
+#define SMMU_ROOT_RME_IMPL_CHK 0x1
 
-#define PAS_SHIFT  0
-#define SHAREABLE_SHIFT  2
-#define PGT_SHAREABLITY_SHIFT 8
-#define CACHEABLE_SHIFT  4
-#define MAIR_ATTR_SHIFT(x) 8*x
-#define MAIR_ATTR_INDX_SHIFT 2
-#define MAIR_ATTR_INDX_MASK  (0x7ULL << MAIR_ATTR_INDX_SHIFT)
-#define CACHEABLE_ATTR(x)  (x << CACHEABLE_SHIFT)
-#define SHAREABLE_ATTR(x) (x << SHAREABLE_SHIFT)
-#define PAS_ATTR(x) (x << PAS_SHIFT)
+/* Defines related to PGT attrinutes of an address */
+#define MAIR_REG_VAL_EL3  0x00000000004404ff
 
 #define GPT_SECURE 0x8
 #define GPT_NONSECURE 0x9
@@ -80,6 +67,38 @@
 #define NONSECURE_STATE 0x1
 #define ROOT_STATE      0x2
 #define REALM_STATE     0x3
+
+#define NSE_SHIFT 9
+#define NS_SHIFT  3
+#define PGT_SHAREABLITY_SHIFT 6
+#define PGT_ENTRY_ACCESS    (0x1 << 8)
+#define PGT_ENTRY_AP_RW     (0x1ull << 4)
+#define INNER_SHAREABLE  0x3ULL
+#define OUTER_SHAREABLE  0x2ULL
+#define NON_SHAREABLE    0x0ULL
+#define WRITE_BACK_NT    0xFFULL
+#define WRITE_THROUGH_NT 0xBBULL
+#define WRITE_BACK_TRSNT 0x77ULL
+#define NON_CACHEABLE    0x44ULL
+#define DEV_MEM_nGnRnE   0x00ULL
+#define EXTRACT_ATTR_IND(x) ((MAIR_REG_VAL_EL3 >> (x*8)) & 0xFF)
+#define GET_ATTR_INDEX(x)   ({                                                       \
+                              int index;                                             \
+                              for (int i = 0; i < 8; ++i) {                          \
+                                  if (EXTRACT_ATTR_IND(i) == x) {                    \
+                                      index = i;                                     \
+                                      break;                                         \
+                                  }                                                  \
+                              }                                                      \
+                              index;                                                 \
+                            })
+
+#define NSE_SET(x)    ((x == SECURE_PAS || x == NONSECURE_PAS) ? 0 : 1)
+#define NS_SET(x)     ((x == ROOT_PAS || x == SECURE_PAS) ? 0 : 1)
+#define SHAREABLE_ATTR(x) (x << PGT_SHAREABLITY_SHIFT)
+#define PAS_ATTR(x) ((NSE_SET(x) << NSE_SHIFT) | (NS_SET(x) << NS_SHIFT))
+
+#define LOWER_ATTRS(x)			(((x) & (0xFFF)) << 2)
 
 /* Shared data structure instances */
 typedef struct shared_data_access {

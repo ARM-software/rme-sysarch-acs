@@ -1,5 +1,5 @@
 /** @file
-  * Copyright (c) 2022-2023, Arm Limited or its affiliates. All rights reserved.
+  * Copyright (c) 2022-2024, Arm Limited or its affiliates. All rights reserved.
   * SPDX-License-Identifier : Apache-2.0
 
   * Licensed under the Apache License, Version 2.0 (the "License");
@@ -275,38 +275,39 @@ uint64_t modify_gpt_gpi(uint64_t entry, uint64_t pa, uint8_t level, uint8_t p, u
 void add_mmu_entry(uint64_t arg0, uint64_t arg1, uint64_t arg2)
 {
     uint64_t input_address = arg0, page_size;
-    uint64_t output_address, acc_pas, attr, share_attr, cache_attr;
+    uint64_t output_address, attr;
     uint64_t *table_desc, tt_base_phys, *tt_base_virt;
     uint32_t num_pgt_levels, page_size_log2, index;
     uint32_t this_level, bits_remaining, bits_at_this_level, bits_per_level;
-    uint32_t attr_indx;
-    uint64_t mair_val;
     pgt_descriptor_t pgt_desc;
+    uint32_t oas_bit_arr[8] = {32, 36, 40, 42, 44, 48, 52, 56}; /* Physical address sizes */
+    uint32_t tg_arr[3] = {SIZE_4KB, SIZE_16KB, SIZE_64KB}; /* Translation Granule Size */
 
-    attr = arg2;
-    acc_pas = VAL_EXTRACT_BITS(attr, 0, 1);
-    share_attr = VAL_EXTRACT_BITS(attr, 2, 3);
-    cache_attr = VAL_EXTRACT_BITS(attr, 4, 11);
     output_address = arg1;
-
+    attr = arg2;
     INFO("val_pe_mmu_map_add: Output Address = 0x%lx\n", output_address);
     INFO("val_pe_mmu_map_add: Input Address = 0x%lx\n", input_address);
-    INFO("val_pe_mmu_map_add: Access PAS = 0x%lx\n", acc_pas);
+    INFO("val_pe_mmu_map_add: Attribute = 0x%lx\n", attr);
 
+    val_get_tcr_info(&pgt_desc.tcr);
     pgt_desc.pgt_base = read_ttbr_el3() & AARCH64_TTBR_ADDR_MASK;
     pgt_desc.stage = PGT_STAGE1;
-    pgt_desc.ias = PGT_IAS;
-    pgt_desc.oas = PAGT_OAS;
-    page_size = SIZE_4KB;
+    pgt_desc.ias = 64 - pgt_desc.tcr.tsz;
+    pgt_desc.oas = oas_bit_arr[pgt_desc.tcr.ps];
+    VERBOSE("Input addr size in bits (ias) = %d\n", pgt_desc.ias);
+    VERBOSE("Output addr size in bits (oas) = %d\n", pgt_desc.oas);
+
+    page_size = tg_arr[pgt_desc.tcr.tg];
     page_size_log2 = log2_page_size(page_size);
     bits_per_level = page_size_log2 - 3;
     num_pgt_levels = (pgt_desc.ias - page_size_log2 + bits_per_level - 1)/bits_per_level;
     num_pgt_levels = (num_pgt_levels > 4)?4:num_pgt_levels;
     tt_base_phys = pgt_desc.pgt_base;
-    this_level = 4 - num_pgt_levels;
+    this_level = 0;
     bits_remaining = (num_pgt_levels - 1) * bits_per_level + page_size_log2;
     bits_at_this_level = pgt_desc.ias - bits_remaining;
     tt_base_virt = (uint64_t *)tt_base_phys;
+
     while (1) {
         index = (input_address >> bits_remaining) & ((0x1ul << bits_at_this_level) - 1);
         table_desc = &tt_base_virt[index];
@@ -314,23 +315,11 @@ void add_mmu_entry(uint64_t arg0, uint64_t arg1, uint64_t arg2)
         INFO("val_pe_mmu_map_add: index = %d     \n", index);
         INFO("val_pe_mmu_map_add: table_desc at level %d at address 0x%lx = %lx     \n",
             this_level, (uint64_t)table_desc, *table_desc);
-        if (this_level == 3)
+        if (this_level == (num_pgt_levels - 1))
         {
             *table_desc = PGT_ENTRY_PAGE_MASK | PGT_ENTRY_VALID_MASK;
-            *table_desc |= PGT_STAGE1_AP_RW;
             *table_desc |= (output_address & ~(uint64_t)(page_size - 1));
-            *table_desc |= PGT_ENTRY_ACCESS_SET;
-            /* To set the NS and NSE bits of descriptor according to the requested PAS */
-            *table_desc = modify_desc(*table_desc, DESC_NSE_BIT, NSE_SET(acc_pas), 1);
-            *table_desc = modify_desc(*table_desc, DESC_NS_BIT, NS_SET(acc_pas), 1);
-            /* Set the shareabality attribute */
-            *table_desc |= modify_desc(*table_desc, PGT_SHAREABLITY_SHIFT, share_attr, 2);
-	    /* Set the cacheability attribute if specified */
-	    if (cache_attr != 0) {
-              attr_indx = val_get_pgt_attr_indx(*table_desc);
-              mair_val = modify_desc(read_mair_el3(), MAIR_ATTR_SHIFT(attr_indx), cache_attr, 8);
-              write_mair_el3(mair_val);
-	    }
+            *table_desc |= attr;
             break;
         }
         /* If a descriptor has no entry or is a block descriptor or the address
@@ -356,20 +345,8 @@ void add_mmu_entry(uint64_t arg0, uint64_t arg1, uint64_t arg2)
         if (IS_PGT_ENTRY_BLOCK(*table_desc))
         {
             *table_desc = PGT_ENTRY_PAGE_MASK | PGT_ENTRY_VALID_MASK;
-            *table_desc |= PGT_STAGE1_AP_RW;
             *table_desc |= (output_address & ~(bits_remaining - 1));
-            *table_desc |= PGT_ENTRY_ACCESS_SET;
-            /* To set the NS and NSE bits of descriptor according to the requested PAS */
-            *table_desc = modify_desc(*table_desc, DESC_NSE_BIT, NSE_SET(acc_pas), 1);
-            *table_desc = modify_desc(*table_desc, DESC_NS_BIT, NS_SET(acc_pas), 1);
-	    /* Set the shareabality attribute */
-	    *table_desc |= modify_desc(*table_desc, PGT_SHAREABLITY_SHIFT, share_attr, 2);
-	    /* Set the cacheability attribute if specified */
-            if (cache_attr != 0) {
-              attr_indx = val_get_pgt_attr_indx(*table_desc);
-              mair_val = modify_desc(read_mair_el3(), MAIR_ATTR_SHIFT(attr_indx), cache_attr, 8);
-              write_mair_el3(mair_val);
-            }
+            *table_desc |= attr;
             break;
         }
 
@@ -392,7 +369,7 @@ modify_desc(uint64_t table_desc, uint8_t start_bit, uint64_t value_to_set, uint8
     while (num_bits)
     {
         bit_mask *= bin_mltpl;
-	--num_bits;
+        --num_bits;
     }
     bit_mask -= 1;
     /* To clear the bits from "start_bit" to "start_bit + num_bits" position */
@@ -416,10 +393,22 @@ uint32_t log2_page_size(uint64_t size)
     return 0;
 }
 
-uint32_t val_get_pgt_attr_indx(uint64_t table_desc)
+/**
+  @brief   This API reads the TCR register and fills info to structure.
+           1. Caller       -  Test Suite
+           2. Prerequisite -  None
+  @param   *tcr_el3 - To fill the TCR information.
+  @return  None
+**/
+void val_get_tcr_info(TCR_EL3_INFO *tcr_el3)
 {
-    uint32_t attr_indx;
 
-    attr_indx = ((table_desc & MAIR_ATTR_INDX_MASK) >> MAIR_ATTR_INDX_SHIFT);
-    return attr_indx;
+  uint64_t tcr_val;
+
+  tcr_val = read_tcr_el3();
+  tcr_el3->tg = (tcr_val & TCR_EL3_TG0_MASK) >> TCR_EL3_TG0_SHIFT;
+  tcr_el3->ps = (tcr_val & TCR_EL3_PS_MASK) >> TCR_EL3_PS_SHIFT;
+  tcr_el3->sh = (tcr_val & TCR_EL3_SH0_MASK) >> TCR_EL3_SH0_SHIFT;
+  tcr_el3->orgn = (tcr_val & TCR_EL3_IRGN0_MASK) >> TCR_EL3_IRGN0_SHIFT;
+  tcr_el3->tsz = (tcr_val & TCR_EL3_T0SZ_MASK) >> TCR_EL3_T0SZ_SHIFT;
 }

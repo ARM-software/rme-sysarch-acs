@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2023, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2023-2024, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -56,8 +56,10 @@ void payload(void)
   *(uint64_t *)PA = (uint64_t) INIT_DATA;
 
   /* Map the PA with VA_Secure and VA_Non-Secure with Non-Cacheable attribute */
-  attr_sec = (CACHEABLE_ATTR(NON_CACHEABLE) | SHAREABLE_ATTR(OUTER_SHAREABLE) | SECURE_PAS);
-  attr_ns = (CACHEABLE_ATTR(NON_CACHEABLE) | SHAREABLE_ATTR(OUTER_SHAREABLE) | NONSECURE_PAS);
+  attr_sec = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(OUTER_SHAREABLE)
+                         | GET_ATTR_INDEX(NON_CACHEABLE) | PGT_ENTRY_AP_RW | PAS_ATTR(SECURE_PAS));
+  attr_ns = LOWER_ATTRS(PGT_ENTRY_ACCESS  | SHAREABLE_ATTR(OUTER_SHAREABLE) | PGT_ENTRY_AP_RW
+                        | GET_ATTR_INDEX(NON_CACHEABLE) | PAS_ATTR(NONSECURE_PAS));
 
   val_add_mmu_entry_el3(VA_S/* VA1 */, PA, attr_sec);
 

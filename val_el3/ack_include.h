@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022-2023, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2024, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -49,15 +49,18 @@
 #define GPF_ESR_READ    0x96000028ULL
 #define GPF_ESR_WRITE   0x96000068ULL
 #define get_max(a, b)   (((a) > (b))?(a):(b))
-#define NSE_SET(val)    ((val == SECURE_PAS || val == NONSECURE_PAS) ? 0 : 1)
-#define NS_SET(val)     ((val == ROOT_PAS || val == SECURE_PAS) ? 0 : 1)
+#define CIPOPA_NS_BIT           63
+#define CIPOPA_NSE_BIT          62
+
+/* Page table defines */
 #define DESC_NSE_BIT    11
 #define DESC_NS_BIT     5
-#define PGT_IAS         40
-#define PAGT_OAS        40
+#define PGT_LVL_MAX     4
 #define PGT_STAGE1      1
 #define PGT_STAGE2      2
 #define SIZE_4KB        (4*1024)
+#define SIZE_16KB       (16*1024)
+#define SIZE_64KB       (64*1024)
 #define AARCH64_TTBR_ADDR_MASK  (((0x1ull << 47) - 1) << 1)
 #define IS_PGT_ENTRY_PAGE(val)  (val & 0x2)
 #define IS_PGT_ENTRY_BLOCK(val) !(val & 0x2)
@@ -68,8 +71,21 @@
 #define PGT_ENTRY_BLOCK_MASK    (0x0 << 1)
 #define PGT_ENTRY_ACCESS_SET    (0x1 << 10)
 
-#define CIPOPA_NS_BIT           63
-#define CIPOPA_NSE_BIT          62
+/* TCR_EL3 register defines */
+#define TCR_EL3_TG0_SHIFT   14
+#define TCR_EL3_SH0_SHIFT   12
+#define TCR_EL3_ORGN0_SHIFT 10
+#define TCR_EL3_IRGN0_SHIFT 8
+#define TCR_EL3_T0SZ_SHIFT  0
+
+#define TCR_EL3_TG0_MASK   (0x3ull << TCR_EL3_TG0_SHIFT)
+#define TCR_EL3_SH0_MASK   (0x3ull << TCR_EL3_SH0_SHIFT)
+#define TCR_EL3_ORGN0_MASK (0x3ull << TCR_EL3_ORGN0_SHIFT)
+#define TCR_EL3_IRGN0_MASK (0x3ull << TCR_EL3_IRGN0_SHIFT)
+#define TCR_EL3_T0SZ_MASK  (0x3Full << TCR_EL3_T0SZ_SHIFT)
+
+#define TCR_EL3_PS_SHIFT   16
+#define TCR_EL3_PS_MASK    (0x7ull << TCR_EL3_PS_SHIFT)
 
 #ifndef __ASSEMBLER__
 
@@ -97,6 +113,42 @@
 #define ACS_EL3_HANDLER_SAVED_POINTER (SHARED_ADDRESS + 0x800)
 
 #ifndef __ASSEMBLER__
+
+typedef struct gpt_attributes {
+  uint32_t pps:3;
+  uint32_t pgs:2;
+  uint32_t l0gptsz:4;
+  uint32_t orgn:2;
+  uint32_t irgn:2;
+  uint32_t sh:2;
+} PE_GPCCR_BF;
+
+typedef struct gpt_descriptors {
+  uint64_t gpt_base;    // Base table adrress
+  uint32_t size;        // Region size
+  uint32_t level;       // Level of GPT lookup
+  uint32_t contig_size; // Contiguous region size
+  uint64_t pa;          // PA uniquely identifying the GPT entry
+  PE_GPCCR_BF gpccr;    // GPCCR_EL3 register
+} gpt_descriptor_t;
+
+typedef struct {
+  uint32_t ps:3;
+  uint32_t tg:2;
+  uint32_t sh:2;
+  uint32_t orgn:2;
+  uint32_t irgn:2;
+  uint32_t tsz:6;
+} TCR_EL3_INFO;
+
+typedef struct {
+  uint64_t pgt_base;
+  uint32_t ias;
+  uint32_t oas;
+  uint64_t mair;
+  uint32_t stage;
+  TCR_EL3_INFO tcr;
+} pgt_descriptor_t;
 
 void val_security_state_change(uint64_t attr_nse_ns);
 void set_daif(void);
@@ -160,44 +212,8 @@ uint32_t log2_page_size(uint64_t size);
 void acs_str(uint64_t *address, uint64_t data);
 void acs_ldr_pas_filter(uint64_t *address, uint64_t data);
 uint32_t val_get_pgt_attr_indx(uint64_t table_desc);
-
-typedef struct gpt_attributes {
-  uint32_t pps:3;
-  uint32_t pgs:2;
-  uint32_t l0gptsz:4;
-  uint32_t orgn:2;
-  uint32_t irgn:2;
-  uint32_t sh:2;
-} PE_GPCCR_BF;
-
-typedef struct gpt_descriptors {
-  uint64_t gpt_base;    // Base table adrress
-  uint32_t size;        // Region size
-  uint32_t level;       // Level of GPT lookup
-  uint32_t contig_size; // Contiguous region size
-  uint64_t pa;          // PA uniquely identifying the GPT entry
-  PE_GPCCR_BF gpccr;    // GPCCR_EL3 register
-} gpt_descriptor_t;
-
-typedef struct {
-  uint32_t ps:3;
-  uint32_t tg:2;
-  uint32_t sh:2;
-  uint32_t orgn:2;
-  uint32_t irgn:2;
-  uint32_t tsz:6;
-  uint32_t sl:2;
-  uint32_t tg_size_log2:5;
-} PE_TCR_BF;
-
-typedef struct {
-  uint64_t pgt_base;
-  uint32_t ias;
-  uint32_t oas;
-  uint64_t mair;
-  uint32_t stage;
-  PE_TCR_BF tcr;
-} pgt_descriptor_t;
+void val_smmu_root_reg_chk(uint64_t reg_config);
+void val_get_tcr_info(TCR_EL3_INFO *tcr_el3);
 
 #endif //__ASSEMBLER__
 

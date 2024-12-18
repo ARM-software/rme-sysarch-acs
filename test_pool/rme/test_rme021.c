@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2023, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2023-2024, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -41,16 +41,16 @@ static
 void payload(void)
 {
 
-  uint32_t index = val_pe_get_index_mpid(val_pe_get_mpid());
+  uint32_t index = val_pe_get_index_mpid(val_pe_get_mpid()), attr;
   uint64_t PA, VA, size;
 
   size = val_get_min_tg();
   PA = val_get_free_pa(size, size);
   VA = val_get_free_va(size);
-
+  attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(NON_SHAREABLE) | PGT_ENTRY_AP_RW);
   /* Map VA to PA as secure access PAS in MMU and PA to secure resource PAS in GPT */
   val_add_gpt_entry_el3(PA, GPT_SECURE);
-  val_add_mmu_entry_el3(VA, PA, SECURE_PAS);
+  val_add_mmu_entry_el3(VA, PA, (attr | LOWER_ATTRS(PAS_ATTR(SECURE_PAS))));
 
   //Access VA
   shared_data->num_access = 1;

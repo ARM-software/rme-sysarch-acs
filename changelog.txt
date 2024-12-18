@@ -1,3 +1,15 @@
+vB.a_BETA_24.12
+
+Release Highlights:
+* Updated documentation to reflect Beta quality standards.
+* Comprehensive updates and additions to the RME-DA test suite with 16 new tests.
+* Key bug fixes and infrastructure enhancements to improve functionality and robustness.
+Infrastructure Enhancements
+* Infrastructure updates for IDE stream state transitions (secure ? insecure).
+* Enabled P2P traffic between TDISP locked devices.
+* Device locking via TDISP.
+
+
 v23.12_REL1.0
 
 EL3 Code Integration into TF-A SMC Service:

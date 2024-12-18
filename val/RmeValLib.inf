@@ -1,5 +1,5 @@
 ## @file
-#  Copyright (c) 2022, Arm Limited or its affiliates. All rights reserved.
+#  Copyright (c) 2022, 2024, Arm Limited or its affiliates. All rights reserved.
 #  SPDX-License-Identifier : Apache-2.0
 #
 #  Licensed under the Apache License, Version 2.0 (the "License");
@@ -30,6 +30,7 @@
   src/AArch64/GicSupport.S
   src/acs_status.c
   src/acs_pe.c
+  src/acs_da.c
   src/test_entry_rme.c
   src/acs_pe_infra.c
   src/acs_gic.c

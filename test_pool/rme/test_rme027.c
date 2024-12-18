@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2023, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2023-2024, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -60,7 +60,7 @@ payload()
 {
 
     uint64_t timer_expire_ticks = 1;
-    uint32_t index = val_pe_get_index_mpid(val_pe_get_mpid()), timeout;
+    uint32_t index = val_pe_get_index_mpid(val_pe_get_mpid()), timeout, attr;
     uint64_t size;
 
     size = val_get_min_tg();
@@ -83,7 +83,8 @@ payload()
     val_gic_set_intr_trigger(int_id, INTR_TRIGGER_INFO_LEVEL_HIGH);
 
     shared_data->generic_flag = CLEAR;
-    val_add_mmu_entry_el3(VA_RT_WDOG, RT_WDOG_CTRL, ROOT_PAS);
+    attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(NON_SHAREABLE) | PGT_ENTRY_AP_RW);
+    val_add_mmu_entry_el3(VA_RT_WDOG, RT_WDOG_CTRL,  (attr | LOWER_ATTRS(PAS_ATTR(ROOT_PAS))));
     val_wd_set_ws0_el3(VA_RT_WDOG, timer_expire_ticks, counter_freq);
 
     while ((--timeout > 0) && (IS_RESULT_PENDING(val_get_status(index))));

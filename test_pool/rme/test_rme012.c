@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2023, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2023-2024, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -40,7 +40,7 @@ void payload(void)
 {
 
   struct_sh_data *shared_data = (struct_sh_data *) SHARED_ADDRESS;
-  uint32_t index = val_pe_get_index_mpid(val_pe_get_mpid());
+  uint32_t index = val_pe_get_index_mpid(val_pe_get_mpid()), attr;
   uint64_t wt_data, rd_data, PA_RLM = REALM_SMEM_BASE;
 
   wt_data = RANDOM_DATA_1;
@@ -48,7 +48,8 @@ void payload(void)
           goto reset_done;
 
   /* Store DATA1 to PA of Realm SMEM and read the PA from realm SMEM after reset.*/
-  val_add_mmu_entry_el3(PA_RLM, PA_RLM, REALM_PAS);//Flat-mapping
+  attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(NON_SHAREABLE) | PGT_ENTRY_AP_RW);
+  val_add_mmu_entry_el3(PA_RLM, PA_RLM, (attr | LOWER_ATTRS(PAS_ATTR(REALM_PAS))));//Flat-mapping
   shared_data->num_access = 1;
   shared_data->shared_data_access[0].addr = PA_RLM;
   shared_data->shared_data_access[0].data = wt_data;
@@ -62,7 +63,8 @@ void payload(void)
 reset_done:
   val_print(ACS_PRINT_INFO, "\n  After system reset", 0);
   val_restore_global_test_data();
-  val_add_mmu_entry_el3(PA_RLM, PA_RLM, REALM_PAS);
+  attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(NON_SHAREABLE) | PGT_ENTRY_AP_RW);
+  val_add_mmu_entry_el3(PA_RLM, PA_RLM, (attr | LOWER_ATTRS(PAS_ATTR(REALM_PAS))));
   /* Read the PA from realm SMEM after reset */
   shared_data->num_access = 1;
   shared_data->shared_data_access[0].addr = PA_RLM;

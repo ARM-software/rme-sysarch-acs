@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2023, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2023-2024, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -49,16 +49,20 @@ void payload(void)
   size = val_get_min_tg();
   PA = val_get_free_pa(size, size);
   VA_NS = val_get_free_va(size);
-  attr_ns = (CACHEABLE_ATTR(WRITE_BACK_NT) | SHAREABLE_ATTR(INNER_SHAREABLE) | NONSECURE_PAS);
+  attr_ns = LOWER_ATTRS(PGT_ENTRY_ACCESS  | SHAREABLE_ATTR(INNER_SHAREABLE) | PGT_ENTRY_AP_RW
+                        | GET_ATTR_INDEX(WRITE_BACK_NT) | PAS_ATTR(NONSECURE_PAS));
 
   VA_RT = val_get_free_va(size);
-  attr_rt = (CACHEABLE_ATTR(WRITE_BACK_NT) | SHAREABLE_ATTR(INNER_SHAREABLE) | ROOT_PAS);
+  attr_rt = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(INNER_SHAREABLE)
+                        | GET_ATTR_INDEX(WRITE_BACK_NT) | PGT_ENTRY_AP_RW | PAS_ATTR(ROOT_PAS));
 
   VA_RL = val_get_free_va(size);
-  attr_rl = (CACHEABLE_ATTR(WRITE_BACK_NT) | SHAREABLE_ATTR(INNER_SHAREABLE) | REALM_PAS);
+  attr_rl = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(INNER_SHAREABLE)
+                        | GET_ATTR_INDEX(WRITE_BACK_NT) | PGT_ENTRY_AP_RW | PAS_ATTR(REALM_PAS));
 
   VA_S = val_get_free_va(size);
-  attr_s = (CACHEABLE_ATTR(WRITE_BACK_NT) | SHAREABLE_ATTR(INNER_SHAREABLE) | SECURE_PAS);
+  attr_s = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(INNER_SHAREABLE)
+                       | GET_ATTR_INDEX(WRITE_BACK_NT) | PGT_ENTRY_AP_RW | PAS_ATTR(SECURE_PAS));
 
   /* Map PA as all access permitted */
   val_add_gpt_entry_el3(PA /* PA */, GPT_ANY /* GPI */);

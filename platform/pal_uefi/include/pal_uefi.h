@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022-2023, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2024, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -78,7 +78,7 @@ typedef struct {
 
 #define rme_print(verbose, string, ...) if(verbose >= g_print_level) \
                                             Print(string, ##__VA_ARGS__)
-
+#define VAL_EXTRACT_BITS(data, start, end) ((data >> start) & ((1ul << (end-start+1))-1))
 /**
   Conduits for service calls (SMC vs HVC).
 **/
@@ -192,6 +192,11 @@ typedef struct {
   UINT32 virt_gsiv[8];
   UINT32 flags[8];
 }TIMER_INFO_GTBLOCK;
+
+typedef enum {
+  NON_PREFETCH_MEMORY = 0x0,
+  PREFETCH_MEMORY = 0x1
+}PCIE_MEM_TYPE_INFO_e;
 
 typedef struct {
   TIMER_INFO_HDR     header;
@@ -392,6 +397,7 @@ VOID    pal_mem_free_cacheable(UINT32 bdf, UINT32 size, VOID *va, VOID *pa);
 VOID    *pal_mem_virt_to_phys(VOID *va);
 VOID    *pal_mem_phys_to_virt(UINT64 pa);
 UINT64  pal_memory_get_unpopulated_addr(UINT64 *addr, UINT32 instance);
+VOID pal_mem_free(VOID *buffer);
 
 UINT32 pal_pe_get_num();
 

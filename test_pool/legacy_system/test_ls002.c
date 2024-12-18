@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2023, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2023-2024, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -44,20 +44,20 @@ payload()
 
   uint64_t rd_data;
   uint32_t index = val_pe_get_index_mpid(val_pe_get_mpid());
-  uint32_t status_fail_cnt;
+  uint32_t status_fail_cnt, attr;
   uint64_t VA, PA, size, num_reg;
 
   size = val_get_min_tg();
 
   //Get the registers content
   num_reg = root_registers_cfg.num_reg;
-
+  attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(NON_SHAREABLE) | PGT_ENTRY_AP_RW);
   for (int reg_cnt = 0; reg_cnt < num_reg; ++reg_cnt) {
 
     VA = val_get_free_va(size);
     PA = root_registers_cfg.rt_reg_info[reg_cnt].rt_reg_base_addr;
     /* Use the register addresses as PAs to map them with secure access PAS */
-    val_add_mmu_entry_el3(VA, PA, SECURE_PAS);
+    val_add_mmu_entry_el3(VA, PA, (attr | LOWER_ATTRS(PAS_ATTR(SECURE_PAS))));
 
     shared_data->shared_data_access[0].data = 0xdeadc0de;
     shared_data->arg1 = VA;

@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022-2023, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2024, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -52,6 +52,5 @@ uint32_t rme029_entry(void);
 uint32_t rme030_entry(void);
 uint32_t rme031_entry(uint32_t num_pe);
 uint32_t rme032_entry(void);
-
 #endif /*__RME_TEST_ENTRY_H__*/
 

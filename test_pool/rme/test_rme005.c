@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022-2023, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2024, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -40,7 +40,7 @@ static
 void payload(void)
 {
 
-  uint32_t index = val_pe_get_index_mpid(val_pe_get_mpid());
+  uint32_t index = val_pe_get_index_mpid(val_pe_get_mpid()), attr;
   uint64_t rd_data_s, rd_data_ns, wt_data_s, ns_data_popa, PA;
   uint64_t VA_S, VA_NS, size;
 
@@ -48,15 +48,16 @@ void payload(void)
   PA = val_get_free_pa(size, size);
   VA_S = val_get_free_va(size);
   VA_NS = val_get_free_va(size);
+  attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(NON_SHAREABLE) | PGT_ENTRY_AP_RW);
 
   val_add_gpt_entry_el3(PA, GPT_ANY);
 
   /*PA is initialized with the initial DATA*/
   *(uint64_t *)PA = (uint64_t) INIT_DATA;
 
-  val_add_mmu_entry_el3(VA_S/* VA1 */, PA, SECURE_PAS);
+  val_add_mmu_entry_el3(VA_S/* VA1 */, PA, (attr | LOWER_ATTRS(PAS_ATTR(SECURE_PAS))));
 
-  val_add_mmu_entry_el3(VA_NS/* VA2 */, PA, NONSECURE_PAS);
+  val_add_mmu_entry_el3(VA_NS/* VA2 */, PA, (attr | LOWER_ATTRS(PAS_ATTR(NONSECURE_PAS))));
 
   /* Read VA1 and VA2 and Write Random data in VA1*/
   wt_data_s = RANDOM_DATA_2;

@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022-2023, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2024, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -40,7 +40,7 @@ static
 void payload(void)
 {
 
-  uint32_t index = val_pe_get_index_mpid(val_pe_get_mpid());
+  uint32_t index = val_pe_get_index_mpid(val_pe_get_mpid()), attr;
   uint64_t wt_data_ns, data_rt, data_rl, data_s, PA;
   uint64_t VA_NS, VA_RT, VA_RL, VA_S, size;
 
@@ -50,19 +50,20 @@ void payload(void)
   VA_RT = val_get_free_va(size);
   VA_RL = val_get_free_va(size);
   VA_S = val_get_free_va(size);
+  attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(NON_SHAREABLE) | PGT_ENTRY_AP_RW);
 
   /* Map PA as all access permitted */
   val_add_gpt_entry_el3(PA /* PA */, GPT_ANY /* GPI */);
 
   /* PA is mapped as VA1_S, VA2_RL, VA3_RT, VA4_NS */
 
-  val_add_mmu_entry_el3(VA_NS /* VA1 */, PA, NONSECURE_PAS);
+  val_add_mmu_entry_el3(VA_NS /* VA1 */, PA, (attr | LOWER_ATTRS(PAS_ATTR(NONSECURE_PAS))));
 
-  val_add_mmu_entry_el3(VA_RT /* VA2 */, PA, ROOT_PAS);
+  val_add_mmu_entry_el3(VA_RT /* VA2 */, PA, (attr | LOWER_ATTRS(PAS_ATTR(ROOT_PAS))));
 
-  val_add_mmu_entry_el3(VA_RL /* VA3 */, PA, REALM_PAS);
+  val_add_mmu_entry_el3(VA_RL /* VA3 */, PA, (attr | LOWER_ATTRS(PAS_ATTR(REALM_PAS))));
 
-  val_add_mmu_entry_el3(VA_S /* VA4 */, PA, SECURE_PAS);
+  val_add_mmu_entry_el3(VA_S /* VA4 */, PA, (attr | LOWER_ATTRS(PAS_ATTR(SECURE_PAS))));
 
   /* Store Random data in VA_NS and access the rest of the VAs */
   wt_data_ns = RANDOM_DATA_1;

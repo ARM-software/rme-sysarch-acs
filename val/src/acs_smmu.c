@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022-2023, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2024, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -46,12 +46,11 @@ val_smmu_read_cfg(uint32_t offset, uint32_t index)
   @brief   This API executes all the SMMU tests sequentially
            1. Caller       -  Application layer.
            2. Prerequisite -  val_smmu_create_info_table()
-  @param   level  - level of compliance being tested for.
   @param   num_pe - the number of PE to run these tests on.
   @return  Consolidated status of all the tests run.
 **/
 uint32_t
-val_smmu_execute_tests(uint32_t level, uint32_t num_pe)
+val_smmu_execute_tests(uint32_t num_pe)
 {
   uint32_t status = ACS_STATUS_PASS, i;
   uint32_t num_smmu;

@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022-2023, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2024, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -41,17 +41,19 @@ static
 void payload(void)
 {
   struct_sh_data *shared_data = (struct_sh_data *) SHARED_ADDRESS;
-  uint32_t index = val_pe_get_index_mpid(val_pe_get_mpid());
+  uint32_t index = val_pe_get_index_mpid(val_pe_get_mpid()), attr;
   uint64_t pas_list[4] = {REALM_PAS, NONSECURE_PAS, SECURE_PAS, ROOT_PAS}, VA, size;
   uint8_t status_fail_cnt;
 
   size = val_get_min_tg();
   VA = val_get_free_va(NUM_MTE_RGN * NUM_PAS * size);
+  attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(NON_SHAREABLE) | PGT_ENTRY_AP_RW);
 
   for (int pas_cnt = 0; pas_cnt < 4; ++pas_cnt)
   {
     /* MTE carve-out region: Base Address */
-    val_add_mmu_entry_el3(VA, MTE_PROTECTED_REGION_BASE, pas_list[pas_cnt]);
+    val_add_mmu_entry_el3(VA, MTE_PROTECTED_REGION_BASE,
+                    (attr | LOWER_ATTRS(PAS_ATTR(pas_list[pas_cnt]))));
 
     if (pas_list[pas_cnt] == ROOT_PAS) {
         shared_data->exception_expected = CLEAR;
@@ -82,7 +84,8 @@ void payload(void)
     VA += size;
 
     /* MTE carve-out region: Middle Address */
-    val_add_mmu_entry_el3(VA, MTE_PROTECTED_REGION_MID, pas_list[pas_cnt]);
+    val_add_mmu_entry_el3(VA, MTE_PROTECTED_REGION_MID,
+                    (attr | LOWER_ATTRS(PAS_ATTR(pas_list[pas_cnt]))));
 
     if (pas_list[pas_cnt] == ROOT_PAS) {
         shared_data->exception_expected = CLEAR;
@@ -113,7 +116,8 @@ void payload(void)
     VA += size;
 
     /* MTE carve-out region: End Address */
-    val_add_mmu_entry_el3(VA, MTE_PROTECTED_REGION_END, pas_list[pas_cnt]);
+    val_add_mmu_entry_el3(VA, MTE_PROTECTED_REGION_END,
+                    (attr | LOWER_ATTRS(PAS_ATTR(pas_list[pas_cnt]))));
 
     if (pas_list[pas_cnt] == ROOT_PAS) {
         shared_data->exception_expected = CLEAR;

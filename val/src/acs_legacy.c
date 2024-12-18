@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2023, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2023-2024, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -35,7 +35,7 @@
 uint32_t
 val_legacy_execute_tests(uint32_t num_pe)
 {
-  uint32_t status, i, reset_status;
+  uint32_t status, i, reset_status, attr;
   uint64_t sp_val;
 
   for (i = 0 ; i < MAX_TEST_SKIP_NUM ; i++) {
@@ -64,8 +64,11 @@ support the feature \n", 0);
     val_print(ACS_PRINT_TEST, " Installing the handler for legacy tests\n", 0);
     //struct_sh_data *shared_data = (struct_sh_data *)SHARED_ADDRESS;
     sp_val = AA64ReadSP_EL0();
-    val_add_mmu_entry_el3(SHARED_ADDRESS, SHARED_ADDRESS, NONSECURE_PAS);
-    val_add_mmu_entry_el3(sp_val, sp_val, NONSECURE_PAS);
+    attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(OUTER_SHAREABLE) | PGT_ENTRY_AP_RW);
+    val_add_mmu_entry_el3(SHARED_ADDRESS, SHARED_ADDRESS,
+                    (attr | LOWER_ATTRS(PAS_ATTR(NONSECURE_PAS))));
+    val_add_mmu_entry_el3(sp_val, sp_val,
+                    (attr | LOWER_ATTRS(PAS_ATTR(NONSECURE_PAS))));
     val_rme_install_handler_el3();
     reset_status = val_read_reset_status();
 

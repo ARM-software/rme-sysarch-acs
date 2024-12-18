@@ -1,5 +1,5 @@
 /** @file
-  * Copyright (c) 2023, Arm Limited or its affiliates. All rights reserved.
+  * Copyright (c) 2023-2024, Arm Limited or its affiliates. All rights reserved.
   * SPDX-License-Identifier : Apache-2.0
 
   * Licensed under the Apache License, Version 2.0 (the "License");
@@ -187,7 +187,7 @@ void val_memory_set_el3(void *address, uint32_t size, uint8_t value)
 /**
  *  @brief  This API is used to set/clear the active mode of PAS_FILTER
  *          present in the system.
- *          1. Caller	- Test suite
+ *          1. Caller   - Test suite
  *  @param  enable - Bit to enable the active mode: SET to Active mode,
  *                   CLEAR to In-Active
  *  @return None
@@ -205,6 +205,10 @@ void val_pas_filter_active_mode(int enable)
 void
 val_wd_enable(uint64_t wdog_ctrl_base)
 {
+    if (shared_data->generic_flag) {
+      shared_data->exception_expected = SET;
+      shared_data->access_mut = CLEAR;
+    }
     *(uint64_t *)(wdog_ctrl_base + 0) = SET;
 }
 
@@ -256,11 +260,20 @@ void val_wd_set_ws0_el3(uint64_t VA_RT_WDOG, uint32_t timeout, uint64_t counter_
   wor_l = (uint32_t)(counter_freq * timeout);
   wor_h = (uint32_t)((counter_freq * timeout) >> 32);
 
+  if (shared_data->generic_flag) {
+    shared_data->exception_expected = SET;
+    shared_data->access_mut = CLEAR;
+  }
   *(uint64_t *)(ctrl_base + 8) =  wor_l;
 
   /* Upper bits are applicable only for WDog Version 1 */
-  if (data == 1)
+  if (data == 1) {
+      if (shared_data->generic_flag) {
+        shared_data->exception_expected = SET;
+        shared_data->access_mut = CLEAR;
+      }
       *(uint64_t *)(ctrl_base + 12) = wor_h;
+  }
 
   INFO("Enabling the Root watchdog\n");
   val_wd_enable(ctrl_base);
@@ -294,4 +307,23 @@ void val_security_state_change(uint64_t attr_nse_ns)
   scr_data |= ((nse_bit << SCR_NSE_SHIFT) | (ns_bit << SCR_NS_SHIFT));
   write_scr_el3(scr_data);
 
+}
+
+void val_smmu_root_reg_chk(uint64_t reg_config)
+{
+  uint64_t data;
+
+  switch (reg_config)
+  {
+       case SMMU_ROOT_RME_IMPL_CHK:
+         INFO("SMMU base address & offset: 0x%lx \n",
+                             (uint64_t)ROOT_IOVIRT_SMMUV3_BASE + SMMU_ROOT_IDRO);
+         data = *(uint32_t *)(ROOT_IOVIRT_SMMUV3_BASE + SMMU_ROOT_IDRO);
+         INFO("SMMU ROOT IDRO: 0x%lx", data);
+         shared_data->shared_data_access[0].data = data;
+         break;
+       default:
+         INFO(" Invalid SMMU ROOT register config\n");
+         break;
+  }
 }

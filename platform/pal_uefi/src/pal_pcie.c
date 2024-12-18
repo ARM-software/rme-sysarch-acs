@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022-2023, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2024, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -28,6 +28,7 @@
 #include "Include/IndustryStandard/Pci.h"
 #include "Include/IndustryStandard/Pci22.h"
 #include <Protocol/PciIo.h>
+#include <Protocol/PciRootBridgeIo.h>
 
 #include "include/platform_override.h"
 #include "include/pal_uefi.h"
@@ -209,6 +210,103 @@ pal_pcie_io_write_cfg(UINT32 Bdf, UINT32 offset, UINT32 data)
       }
     }
   }
+
+  pal_mem_free(HandleBuffer);
+}
+
+/**
+    @brief   Reads 32-bit data from BAR space pointed by Bus,
+             Device, Function and register offset, using UEFI PciRootBridgeIoProtocol
+
+    @param   Bdf     - BDF value for the device
+    @param   address - BAR memory address
+    @param   *data   - 32 bit value at BAR address
+    @return  success/failure
+**/
+UINT32
+pal_pcie_bar_mem_read(UINT32 Bdf, UINT64 address, UINT32 *data)
+{
+
+  EFI_STATUS                       Status;
+  EFI_PCI_ROOT_BRIDGE_IO_PROTOCOL  *Pci;
+  UINTN                            HandleCount;
+  EFI_HANDLE                       *HandleBuffer;
+  UINT32                           Index;
+  UINT32                           InputSeg;
+
+
+  Status = gBS->LocateHandleBuffer (ByProtocol, &gEfiPciRootBridgeIoProtocolGuid, NULL, &HandleCount, &HandleBuffer);
+  if (EFI_ERROR (Status)) {
+    rme_print(ACS_PRINT_INFO,L" No Root Bridge found in the system\n");
+    return PCIE_NO_MAPPING;
+  }
+
+  InputSeg = PCIE_EXTRACT_BDF_SEG(Bdf);
+
+  for (Index = 0; Index < HandleCount; Index++) {
+    Status = gBS->HandleProtocol (HandleBuffer[Index], &gEfiPciRootBridgeIoProtocolGuid, (VOID **)&Pci);
+    if (!EFI_ERROR (Status)) {
+      if (Pci->SegmentNumber == InputSeg) {
+          Status = Pci->Mem.Read (Pci, EfiPciIoWidthUint32, address, 1, data);
+          pal_mem_free(HandleBuffer);
+          if (!EFI_ERROR (Status))
+            return 0;
+          else
+            return PCIE_NO_MAPPING;
+      }
+    }
+  }
+
+  pal_mem_free(HandleBuffer);
+  return PCIE_NO_MAPPING;
+}
+
+/**
+    @brief   Write 32-bit data to BAR space pointed by Bus,
+             Device, Function and register offset, using UEFI PciRootBridgeIoProtocol
+
+    @param   Bdf     - BDF value for the device
+    @param   address - BAR memory address
+    @param   data    - 32 bit value to writw BAR address
+    @return  success/failure
+**/
+
+UINT32
+pal_pcie_bar_mem_write(UINT32 Bdf, UINT64 address, UINT32 data)
+{
+
+  EFI_STATUS                       Status;
+  EFI_PCI_ROOT_BRIDGE_IO_PROTOCOL  *Pci;
+  UINTN                            HandleCount;
+  EFI_HANDLE                       *HandleBuffer;
+  UINT32                           Index;
+  UINT32                           InputSeg;
+
+
+  Status = gBS->LocateHandleBuffer (ByProtocol, &gEfiPciRootBridgeIoProtocolGuid, NULL, &HandleCount, &HandleBuffer);
+  if (EFI_ERROR (Status)) {
+    rme_print(ACS_PRINT_INFO,L" No Root Bridge found in the system\n");
+    return PCIE_NO_MAPPING;
+  }
+
+  InputSeg = PCIE_EXTRACT_BDF_SEG(Bdf);
+
+  for (Index = 0; Index < HandleCount; Index++) {
+    Status = gBS->HandleProtocol (HandleBuffer[Index], &gEfiPciRootBridgeIoProtocolGuid, (VOID **)&Pci);
+    if (!EFI_ERROR (Status)) {
+      if (Pci->SegmentNumber == InputSeg) {
+          Status = Pci->Mem.Write (Pci, EfiPciIoWidthUint32, address, 1, &data);
+          pal_mem_free(HandleBuffer);
+          if (!EFI_ERROR (Status))
+            return 0;
+          else
+            return PCIE_NO_MAPPING;
+      }
+    }
+  }
+
+  pal_mem_free(HandleBuffer);
+  return PCIE_NO_MAPPING;
 }
 
 /**
@@ -222,6 +320,7 @@ UINT32
 pal_pcie_p2p_support()
 {
   /*
+   * This is platform specific API which needs to be populated with system p2p capability
    * PCIe support for peer to peer
    * transactions is platform implementation specific
    */
@@ -245,6 +344,7 @@ pal_pcie_dev_p2p_support (
   UINT32 Fn)
 {
   /*
+   * This is platform specific API which needs to be populated with pcie device  p2p capability
    * Root port or Switch support for peer to peer
    * transactions is platform implementation specific
    */
@@ -378,14 +478,15 @@ pal_pcie_check_device_list(void)
 
 /**
   @brief  Returns the memory offset that can be
-          accessed from the BAR base and is within
+          accessed safely from the BAR base and is within
           BAR limit value
 
-  @param  memory offset
+  @param  bdf      - PCIe BUS/Device/Function
+  @param  mem_type - If the memory is Pre-fetchable or Non-prefetchable memory
   @return memory offset
 **/
 UINT32
-pal_pcie_mem_get_offset(UINT32 type)
+pal_pcie_mem_get_offset(UINT32 bdf, PCIE_MEM_TYPE_INFO_e mem_type)
 {
 
   return MEM_OFFSET_SMALL;

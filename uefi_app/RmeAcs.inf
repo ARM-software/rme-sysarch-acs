@@ -1,5 +1,5 @@
 ## @file
-#  Copyright (c) 2022-2023, Arm Limited or its affiliates. All rights reserved.
+#  Copyright (c) 2022-2024, Arm Limited or its affiliates. All rights reserved.
 #  SPDX-License-Identifier : Apache-2.0
 #
 #  Licensed under the Apache License, Version 2.0 (the "License");
@@ -70,6 +70,21 @@
   ../test_pool/legacy_system/test_ls002.c
   ../test_pool/legacy_system/test_ls003.c
   ../test_pool/legacy_system/test_ls004.c
+  ../test_pool/da/test_da001.c
+  ../test_pool/da/test_da002.c
+  ../test_pool/da/test_da003.c
+  ../test_pool/da/test_da004.c
+  ../test_pool/da/test_da005.c
+  ../test_pool/da/test_da006.c
+  ../test_pool/da/test_da007.c
+  ../test_pool/da/test_da008.c
+  ../test_pool/da/test_da009.c
+  ../test_pool/da/test_da010.c
+  ../test_pool/da/test_da011.c
+  ../test_pool/da/test_da012.c
+  ../test_pool/da/test_da013.c
+  ../test_pool/da/test_da014.c
+  ../test_pool/da/test_da015.c
 
 [Packages]
   StdLib/StdLib.dec

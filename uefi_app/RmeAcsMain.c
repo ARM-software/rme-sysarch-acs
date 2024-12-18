@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022-2023, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2024, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -33,7 +33,6 @@
 UINT32 g_pcie_p2p;
 UINT32 g_pcie_cache_present;
 
-UINT32  g_rme_level;
 UINT32  g_print_level;
 UINT32  g_execute_nist;
 UINT32 g_print_mmio;
@@ -410,7 +409,7 @@ ShellAppMainrme (
   g_rme_tests_fail  = 0;
 
   Print(L"\n\n RME Architecture Compliance Suite \n");
-  Print(L"    Version %d.%d  \n", RME_ACS_MAJOR_VER, RME_ACS_MINOR_VER);
+  Print(L"    Version: Issue B.a ACS BETA  \n");
 
   Print(L"\n Starting tests for (Print level is %2d)\n\n", g_print_level);
 
@@ -441,6 +440,14 @@ ShellAppMainrme (
   */
   configureGicIts();
 
+  /* Configure SMMUs, PCIe and Exerciser tables required for the ACS */
+  Status = val_configure_acs();
+  if (Status)
+    return Status;
+
+  Print(L"\n      *** Starting RME DA tests ***  \n");
+  Status = val_rme_da_execute_tests(val_pe_get_num());
+
   Print(L"\n      *** Starting RME tests ***  \n");
   Status |= val_rme_execute_tests(val_pe_get_num());
 
@@ -448,10 +455,10 @@ ShellAppMainrme (
   Status |= val_legacy_execute_tests(val_pe_get_num());
 
   Print(L"\n      *** Starting GIC test ***  \n");
-  Status |= val_gic_execute_tests(g_rme_level, val_pe_get_num());
+  Status |= val_gic_execute_tests(val_pe_get_num());
 
   Print(L"\n      *** Starting IO Virtualization tests ***  \n");
-  Status |= val_smmu_execute_tests(g_rme_level, val_pe_get_num());
+  Status |= val_smmu_execute_tests(val_pe_get_num());
 
 print_test_status:
   val_print(ACS_PRINT_TEST, "\n     ------------------------------------------------------- \n", 0);

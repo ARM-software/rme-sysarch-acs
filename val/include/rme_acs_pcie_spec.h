@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022, 2024, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -121,9 +121,11 @@
 #define BAR0_OFFSET               0x10
 #define BAR_TYPE_0_MAX_OFFSET     0x24
 #define BAR_TYPE_1_MAX_OFFSET     0x14
+#define BAR_NP_TYPE               0x0
+#define BAR_P_TYPE                0x1
 #define BAR_64_BIT                0x1
 #define BAR_32_BIT                0x0
-#define BAR_REG(bar_reg_value) ((bar_reg_value >> 2) & 0x1)
+#define BAR_REG(bar_reg_value)    ((bar_reg_value >> 2) & 0x1)
 
 #define TYPE0_MAX_BARS  6
 #define TYPE1_MAX_BARS  2
@@ -181,12 +183,19 @@
 #define CID_MSI        0x05
 #define CID_MSIX       0x11
 #define CID_PMC        0x01
+#define CID_EA         0x14
 #define ECID_AER       0x0001
 #define ECID_ACS       0x000D
 #define ECID_ARICS     0x000E
 #define ECID_ATS       0x000F
+#define ECID_MC        0x0012
 #define ECID_PRI       0x0013
+#define ECID_RBAR      0x0015
 #define ECID_PASID     0x001B
+#define ECID_DPC       0x001D
+#define ECID_DVSEC     0x0023
+#define ECID_DCAP3     0x0027
+#define ECID_IDE       0x0030
 
 /* PCI Express capability struct offsets */
 #define CIDR_OFFSET    0x0
@@ -199,6 +208,69 @@
 #define DCAP2R_OFFSET  0x24
 #define DCTL2R_OFFSET  0x28
 #define DCTL2R_MASK    0xFFFF
+#define LCAP2R_OFFSET  0x2C
+#define LCTL2R_OFFSET  0x30
+#define DCTL2R_MASK    0xFFFF
+#define DSTS_SHIFT     16
+#define DS_UNCORR_MASK 0x6
+#define DS_CORR_MASK   0x1
+
+/* DPC Capability struct offsets and shifts */
+#define DPC_CTRL_OFFSET        0x4
+#define DPC_STATUS_OFFSET      0x8
+#define DPC_STATUS_RESET       0xFFFFFFFF
+#define DPC_STATUS_MASK        0x1
+#define DPC_TRIGGER_MASK       0x6
+#define DPC_TRIGGER_FATAL      0x2
+#define DPC_TRIGGER_NON_FATAL  0x1
+#define DPC_CTRL_TRG_EN_SHIFT  16
+#define DPC_CTRL_TRG_EN_MASK   0x3
+#define DPC_SOURCE_ID_SHIFT    16
+#define DPC_TRIGGER_SHIFT      0x1
+
+/* AER Capability struct offsets and shifts */
+#define ERR_CNT                  0x18
+#define AER_UNCORR_STATUS_OFFSET 0x4
+#define AER_UNCORR_MASK_OFFSET   0x8
+#define AER_UNCORR_SEVR_OFFSET   0xC
+#define AER_UNCORR_SEVR_FATAL    0xFFFFFFFF
+#define AER_UNCORR_SEVR_NONFATAL 0x0
+#define AER_CORR_STATUS_OFFSET   0x10
+#define AER_CORR_MASK_OFFSET     0x14
+#define AER_ROOT_ERR_CMD_OFFSET  0x2C
+#define AER_ROOT_ERR_OFFSET      0x30
+#define AER_ROOT_ERR_SOURCE_ID   0x34
+#define AER_SOURCE_ID_SHIFT      16
+#define AER_SOURCE_ID_MASK       0xFFFF
+#define AER_ERROR_MASK           0xFFFFFFFF
+
+/* DPC Capability struct offsets and shifts */
+#define DPC_CTRL_OFFSET        0x4
+#define DPC_STATUS_OFFSET      0x8
+#define DPC_STATUS_RESET       0xFFFFFFFF
+#define DPC_STATUS_MASK        0x1
+#define DPC_TRIGGER_MASK       0x6
+#define DPC_TRIGGER_FATAL      0x2
+#define DPC_TRIGGER_NON_FATAL  0x1
+#define DPC_CTRL_TRG_EN_SHIFT  16
+#define DPC_CTRL_TRG_EN_MASK   0x3
+#define DPC_SOURCE_ID_SHIFT    16
+#define DPC_TRIGGER_SHIFT      0x1
+#define DPC_DISABLE_MASK       0xFFFCFFFF
+#define DPC_INTR_ENABLE        0x80000
+
+/* AER Capability struct offsets and shifts */
+#define AER_UNCORR_STATUS_OFFSET 0x4
+#define AER_UNCORR_MASK_OFFSET   0x8
+#define AER_UNCORR_SEVR_OFFSET   0xC
+#define AER_UNCORR_SEVR_FATAL    0xFFFFFFFF
+#define AER_UNCORR_SEVR_NONFATAL 0x0
+#define AER_ROOT_ERR_OFFSET      0x30
+
+/* EA Capability struct offsets */
+#define EA_ENTRY_TYPE_OFFSET       8
+#define EA_ENTRY_TYPE_ENABLE_SHIFT 31
+#define EA_ENTRY_TYPE_ENABLE_MASK  1
 
 /* ACS Capability Register */
 #define ACS_CTRL_SVE_SHIFT  16
@@ -221,6 +293,8 @@
 /* Device Capabilities register */
 #define DCAPR_MPSS_SHIFT 0
 #define DCAPR_FLRC_SHIFT 28
+#define DCAPR_TEE_SHIFT  30
+#define DCAPR_TEE_MASK   1
 
 /* Device Capabilities reg mask */
 #define DCAPR_MPSS_MASK   0x07
@@ -292,15 +366,83 @@
 #define DCTL2R_AFE_MASK  0x1
 #define DCTL2R_AFE_NORMAL 0xFFDF
 
+/* IDE register offset */
+#define IDE_CAP_REG 0x4
+#define IDE_CAP_REG_SIZE 0xC
+#define LINK_IDE_CNTRL_REG 0x0
+#define LINK_IDE_STATUS_REG 0x4
+#define LINK_IDE_BLK_SIZE 0x8
+#define SEL_IDE_CAP_REG 0x0
+#define SEL_IDE_CAP_CNTRL_REG 0x4
+#define SEL_IDE_CAP_STATUS_REG 0x8
+#define SEL_IDE_CAP_REG_SIZE 0xC
+#define RID_ADDR_REG1_SIZE 0x4
+#define RID_ADDR_REG2_SIZE 0x4
+#define IDE_ADDR_REG_BLK_SIZE 0xC
+
+/* Link IDE Stream Status Register Mask */
+#define LINK_IDE_STATE_MASK 0xF
+
+/* Selective IDE Stream status register Mask */
+#define SEL_IDE_STATE_MASK 0xF
+
+/* Selective IDE Stream State */
+#define STREAM_STATE_INSECURE 0x0
+#define STREAM_STATE_SECURE   0x2
+
+/* IDE Capability Register offset */
+#define SEL_IDE_STR_SUPPORT 0x1
+#define SEL_IDE_STR_MASK 0x2
+#define SEL_IDE_STR_SHIFT 0x1
+#define NUM_SEL_STR_MASK 0xFF0000
+#define NUM_SEL_STR_SHIFT 16
+#define NUM_TC_SUPP_MASK 0xE000
+#define NUM_TC_SUPP_SHIFT 13
+#define TEE_LIM_STR_SUPP_MASK 0x1000000
+#define TEE_LIM_STR_SUPP_SHIFT 24
+#define NUM_ADDR_ASSO_REG_MASK 0xF
+#define NUM_ADDR_ASSO_REG_SHIFT 0
+
+/* RME DA DVSEC registers */
+#define RMEDA_ECH 0x0
+#define RMEDA_HEAD1 0x4
+#define RMEDA_HEAD2 0x8
+#define RMEDA_CTL1 0xC
+#define RMEDA_CTL2 0x10
+
+/* RME DA ECH register */
+#define RMEDA_ECH_ID 0x0023
+#define RMEDA_ECH_CAP_VER 0x1
+
+/* RME DA Header 1 register */
+#define RMEDA_HEAD1_DVSEC_VID 0x0
+#define DVSEC_VID_MASK 0xFFFF
+#define RMEDA_HEAD1_DVSEC_REV 0x0
+#define RMEDA_HEAD1_DVSEC_LEN 0x14
+
+/* RME DA DVSEC Header 2 rregister */
+#define RMEDA_HEAD2_DVSEC_ID 0xFF01
+#define RMEDA_HEAD2_DVSEC_ID_MASK 0xFFFF
+
+/* RME DA DVSEC Control 1 register */
+#define RMEDA_CTL1_TDISP_EN 0x0
+
+/* RME DA DVSEC Control 2 register */
+#define RMEDA_CTL2_SEL_STR_LOCK 0x0
+#define SEL_STR_LOCK_VALID_MAX 0xFFFFFFFF
+#define SEL_STR_LOCK_VALID_MASK(x) (((uint32_t)0x1 << x) - 1)
+
 /* Device bitmask definitions */
-#define RCiEP    (1 << 0x9)
-#define RCEC     (1 << 0xA)
-#define EP       (1 << 0x0)
-#define RP       (1 << 0x4)
-#define UP       (1 << 0x5)
-#define DP       (1 << 0x6)
-#define iEP_EP   (1 << 0xC)
-#define iEP_RP   (1 << 0xB)
+#define RCiEP    (1 << 0b1001)
+#define RCEC     (1 << 0b1010)
+#define EP       (1 << 0b0000)
+#define RP       (1 << 0b0100)
+#define UP       (1 << 0b0101)
+#define DP       (1 << 0b0110)
+#define iEP_EP   (1 << 0b1100)
+#define iEP_RP   (1 << 0b1011)
+#define PCI_PCIE (1 << 0b1000)
+#define PCIE_PCI (1 << 0b0111)
 #define PCIe_ALL (iEP_RP | iEP_EP | RP | EP | RCEC | RCiEP)
 
 /* MSI-X Capabilities */

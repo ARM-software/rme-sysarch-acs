@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022-2023, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2024, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -28,7 +28,6 @@
 #include "include/mem_interface.h"
 #include "include/sys_config.h"
 
-struct_sh_data *shared_data = (struct_sh_data *)SHARED_ADDRESS;
 
 /**
   @brief   This API will execute all RME tests designated for a given compliance level
@@ -40,8 +39,7 @@ struct_sh_data *shared_data = (struct_sh_data *)SHARED_ADDRESS;
 uint32_t
 val_rme_execute_tests(uint32_t num_pe)
 {
-  uint32_t status, i, reset_status, num_smmus;
-  uint64_t sp_val;
+  uint32_t status, i, reset_status;
 
   for (i = 0 ; i < MAX_TEST_SKIP_NUM ; i++) {
       if (g_skip_test_num[i] == ACS_RME_TEST_NUM_BASE) {
@@ -59,28 +57,6 @@ val_rme_execute_tests(uint32_t num_pe)
     return ACS_STATUS_SKIP;
   }
 
-  sp_val = AA64ReadSP_EL0();
-  val_print(ACS_PRINT_INFO, "\n SHARED_ADDRESS = 0x%llx", SHARED_ADDRESS);
-  val_add_mmu_entry_el3(SHARED_ADDRESS, SHARED_ADDRESS, NONSECURE_PAS);
-  val_add_mmu_entry_el3(sp_val, sp_val, NONSECURE_PAS);
-  val_rme_install_handler_el3();
-
-  /* Create the list of valid Pcie Device Functions, Exerciser table
-   * and initialise smmu for the tests that require exerciser and smmu required
-   **/
-  if (val_pcie_create_device_bdf_table()) {
-      val_print(ACS_PRINT_WARN, "\n     Create BDF Table Failed \n", 0);
-      return ACS_STATUS_SKIP;
-  }
-
-  val_exerciser_create_info_table();
-  val_smmu_init();
-
-  num_smmus = val_iovirt_get_smmu_info(SMMU_NUM_CTRL, 0);
-
-  /* Disable all SMMUs */
-  for (uint32_t instance = 0; instance < num_smmus; ++instance)
-     val_smmu_disable(instance);
 
   reset_status = val_read_reset_status();
   val_print(ACS_PRINT_TEST, "      reset_status = %lx\n", reset_status);
@@ -101,6 +77,7 @@ val_rme_execute_tests(uint32_t num_pe)
 
   g_curr_module = 1 << RME_MODULE;
 
+  /* RME-ACS tests */
   status = rme001_entry(num_pe);
   status |= rme002_entry();
 reset_done_2:
