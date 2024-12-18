@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022-2023, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2024, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -56,10 +56,11 @@
 #define SINGLE_TEST_SENTINEL   10000
 #define SINGLE_MODULE_SENTINEL 10001
 
-#define USER_SMC_IMM    0x100
-#define ARM_ACS_SMC_FID 0xC2000060
+#define USER_SMC_IMM     0x100
+#define ARM_ACS_SMC_FID  0xC2000060
 
 /* GENERIC VAL APIs */
+uint32_t val_configure_acs(void);
 void val_allocate_shared_mem(void);
 void val_free_shared_mem(void);
 void val_print(uint32_t level, char8_t *string, uint64_t data);
@@ -70,7 +71,7 @@ void val_set_test_data(uint32_t index, uint64_t addr, uint64_t test_data);
 void val_get_test_data(uint32_t index, uint64_t *data0, uint64_t *data1);
 uint32_t val_strncmp(char8_t *str1, char8_t *str2, uint32_t len);
 void    *val_memcpy(void *dest_buffer, void *src_buffer, uint32_t len);
-
+uint32_t val_generate_stream_id(void);
 uint64_t val_time_delay_ms(uint64_t time_ms);
 
 /* VAL PE APIs */
@@ -89,12 +90,13 @@ int      val_suspend_pe(uint64_t entry, uint32_t context_id);
 void     UserCallSMC(uint64_t smc_fid, uint64_t service, uint64_t arg0,
                      uint64_t arg1, uint64_t arg2);
 void     tlbi_alle2(void);
+uint64_t ats1e2r(uint64_t VA);
 
 /* VAL RME APIs */
 uint32_t val_rme_execute_tests(uint32_t num_pe);
 void val_data_cache_ops_by_va_el3(uint64_t address, uint32_t type);
 void val_memory_set_el3(void *buf, uint32_t size, uint8_t value);
-void val_add_mmu_entry_el3(uint64_t VA, uint64_t PA, uint64_t acc_pas);
+void val_add_mmu_entry_el3(uint64_t VA, uint64_t PA, uint64_t attr);
 void val_add_gpt_entry_el3(uint64_t PA, uint64_t gpi);
 void val_pe_access_mut_el3(void);
 void val_data_cache_ops_by_pa_el3(uint64_t PA, uint64_t acc_pas);
@@ -110,6 +112,7 @@ void val_smmu_access_disable(void);
 void val_change_security_state_el3(int sec_state);
 void write_gpr_and_reset(void);
 uint32_t check_gpr_after_reset(void);
+void val_smmu_check_rmeda_el3(void);
 
 //Legacy system VAL APIs
 uint32_t val_legacy_execute_tests(uint32_t num_pe);
@@ -136,7 +139,7 @@ typedef enum {
 uint32_t
 val_gic_get_info(GIC_INFO_e type);
 void     val_gic_free_info_table(void);
-uint32_t val_gic_execute_tests(uint32_t level, uint32_t num_pe);
+uint32_t val_gic_execute_tests(uint32_t num_pe);
 uint32_t val_gic_install_isr(uint32_t int_id, void (*isr)(void));
 uint32_t val_gic_end_of_interrupt(uint32_t int_id);
 uint32_t val_gic_route_interrupt_to_pe(uint32_t int_id, uint64_t mpidr);
@@ -222,6 +225,7 @@ void val_pcie_enable_msa(uint32_t bdf);
 uint32_t val_pcie_is_msa_enabled(uint32_t bdf);
 void val_pcie_clear_urd(uint32_t bdf);
 uint32_t val_pcie_is_urd(uint32_t bdf);
+void val_pcie_enable_eru(uint32_t bdf);
 void val_pcie_disable_eru(uint32_t bdf);
 uint32_t val_pcie_bitfield_check(uint32_t bdf, uint64_t *bf_entry);
 uint32_t val_pcie_register_bitfields_check(uint64_t *bf_info_table, uint32_t table_size);
@@ -236,6 +240,10 @@ uint32_t val_pcie_is_device_status_error(uint32_t bdf);
 uint32_t val_pcie_is_sig_target_abort(uint32_t bdf);
 void val_pcie_clear_sig_target_abort(uint32_t bdf);
 uint32_t val_pcie_mem_get_offset(uint32_t type);
+
+/* RME-DA APIs */
+uint32_t val_rme_da_execute_tests(uint32_t num_pe);
+uint32_t val_pcie_find_da_capability(uint32_t bdf, uint32_t *cid_offset);
 
 /* IO-VIRT APIs */
 typedef enum {
@@ -266,13 +274,14 @@ typedef enum {
   RC_SEGMENT_NUM,
   RC_ATS_ATTRIBUTE,
   RC_MEM_ATTRIBUTE,
-  RC_IOVIRT_BLOCK
+  RC_IOVIRT_BLOCK,
+  RC_SMMU_BASE
 } PCIE_RC_INFO_e;
 
 void     val_iovirt_create_info_table(uint64_t *iovirt_info_table);
 void     val_iovirt_free_info_table(void);
 uint32_t val_iovirt_get_rc_smmu_index(uint32_t rc_seg_num, uint32_t rid);
-uint32_t val_smmu_execute_tests(uint32_t level, uint32_t num_pe);
+uint32_t val_smmu_execute_tests(uint32_t num_pe);
 uint64_t val_smmu_get_info(SMMU_INFO_e type, uint32_t index);
 uint64_t val_iovirt_get_smmu_info(SMMU_INFO_e type, uint32_t index);
 

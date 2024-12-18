@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022-2023, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2024, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,6 +18,9 @@
 #include "include/rme_acs_val.h"
 #include "include/rme_acs_common.h"
 #include "include/rme_acs_pcie.h"
+#include "include/sys_config.h"
+#include "include/rme_acs_da.h"
+#include "include/rme_acs_el32.h"
 
 #define WARN_STR_LEN 7
 PCIE_INFO_TABLE *g_pcie_info_table;
@@ -178,6 +181,36 @@ val_pcie_io_write_cfg(uint32_t bdf, uint32_t offset, uint32_t data)
 }
 
 /**
+    @brief   Write 32-bit data to BAR space pointed by Bus,
+             Device, Function and register offset using UEFI PciIoProtocol interface.
+
+    @param   Bdf     - BDF value for the device
+    @param   address - BAR memory address
+    @param   data    - 32 bit value to writw BAR address
+    @return  success/failure
+**/
+uint32_t
+val_pcie_bar_mem_write(uint32_t bdf, uint64_t offset, uint32_t data)
+{
+    return pal_pcie_bar_mem_write(bdf, offset, data);
+}
+
+/**
+    @brief   Reads 32-bit data from BAR space pointed by Bus,
+             Device, Function and register offset using UEFI PciIoProtocol interface.
+
+    @param   Bdf     - BDF value for the device
+    @param   address - BAR memory address
+    @param   *data   - 32 bit value at BAR address
+    @return  success/failure
+**/
+uint32_t
+val_pcie_bar_mem_read(uint32_t bdf, uint64_t offset, uint32_t *data)
+{
+    return pal_pcie_bar_mem_read(bdf, offset, data);
+}
+
+/**
   @brief   This API  returns function config space addr.
            1. Caller       -  Test Suite
            2. Prerequisite -  val_pcie_create_info_table
@@ -248,13 +281,21 @@ val_pcie_print_device_info(void)
   uint32_t bdf;
   uint32_t dp_type;
   uint32_t tbl_index;
+  uint32_t ecam_index;
+  uint64_t ecam_base;
+  uint32_t ecam_start_bus;
+  uint32_t ecam_end_bus;
   pcie_device_bdf_table *bdf_tbl_ptr;
   uint32_t num_rciep = 0, num_rcec = 0;
   uint32_t num_iep = 0, num_irp = 0;
   uint32_t num_ep = 0, num_rp = 0;
+  uint32_t num_dp = 0, num_up = 0;
+  uint32_t num_pcie_pci = 0, num_pci_pcie = 0;
+  uint32_t bdf_counter;
 
   bdf_tbl_ptr = val_pcie_bdf_table_ptr();
   tbl_index = 0;
+  ecam_index = 0;
 
   if (bdf_tbl_ptr->num_entries == 0)
   {
@@ -270,26 +311,103 @@ val_pcie_print_device_info(void)
       switch (dp_type)
       {
         case RCiEP:
-            num_rciep++; break;
+            num_rciep++;
+            break;
         case RCEC:
-            num_rcec++; break;
+            num_rcec++;
+            break;
         case EP:
-            num_ep++; break;
+            num_ep++;
+            break;
         case RP:
-            num_rp++; break;
+            num_rp++;
+            break;
         case iEP_EP:
-            num_iep++; break;
+            num_iep++;
+            break;
         case iEP_RP:
-            num_irp++; break;
+            num_irp++;
+            break;
+        case UP:
+            num_up++;
+            break;
+        case DP:
+            num_dp++;
+            break;
+        case PCI_PCIE:
+            num_pci_pcie++;
+            break;
+        case PCIE_PCI:
+            num_pcie_pci++;
+            break;
       }
   }
 
-  val_print(ACS_PRINT_TEST, " PCIE_INFO: Number of RCiEP           : %4d \n", num_rciep);
-  val_print(ACS_PRINT_TEST, " PCIE_INFO: Number of RCEC            : %4d \n", num_rcec);
-  val_print(ACS_PRINT_TEST, " PCIE_INFO: Number of EP              : %4d \n", num_ep);
-  val_print(ACS_PRINT_TEST, " PCIE_INFO: Number of RP              : %4d \n", num_rp);
-  val_print(ACS_PRINT_TEST, " PCIE_INFO: Number of iEP_EP          : %4d \n", num_iep);
-  val_print(ACS_PRINT_TEST, " PCIE_INFO: Number of iEP_RP          : %4d \n", num_irp);
+  val_print(ACS_PRINT_TEST, " PCIE_INFO: Number of RCiEP           : %4d\n", num_rciep);
+  val_print(ACS_PRINT_TEST, " PCIE_INFO: Number of RCEC            : %4d\n", num_rcec);
+  val_print(ACS_PRINT_TEST, " PCIE_INFO: Number of EP              : %4d\n", num_ep);
+  val_print(ACS_PRINT_TEST, " PCIE_INFO: Number of RP              : %4d\n", num_rp);
+  val_print(ACS_PRINT_TEST, " PCIE_INFO: Number of iEP_EP          : %4d\n", num_iep);
+  val_print(ACS_PRINT_TEST, " PCIE_INFO: Number of iEP_RP          : %4d\n", num_irp);
+  val_print(ACS_PRINT_TEST, " PCIE_INFO: Number of UP of switch    : %4d\n", num_up);
+  val_print(ACS_PRINT_TEST, " PCIE_INFO: Number of DP of switch    : %4d\n", num_dp);
+  val_print(ACS_PRINT_TEST, " PCIE_INFO: Number of PCI/PCIe Bridge : %4d\n", num_pci_pcie);
+  val_print(ACS_PRINT_TEST, " PCIE_INFO: Number of PCIe/PCI Bridge : %4d\n", num_pcie_pci);
+
+  while (ecam_index < val_pcie_get_info(PCIE_INFO_NUM_ECAM, 0))
+  {
+      ecam_base = val_pcie_get_info(PCIE_INFO_ECAM, ecam_index);
+      ecam_start_bus = val_pcie_get_info(PCIE_INFO_START_BUS, ecam_index);
+      ecam_end_bus = val_pcie_get_info(PCIE_INFO_END_BUS, ecam_index);
+      tbl_index = 0;
+      bdf_counter = 0;
+
+      val_print(ACS_PRINT_INFO, "\n  ECAM %d:", ecam_index);
+      val_print(ACS_PRINT_INFO, "  Base 0x%llx\n", ecam_base);
+
+      while (tbl_index < bdf_tbl_ptr->num_entries)
+      {
+          uint32_t seg_num;
+          uint32_t bus_num;
+          uint32_t dev_num;
+          uint32_t func_num;
+          uint32_t device_id;
+          uint32_t vendor_id;
+          uint32_t reg_value;
+          uint32_t bdf;
+          uint64_t dev_ecam_base;
+
+          bdf = bdf_tbl_ptr->device[tbl_index++].bdf;
+          seg_num  = PCIE_EXTRACT_BDF_SEG(bdf);
+          bus_num  = PCIE_EXTRACT_BDF_BUS(bdf);
+          dev_num  = PCIE_EXTRACT_BDF_DEV(bdf);
+          func_num = PCIE_EXTRACT_BDF_FUNC(bdf);
+
+          val_pcie_read_cfg(bdf, TYPE01_VIDR, &reg_value);
+          device_id = (reg_value >> TYPE01_DIDR_SHIFT) & TYPE01_DIDR_MASK;
+          vendor_id = (reg_value >> TYPE01_VIDR_SHIFT) & TYPE01_VIDR_MASK;
+
+          dev_ecam_base = val_pcie_get_ecam_base(bdf);
+
+          if ((ecam_base == dev_ecam_base) && (bus_num >= ecam_start_bus)
+              && (bus_num <= ecam_end_bus))
+          {
+              bdf_counter = 1;
+              bdf = PCIE_CREATE_BDF(seg_num, bus_num, dev_num, func_num);
+              val_print(ACS_PRINT_INFO, "  BDF: 0x%x\n", bdf);
+              val_print(ACS_PRINT_INFO, "  Seg: 0x%x, ", seg_num);
+              val_print(ACS_PRINT_INFO, "Bus: 0x%02x, ", bus_num);
+              val_print(ACS_PRINT_INFO, "Dev: 0x%02x, ", dev_num);
+              val_print(ACS_PRINT_INFO, "Func: 0x%x, ", func_num);
+              val_print(ACS_PRINT_INFO, "Dev ID: 0x%04x, ", device_id);
+              val_print(ACS_PRINT_INFO, "Vendor ID: 0x%04x\n", vendor_id);
+          }
+      }
+      if (bdf_counter == 0)
+          val_print(ACS_PRINT_INFO, "  No BDF devices in ECAM region index %d\n", ecam_index);
+
+      ecam_index++;
+  }
 }
 
 /**
@@ -347,7 +465,6 @@ static uint32_t val_pcie_populate_device_rootport(void)
   uint32_t bdf;
   uint32_t rp_bdf;
   uint32_t tbl_index;
-  uint32_t status;
   pcie_device_bdf_table *bdf_tbl_ptr;
 
   bdf_tbl_ptr = val_pcie_bdf_table_ptr();
@@ -358,10 +475,8 @@ static uint32_t val_pcie_populate_device_rootport(void)
       bdf = bdf_tbl_ptr->device[tbl_index].bdf;
       val_print(ACS_PRINT_DEBUG, "   Dev bdf 0x%x", bdf);
 
-      /* Fn returns rp_bdf = 0 and status = 1, if RP not found */
-      status = val_pcie_get_rootport(bdf, &rp_bdf);
-      if ((rp_bdf == 0) && status)
-        return 1;
+      /* Checks if the BDF has RootPort */
+      val_pcie_get_rootport(bdf, &rp_bdf);
 
       bdf_tbl_ptr->device[tbl_index].rp_bdf = rp_bdf;
       val_print(ACS_PRINT_DEBUG, " RP bdf 0x%x\n", rp_bdf);
@@ -447,6 +562,13 @@ val_pcie_create_device_bdf_table()
                       if (status)
                           continue;
 
+                      /* Enable memory access and bus master enable for all BDF's
+                       * For BM systems, these bits are enabled during enumeration in PAL
+                       * For linux, the driver takes care.
+                      */
+                      val_pcie_enable_bme(bdf);
+                      val_pcie_enable_msa(bdf);
+
                       g_pcie_bdf_table->device[g_pcie_bdf_table->num_entries++].bdf = bdf;
                   }
               }
@@ -454,16 +576,12 @@ val_pcie_create_device_bdf_table()
       }
   }
 
-  val_print(ACS_PRINT_INFO,
-            " PCIE_INFO: Number of valid BDFs is %x\n", g_pcie_bdf_table->num_entries);
-
   /* Sanity Check : Confirm all EP (normal, integrated) have a rootport */
-  if (val_pcie_populate_device_rootport())
-  {
-      /* Discard the bdf table */
-      g_pcie_bdf_table->num_entries = 0;
-      return 1;
-  }
+  val_pcie_populate_device_rootport();
+
+  val_print(ACS_PRINT_TEST,
+            " PCIE_INFO: Number of BDFs found      : %4d\n", g_pcie_bdf_table->num_entries);
+
   return 0;
 }
 
@@ -1344,6 +1462,43 @@ val_pcie_is_sig_target_abort(uint32_t bdf)
 }
 
 /**
+  @brief  Enable error reporting of the PCIe Function to the upstream
+  @param  bdf   - Segment/Bus/Dev/Func in the format of PCIE_CREATE_BDF
+  @return None
+**/
+void
+val_pcie_enable_eru(uint32_t bdf)
+{
+
+  uint32_t reg_value;
+  uint32_t dis_mask;
+  uint32_t pciecs_base;
+
+  /* Set SERR# Enable bit in the Command Register to enable reporting
+   * upstream of Non-fatal and Fatal errors detected by the Function.
+   */
+  val_pcie_read_cfg(bdf, TYPE01_CR, &reg_value);
+  dis_mask = (1 << CR_SERRE_SHIFT);
+  val_pcie_write_cfg(bdf, TYPE01_CR, reg_value | dis_mask);
+
+  /* Get the PCI Express Capability structure offset and
+   * use that offset to read the Device Control register
+   */
+  val_pcie_find_capability(bdf, PCIE_CAP, CID_PCIECS, &pciecs_base);
+  val_pcie_read_cfg(bdf, pciecs_base + DCTLR_OFFSET, &reg_value);
+
+  /* Set Correctable, Non-fatal, Fatal, UR Reporting Enable bits in the
+   * Device Control Register to enable reporting upstream of these errors
+   * detected by the Function.
+   */
+  dis_mask = (1 << DCTLR_CERE_SHIFT |
+              1 << DCTLR_NFERE_SHIFT |
+              1 << DCTLR_FERE_SHIFT |
+              1 << DCTLR_URRE_SHIFT);
+  val_pcie_write_cfg(bdf, pciecs_base + DCTLR_OFFSET, reg_value | dis_mask);
+}
+
+/**
   @brief  Disable error reporting of the PCIe Function to the upstream
   @param  bdf   - Segment/Bus/Dev/Func in the format of PCIE_CREATE_BDF
   @return None
@@ -1393,6 +1548,7 @@ uint32_t val_pcie_bitfield_check(uint32_t bdf, uint64_t *bitfield_entry)
 
   uint32_t bf_value;
   uint32_t cap_base;
+  uint32_t id;
   uint32_t reg_value;
   uint32_t reg_offset;
   uint32_t temp_reg_value;
@@ -1419,9 +1575,17 @@ uint32_t val_pcie_bitfield_check(uint32_t bdf, uint64_t *bitfield_entry)
           break;
       case PCIE_CAP:
           status = val_pcie_find_capability(bdf, PCIE_CAP, bf_entry->cap_id, &cap_base);
+          id = bf_entry->cap_id;
           break;
       case PCIE_ECAP:
+          if (bf_entry->ecap_id == ECID_DVSEC)
+          {
+            status = val_pcie_find_da_capability(bdf, &cap_base);
+            id = bf_entry->ecap_id;
+            break;
+          }
           status = val_pcie_find_capability(bdf, PCIE_ECAP, bf_entry->ecap_id, &cap_base);
+          id = bf_entry->ecap_id;
           break;
       default:
           val_print(ACS_PRINT_ERR, "\n       Invalid reg_type : 0x%x  ", bf_entry->reg_type);
@@ -1430,7 +1594,8 @@ uint32_t val_pcie_bitfield_check(uint32_t bdf, uint64_t *bitfield_entry)
 
   if (status != PCIE_SUCCESS)
   {
-      val_print(ACS_PRINT_ERR, "\n       PCIe Capability not found for BDF 0x%x", bdf);
+      val_print(ACS_PRINT_ERR, "\n       PCIe Capability 0x%x", id);
+      val_print(ACS_PRINT_ERR, " not found for BDF 0x%x", bdf);
       return status;
   }
 
@@ -1638,6 +1803,7 @@ val_pcie_get_mmio_bar(uint32_t bdf, void *base)
           val_print(ACS_PRINT_ERR, "\n       pal_exerciser_get_data() not implemented", 0);
       }
 
+      /* data.bar_space.base_addr will be zero if no MMIO bar are present for the function */
       *(uint64_t *)base = (uint64_t)data.bar_space.base_addr;
       return;
   }
@@ -1793,8 +1959,8 @@ val_pcie_get_rootport(uint32_t bdf, uint32_t *rp_bdf)
 
   val_print(ACS_PRINT_DEBUG, " DP type 0x%x ", dp_type);
 
-  /* If the device is RP, set its rootport value to same */
-  if (dp_type == RP)
+  /* If the device is RP or iEP_RP, set its rootport value to same */
+  if ((dp_type == RP) || (dp_type == iEP_RP))
   {
       *rp_bdf = bdf;
       return 0;
@@ -1857,7 +2023,7 @@ val_pcie_parent_is_rootport(uint32_t dsf_bdf, uint32_t *rp_bdf)
       dp_type = val_pcie_device_port_type(bdf);
 
       /* Check if this table entry is a Root Port */
-      if (dp_type == RP)
+      if ((dp_type == RP) || (dp_type == iEP_RP))
       {
          /* Check if device is a direct child of this root port */
           val_pcie_read_cfg(bdf, TYPE1_PBN, &reg_value);
@@ -2042,3 +2208,214 @@ uint32_t val_pcie_mem_get_offset(uint32_t type)
 {
   return pal_pcie_mem_get_offset(type);
 }
+
+/**
+ * @brief  Returns the Function's config capability offset matching it's input parameter
+          cid. cid_offset set to the matching cpability offset w.r.t. zero.
+
+  @param  bdf        - Segment/Bus/Dev/Func in the format of PCIE_CREATE_BDF
+  @param  cid        - Capability ID
+  @param  cid_offset - On return, points to cid offset in Function config space
+  @return PCIE_CAP_NOT_FOUND, if there was a failure in finding required capability.
+          PCIE_SUCCESS, if the search was successful.
+**/
+uint32_t
+val_pcie_find_da_capability(uint32_t bdf, uint32_t *cid_offset)
+{
+
+  uint32_t reg_value;
+  uint32_t next_cap_offset;
+
+  /* Serach in PCIe extended configuration space */
+  next_cap_offset = PCIE_ECAP_START;
+  while (next_cap_offset)
+  {
+    val_pcie_read_cfg(bdf, next_cap_offset, &reg_value);
+
+    if ((reg_value & PCIE_ECAP_CIDR_MASK) == ECID_DVSEC)
+    {
+      val_pcie_read_cfg(bdf, next_cap_offset + RMEDA_HEAD2, &reg_value);
+      reg_value = reg_value & RMEDA_HEAD2_DVSEC_ID_MASK;
+
+      if (reg_value == RMEDA_HEAD2_DVSEC_ID)
+      {
+        *cid_offset = next_cap_offset;
+        return PCIE_SUCCESS;
+      }
+    }
+    next_cap_offset = ((reg_value >> PCIE_ECAP_NCPR_SHIFT) & PCIE_ECAP_NCPR_MASK);
+  }
+
+  /* The capability was not found */
+  return PCIE_CAP_NOT_FOUND;
+}
+
+/**
+  @brief  Set the TDISP_en bit in DA DVSEC of the input PCIe function
+  @param  bdf   - Segment/Bus/Dev/Func in PCIE_CREATE_BDF format
+  @return 0 - success, 1 - failure
+**/
+uint32_t val_pcie_enable_tdisp(uint32_t bdf)
+{
+  uint64_t va;
+  uint32_t cfg_addr, attr;
+  uint32_t cap_base, reg_value;
+
+  if (val_pcie_find_da_capability(bdf, &cap_base) != PCIE_SUCCESS)
+  {
+       val_print(ACS_PRINT_INFO, "\n       PCIe DVSEC Capability not presentfor BDF: 0x%x ", bdf);
+       return 1;
+  }
+
+  va = val_get_free_va(val_get_min_tg());
+  cfg_addr = val_pcie_get_bdf_config_addr(bdf);
+  val_pcie_read_cfg(bdf, cap_base + RMEDA_CTL1, &reg_value);
+  attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(OUTER_SHAREABLE)
+                  | GET_ATTR_INDEX(DEV_MEM_nGnRnE) | PGT_ENTRY_AP_RW);
+
+  val_add_mmu_entry_el3(va, cfg_addr, (attr | LOWER_ATTRS(PAS_ATTR(ROOT_PAS))));
+  shared_data->num_access = 1;
+  shared_data->shared_data_access[0].addr = va + cap_base + 0xC;
+  shared_data->shared_data_access[0].access_type = WRITE_DATA;
+  shared_data->shared_data_access[0].data = 1;
+  val_pe_access_mut_el3();
+  val_pcie_read_cfg(bdf, cap_base + RMEDA_CTL1, &reg_value);
+
+  return 0;
+}
+
+uint32_t val_pcie_disable_tdisp(uint32_t bdf)
+{
+  uint64_t va;
+  uint32_t cfg_addr, attr;
+  uint32_t cap_base;
+
+  if (val_pcie_find_da_capability(bdf, &cap_base) != PCIE_SUCCESS)
+  {
+       val_print(ACS_PRINT_INFO, "\n       PCIe DVSEC Capability not presentfor BDF: 0x%x ", bdf);
+       return 1;
+  }
+
+  va = val_get_free_va(val_get_min_tg());
+  cfg_addr = val_pcie_get_bdf_config_addr(bdf);
+  attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(OUTER_SHAREABLE)
+                  | GET_ATTR_INDEX(DEV_MEM_nGnRnE) | PGT_ENTRY_AP_RW);
+
+  val_add_mmu_entry_el3(va, cfg_addr, (attr | LOWER_ATTRS(PAS_ATTR(ROOT_PAS))));
+  shared_data->num_access = 1;
+  shared_data->shared_data_access[0].addr = va + cap_base + 0xC;
+  shared_data->shared_data_access[0].access_type = WRITE_DATA;
+  shared_data->shared_data_access[0].data = 0;
+  val_pe_access_mut_el3();
+
+  return 0;
+}
+
+/**
+  @brief  Returns whether a device's bit-field passed the compliance check or not.
+          The device under test is indicated by input bdf.
+
+  @param  bdf           - Segment/Bus/Dev/Func in the format of PCIE_CREATE_BDF
+  @param  bitfield_entry- Expected bit-field entry configuration for the comparison
+  @return Return 0 for success, else 1 for failure.
+**/
+uint32_t val_pcie_write_detect_bitfield_check(uint32_t bdf, uint64_t *bitfield_entry,
+                                              uint32_t ide_sel_str_cnt)
+{
+
+  uint32_t cap_base;
+  uint32_t id;
+  uint32_t reg_value;
+  uint32_t reg_offset;
+  uint32_t temp_reg_value;
+  uint32_t reg_overwrite_value;
+  uint32_t alignment_byte_cnt;
+  uint32_t status = PCIE_SUCCESS;
+
+  pcie_cfgreg_bitfield_entry *bf_entry;
+
+  bf_entry = (pcie_cfgreg_bitfield_entry *)bitfield_entry;
+
+  /*
+   * Calculate word alignment byte count and adjust
+   * reg_offset to read word-aligned offsets always.
+   */
+  reg_offset = bf_entry->reg_offset;
+  alignment_byte_cnt = (reg_offset & WORD_ALIGN_MASK);
+  reg_offset = reg_offset - alignment_byte_cnt;
+
+  switch (bf_entry->reg_type)
+  {
+      case HEADER:
+          cap_base = 0;
+          break;
+      case PCIE_CAP:
+          status = val_pcie_find_capability(bdf, PCIE_CAP, bf_entry->cap_id, &cap_base);
+          id = bf_entry->cap_id;
+          break;
+      case PCIE_ECAP:
+          if (bf_entry->ecap_id == ECID_DVSEC)
+          {
+            status = val_pcie_find_da_capability(bdf, &cap_base);
+            id = bf_entry->ecap_id;
+            break;
+          }
+          status = val_pcie_find_capability(bdf, PCIE_ECAP, bf_entry->ecap_id, &cap_base);
+          id = bf_entry->ecap_id;
+          break;
+      default:
+          val_print(ACS_PRINT_ERR, "\n       Invalid reg_type : 0x%x  ", bf_entry->reg_type);
+          return 1;
+  }
+
+  if (status != PCIE_SUCCESS)
+  {
+      val_print(ACS_PRINT_INFO, "\n       PCIe Capability 0x%x", id);
+      val_print(ACS_PRINT_INFO, " not found for BDF 0x%x", bdf);
+      return status;
+  }
+
+    /* Derive bit-field of interest from the register value */
+  val_pcie_read_cfg(bdf, cap_base + reg_offset, &reg_value);
+
+  /* To prevent status bits are clear when write 1, just clear it firstly */
+  val_pcie_write_cfg(bdf, cap_base + reg_offset, reg_value);
+  val_pcie_read_cfg(bdf, cap_base + reg_offset, &reg_value);
+
+  /* Check if bit-field attribute is proper */
+  switch (bf_entry->attr)
+  {
+      case WRITE_DETECT:
+          /* IDE must transition into Insecure state when written in Non-Secure state */
+          temp_reg_value = reg_value;
+          reg_value ^= (REG_MASK(bf_entry->end, bf_entry->start) <<
+                       REG_SHIFT(alignment_byte_cnt, bf_entry->start));
+          val_pcie_write_cfg(bdf, cap_base + reg_offset, reg_value);
+          /* Select the ide stream number and stream_id */
+          val_get_sel_str_status(bdf, ide_sel_str_cnt, &reg_overwrite_value);
+          /* Restore the original register value */
+          val_pcie_write_cfg(bdf, cap_base + reg_offset, temp_reg_value);
+          reg_value = STREAM_STATE_INSECURE;
+          break;
+      default:
+          val_print(ACS_PRINT_ERR, "\n       Invalid Attribute : 0x%x  ", bf_entry->attr);
+          return 1;
+  }
+
+  if (reg_overwrite_value != reg_value)
+  {
+      val_print(ACS_PRINT_ERR, "\n       BDF 0x%x : ", bdf);
+      val_print(ACS_PRINT_ERR, bf_entry->err_str2, 0);
+      val_print(ACS_PRINT_ERR, ": 0x%x", reg_overwrite_value);
+      val_print(ACS_PRINT_ERR, " instead of 0x%x", reg_value);
+      if (!val_strncmp(bf_entry->err_str2, "WARNING", WARN_STR_LEN))
+          return 0;
+      return 1;
+  }
+
+  /* Return pass status */
+  val_print(ACS_PRINT_INFO, "\n       BDF 0x%x : PASS", bdf);
+  return 0;
+}
+
+

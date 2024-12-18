@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2023, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2023-2024, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -41,7 +41,8 @@ void payload2(void)
   uint64_t VA2, rd_data, attr;
 
   VA2 = val_get_free_va(size);
-  attr = (CACHEABLE_ATTR(WRITE_BACK_NT) | SHAREABLE_ATTR(INNER_SHAREABLE) | REALM_PAS);
+  attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(INNER_SHAREABLE)
+                     | PGT_ENTRY_AP_RW | PAS_ATTR(REALM_PAS));
   val_add_mmu_entry_el3(VA2, PA, attr);
 
   /* Access VA2 from this PE */
@@ -81,7 +82,8 @@ void payload1(uint32_t num_pe)
 
   size = val_get_min_tg();
   PA = val_get_free_pa(size, size);
-  attr = (CACHEABLE_ATTR(WRITE_BACK_NT) | SHAREABLE_ATTR(INNER_SHAREABLE) | ROOT_PAS);
+  attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(INNER_SHAREABLE)
+                     | PGT_ENTRY_AP_RW | PAS_ATTR(ROOT_PAS));
   VA1 = val_get_free_va(size);
   val_add_mmu_entry_el3(VA1, PA, attr);
 

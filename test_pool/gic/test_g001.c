@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2023, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2023-2024, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -37,7 +37,7 @@
 #define TEST_RULE  "GIC_01"
 
 static uint32_t irq_pending;
-static uint32_t lpi_int_id = 0x204C;
+static uint32_t lpi_int_id = 0x204c;
 
 extern GIC_ITS_INFO    *g_gic_its_info;
 
@@ -123,6 +123,9 @@ payload(void)
     status = val_iovirt_get_device_info(PCIE_CREATE_BDF_PACKED(e_bdf),
                                         PCIE_EXTRACT_BDF_SEG(e_bdf), &device_id,
                                         &stream_id, &its_id);
+
+    val_print(ACS_PRINT_DEBUG, "\n device_id: 0x%lx", device_id);
+    val_print(ACS_PRINT_DEBUG, "   its_id: 0x%lx\n", its_id);
     if (status) {
         val_print(ACS_PRINT_ERR, "\n       MSI Assignment failed for bdf : 0x%x", e_bdf);
         val_set_status(index, RESULT_FAIL(TEST_NUM, 01));
@@ -130,9 +133,11 @@ payload(void)
     }
 
     itt_base = g_gic_its_info->GicIts[its_id].ITTBase;
+    val_print(ACS_PRINT_INFO, "\n       itt_base: 0x%lx", itt_base);
     val_add_gpt_entry_el3(itt_base, GPT_NONSECURE);
     val_print(ACS_PRINT_INFO, "\n       ITT base is mapped as Non-secure in GPT ", 0);
 
+    val_print(ACS_PRINT_DEBUG, "\n       Max LPI: 0x%lx", val_its_get_max_lpi());
     status = val_gic_request_msi(e_bdf, device_id, its_id, lpi_int_id + instance, msi_index);
     if (status) {
         val_print(ACS_PRINT_ERR, "\n       MSI Assignment failed for bdf : 0x%x", e_bdf);

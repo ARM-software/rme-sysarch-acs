@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022-2023, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2024, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -25,9 +25,9 @@
 #define PCIE_EXTRACT_BDF_DEV(bdf)  ((bdf >> 8) & 0xFF)
 #define PCIE_EXTRACT_BDF_FUNC(bdf) (bdf & 0xFF)
 
-#define PCIE_CREATE_BDF_PACKED(bdf)  ((PCIE_EXTRACT_BDF_FUNC(bdf)) | \
+#define PCIE_CREATE_BDF_PACKED(bdf)  PCIE_EXTRACT_BDF_FUNC(bdf) | \
                                     (PCIE_EXTRACT_BDF_DEV(bdf) << 3) | \
-                                    (PCIE_EXTRACT_BDF_BUS(bdf) << 8))
+                                    (PCIE_EXTRACT_BDF_BUS(bdf) << 8)
 
 #define PCIE_CREATE_BDF(seg, bus, dev, func) ((seg << 24) | \
                                               ((bus & 0xFF) << 16) | \
@@ -59,7 +59,7 @@
 #define PCIE_DLL_LINK_ACTIVE_NOT_SUPPORTED    0x2
 
 #define REG_MASK(end, start) (((~(uint32_t)0 << (start)) & \
-                             (((uint32_t)1 << ((end)+1)) - 1)) >> (start))
+                             (((uint64_t)1 << ((end)+1)) - 1)) >> (start))
 #define REG_SHIFT(alignment_byte_cnt, start) (((alignment_byte_cnt)*BITS_IN_BYTE) + start)
 
 #define MAX_BITFIELD_ENTRIES 100
@@ -89,7 +89,8 @@ typedef enum {
   RSVDP_RO = 3,
   RSVDZ_RO = 4,
   READ_WRITE = 5,
-  STICKY_RW = 6
+  STICKY_RW = 6,
+  WRITE_DETECT = 7
 } BITFIELD_ATTR_TYPE;
 
 /**
@@ -159,6 +160,10 @@ uint32_t val_pcie_read_cfg(uint32_t bdf, uint32_t offset, uint32_t *data);
 uint32_t val_get_msi_vectors(uint32_t bdf, PERIPHERAL_VECTOR_LIST **mvector);
 uint64_t val_pcie_get_bdf_config_addr(uint32_t bdf);
 
+uint32_t val_pcie_bar_mem_read(uint32_t bdf, uint64_t address, uint32_t *data);
+uint32_t val_pcie_bar_mem_write(uint32_t bdf, uint64_t address, uint32_t data);
+uint32_t val_pcie_enable_tdisp(uint32_t bdf);
+uint32_t val_pcie_disable_tdisp(uint32_t bdf);
 
 typedef enum {
   PCIE_INFO_NUM_ECAM = 1,
@@ -217,4 +222,6 @@ val_pcie_get_max_pasid_width(uint32_t bdf, uint32_t *max_pasid_width);
 uint32_t
 val_pcie_get_ecam_index(uint32_t bdf, uint32_t *ecam_index);
 
+uint32_t
+val_pcie_write_detect_bitfield_check(uint32_t bdf, uint64_t *bitfield_entry, uint32_t str_count);
 #endif

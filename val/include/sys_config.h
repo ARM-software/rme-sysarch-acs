@@ -1,5 +1,5 @@
 /** @file
-  * Copyright (c) 2022-2023, Arm Limited or its affiliates. All rights reserved.
+  * Copyright (c) 2022-2024, Arm Limited or its affiliates. All rights reserved.
   * SPDX-License-Identifier : Apache-2.0
 
   * Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,20 +17,66 @@
 
 #include "platform_overrride_fvp.h"
 
-#define MTE_PROTECTED_REGION_BASE      0xFE400000ULL
-#define MTE_PROTECTED_REGION_SIZE      (0x1AULL << 20)   //3 MB
+#if PLATFORM_BASEFVP
+
+#define MTE_PROTECTED_REGION_BASE      0xFFC00000ULL
+#define MTE_PROTECTED_REGION_SIZE      0x300000   //3 MB
 #define MTE_PROTECTED_REGION_END       (MTE_PROTECTED_REGION_BASE + MTE_PROTECTED_REGION_SIZE - 1)
 #define MTE_PROTECTED_REGION_MID       (MTE_PROTECTED_REGION_END - (MTE_PROTECTED_REGION_SIZE / 2))
 
 /* Defines related to System memory */
-#define ROOT_SMEM_BASE  0xFC400000ULL
-#define REALM_SMEM_BASE 0XF9E00000ULL
+#define ROOT_SMEM_BASE  0xFFC00000ULL
+#define REALM_SMEM_BASE 0XFDC00000ULL
 
-#define REALM_MEM_ADDRES 0xF9E00000ULL
+#define REALM_MEM_ADDRES 0XFDC00000ULL
 
-#define MSD_SAVE_RESTORE_MEM 0xFC400000ULL
+#define MSD_SAVE_RESTORE_MEM 0xFFC00000ULL
 
-#define RME_RNVS_MAILBOX_MEM 0xFC400000ULL
+#define RME_RNVS_MAILBOX_MEM 0xFFC00000ULL
+
+/* Root watchdog defines */
+#define WD_IIDR_OFFSET 0xFCC
+
+#define RT_WDOG_CTRL 0x2A490000 // 0x2A460000
+#define RT_WDOG_REFRESH 0x2A470000
+#define RT_WDOG_INT_ID 0x72
+
+#define CNTR_FREQ 0x5F5E100
+
+/* SMMU_V3 ROOT register defines */
+#define ROOT_IOVIRT_SMMUV3_BASE (0x2b400000)
+#define SMMUV3_ROOT_REG_OFFSET  (0x20000)
+#define SMMU_ROOT_CR0           (SMMUV3_ROOT_REG_OFFSET + 0x0020)
+#define SMMU_ROOT_IDRO          (SMMUV3_ROOT_REG_OFFSET + 0x0000)
+
+/**
+ * FREE_MEM_START is the start address of 2MB region which is flat-mapped in EL3 MMU. This
+ * region is used for descriptor mappings.
+ * FREE_PA_TEST is the base address for free PA which is used in test(EL2).
+ * This free PA does not require to be flat-mapped.
+ * FREE_VA_TEST is the base VA of 512MB size used in test as free VA.
+ **/
+#define FREE_MEM_START   0x880000000ULL
+#define FREE_VA_TEST     0x880200000ULL
+#define FREE_PA_TEST     0x880300000ULL
+#define SHARED_ADDRESS 0xE0000000ULL
+
+#else
+
+#define MTE_PROTECTED_REGION_BASE      0x2A460000ULL
+#define MTE_PROTECTED_REGION_SIZE      0x20000
+#define MTE_PROTECTED_REGION_END       (MTE_PROTECTED_REGION_BASE + MTE_PROTECTED_REGION_SIZE - 1)
+#define MTE_PROTECTED_REGION_MID       (MTE_PROTECTED_REGION_END - (MTE_PROTECTED_REGION_SIZE / 2))
+
+/* Defines related to System memory */
+#define ROOT_SMEM_BASE  0x2A460000ULL
+#define REALM_SMEM_BASE 0x2A420000ULL
+
+#define REALM_MEM_ADDRES 0x2A420000ULL
+
+#define MSD_SAVE_RESTORE_MEM 0x2A460000ULL
+
+#define RME_RNVS_MAILBOX_MEM 0x2A460000ULL
 
 /* Root watchdog defines */
 #define WD_IIDR_OFFSET 0xFCC
@@ -42,9 +88,10 @@
 #define CNTR_FREQ 0x5F5E100
 
 /* SMMU_V3 ROOT register defines */
-#define ROOT_IOVIRT_SMMUV3_BASE UL(0x288000000)
-#define SMMUV3_ROOT_REG_OFFSET  UL(0xA0000)
-#define SMMU_ROOT_CR0           U(SMMUV3_ROOT_REG_OFFSET + 0x0020)
+#define ROOT_IOVIRT_SMMUV3_BASE (0x288000000)
+#define SMMUV3_ROOT_REG_OFFSET  (0xA0000)
+#define SMMU_ROOT_CR0           (SMMUV3_ROOT_REG_OFFSET + 0x0020)
+#define SMMU_ROOT_IDRO          (SMMUV3_ROOT_REG_OFFSET + 0x0000)
 
 /**
  * FREE_MEM_START is the start address of 2MB region which is flat-mapped in EL3 MMU. This
@@ -53,10 +100,12 @@
  * This free PA does not require to be flat-mapped.
  * FREE_VA_TEST is the base VA of 512MB size used in test as free VA.
  **/
-#define FREE_MEM_START 0x8080000000ULL
-#define FREE_VA_TEST   0x8080200000ULL
-#define FREE_PA_TEST   0x8080300000ULL
+#define FREE_MEM_START   0x8080000000ULL
+#define FREE_VA_TEST     0x8080200000ULL
+#define FREE_PA_TEST     0x8080300000ULL
 #define SHARED_ADDRESS 0xE0000000ULL
+
+#endif
 
 #ifndef __ASSEMBLER__
 /**

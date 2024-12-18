@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022-2023, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2024, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -324,6 +324,8 @@ uint32_t pal_pcie_check_device_list(void);
 uint32_t pal_pcie_check_device_valid(uint32_t bdf);
 uint32_t pal_pcie_mem_get_offset(uint32_t type);
 
+uint32_t pal_pcie_bar_mem_read(uint32_t bdf, uint64_t address, uint32_t *data);
+uint32_t pal_pcie_bar_mem_write(uint32_t bdf, uint64_t address, uint32_t data);
 /**
   @brief  Instance of SMMU INFO block
 **/
@@ -543,6 +545,8 @@ uint32_t pal_pcie_device_driver_present(uint32_t seg, uint32_t bus, uint32_t dev
 uint32_t pal_pcie_scan_bridge_devices_and_check_memtype(uint32_t seg, uint32_t bus,
                                                             uint32_t dev, uint32_t fn);
 uint32_t pal_pcie_get_rp_transaction_frwd_support(uint32_t seg, uint32_t bus, uint32_t dev, uint32_t fn);
+uint32_t pal_device_lock(uint32_t bdf);
+uint32_t pal_device_unlock(uint32_t bdf);
 
 /* Common Definitions */
 void     pal_print(char8_t *string, uint64_t data);
@@ -635,7 +639,10 @@ typedef enum {
     CFG_TXN_ATTRIBUTES = 0x7,
     ATS_RES_ATTRIBUTES = 0x8,
     TRANSACTION_TYPE  = 0x9,
-    NUM_TRANSACTIONS  = 0xA
+    NUM_TRANSACTIONS  = 0xA,
+    ADDRESS_ATTRIBUTES = 0xB,
+    DATA_ATTRIBUTES = 0xC,
+    ERROR_INJECT_TYPE = 0xD
 } EXERCISER_PARAM_TYPE;
 
 typedef enum {
@@ -671,7 +678,8 @@ typedef enum {
     TXN_NO_SNOOP_DISABLE = 0xa,
     START_TXN_MONITOR    = 0xb,
     STOP_TXN_MONITOR     = 0xc,
-    ATS_TXN_REQ          = 0xd
+    ATS_TXN_REQ          = 0xd,
+    INJECT_ERROR         = 0xe
 } EXERCISER_OPS;
 
 typedef enum {

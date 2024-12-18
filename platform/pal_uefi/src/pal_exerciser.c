@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022, 2024, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -28,17 +28,6 @@
 #include  <include/rme_pcie_enum.h>
 #include "include/pal_uefi.h"
 #include "include/pal_exerciser.h"
-
-
-UINT32
-pal_mmio_read(UINT64 addr);
-
-VOID
-pal_mmio_write(UINT64 addr, UINT32 data);
-
-UINT64
-pal_pcie_get_mcfg_ecam();
-
 
 /**
   @brief This API increments the BDF
@@ -124,6 +113,51 @@ pal_exerciser_start_dma_direction (
 }
 
 /**
+  @brief This function finds the Eror Injection capability and return 0 if it finds.
+**/
+UINT32
+pal_exerciser_find_error_injection_capability (
+  UINT32 Bdf,
+  UINT32 *Offset
+  )
+{
+  UINT32 TempId;
+  UINT32 Data;
+  UINT64 Ecam;
+  UINT32 IdMask;
+  UINT32 PtrMask;
+  UINT32 PtrOffset;
+  UINT64 NxtPtr = 0;
+
+  Ecam = pal_pcie_get_mcfg_ecam();
+  NxtPtr = PCIE_CAP_OFFSET;
+
+  /* Serach in PCIe extended configuration space */
+  IdMask = PCIE_CAP_ID_MASK;
+  PtrMask = PCIE_NXT_CAP_PTR_MASK;
+  PtrOffset = PCIE_CAP_PTR_OFFSET;
+
+  while (NxtPtr)
+  {
+    Data = pal_mmio_read(Ecam + pal_exerciser_get_pcie_config_offset(Bdf) + NxtPtr);
+    TempId = Data & IdMask;
+    /* Check for DEVSEC capability ID */
+    if (TempId == DVSEC){
+        Data = pal_mmio_read(Ecam + pal_exerciser_get_pcie_config_offset(Bdf) + NxtPtr + DVSEC_CTRL);
+        TempId = Data & IdMask;
+        /* Check for DVSEC_ID in Control register*/
+        if (TempId == 0x1){
+            *Offset = NxtPtr;
+            return 0;
+        }
+    }
+    NxtPtr = (Data >> PtrOffset) & PtrMask;
+  }
+  rme_print(ACS_PRINT_ERR,L"\n No capabilities found",0);
+  return 1;
+}
+
+/**
   @brief This function finds the PCI capability and return 0 if it finds.
 **/
 UINT32
@@ -134,7 +168,7 @@ pal_exerciser_find_pcie_capability (
   UINT32 *Offset
   )
 {
-  UINT64 NxtPtr;
+  UINT64 NxtPtr = 0;
   UINT32 Data;
   UINT32 TempId;
   UINT64 Ecam;
@@ -187,8 +221,12 @@ UINT32 pal_exerciser_set_param (
 {
   UINT32 Data;
   UINT64 Base;
+  UINT32 CapabilityOffset = 0;
+  UINT64 Ecam;
 
   Base = pal_exerciser_get_ecsr_base(Bdf,0);
+  Ecam = pal_pcie_get_mcfg_ecam(); // Getting the ECAM address
+
   switch (Type) {
 
       case SNOOP_ATTRIBUTES:
@@ -257,6 +295,18 @@ UINT32 pal_exerciser_set_param (
                 return 1;
           }
 
+     case ERROR_INJECT_TYPE:
+        pal_exerciser_find_error_injection_capability(Bdf, &CapabilityOffset);
+        Data = pal_mmio_read(Ecam + CapabilityOffset +
+                             pal_exerciser_get_pcie_config_offset(Bdf) + DVSEC_CTRL);
+        Data = ((Value1 << ERR_CODE_SHIFT) | (Value2 << FATAL_SHIFT));
+        pal_mmio_write(Ecam + CapabilityOffset + DVSEC_CTRL +
+                             pal_exerciser_get_pcie_config_offset(Bdf), Data);
+        if (Value1 <= 0x7)
+                return 2;
+        else
+                return 3;
+
       default:
           return 1;
   }
@@ -281,6 +331,11 @@ pal_exerciser_get_param (
   UINT32 Status;
   UINT32 Temp;
   UINT64 Base;
+  UINT32 tx_attr;
+  UINT32 addr_low = 0;
+  UINT32 addr_high = 0;
+  UINT32 data_low = 0;
+  UINT32 data_high = 0;
 
   Base = pal_exerciser_get_ecsr_base(Bdf,0);
   switch (Type) {
@@ -306,6 +361,46 @@ pal_exerciser_get_param (
           return pal_mmio_read(Base + MSICTL) | MASK_BIT;
       case ATS_RES_ATTRIBUTES:
           *Value1 = pal_mmio_read(Base + ATS_ADDR);
+          return 0;
+      case CFG_TXN_ATTRIBUTES:
+      case TRANSACTION_TYPE:
+      case ADDRESS_ATTRIBUTES:
+      case DATA_ATTRIBUTES:
+          /* Get the first entry and check for validity */
+          tx_attr = pal_mmio_read(Base + TXN_TRACE);
+          if (tx_attr == TXN_INVALID)
+              return 1;
+
+          /* Obtain all the recorded information of the packet in the format.
+               ________________________________
+              |         TX ATTRIBUTES          |
+              |      CFG/MEM ADDRESS_LO        |
+              |      CFG/MEM ADDRESS_HI        |
+              |           DATA_LO              |
+              |           DATA_HI              |
+              |________________________________|
+          */
+          addr_low = pal_mmio_read(Base + TXN_TRACE);
+          addr_high = pal_mmio_read(Base + TXN_TRACE);
+          data_low = pal_mmio_read(Base + TXN_TRACE);
+          data_high = pal_mmio_read(Base + TXN_TRACE);
+
+          if (Type == CFG_TXN_ATTRIBUTES)
+              *Value1 = tx_attr & MASK_BIT;
+
+          /* 0 - Read, 1 - Write */
+          else if (Type == TRANSACTION_TYPE)
+              if (tx_attr & 0x2)
+                  *Value2 = CFG_READ;
+              else
+                  *Value2 = CFG_WRITE;
+
+          else if (Type == ADDRESS_ATTRIBUTES)
+               *Value1 = addr_low | ((UINT64)addr_high << 32);
+
+          else if (Type == DATA_ATTRIBUTES)
+               *Value1 = data_low | ((UINT64)data_high << 32);
+
           return 0;
       default:
           return 1;
@@ -361,7 +456,7 @@ pal_exerciser_ops (
 {
   UINT64 Base;
   UINT64 Ecam;
-  UINT32 CapabilityOffset;
+  UINT32 CapabilityOffset = 0;
   UINT32 data;
   Base = pal_exerciser_get_ecsr_base(Bdf,0);
   Ecam = pal_pcie_get_mcfg_ecam(); // Getting the ECAM address
@@ -439,6 +534,22 @@ pal_exerciser_ops (
         pal_mmio_write(Base + DMA_BUS_ADDR, Param);
         pal_mmio_write(Base + ATSCTL, ATS_TRIGGER);
         return !(pal_mmio_read(Base + ATSCTL) & ATS_STATUS);
+
+    case START_TXN_MONITOR:
+        pal_mmio_write(Base + TXN_CTRL_BASE, TXN_START);
+        return 0;
+    case STOP_TXN_MONITOR:
+        pal_mmio_write(Base + TXN_CTRL_BASE, TXN_STOP);
+        return 0;
+
+    case INJECT_ERROR:
+        pal_exerciser_find_error_injection_capability(Bdf, &CapabilityOffset);
+        data = pal_mmio_read(Ecam + pal_exerciser_get_pcie_config_offset(Bdf) +
+                             CapabilityOffset + DVSEC_CTRL);
+        data = data | (1 << ERROR_INJECT_BIT);
+        pal_mmio_write(Ecam + pal_exerciser_get_pcie_config_offset(Bdf) + CapabilityOffset +
+                       DVSEC_CTRL, data);
+        return Param;
 
     default:
         return PCIE_CAP_NOT_FOUND;

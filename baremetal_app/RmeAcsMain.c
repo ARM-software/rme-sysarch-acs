@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022-2023, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2024, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,7 +22,6 @@
 #include "platform/pal_baremetal/FVP/include/platform_override_fvp.h"
 #include "RmeAcs.h"
 
-uint32_t  g_rme_level;
 uint32_t  g_enable_pcie_tests;
 uint32_t  g_print_level;
 uint32_t  g_execute_nist;
@@ -182,8 +181,7 @@ ShellAppMainrme(
   g_rme_tests_fail  = 0;
 
   val_print(g_print_level, "\n\n RME Architecture Compliance Suite \n", 0);
-  val_print(g_print_level, "    Version %d.", RME_ACS_MAJOR_VER);
-  val_print(g_print_level, "%d  \n", RME_ACS_MINOR_VER);
+  val_print(g_print_level, "    Version: Issue B.a ACS BETA  \n", 0);
 
   val_print(g_print_level, " (Print level is %2d)\n\n", g_print_level);
 
@@ -221,10 +219,10 @@ ShellAppMainrme(
   Status |= val_legacy_execute_tests(val_pe_get_num());
 
   val_print(ACS_PRINT_TEST, "\n      *** Starting GIC test ***  \n", 0);
-  Status |= val_gic_execute_tests(g_rme_level, val_pe_get_num());
+  Status |= val_gic_execute_tests(val_pe_get_num());
 
   val_print(ACS_PRINT_TEST, "\n   *** Starting IO Virtualization tests ***      \n", 0);
-  Status |= val_smmu_execute_tests(g_rme_level, val_pe_get_num());
+  Status |= val_smmu_execute_tests(val_pe_get_num());
 
 
 print_test_status:

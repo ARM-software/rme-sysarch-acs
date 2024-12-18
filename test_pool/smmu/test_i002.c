@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2023, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2023-2024, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -53,7 +53,7 @@ void
 payload(void)
 {
   uint32_t pe_index;
-  uint32_t dma_len;
+  uint32_t dma_len, attr;
   uint32_t instance;
   uint32_t e_bdf;
   uint32_t cap_base;
@@ -168,8 +168,9 @@ payload(void)
       //Map the memory as Non-secure for the instance
       //shared_data->generic_flag = SET;
       val_add_gpt_entry_el3(mem_desc->physical_address, GPT_NONSECURE);
+      attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(OUTER_SHAREABLE) | PGT_ENTRY_AP_RW);
       val_add_mmu_entry_el3(mem_desc->virtual_address, mem_desc->physical_address,
-                      SHAREABLE_ATTR(OUTER_SHAREABLE) | NONSECURE_PAS);
+                      (attr | LOWER_ATTRS(PAS_ATTR(NONSECURE_PAS))));
 
       //Clear the memory
       val_memory_set((uint64_t *)dram_buf_in_virt, dma_len, 0);
@@ -282,7 +283,7 @@ test_fail:
 test_clean:
   val_add_gpt_entry_el3(dram_buf_in_phys, GPT_ANY);
   val_add_mmu_entry_el3((uint64_t)dram_buf_in_virt, dram_buf_in_phys,
-                  SHAREABLE_ATTR(OUTER_SHAREABLE) | NONSECURE_PAS);
+                  (attr | LOWER_ATTRS(PAS_ATTR(NONSECURE_PAS))));
 
   //Clear the memory
   val_memory_set_el3((uint64_t *)dram_buf_in_virt, dma_len/2, 0);

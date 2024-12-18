@@ -1,5 +1,5 @@
 /** @file
-  * Copyright (c) 2022-2023, Arm Limited or its affiliates. All rights reserved.
+  * Copyright (c) 2022-2024, Arm Limited or its affiliates. All rights reserved.
   * SPDX-License-Identifier : Apache-2.0
 
   * Licensed under the Apache License, Version 2.0 (the "License");
@@ -36,7 +36,7 @@ uint64_t *armtf_handler = (uint64_t *)(ARM_TF_SHARED_ADDRESS);
 void rme_install_handler(void)
 {
   save_vbar_el3(armtf_handler);
-  INFO("armtf_handler= 0x%lx\n", *(armtf_handler));
+  INFO("armtf_handler: 0x%lx\n", *(armtf_handler));
   program_vbar_el3(&exception_handler_user);
 }
 
@@ -75,7 +75,7 @@ void ack_handler_el3(void)
         VERBOSE("Saved spsr = %lx\n", *(spsr_ptr));
         VERBOSE("Current elr = %lx\n", read_elr_el3());
         VERBOSE("Current spsr = %lx\n", read_spsr_el3());
-	shared_data->exception_expected = CLEAR;
+        shared_data->exception_expected = CLEAR;
         asm_eret();
     }
     //Save other parameters as per test requirement
@@ -130,17 +130,17 @@ void access_mut(void)
     switch (type)
     {
         case READ_DATA:
-          data = *(uint64_t *) shared_data->shared_data_access[acc_cnt].addr;
-          VERBOSE("The data returned from the address, 0x%lx is 0x%lx\n",
-               shared_data->shared_data_access[acc_cnt].addr, data);
+          data = *(volatile uint32_t *) shared_data->shared_data_access[acc_cnt].addr;
+          VERBOSE("The data returned from the address, 0x%lx is 0x%x\n",
+               shared_data->shared_data_access[acc_cnt].addr, (uint32_t)data);
           shared_data->shared_data_access[acc_cnt].data = data;
           break;
         case WRITE_DATA:
           data = shared_data->shared_data_access[acc_cnt].data;
-          *(uint64_t *)shared_data->shared_data_access[acc_cnt].addr = data;
-          VERBOSE("Data stored in VA, 0x%lx is 0x%lx\n",
+          *(volatile uint32_t *)shared_data->shared_data_access[acc_cnt].addr = data;
+          VERBOSE("Data stored in VA, 0x%lx is 0x%x\n",
                 shared_data->shared_data_access[acc_cnt].addr,
-                *(uint64_t *)shared_data->shared_data_access[acc_cnt].addr);
+                *(uint32_t *)shared_data->shared_data_access[acc_cnt].addr);
           break;
         default:
           ERROR("INVALID TYPE OF ACCESS");
@@ -225,11 +225,11 @@ void plat_arm_acs_smc_handler(uint64_t services, uint64_t arg0, uint64_t arg1, u
       INFO("Root watchdog service \n");
       if (shared_data->generic_flag) {
         set_daif();
-        shared_data->generic_flag = CLEAR;
         shared_data->exception_expected = SET;
         shared_data->access_mut = CLEAR;
       }
       val_wd_set_ws0_el3(arg0, arg1, arg2);
+      shared_data->generic_flag = CLEAR;
       break;
     case PAS_FILTER_SERVICE:
       INFO("PAS filter mode service \n");
@@ -242,6 +242,10 @@ void plat_arm_acs_smc_handler(uint64_t services, uint64_t arg0, uint64_t arg1, u
     case SEC_STATE_CHANGE:
       INFO("Security STte change service \n");
       val_security_state_change(arg0);
+      break;
+    case SMMU_ROOT_REG_CHK:
+      INFO("SMMU ROOT Register Configuration validate \n");
+      val_smmu_root_reg_chk(arg0);
       break;
     default:
       INFO(" Service not present\n");

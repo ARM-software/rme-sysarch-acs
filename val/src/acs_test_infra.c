@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022-2023, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2024, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,9 +22,13 @@
 #include "include/mem_interface.h"
 #include "include/rme_acs_el32.h"
 #include "include/sys_config.h"
+#include "include/rme_acs_exerciser.h"
+#include "include/rme_acs_smmu.h"
 
 uint64_t free_mem_var_pa = FREE_PA_TEST;
 uint64_t free_mem_var_va = FREE_VA_TEST;
+
+struct_sh_data *shared_data = (struct_sh_data *)SHARED_ADDRESS;
 
 /**
   @brief  This API calls PAL layer to print a formatted string
@@ -236,7 +240,6 @@ val_mmio_write64(addr_t addr, uint64_t data)
   @param test_num unique number identifying this test
   @param desc     brief description of the test
   @param num_pe   the number of PE to execute this test on.
-  @param level    compliance level being tested against
   @param ruleid   Pointer to the TEST_RULE string.
   @return         Skip - if the user has overridden to skip the test.
  **/
@@ -678,3 +681,59 @@ val_restore_global_test_data()
                                &g_rme_tests_pass, &g_rme_tests_fail);
 }
 
+uint32_t val_configure_acs(void)
+{
+  uint64_t sp_val, smmu_root_page;
+  uint32_t num_smmus, attr;
+
+  sp_val = AA64ReadSP_EL0();
+  val_print(ACS_PRINT_INFO, "\n SHARED_ADDRESS = 0x%llx", SHARED_ADDRESS);
+
+  /* Map the SHARED_ADDRESS and the sp_el0 as NS in EL3 */
+  attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(OUTER_SHAREABLE) | PGT_ENTRY_AP_RW);
+  val_add_mmu_entry_el3(SHARED_ADDRESS, SHARED_ADDRESS,
+                  (attr | LOWER_ATTRS(PAS_ATTR(NONSECURE_PAS))));
+  val_add_mmu_entry_el3(sp_val, sp_val, (attr | LOWER_ATTRS(PAS_ATTR(NONSECURE_PAS))));
+
+  /* Map the SMMU root page as ROOT PAS */
+  smmu_root_page = ROOT_IOVIRT_SMMUV3_BASE + SMMUV3_ROOT_REG_OFFSET;
+  attr |= LOWER_ATTRS(GET_ATTR_INDEX(DEV_MEM_nGnRnE));
+  val_add_mmu_entry_el3(smmu_root_page, smmu_root_page, attr | LOWER_ATTRS(PAS_ATTR(ROOT_PAS)));
+  val_rme_install_handler_el3();
+
+  /* Create the list of valid Pcie Device Functions, Exerciser table
+   * and initialise smmu for the tests that require exerciser and smmu required
+   **/
+  if (val_pcie_create_device_bdf_table()) {
+      val_print(ACS_PRINT_WARN, "\n     Create BDF Table Failed \n", 0);
+      return ACS_STATUS_SKIP;
+  }
+
+  val_exerciser_create_info_table();
+  val_smmu_init();
+
+  num_smmus = val_iovirt_get_smmu_info(SMMU_NUM_CTRL, 0);
+
+  /* Disable all SMMUs */
+  for (uint32_t instance = 0; instance < num_smmus; ++instance)
+     val_smmu_disable(instance);
+
+  return 0;
+}
+
+uint32_t val_generate_stream_id(void)
+{
+  /* Starting from 1 */
+  static uint32_t unique_stream_id = 1;
+
+  /* Increment the unique Stream ID */
+  unique_stream_id++;
+
+  /* If the number exceeds 255, reset to 1 */
+  if (unique_stream_id > 255)
+  {
+      unique_stream_id = 1;
+  }
+
+  return unique_stream_id;
+}

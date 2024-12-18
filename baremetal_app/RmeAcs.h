@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022-2023, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2024, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,9 +19,6 @@
 #define __RME_ACS_LEVEL_H__
 
   #define SIZE_4K 0x100
-
-  #define RME_ACS_MAJOR_VER  1
-  #define RME_ACS_MINOR_VER  0
 
   #define RME_MIN_LEVEL_SUPPORTED 3
   #define RME_MAX_LEVEL_SUPPORTED 6

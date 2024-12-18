@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2023, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2023-2024, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -60,9 +60,9 @@ val_data_cache_ops_by_va_el3(uint64_t address, uint32_t type)
  *  @return  None
 **/
 void
-val_add_mmu_entry_el3(uint64_t VA, uint64_t PA, uint64_t acc_pas)
+val_add_mmu_entry_el3(uint64_t VA, uint64_t PA, uint64_t attr)
 {
-  UserCallSMC(ARM_ACS_SMC_FID, RME_ADD_MMU_ENTRY, VA, PA, acc_pas);
+  UserCallSMC(ARM_ACS_SMC_FID, RME_ADD_MMU_ENTRY, VA, PA, attr);
 }
 
 /**
@@ -213,4 +213,14 @@ void val_smmu_access_disable(void)
 void val_change_security_state_el3(int sec_state)
 {
   UserCallSMC(ARM_ACS_SMC_FID, SEC_STATE_CHANGE, sec_state, 0, 0);
+}
+
+/**
+ *  @brief  This API is used to check the RME_IMPL && ROOT_IMPL feature of the SMMU.
+ *          1. Caller       -  Test suite
+ *  @return None
+ */
+void val_smmu_check_rmeda_el3(void)
+{
+  UserCallSMC(ARM_ACS_SMC_FID, SMMU_ROOT_REG_CHK, SMMU_ROOT_RME_IMPL_CHK, 0, 0);
 }

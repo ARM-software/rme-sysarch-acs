@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022, 2024, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -27,12 +27,11 @@ GIC_INFO_TABLE  *g_gic_info_table;
   @brief   This API executes all the GIC tests sequentially
            1. Caller       -  Application layer.
            2. Prerequisite -  val_gic_create_info_table()
-  @param   level  - level of compliance being tested for.
   @param   num_pe - the number of PE to run these tests on.
   @return  Consolidated status of all the tests run.
 **/
 uint32_t
-val_gic_execute_tests(uint32_t level, uint32_t num_pe)
+val_gic_execute_tests(uint32_t num_pe)
 {
 
   uint32_t status, i;
@@ -241,7 +240,7 @@ val_get_cpuif_base(void)
   @return  32-bit data
 **/
 uint32_t
-val_gic_get_info(uint32_t type)
+val_gic_get_info(GIC_INFO_e type)
 {
   uint32_t rdbase_len;
 

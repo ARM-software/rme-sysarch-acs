@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2023, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2023-2024, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -40,7 +40,7 @@ static
 void payload(void)
 {
   uint8_t status_fail_cnt = 0;
-  uint32_t index = val_pe_get_index_mpid(val_pe_get_mpid()), security_state;
+  uint32_t index = val_pe_get_index_mpid(val_pe_get_mpid()), security_state, attr;
   uint64_t pas_list[4] = {ROOT_PAS, REALM_PAS, NONSECURE_PAS, SECURE_PAS};
   uint64_t VA, PA, VA_Top, size, rd_data1, rd_data2;
 
@@ -50,10 +50,11 @@ void payload(void)
   VA = val_get_free_va(NUM_PAS * NUM_SMEM_REGN * size);
   VA_Top = VA + size - 8;
   security_state = ROOT_PAS;
+  attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(NON_SHAREABLE) | PGT_ENTRY_AP_RW);
 
   for (int pas_cnt = 0; pas_cnt < 4; ++pas_cnt)
   {
-      val_add_mmu_entry_el3(VA, PA, pas_list[pas_cnt]);
+      val_add_mmu_entry_el3(VA, PA, (attr | LOWER_ATTRS(PAS_ATTR(pas_list[pas_cnt]))));
 
       if (security_state == pas_list[pas_cnt]) {
 

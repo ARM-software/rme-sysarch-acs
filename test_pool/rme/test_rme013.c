@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2023, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2023-2024, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -36,6 +36,7 @@
 #define NUM_PAS 4
 
 uint32_t dma_len;
+uint32_t attr;
 uint32_t test_data_blk_size;
 
 static
@@ -99,7 +100,7 @@ uint32_t test_sequence1(void *dram_buf1_virt, void *dram_buf1_phys, uint32_t ins
       //Clear the memory and it's protection by making it NS
       val_add_gpt_entry_el3(PA, GPT_ANY);
       val_add_mmu_entry_el3((uint64_t)dram_buf1_virt, PA,
-                      SHAREABLE_ATTR(OUTER_SHAREABLE) | NONSECURE_PAS);
+                      (attr | LOWER_ATTRS(PAS_ATTR(NONSECURE_PAS))));
       val_memory_set_el3((uint64_t *)dram_buf1_virt, dma_len/2, 0);
       val_data_cache_ops_by_va_el3((uint64_t)dram_buf1_virt, CLEAN_AND_INVALIDATE);
       return 1;
@@ -107,7 +108,7 @@ uint32_t test_sequence1(void *dram_buf1_virt, void *dram_buf1_phys, uint32_t ins
     //Clear the memory and it's protection by making it NS
     val_add_gpt_entry_el3(PA, GPT_ANY);
     val_add_mmu_entry_el3((uint64_t)dram_buf1_virt, PA,
-                    SHAREABLE_ATTR(OUTER_SHAREABLE) | NONSECURE_PAS);
+                      (attr | LOWER_ATTRS(PAS_ATTR(NONSECURE_PAS))));
     val_memory_set_el3((uint64_t *)dram_buf1_virt, dma_len/2, 0);
     val_data_cache_ops_by_va_el3((uint64_t)dram_buf1_virt, CLEAN_AND_INVALIDATE);
 
@@ -147,6 +148,8 @@ payload (void)
 
     test_data_blk_size = page_size * TEST_DATA_NUM_PAGES;
     pe_index = val_pe_get_index_mpid(val_pe_get_mpid());
+
+    attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(NON_SHAREABLE) | PGT_ENTRY_AP_RW);
 
     num_smmu = val_iovirt_get_smmu_info(SMMU_NUM_CTRL, 0);
 
@@ -239,7 +242,7 @@ payload (void)
 
       val_add_gpt_entry_el3(mem_desc->physical_address, GPT_NONSECURE);
       val_add_mmu_entry_el3(mem_desc->virtual_address, mem_desc->physical_address,
-                      SHAREABLE_ATTR(OUTER_SHAREABLE) | NONSECURE_PAS);
+                      (attr | LOWER_ATTRS(PAS_ATTR(NONSECURE_PAS))));
 
       //Clear the memory
       val_memory_set_el3((uint64_t *)dram_buf1_virt, dma_len/2, 0);

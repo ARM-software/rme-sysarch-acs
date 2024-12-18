@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2023, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2023-2024, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -45,7 +45,7 @@ static
 void payload(void)
 {
 
-  uint32_t index = val_pe_get_index_mpid(val_pe_get_mpid());
+  uint32_t index = val_pe_get_index_mpid(val_pe_get_mpid()), attr;
   uint64_t PA, VA_NS, size, wt_ns_data, rd_data_encrpt_enbl, rd_data_encrpt_disbl;
 
   if (IS_NS_ENCRYPTION_PROGRAMMABLE == CLEAR) {
@@ -58,9 +58,10 @@ void payload(void)
   size = val_get_min_tg();
   PA = val_get_free_pa(size, size);
   VA_NS = val_get_free_va(size);
+  attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(NON_SHAREABLE) | PGT_ENTRY_AP_RW);
 
   //Map VA to PA as NS access pas in MMU
-  val_add_mmu_entry_el3(VA_NS, PA, NONSECURE_PAS);
+  val_add_mmu_entry_el3(VA_NS, PA, (attr | LOWER_ATTRS(PAS_ATTR(NONSECURE_PAS))));
 
   //Store the data in PA_NS
   wt_ns_data = RANDOM_DATA_1;

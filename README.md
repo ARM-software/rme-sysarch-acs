@@ -9,7 +9,7 @@
   - Granule Protection Check mechanism.
 Together with the other components of the Arm CCA, RME enables support for dynamic, attestable, and trusted execution environments (Realms) to be run on an Arm PE.
 
-For more information, download the [RME System Architecture specification](https://developer.arm.com/documentation/ddi0615/latest/)
+For more information, download the [RME System Architecture specification](https://developer.arm.com/documentation/den0129/latest/)
 
 
 ## RME System - Architecture Compliance Suite
@@ -19,8 +19,8 @@ This suite includes a set of examples of the invariant behaviors that are provid
 Most of the tests are executed from UEFI Shell by executing the RME UEFI shell application.
 
 ## Release details
-  - Code Quality: EAC v1.0.
-  - The tests are written for version A.d of the Arm Realm Management Extension (RME) System Architecture.
+  - Code Quality: Beta
+  - The tests are written for version B.a of the Arm Realm Management Extension (RME) System Architecture.
   - The compliance suite is not a substitute for design verification.
 
 ## GitHub branch
@@ -63,7 +63,7 @@ For more information, see [arm RME System ACS Validation Methodology document](D
 - Any mainstream Linux based OS distribution running on a x86 or aarch64 machine.
 - git clone --branch edk2-stable202208 --depth 1 https://github.com/tianocore/edk2
 - git clone https://github.com/tianocore/edk2-libc [ Checkout SHA: 61687168fe02ac4d933a36c9145fdd242ac424d1]
-- Install GCC 12.3 or later toolchain for Linux from [here](https://developer.arm.com/downloads/-/arm-gnu-toolchain-downloads/12-3-rel1).
+- Install GCC 13.2 or later toolchain for Linux from [here](https://developer.arm.com/downloads/-/arm-gnu-toolchain-downloads).
 - Install the build prerequisite packages to build EDK2.
 Note: The details of the packages are beyond the scope of this document.
 
@@ -77,7 +77,7 @@ To start the ACS build, perform the following steps:
    - Add  RmeValLib|ShellPkg/Application/rme-acs/val/RmeValLib.inf
    - Add  RmePalLib|ShellPkg/Application/rme-acs/platform/pal_uefi/RmePalLib.inf
    - Add ShellPkg/Application/rme-acs/uefi_app/RmeAcs.inf in the [components] section of ShellPkg/ShellPkg.dsc <br>
-    If Baremetal platform, then add the following to [LibraryClasses.common] section in ShellPkg/ShellPkg.dsc
+    If Baremetal platform, checkout to ACS tag v23.12_REL1.0 then add the following to [LibraryClasses.common] section in ShellPkg/ShellPkg.dsc
    - Add  RmeValLib|ShellPkg/Application/rme-acs/val/RmeValLib.inf
    - Add  RmePalBaremetalLib|ShellPkg/Application/rme-acs/platform/pal_baremetal/RmePalBaremetalLib.inf
    - Add  RmePalFVPLib|ShellPkg/Application/rme-acs/platform/pal_baremetal/FVP/RmePalFVPLib.inf
@@ -121,7 +121,7 @@ If the build environment is Linux, perform the following steps:
 
 ### Windows build environment
 If the build environment is Windows, perform the following steps:
-1. Set the toolchain path to GCC12.3 or above.
+1. Set the toolchain path to GCC13.2 or above.
 2. Setup the environment for AARCH64 EDK2 build.
 3. Setup the environment for PACKAGES_PATH.
 4. Build the RME shell application.
@@ -197,6 +197,7 @@ Below tests are not qualified in model. These are expected to pass in any valid 
   - test_pool/rme/test_rme022.c - Require NS encryption to be programmable.
   - test_pool/gic/test_g001.c -   Model issue.
   - test_pool/rme/test_rme015.c - Model limitation.
+  - test_pool/da/test_da008.c - Model issue (RMSD write-protect not implemented).
 
 ## License
 RME System ACS is distributed under Apache v2.0 License.
@@ -208,4 +209,4 @@ RME System ACS is distributed under Apache v2.0 License.
 
 --------------
 
-*Copyright (c) 2022-2023, Arm Limited and Contributors. All rights reserved.*
+*Copyright (c) 2022-2024, Arm Limited and Contributors. All rights reserved.*
