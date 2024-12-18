@@ -193,11 +193,10 @@ Below tests are not qualified in model. These are expected to pass in any valid 
   - test_pool/legacy_system/test_ls002.c - Require Legacy TZ Support.
   - test_pool/legacy_system/test_ls003.c - Require Legacy TZ Support.
   - test_pool/legacy_system/test_ls004.c - Require Legacy TZ Support.
-  - test_pool/rme/test_rme029.c - Model Issue.
+  - test_pool/rme/test_rme029.c - Reference Validation Platform Issue.
   - test_pool/rme/test_rme022.c - Require NS encryption to be programmable.
-  - test_pool/gic/test_g001.c -   Model issue.
-  - test_pool/rme/test_rme015.c - Model limitation.
-  - test_pool/da/test_da008.c - Model issue (RMSD write-protect not implemented).
+  - test_pool/rme/test_rme015.c - Reference Validation Platform limitation.
+  - test_pool/da/test_da008.c - Reference Validation Platform Issue.
 
 ## License
 RME System ACS is distributed under Apache v2.0 License.
