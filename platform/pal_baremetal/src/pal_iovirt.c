@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022-2023, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2023, 2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,6 +21,13 @@
 extern PLATFORM_OVERRIDE_IOVIRT_INFO_TABLE platform_iovirt_cfg;
 extern PLATFORM_OVERRIDE_NODE_DATA platform_node_type;
 
+#ifdef TARGET_BM_BOOT
+    // Align the memory access by 8 bytes in case of baremetal boot.
+    static uint64_t bound = 0x08;
+#else
+    static uint64_t bound = 0x01;
+#endif
+
 uint64_t
 pal_iovirt_get_rc_smmu_base (
   IOVIRT_INFO_TABLE *Iovirt,
@@ -40,6 +47,7 @@ pal_iovirt_get_rc_smmu_base (
   mapping_found = 0;
   for (i = 0; i < Iovirt->num_blocks; i++, block = IOVIRT_NEXT_BLOCK(block))
   {
+      block = ALIGN_MEMORY(block, bound);
       if (block->type == IOVIRT_NODE_PCI_ROOT_COMPLEX
           && block->data.rc.segment == RcSegmentNum)
       {
@@ -181,13 +189,14 @@ pal_iovirt_create_info_table(IOVIRT_INFO_TABLE *IoVirtTable)
   block = &(IoVirtTable->blocks[0]);
   for (i = 0; i < platform_iovirt_cfg.node_count; i++, block=IOVIRT_NEXT_BLOCK(block))
   {
+     block = ALIGN_MEMORY(block, bound);
      block->type = platform_iovirt_cfg.type[i];
      block->flags = 0;
      switch(platform_iovirt_cfg.type[i]){
           case IOVIRT_NODE_ITS_GROUP:
           block->data.its_count = platform_node_type.its_count;
           data_map = &block->data_map[0];
-          memcpy(&((*data_map).id[0]), &identifier[i][0], sizeof(uint32_t) * block->data.its_count);
+          pal_memcpy(&((*data_map).id[0]), &identifier[i][0], sizeof(uint32_t) * block->data.its_count);
           block->num_data_map = (block->data.its_count +3)/4;
           IoVirtTable->num_its_groups++;
           break;
@@ -260,8 +269,10 @@ pal_iovirt_create_info_table(IOVIRT_INFO_TABLE *IoVirtTable)
 
   block = &(IoVirtTable->blocks[0]);
   print(ACS_PRINT_DEBUG, " Number of IOVIRT blocks = %d\n", IoVirtTable->num_blocks);
-  for(i = 0; i < IoVirtTable->num_blocks; i++, block = IOVIRT_NEXT_BLOCK(block))
-             dump_block(block);
+  for(i = 0; i < IoVirtTable->num_blocks; i++, block = IOVIRT_NEXT_BLOCK(block)) {
+    block = ALIGN_MEMORY(block, bound);
+    dump_block(block);
+  }
 }
 
 /**

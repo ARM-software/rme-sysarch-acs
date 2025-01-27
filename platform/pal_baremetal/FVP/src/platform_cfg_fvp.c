@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022-2023, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,6 +17,12 @@
 
 #include "../include/pal_common_support.h"
 #include "include/platform_override_struct.h"
+
+/* Populate the skip array with the module or test numbers to be excluded from the run */
+uint32_t  g_skip_test_num[MAX_TEST_SKIP_NUM] = { 1000, 10000, 10000, 10000, 10000,
+                                                 10000, 10000, 10000, 10000, 10000};
+uint32_t  g_single_test = SINGLE_TEST_SENTINEL;
+uint32_t  g_single_module = 600; //SINGLE_MODULE_SENTINEL;
 
 PE_INFO_TABLE platform_pe_cfg = {
 
@@ -43,32 +49,7 @@ PE_INFO_TABLE platform_pe_cfg = {
     .pe_info[6].mpidr       = PLATFORM_OVERRIDE_PE6_MPIDR,
 
     .pe_info[7].pe_num      = PLATFORM_OVERRIDE_PE7_INDEX,
-    .pe_info[7].mpidr       = PLATFORM_OVERRIDE_PE7_MPIDR,
-
-    .pe_info[8].pe_num      = PLATFORM_OVERRIDE_PE8_INDEX,
-    .pe_info[8].mpidr       = PLATFORM_OVERRIDE_PE8_MPIDR,
-
-    .pe_info[9].pe_num      = PLATFORM_OVERRIDE_PE9_INDEX,
-    .pe_info[9].mpidr       = PLATFORM_OVERRIDE_PE9_MPIDR,
-
-    .pe_info[10].pe_num     = PLATFORM_OVERRIDE_PE10_INDEX,
-    .pe_info[10].mpidr      = PLATFORM_OVERRIDE_PE10_MPIDR,
-
-    .pe_info[11].pe_num     = PLATFORM_OVERRIDE_PE11_INDEX,
-    .pe_info[11].mpidr      = PLATFORM_OVERRIDE_PE11_MPIDR,
-
-    .pe_info[12].pe_num     = PLATFORM_OVERRIDE_PE12_INDEX,
-    .pe_info[12].mpidr      = PLATFORM_OVERRIDE_PE12_MPIDR,
-
-    .pe_info[13].pe_num     = PLATFORM_OVERRIDE_PE13_INDEX,
-    .pe_info[13].mpidr      = PLATFORM_OVERRIDE_PE13_MPIDR,
-
-    .pe_info[14].pe_num     = PLATFORM_OVERRIDE_PE14_INDEX,
-    .pe_info[14].mpidr      = PLATFORM_OVERRIDE_PE14_MPIDR,
-
-    .pe_info[15].pe_num     = PLATFORM_OVERRIDE_PE15_INDEX,
-    .pe_info[15].mpidr      = PLATFORM_OVERRIDE_PE15_MPIDR,
-
+    .pe_info[7].mpidr       = PLATFORM_OVERRIDE_PE7_MPIDR
 };
 
 
@@ -92,31 +73,11 @@ PLATFORM_OVERRIDE_GIC_INFO_TABLE platform_gic_cfg = {
     .gicc_base[5]   = PLATFORM_OVERRIDE_GICC_BASE,
     .gicc_base[6]   = PLATFORM_OVERRIDE_GICC_BASE,
     .gicc_base[7]   = PLATFORM_OVERRIDE_GICC_BASE,
-    .gicc_base[8]   = PLATFORM_OVERRIDE_GICC_BASE,
-    .gicc_base[9]   = PLATFORM_OVERRIDE_GICC_BASE,
-    .gicc_base[10]  = PLATFORM_OVERRIDE_GICC_BASE,
-    .gicc_base[11]  = PLATFORM_OVERRIDE_GICC_BASE,
-    .gicc_base[12]  = PLATFORM_OVERRIDE_GICC_BASE,
-    .gicc_base[13]  = PLATFORM_OVERRIDE_GICC_BASE,
-    .gicc_base[14]  = PLATFORM_OVERRIDE_GICC_BASE,
-    .gicc_base[15]  = PLATFORM_OVERRIDE_GICC_BASE,
 
     .gicd_base[0]   = PLATFORM_OVERRIDE_GICD_BASE,
     .gicrd_base[0]  = PLATFORM_OVERRIDE_GICRD_BASE,
     .gicits_base[0] = PLATFORM_OVERRIDE_GICITS0_BASE,
-    .gicits_id[0]   = PLATFORM_OVERRIDE_GICITS0_ID,
-    .gicits_base[1] = PLATFORM_OVERRIDE_GICITS1_BASE,
-    .gicits_id[1]   = PLATFORM_OVERRIDE_GICITS1_ID,
-    .gicits_base[2] = PLATFORM_OVERRIDE_GICITS2_BASE,
-    .gicits_id[2]   = PLATFORM_OVERRIDE_GICITS2_ID,
-    .gicits_base[3] = PLATFORM_OVERRIDE_GICITS3_BASE,
-    .gicits_id[3]   = PLATFORM_OVERRIDE_GICITS3_ID,
-    .gicits_base[4] = PLATFORM_OVERRIDE_GICITS4_BASE,
-    .gicits_id[4]   = PLATFORM_OVERRIDE_GICITS4_ID,
-    .gicits_base[5] = PLATFORM_OVERRIDE_GICITS5_BASE,
-    .gicits_id[5]   = PLATFORM_OVERRIDE_GICITS5_ID,
-    .gich_base[0]   = PLATFORM_OVERRIDE_GICH_BASE
-
+    .gicits_id[0]   = PLATFORM_OVERRIDE_GICITS0_ID
 };
 
 PLATFORM_OVERRIDE_TIMER_INFO_TABLE platform_timer_cfg = {
@@ -155,94 +116,149 @@ PCIE_INFO_TABLE platform_pcie_cfg = {
     .block[0].segment_num    = PLATFORM_OVERRIDE_PCIE_SEGMENT_GRP_NUM_0,
     .block[0].start_bus_num  = PLATFORM_OVERRIDE_PCIE_START_BUS_NUM_0,
     .block[0].end_bus_num    = PLATFORM_OVERRIDE_PCIE_END_BUS_NUM_0
+};
 
+PCIE_READ_TABLE platform_pcie_device_hierarchy = {
+    .num_entries             = PLATFORM_PCIE_NUM_ENTRIES,
+
+    .device[0].class_code    = PLATFORM_PCIE_DEV0_CLASSCODE,
+    .device[0].vendor_id     = PLATFORM_PCIE_DEV0_VENDOR_ID,
+    .device[0].device_id     = PLATFORM_PCIE_DEV0_DEV_ID,
+    .device[0].bus           = PLATFORM_PCIE_DEV0_BUS_NUM,
+    .device[0].dev           = PLATFORM_PCIE_DEV0_DEV_NUM,
+    .device[0].func          = PLATFORM_PCIE_DEV0_FUNC_NUM,
+    .device[0].seg           = PLATFORM_PCIE_DEV0_SEG_NUM,
+    .device[0].dma_support   = PLATFORM_PCIE_DEV0_DMA_SUPPORT,
+    .device[0].dma_coherent  = PLATFORM_PCIE_DEV0_DMA_COHERENT,
+    .device[0].p2p_support   = PLATFORM_PCIE_DEV0_P2P_SUPPORT,
+    .device[0].dma_64bit     = PLATFORM_PCIE_DEV0_DMA_64BIT,
+    .device[0].behind_smmu   = PLATFORM_PCIE_DEV0_BEHIND_SMMU,
+    .device[0].atc_present   = PLATFORM_PCIE_DEV0_ATC_SUPPORT,
+
+    .device[1].class_code    = PLATFORM_PCIE_DEV1_CLASSCODE,
+    .device[1].vendor_id     = PLATFORM_PCIE_DEV1_VENDOR_ID,
+    .device[1].device_id     = PLATFORM_PCIE_DEV1_DEV_ID,
+    .device[1].bus           = PLATFORM_PCIE_DEV1_BUS_NUM,
+    .device[1].dev           = PLATFORM_PCIE_DEV1_DEV_NUM,
+    .device[1].func          = PLATFORM_PCIE_DEV1_FUNC_NUM,
+    .device[1].seg           = PLATFORM_PCIE_DEV1_SEG_NUM,
+    .device[1].dma_support   = PLATFORM_PCIE_DEV1_DMA_SUPPORT,
+    .device[1].dma_coherent  = PLATFORM_PCIE_DEV1_DMA_COHERENT,
+    .device[1].p2p_support   = PLATFORM_PCIE_DEV1_P2P_SUPPORT,
+    .device[1].dma_64bit     = PLATFORM_PCIE_DEV1_DMA_64BIT,
+    .device[1].behind_smmu   = PLATFORM_PCIE_DEV1_BEHIND_SMMU,
+    .device[1].atc_present   = PLATFORM_PCIE_DEV1_ATC_SUPPORT,
+
+    .device[2].class_code    = PLATFORM_PCIE_DEV2_CLASSCODE,
+    .device[2].vendor_id     = PLATFORM_PCIE_DEV2_VENDOR_ID,
+    .device[2].device_id     = PLATFORM_PCIE_DEV2_DEV_ID,
+    .device[2].bus           = PLATFORM_PCIE_DEV2_BUS_NUM,
+    .device[2].dev           = PLATFORM_PCIE_DEV2_DEV_NUM,
+    .device[2].func          = PLATFORM_PCIE_DEV2_FUNC_NUM,
+    .device[2].seg           = PLATFORM_PCIE_DEV2_SEG_NUM,
+    .device[2].dma_support   = PLATFORM_PCIE_DEV2_DMA_SUPPORT,
+    .device[2].dma_coherent  = PLATFORM_PCIE_DEV2_DMA_COHERENT,
+    .device[2].p2p_support   = PLATFORM_PCIE_DEV2_P2P_SUPPORT,
+    .device[2].dma_64bit     = PLATFORM_PCIE_DEV2_DMA_64BIT,
+    .device[2].behind_smmu   = PLATFORM_PCIE_DEV2_BEHIND_SMMU,
+    .device[2].atc_present   = PLATFORM_PCIE_DEV2_ATC_SUPPORT,
+
+    .device[3].class_code    = PLATFORM_PCIE_DEV3_CLASSCODE,
+    .device[3].vendor_id     = PLATFORM_PCIE_DEV3_VENDOR_ID,
+    .device[3].device_id     = PLATFORM_PCIE_DEV3_DEV_ID,
+    .device[3].bus           = PLATFORM_PCIE_DEV3_BUS_NUM,
+    .device[3].dev           = PLATFORM_PCIE_DEV3_DEV_NUM,
+    .device[3].func          = PLATFORM_PCIE_DEV3_FUNC_NUM,
+    .device[3].seg           = PLATFORM_PCIE_DEV3_SEG_NUM,
+    .device[3].dma_support   = PLATFORM_PCIE_DEV3_DMA_SUPPORT,
+    .device[3].dma_coherent  = PLATFORM_PCIE_DEV3_DMA_COHERENT,
+    .device[3].p2p_support   = PLATFORM_PCIE_DEV3_P2P_SUPPORT,
+    .device[3].dma_64bit     = PLATFORM_PCIE_DEV3_DMA_64BIT,
+    .device[3].behind_smmu   = PLATFORM_PCIE_DEV3_BEHIND_SMMU,
+    .device[3].atc_present   = PLATFORM_PCIE_DEV3_ATC_SUPPORT,
+
+    .device[4].class_code    = PLATFORM_PCIE_DEV4_CLASSCODE,
+    .device[4].vendor_id     = PLATFORM_PCIE_DEV4_VENDOR_ID,
+    .device[4].device_id     = PLATFORM_PCIE_DEV4_DEV_ID,
+    .device[4].bus           = PLATFORM_PCIE_DEV4_BUS_NUM,
+    .device[4].dev           = PLATFORM_PCIE_DEV4_DEV_NUM,
+    .device[4].func          = PLATFORM_PCIE_DEV4_FUNC_NUM,
+    .device[4].seg           = PLATFORM_PCIE_DEV4_SEG_NUM,
+    .device[4].dma_support   = PLATFORM_PCIE_DEV4_DMA_SUPPORT,
+    .device[4].dma_coherent  = PLATFORM_PCIE_DEV4_DMA_COHERENT,
+    .device[4].p2p_support   = PLATFORM_PCIE_DEV4_P2P_SUPPORT,
+    .device[4].dma_64bit     = PLATFORM_PCIE_DEV4_DMA_64BIT,
+    .device[4].behind_smmu   = PLATFORM_PCIE_DEV4_BEHIND_SMMU,
+    .device[4].atc_present   = PLATFORM_PCIE_DEV4_ATC_SUPPORT,
+
+    .device[5].class_code    = PLATFORM_PCIE_DEV5_CLASSCODE,
+    .device[5].vendor_id     = PLATFORM_PCIE_DEV5_VENDOR_ID,
+    .device[5].device_id     = PLATFORM_PCIE_DEV5_DEV_ID,
+    .device[5].bus           = PLATFORM_PCIE_DEV5_BUS_NUM,
+    .device[5].dev           = PLATFORM_PCIE_DEV5_DEV_NUM,
+    .device[5].func          = PLATFORM_PCIE_DEV5_FUNC_NUM,
+    .device[5].seg           = PLATFORM_PCIE_DEV5_SEG_NUM,
+    .device[5].dma_support   = PLATFORM_PCIE_DEV5_DMA_SUPPORT,
+    .device[5].dma_coherent  = PLATFORM_PCIE_DEV5_DMA_COHERENT,
+    .device[5].p2p_support   = PLATFORM_PCIE_DEV5_P2P_SUPPORT,
+    .device[5].dma_64bit     = PLATFORM_PCIE_DEV5_DMA_64BIT,
+    .device[5].behind_smmu   = PLATFORM_PCIE_DEV5_BEHIND_SMMU,
+    .device[5].atc_present   = PLATFORM_PCIE_DEV5_ATC_SUPPORT,
+
+    .device[6].class_code    = PLATFORM_PCIE_DEV6_CLASSCODE,
+    .device[6].vendor_id     = PLATFORM_PCIE_DEV6_VENDOR_ID,
+    .device[6].device_id     = PLATFORM_PCIE_DEV6_DEV_ID,
+    .device[6].bus           = PLATFORM_PCIE_DEV6_BUS_NUM,
+    .device[6].dev           = PLATFORM_PCIE_DEV6_DEV_NUM,
+    .device[6].func          = PLATFORM_PCIE_DEV6_FUNC_NUM,
+    .device[6].seg           = PLATFORM_PCIE_DEV6_SEG_NUM,
+    .device[6].dma_support   = PLATFORM_PCIE_DEV6_DMA_SUPPORT,
+    .device[6].dma_coherent  = PLATFORM_PCIE_DEV6_DMA_COHERENT,
+    .device[6].p2p_support   = PLATFORM_PCIE_DEV6_P2P_SUPPORT,
+    .device[6].dma_64bit     = PLATFORM_PCIE_DEV6_DMA_64BIT,
+    .device[6].behind_smmu   = PLATFORM_PCIE_DEV6_BEHIND_SMMU,
+    .device[6].atc_present   = PLATFORM_PCIE_DEV6_ATC_SUPPORT,
 /** Configure more PCIe info details as per specification for more than 1 ECAM
     Refer to platform_override_fvp.h file for an example
 **/
+};
+
+PCIE_ROOT_INFO_TABLE platform_root_pcie_cfg = {
+    .block[0].hb_enteries         = PLATFORM_OVERRIDE_PCIE_ECAM0_HB_COUNT,
+    .block[0].segment_num[0]      = PLATFORM_OVERRIDE_PCIE_ECAM0_SEG_NUM,
+    .block[0].start_bus_num[0]    = PLATFORM_OVERRIDE_PCIE_ECAM0_START_BUS_NUM,
+    .block[0].end_bus_num[0]      = PLATFORM_OVERRIDE_PCIE_ECAM0_END_BUS_NUM,
+    .block[0].ep_bar64_value[0]   = PLATFORM_OVERRIDE_PCIE_ECAM0_EP_BAR64,
+    .block[0].rp_bar64_value[0]   = PLATFORM_OVERRIDE_PCIE_ECAM0_RP_BAR64,
+    .block[0].ep_npbar32_value[0] = PLATFORM_OVERRIDE_PCIE_ECAM0_EP_NPBAR32,
+    .block[0].ep_pbar32_value[0]  = PLATFORM_OVERRIDE_PCIE_ECAM0_EP_PBAR32,
+    .block[0].rp_bar32_value[0]   = PLATFORM_OVERRIDE_PCIE_ECAM0_RP_BAR32,
 };
 
 PLATFORM_OVERRIDE_IOVIRT_INFO_TABLE platform_iovirt_cfg = {
     .Address               = IOVIRT_ADDRESS,
     .node_count            = IORT_NODE_COUNT,
     .type[0]               = IOVIRT_NODE_ITS_GROUP,
-    .type[1]               = IOVIRT_NODE_ITS_GROUP,
-    .type[2]               = IOVIRT_NODE_ITS_GROUP,
-    .type[3]               = IOVIRT_NODE_ITS_GROUP,
-    .type[4]               = IOVIRT_NODE_SMMU_V3,
-    .type[5]               = IOVIRT_NODE_SMMU_V3,
-    .type[6]               = IOVIRT_NODE_SMMU_V3,
-    .type[7]               = IOVIRT_NODE_SMMU_V3,
-    .type[8]               = IOVIRT_NODE_PCI_ROOT_COMPLEX,
-    .num_map[4]            = IOVIRT_SMMUV3_0_NUM_MAP,
-    .num_map[5]            = IOVIRT_SMMUV3_1_NUM_MAP,
-    .num_map[6]            = IOVIRT_SMMUV3_2_NUM_MAP,
-    .num_map[7]            = IOVIRT_SMMUV3_3_NUM_MAP,
-    .num_map[8]            = IOVIRT_RC_NUM_MAP,
+    .type[1]               = IOVIRT_NODE_SMMU_V3,
+    .type[2]               = IOVIRT_NODE_PCI_ROOT_COMPLEX,
+    .num_map[1]            = IOVIRT_SMMUV3_0_NUM_MAP,
+    .num_map[2]            = IOVIRT_RC_NUM_MAP,
 
-    .map[4].input_base[0]  = SMMUV3_0_ID_MAP0_INPUT_BASE,
-    .map[4].id_count[0]    = SMMUV3_0_ID_MAP0_ID_COUNT,
-    .map[4].output_base[0] = SMMUV3_0_ID_MAP0_OUTPUT_BASE,
-    .map[4].output_ref[0]  = SMMUV3_0_ID_MAP0_OUTPUT_REF,
-    .map[4].input_base[1]  = SMMUV3_0_ID_MAP1_INPUT_BASE,
-    .map[4].id_count[1]    = SMMUV3_0_ID_MAP1_ID_COUNT,
-    .map[4].output_base[1] = SMMUV3_0_ID_MAP1_OUTPUT_BASE,
-    .map[4].output_ref[1]  = SMMUV3_0_ID_MAP1_OUTPUT_REF,
+    .map[1].input_base[0]  = SMMUV3_0_ID_MAP0_INPUT_BASE,
+    .map[1].id_count[0]    = SMMUV3_0_ID_MAP0_ID_COUNT,
+    .map[1].output_base[0] = SMMUV3_0_ID_MAP0_OUTPUT_BASE,
+    .map[1].output_ref[0]  = SMMUV3_0_ID_MAP0_OUTPUT_REF,
 
-    .map[5].input_base[0]  = SMMUV3_1_ID_MAP0_INPUT_BASE,
-    .map[5].id_count[0]    = SMMUV3_1_ID_MAP0_ID_COUNT,
-    .map[5].output_base[0] = SMMUV3_1_ID_MAP0_OUTPUT_BASE,
-    .map[5].output_ref[0]  = SMMUV3_1_ID_MAP0_OUTPUT_REF,
-    .map[5].input_base[1]  = SMMUV3_1_ID_MAP1_INPUT_BASE,
-    .map[5].id_count[1]    = SMMUV3_1_ID_MAP1_ID_COUNT,
-    .map[5].output_base[1] = SMMUV3_1_ID_MAP1_OUTPUT_BASE,
-    .map[5].output_ref[1]  = SMMUV3_1_ID_MAP1_OUTPUT_REF,
-
-
-    .map[6].input_base[0]  = SMMUV3_2_ID_MAP0_INPUT_BASE,
-    .map[6].id_count[0]    = SMMUV3_2_ID_MAP0_ID_COUNT,
-    .map[6].output_base[0] = SMMUV3_2_ID_MAP0_OUTPUT_BASE,
-    .map[6].output_ref[0]  = SMMUV3_2_ID_MAP0_OUTPUT_REF,
-    .map[6].input_base[1]  = SMMUV3_2_ID_MAP1_INPUT_BASE,
-    .map[6].id_count[1]    = SMMUV3_2_ID_MAP1_ID_COUNT,
-    .map[6].output_base[1] = SMMUV3_2_ID_MAP1_OUTPUT_BASE,
-    .map[6].output_ref[1]  = SMMUV3_2_ID_MAP1_OUTPUT_REF,
-
-
-    .map[7].input_base[0]  = SMMUV3_3_ID_MAP0_INPUT_BASE,
-    .map[7].id_count[0]    = SMMUV3_3_ID_MAP0_ID_COUNT,
-    .map[7].output_base[0] = SMMUV3_3_ID_MAP0_OUTPUT_BASE,
-    .map[7].output_ref[0]  = SMMUV3_3_ID_MAP0_OUTPUT_REF,
-    .map[7].input_base[1]  = SMMUV3_3_ID_MAP1_INPUT_BASE,
-    .map[7].id_count[1]    = SMMUV3_3_ID_MAP1_ID_COUNT,
-    .map[7].output_base[1] = SMMUV3_3_ID_MAP1_OUTPUT_BASE,
-    .map[7].output_ref[1]  = SMMUV3_3_ID_MAP1_OUTPUT_REF,
-
-    .map[8].input_base[0]  = RC_MAP0_INPUT_BASE,
-    .map[8].id_count[0]    = RC_MAP0_ID_COUNT,
-    .map[8].output_base[0] = RC_MAP0_OUTPUT_BASE,
-    .map[8].output_ref[0]  = RC_MAP0_OUTPUT_REF,
-    .map[8].input_base[1]  = RC_MAP1_INPUT_BASE,
-    .map[8].id_count[1]    = RC_MAP1_ID_COUNT,
-    .map[8].output_base[1] = RC_MAP1_OUTPUT_BASE,
-    .map[8].output_ref[1]  = RC_MAP1_OUTPUT_REF,
-    .map[8].input_base[2]  = RC_MAP2_INPUT_BASE,
-    .map[8].id_count[2]    = RC_MAP2_ID_COUNT,
-    .map[8].output_base[2] = RC_MAP2_OUTPUT_BASE,
-    .map[8].output_ref[2]  = RC_MAP2_OUTPUT_REF,
-    .map[8].input_base[3]  = RC_MAP3_INPUT_BASE,
-    .map[8].id_count[3]    = RC_MAP3_ID_COUNT,
-    .map[8].output_base[3] = RC_MAP3_OUTPUT_BASE,
-    .map[8].output_ref[3]  = RC_MAP3_OUTPUT_REF
-
+    .map[2].input_base[0]  = RC_MAP0_INPUT_BASE,
+    .map[2].id_count[0]    = RC_MAP0_ID_COUNT,
+    .map[2].output_base[0] = RC_MAP0_OUTPUT_BASE,
+    .map[2].output_ref[0]  = RC_MAP0_OUTPUT_REF,
 
 };
 
 PLATFORM_OVERRIDE_NODE_DATA platform_node_type = {
     .its_count                        = IOVIRT_ITS_COUNT,
     .smmu[0].base                     = IOVIRT_SMMUV3_0_BASE_ADDRESS,
-    .smmu[1].base                     = IOVIRT_SMMUV3_1_BASE_ADDRESS,
-    .smmu[2].base                     = IOVIRT_SMMUV3_2_BASE_ADDRESS,
-    .smmu[3].base                     = IOVIRT_SMMUV3_3_BASE_ADDRESS,
     .smmu[0].context_interrupt_offset = IOVIRT_SMMU_CTX_INT_OFFSET,
     .smmu[0].context_interrupt_count  = IOVIRT_SMMU_CTX_INT_CNT,
     .rc.segment                       = IOVIRT_RC_PCI_SEG_NUM,

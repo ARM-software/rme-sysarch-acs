@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2024, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2024-2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,7 +18,7 @@
 #include "val/include/rme_acs_pcie.h"
 #include "val/include/rme_acs_pcie_spec.h"
 
-pcie_cfgreg_bitfield_entry bf_info_table15[] = {
+pcie_cfgreg_bitfield_entry bf_info_table18[] = {
     // PCI Express Extended Capability Header (Memory Space Enable)
     {
        HEADER,                       // Part of PCIe header register

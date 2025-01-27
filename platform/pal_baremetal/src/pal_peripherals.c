@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022-2023, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2023, 2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -160,6 +160,8 @@ uint32_t pal_peripheral_is_pcie(uint32_t seg, uint32_t bus, uint32_t dev, uint32
 uint64_t
 pal_memory_ioremap(void *ptr, uint32_t size, uint32_t attr)
 {
+  (void) size;
+  (void) attr;
 
   return (uint64_t)ptr;
 }
@@ -167,6 +169,7 @@ pal_memory_ioremap(void *ptr, uint32_t size, uint32_t attr)
 void
 pal_memory_unmap(void *ptr)
 {
+  (void) ptr;
 
   return;
 }

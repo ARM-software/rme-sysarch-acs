@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2024, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2024-2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -33,8 +33,8 @@
 #define TEST_DESC "Check Selective IDE Streams are Locked/Unlocked        "
 #define TEST_RULE "RYHQQL"
 
-void
 static
+void
 write_from_root(uint64_t addr, uint32_t data)
 {
 

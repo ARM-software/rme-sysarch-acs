@@ -1,5 +1,5 @@
 #/** @file
-# Copyright (c) 2022-2023, Arm Limited or its affiliates. All rights reserved.
+# Copyright (c) 2022-2023, 2025, Arm Limited or its affiliates. All rights reserved.
 # SPDX-License-Identifier : Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,7 +19,6 @@
 /* Private worker functions for ASM_PFX() */
 #define _CONCATENATE(a, b)  __CONCATENATE(a, b)
 #define __CONCATENATE(a, b) a ## b
-#include "include/val_interface.h"
 #include "include/mem_interface.h"
 #include "include/rme_std_smc.h"
 

@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2024, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2024-2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -61,6 +61,12 @@ val_ide_get_num_sel_str(uint32_t bdf, uint32_t *num_sel_str);
 uint32_t
 val_ide_establish_stream(uint32_t bdf, uint32_t count, uint32_t stream_id, uint32_t base_limit);
 
+uint32_t
+val_register_get_num_entries(void);
+
+uint32_t
+val_intercnt_sec_prpty_check(uint64_t *register_entry_info);
+
 uint32_t da001_entry(void);
 uint32_t da002_entry(void);
 uint32_t da003_entry(void);
@@ -76,5 +82,10 @@ uint32_t da012_entry(void);
 uint32_t da013_entry(void);
 uint32_t da014_entry(void);
 uint32_t da015_entry(void);
+uint32_t da016_entry(void);
+uint32_t da017_entry(void);
+uint32_t da018_entry(void);
+uint32_t da019_entry(void);
+uint32_t da020_entry(void);
 
 #endif

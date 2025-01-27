@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022-2024, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -23,6 +23,9 @@
 #include "include/rme_acs_el32.h"
 
 #define WARN_STR_LEN 7
+#define TEST_DATA_1 0xabababab
+#define TEST_DATA_2 0xcdcdcdcd
+
 PCIE_INFO_TABLE *g_pcie_info_table;
 pcie_device_bdf_table *g_pcie_bdf_table;
 uint32_t pcie_bdf_table_list_flag;
@@ -1075,20 +1078,6 @@ uint32_t
 val_pcie_is_onchip_peripheral(uint32_t bdf)
 {
   return pal_pcie_is_onchip_peripheral(bdf);
-}
-
-/**
-  @brief  Returns whether a PCIe Function is atomicop requester capable
-
-  @param  bdf        - Segment/Bus/Dev/Func in the format of PCIE_CREATE_BDF
-  @return Returns 0 (if Function doesn't supports atomicop requester capable
-                     else non-zero value)
-**/
-uint32_t
-val_pcie_get_atomicop_requester_capable(uint32_t bdf)
-{
-  //return pal_pcie_get_atomicop_requester_capable(bdf);
-  return 0;
 }
 
 /**
@@ -2418,4 +2407,126 @@ uint32_t val_pcie_write_detect_bitfield_check(uint32_t bdf, uint64_t *bitfield_e
   return 0;
 }
 
+uint32_t val_pcie_rp_sec_prpty_check(uint64_t *register_entry_info)
+{
+  REGISTER_INFO_TABLE *register_entry;
+  uint32_t bdf;
+  uint32_t rd_data = 0;
+  uint32_t data_rt, data_ns, org_data;
 
+  register_entry = (REGISTER_INFO_TABLE *)register_entry_info;
+
+  if (register_entry->type != PCIE_RP)
+      return 0;
+
+  bdf = register_entry->bdf;
+
+  val_print(ACS_PRINT_DEBUG, "\nBdf: 0x%x", register_entry->bdf);
+  val_print(ACS_PRINT_DEBUG, "\nAddress: 0x%x", register_entry->bdf);
+  val_print(ACS_PRINT_DEBUG, "\nProperty: %d", register_entry->property);
+
+  data_rt = TEST_DATA_1;
+  data_ns = TEST_DATA_2;
+
+  /* Enable TDISP_EN */
+  if (val_pcie_enable_tdisp(bdf))
+  {
+      val_print(ACS_PRINT_INFO, "\n       TDISP_EN not enabled for BDF: 0x%x ", bdf);
+      return 1;
+  }
+
+  switch (register_entry->property)
+  {
+      case RMSD_WRITE_PROTECT:
+          /* Store the original data */
+          org_data = val_mmio_read(register_entry->address);
+
+          /* Write data from Root */
+          shared_data->num_access = 1;
+          shared_data->shared_data_access[0].addr = register_entry->address;
+          shared_data->shared_data_access[0].access_type = WRITE_DATA;
+          shared_data->shared_data_access[0].data = data_rt;
+          val_pe_access_mut_el3();
+
+          /* Read the address from the NS */
+          rd_data = val_mmio_read(register_entry->address);
+
+          /* Fail if the NS read is not successfull */
+          if (rd_data != data_rt)
+          {
+              val_print(ACS_PRINT_ERR, "\n      Read is not succesfull from NS for bdf: 0x%x", bdf);
+              return 1;
+          }
+
+          /* Write data from NS */
+          val_mmio_write(register_entry->address, data_ns);
+          rd_data = val_mmio_read(register_entry->address);
+
+          /* Fail if the NS write is successfull */
+          if (rd_data == data_rt)
+          {
+              val_print(ACS_PRINT_ERR, "\n      Read is succesfull from NS for bdf: 0x%x", bdf);
+              return 1;
+          }
+
+          /* Restore the original data */
+          shared_data->num_access = 1;
+          shared_data->shared_data_access[0].addr = register_entry->address;
+          shared_data->shared_data_access[0].access_type = WRITE_DATA;
+          shared_data->shared_data_access[0].data = org_data;
+          val_pe_access_mut_el3();
+
+          rd_data = 0;
+          break;
+    case RMSD_FULL_PROTECT:
+          /* Store the original data */
+          shared_data->num_access = 1;
+          shared_data->shared_data_access[0].addr = register_entry->address;
+          shared_data->shared_data_access[0].access_type = READ_DATA;
+          val_pe_access_mut_el3();
+          org_data = shared_data->shared_data_access[0].data;
+
+          /* Write the data_rt from ROOT */
+          shared_data->num_access = 1;
+          shared_data->shared_data_access[0].addr = register_entry->address;
+          shared_data->shared_data_access[0].access_type = WRITE_DATA;
+          shared_data->shared_data_access[0].data = data_rt;
+
+          /* Read the data from NS */
+          rd_data = val_mmio_read(register_entry->address);
+
+          /* Fail if the NS read is successfull */
+          if (rd_data == data_rt)
+          {
+              val_print(ACS_PRINT_ERR, "\n      Read is succesfull from NS for bdf: 0x%x", bdf);
+              return 1;
+          }
+
+          /* Write the data_ns from NS */
+          val_mmio_write(register_entry->address, data_ns);
+          rd_data = val_mmio_read(register_entry->address);
+
+          /* Fail if the NS write is successfull */
+          if (rd_data == data_ns)
+          {
+              val_print(ACS_PRINT_ERR, "\n      Write from NS is successfull for bdf: 0x%x", bdf);
+              return 1;
+          }
+
+          /* Restore the original data */
+          shared_data->num_access = 1;
+          shared_data->shared_data_access[0].addr = register_entry->address;
+          shared_data->shared_data_access[0].access_type = WRITE_DATA;
+          shared_data->shared_data_access[0].data = org_data;
+          val_pe_access_mut_el3();
+
+          rd_data = 0;
+          break;
+
+    default:
+      val_print(ACS_PRINT_ERR, "\n       Invalid Security Property: %d", register_entry->property);
+      return 1;
+  }
+
+  return 0;
+}

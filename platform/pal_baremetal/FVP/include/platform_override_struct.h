@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022-2023, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,6 +14,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
 **/
+
+#ifndef __PAL_OVERRIDE_STRUCT_H_
+#define __PAL_OVERRIDE_STRUCT_H_
 
 #include <stdio.h>
 #include <stdint.h>
@@ -119,6 +122,22 @@ typedef struct {
   PLATFORM_OVERRIDE_NODE_DATA_MAP map[IORT_NODE_COUNT];
 } PLATFORM_OVERRIDE_IOVIRT_INFO_TABLE;
 
+typedef struct {
+  uint32_t   hb_enteries;                              ///< No. of HB's in the ECAM
+  uint32_t   segment_num[PLATFORM_MAX_HB_COUNT];       ///< Segment number of the ECAM
+  uint32_t   start_bus_num[PLATFORM_MAX_HB_COUNT];     ///< Start Bus number for this ecam space
+  uint32_t   end_bus_num[PLATFORM_MAX_HB_COUNT];       ///< Last Bus number
+  uint64_t   ep_bar64_value[PLATFORM_MAX_HB_COUNT];    ///< Prefetch 64bit BAR address for EP
+  uint64_t   rp_bar64_value[PLATFORM_MAX_HB_COUNT];    ///< 64bit BAR address for RP
+  uint32_t   ep_npbar32_value[PLATFORM_MAX_HB_COUNT];  ///< Non-Prefetch 32bit BAR address for EP
+  uint32_t   ep_pbar32_value[PLATFORM_MAX_HB_COUNT];   ///< Prefetch 32bit BAR address for EP
+  uint32_t   rp_bar32_value[PLATFORM_MAX_HB_COUNT];    ///< 32bit BAR address for RP
+} PCIE_ROOT_INFO_BLOCK;
+
+typedef struct {
+  PCIE_ROOT_INFO_BLOCK block[PLATFORM_OVERRIDE_NUM_ECAM];
+} PCIE_ROOT_INFO_TABLE;
+
 struct ecam_reg_data {
     uint32_t offset;    //Offset into 4096 bytes ecam config reg space
     uint32_t attribute;
@@ -214,3 +233,24 @@ typedef struct {
     uint32_t count;
     MEMORY_INFO info[];
 } PLATFORM_OVERRIDE_MEMORY_INFO_TABLE;
+
+typedef enum {
+  PCIE_RP = 0,
+  INTERCONNECT = 1
+} REGISTER_TYPE;
+
+typedef struct {
+  uint32_t type;
+  uint32_t bdf;
+  uint64_t address;
+  uint32_t property;
+} REGISTER_INFO_TABLE;
+
+typedef enum {
+  RMSD_WRITE_PROTECT = 0,
+  RMSD_FULL_PROTECT = 1,
+  RMSD_PROTECT = 2
+} RMSD_SECURITY_PROPERTY;
+
+extern REGISTER_INFO_TABLE rp_regs[PLATFORM_OVERRIDE_RP_REG_NUM_ENTRIES];
+#endif //__PAL_OVERRIDE_STRUCT_H_

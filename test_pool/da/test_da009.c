@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2024, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2024-2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -41,7 +41,7 @@ check_rmsd_protect(uint32_t pa_offset, uint32_t data, uint32_t orgn_val, uint32_
   attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(OUTER_SHAREABLE)
                   | GET_ATTR_INDEX(DEV_MEM_nGnRnE) | PGT_ENTRY_AP_RW);
   cfg_addr = val_pcie_get_bdf_config_addr(bdf);
-  for (int pas_cnt = 0; pas_cnt < sizeof(acc_pas)/sizeof(acc_pas[0]); ++pas_cnt)
+  for (uint64_t pas_cnt = 0; pas_cnt < sizeof(acc_pas)/sizeof(acc_pas[0]); ++pas_cnt)
   {
     VA = val_get_free_va(val_get_min_tg());
     val_add_mmu_entry_el3(VA, cfg_addr, (attr | LOWER_ATTRS(PAS_ATTR(acc_pas[pas_cnt]))));

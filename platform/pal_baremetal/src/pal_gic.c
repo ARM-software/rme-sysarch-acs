@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022-2023, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2023, 2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -154,6 +154,9 @@ pal_gic_install_isr(uint32_t int_id,  void (*isr)())
   }
 
   #endif
+    (void) int_id;
+    (void) isr;
+
     return 0;
 }
 
@@ -186,6 +189,7 @@ pal_gic_end_of_interrupt(uint32_t int_id)
 
 #endif
 
+  (void) int_id;
   return 0;
 }
 
@@ -205,7 +209,11 @@ pal_gic_request_irq (
   void *Isr
   )
 {
-    return 0;
+  (void) IrqNum;
+  (void) MappedIrqNum;
+  (void) Isr;
+
+  return 0;
 }
 
 /**
@@ -221,6 +229,8 @@ pal_gic_free_irq (
   uint32_t MappedIrqNum
   )
 {
+    (void) IrqNum;
+    (void) MappedIrqNum;
 
 }
 
@@ -236,5 +246,7 @@ uint32_t
 pal_gic_set_intr_trigger(uint32_t int_id, INTR_TRIGGER_INFO_TYPE_e trigger_type)
 {
 
+  (void) int_id;
+  (void) trigger_type;
   return 0;
 }

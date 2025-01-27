@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2023, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2023, 2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -156,11 +156,13 @@ val_pe_reg_read(uint32_t reg_id)
             return AA64ReadMair1();
           if (AA64ReadCurrentEL() == AARCH64_EL2)
             return AA64ReadMair2();
+        break;
       case TCR_ELx:
           if (AA64ReadCurrentEL() == AARCH64_EL1)
             return AA64ReadTcr1();
           if (AA64ReadCurrentEL() == AARCH64_EL2)
             return AA64ReadTcr2();
+        break;
       default:
            val_report_status(val_pe_get_index_mpid(val_pe_get_mpid()), RESULT_FAIL(0, 0x78), NULL);
   }

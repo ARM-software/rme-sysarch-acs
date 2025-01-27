@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022-2023, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2023, 2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -34,7 +34,7 @@ pal_timer_create_info_table(TIMER_INFO_TABLE *TimerTable)
 
   uint32_t Index;
 
-  if (TimerTable == NULL || TimerTable->gt_info == NULL)
+  if (TimerTable == NULL)
     return;
 
   TimerTable->header.num_platform_timer = 0;

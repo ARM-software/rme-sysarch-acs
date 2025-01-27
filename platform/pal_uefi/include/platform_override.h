@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2016-2018, 2022 Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2016-2018, 2022, 2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,8 +21,24 @@
      2. Fill-in a value which is not provided by any ACPI Table
  */
 
-//Vexpress 0x1c090000
-//Juno 0x7FF80000
+typedef struct {
+  UINT32 type;
+  UINT32 bdf;
+  UINT64 address;
+  UINT32 property;
+} REGISTER_INFO_TABLE;
+
+typedef enum {
+  PCIE_RP = 0,
+  INTERCONNECT = 1
+} REGISTER_TYPE;
+
+typedef enum {
+  RMSD_WRITE_PROTECT = 0,
+  RMSD_FULL_PROTECT = 1,
+  RMSD_PROTECT = 2
+} RMSD_SECURITY_PROPERTY;
+
 #define PLATFORM_GENERIC_UART_BASE       0
 
 //Juno - 115
@@ -64,6 +80,9 @@
 /* Change OVERRIDE_SMMU_BASE to non-zero value for this to take effect */
 #define PLATFORM_OVERRIDE_SMMU_BASE        0x0 //0x2B400000
 #define PLATFORM_OVERRIDE_SMMU_ARCH_MAJOR  3
+
+#define PLATFORM_OVERRIDE_RP_REG_NUM_ENTRIES  0
+extern REGISTER_INFO_TABLE rp_regs[PLATFORM_OVERRIDE_RP_REG_NUM_ENTRIES];
 
 extern UINT32 g_pcie_p2p;
 extern UINT32 g_pcie_cache_present;

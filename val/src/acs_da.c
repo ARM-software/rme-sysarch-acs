@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2024, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2024-2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -24,6 +24,12 @@
 #include "include/mem_interface.h"
 #include "include/rme_acs_el32.h"
 #include "include/mem_interface.h"
+#include "include/pal_interface.h"
+
+#define TEST_DATA_1 0xabababab
+#define TEST_DATA_2 0xcdcdcdcd
+
+REGISTER_INFO_TABLE  *g_register_info_table;
 
 /**
   @brief   This API will execute all RME DA tests designated for a given compliance level
@@ -35,6 +41,7 @@
 uint32_t
 val_rme_da_execute_tests(uint32_t num_pe)
 {
+  (void) num_pe;
   uint32_t status, i, reset_status;
 
   for (i = 0 ; i < MAX_TEST_SKIP_NUM ; i++) {
@@ -47,7 +54,7 @@ val_rme_da_execute_tests(uint32_t num_pe)
   if (g_single_module != SINGLE_MODULE_SENTINEL && g_single_module != ACS_RME_DA_TEST_NUM_BASE &&
        (g_single_test == SINGLE_MODULE_SENTINEL ||
        (g_single_test - ACS_RME_DA_TEST_NUM_BASE > 100 ||
-          g_single_test - ACS_RME_DA_TEST_NUM_BASE < 0))) {
+          g_single_test - ACS_RME_DA_TEST_NUM_BASE <= 0))) {
     val_print(ACS_PRINT_TEST, " USER Override - Skipping all RME tests \
                     (running only a single module)\n", 0);
     return ACS_STATUS_SKIP;
@@ -79,6 +86,11 @@ val_rme_da_execute_tests(uint32_t num_pe)
       status |= da013_entry();
       status |= da014_entry();
       status |= da015_entry();
+      status |= da016_entry();
+      status |= da017_entry();
+      status |= da018_entry();
+      status |= da019_entry();
+      status |= da020_entry();
 
       val_print_test_end(status, "RME-DA");
   }
@@ -86,6 +98,27 @@ val_rme_da_execute_tests(uint32_t num_pe)
   return status;
 
 }
+
+void
+val_register_create_info_table(uint64_t *register_info_table)
+{
+  g_register_info_table = (REGISTER_INFO_TABLE *)register_info_table;
+
+  pal_register_create_info_table(g_register_info_table);
+}
+
+void *
+val_register_table_ptr(void)
+{
+  return g_register_info_table;
+}
+
+uint32_t
+val_register_get_num_entries(void)
+{
+  return pal_register_get_num_entries();
+}
+
 void
 val_da_get_addr_asso_block_base(uint32_t *num_sel_ide_stream_supp,
                          uint32_t *num_tc_supp,
@@ -525,6 +558,80 @@ val_ide_establish_stream(uint32_t bdf, uint32_t count, uint32_t stream_id, uint3
   if (reg_value != STREAM_STATE_SECURE)
   {
       val_print(ACS_PRINT_ERR, "\n       Sel Stream is not in Secure for BDF: 0x%x", bdf);
+      return 1;
+  }
+
+  return 0;
+}
+
+uint32_t val_intercnt_sec_prpty_check(uint64_t *register_entry_info)
+{
+  REGISTER_INFO_TABLE *register_entry;
+  uint32_t rd_data = 0;
+  uint32_t data_rt, data_ns, org_data;
+
+  register_entry = (REGISTER_INFO_TABLE *)register_entry_info;
+
+  if (register_entry->type != INTERCONNECT)
+      return 0;
+
+  val_print(ACS_PRINT_DEBUG, "\nAddress: 0x%x", register_entry->bdf);
+  val_print(ACS_PRINT_DEBUG, "\nProperty: %d", register_entry->property);
+
+  data_rt = TEST_DATA_1;
+  data_ns = TEST_DATA_2;
+
+  switch (register_entry->property)
+  {
+     case RMSD_PROTECT:
+          /* Store the original data */
+          shared_data->num_access = 1;
+          shared_data->shared_data_access[0].addr = register_entry->address;
+          shared_data->shared_data_access[0].access_type = READ_DATA;
+          val_pe_access_mut_el3();
+          org_data = shared_data->shared_data_access[0].data;
+
+          /* Write the data_rt from ROOT */
+          shared_data->num_access = 1;
+          shared_data->shared_data_access[0].addr = register_entry->address;
+          shared_data->shared_data_access[0].access_type = WRITE_DATA;
+          shared_data->shared_data_access[0].data = data_rt;
+
+          /* Read the data from NS */
+          rd_data = val_mmio_read(register_entry->address);
+
+          /* Fail if the NS read is successfull */
+          if (rd_data == data_rt)
+          {
+              val_print(ACS_PRINT_ERR, "\n      Read success from NS for addr: 0x%lx",
+                        register_entry->address);
+              return 1;
+          }
+
+          /* Write the data_ns from NS */
+          val_mmio_write(register_entry->address, data_ns);
+          rd_data = val_mmio_read(register_entry->address);
+
+          /* Fail if the NS write is successfull */
+          if (rd_data == data_ns)
+          {
+              val_print(ACS_PRINT_ERR, "\n      Write from NS is successfull for address: 0x%x",
+                        register_entry->address);
+              return 1;
+          }
+
+          /* Restore the original data */
+          shared_data->num_access = 1;
+          shared_data->shared_data_access[0].addr = register_entry->address;
+          shared_data->shared_data_access[0].access_type = WRITE_DATA;
+          shared_data->shared_data_access[0].data = org_data;
+          val_pe_access_mut_el3();
+
+          rd_data = 0;
+          break;
+
+    default:
+      val_print(ACS_PRINT_ERR, "\n       Invalid Security Property: %d", register_entry->property);
       return 1;
   }
 

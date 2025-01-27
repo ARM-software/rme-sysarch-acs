@@ -1,10 +1,9 @@
 /** @file
- * Copyright (c) 2024, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use
- * this file except in compliance with the License.
+ * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
  *  http://www.apache.org/licenses/LICENSE-2.0
@@ -23,149 +22,141 @@
 #include "val/include/rme_acs_pcie.h"
 #include "val/include/rme_acs_memory.h"
 #include "val/include/rme_acs_pcie_enumeration.h"
+#include "val/include/rme_acs_exerciser.h"
+#include "val/include/rme_acs_smmu.h"
 #include "val/include/rme_acs_pe.h"
+#include "val/include/rme_acs_pgt.h"
+#include "val/include/rme_acs_iovirt.h"
+#include "val/include/mem_interface.h"
+#include "val/include/sys_config.h"
 #include "val/include/rme_acs_da.h"
 
-#include "test_da015_data.h"
+#define TEST_NUM  (ACS_RME_DA_TEST_NUM_BASE  +  15)
+#define TEST_DESC  "RP reject incoming request if IDE is not secure & locked"
+#define TEST_RULE  "RKZBHV, RZJJMZ"
 
-#define TEST_NUM (ACS_RME_DA_TEST_NUM_BASE  +  15)
-#define TEST_DESC "Check for RMSD write-detect                            "
-#define TEST_RULE "RPCRFM"
+#define TEST_DATA_NUM_PAGES 1
+#define TEST_DATA 0xAB
 
 static
 void
 payload(void)
 {
+
   uint32_t pe_index;
-  pcie_device_bdf_table *bdf_tbl_ptr;
-  uint32_t tbl_index;
-  uint32_t bdf, dp_type;
-  uint32_t reg_value;
-  uint32_t ide_cap_base;
-  uint32_t sel_ide_str_supported;
-  uint32_t test_fail = 0;
-  uint32_t test_skip = 1;
-  uint32_t stream_id;
-  uint32_t count;
-  uint32_t status;
-  uint32_t table_entries;
-  uint32_t rp_bdf, ep_index, ep_bdf, index;
-  pcie_cfgreg_bitfield_entry *bf_entry;
+  uint32_t instance, num_exercisers;
+  uint32_t bdf, rp_bdf, da_cap_base;
+  uint32_t dma_len, test_data_blk_size;
+  void *dram_buf_in_virt, *dram_buf_in_virt2;
+  uint32_t test_fail = 0, test_skip = 1;
+  uint32_t page_size = val_memory_page_size();
 
-  tbl_index = 0;
   pe_index = val_pe_get_index_mpid(val_pe_get_mpid());
-  bdf_tbl_ptr = val_pcie_bdf_table_ptr();
 
-  table_entries = sizeof(bf_info_table15)/sizeof(bf_info_table15[0]);
-  ep_index = 0;
+  test_data_blk_size = page_size * TEST_DATA_NUM_PAGES;
+  dma_len = test_data_blk_size / 2;
 
-  while (tbl_index < bdf_tbl_ptr->num_entries)
+  num_exercisers = val_exerciser_get_info(EXERCISER_NUM_CARDS);
+
+  for (instance = 0; instance < num_exercisers; ++instance)
   {
-      bdf = bdf_tbl_ptr->device[tbl_index++].bdf;
-      dp_type = val_pcie_device_port_type(bdf);
-
-      if (dp_type != RP)
+      /* if init fail moves to next exerciser */
+      if (val_exerciser_init(instance))
           continue;
 
+      bdf = val_exerciser_get_bdf(instance);
+      val_print(ACS_PRINT_DEBUG, "\n       Exerciser BDF - 0x%x", bdf);
 
-      /* Check IDE Extended Capability register is present */
-      if (val_pcie_find_capability(bdf, PCIE_ECAP, ECID_IDE, &ide_cap_base) != PCIE_SUCCESS)
+      /* Create a buffer of size TEST_DMA_SIZE in DRAM */
+      dram_buf_in_virt = val_memory_alloc_pages(TEST_DATA_NUM_PAGES);
+
+      /* Set the buffer to value 0 */
+      val_memory_set(dram_buf_in_virt, dma_len, 0);
+      dram_buf_in_virt2 = dram_buf_in_virt + dma_len;
+
+      /* Initialise the input buffer with test data */
+      val_memory_set(dram_buf_in_virt, dma_len, TEST_DATA);
+      val_data_cache_ops_by_va((uint64_t)dram_buf_in_virt, CLEAN_AND_INVALIDATE);
+
+      /* Get the RootPort for the Exerciser */
+      if (val_pcie_get_rootport(bdf, &rp_bdf))
+          continue;
+
+      /* Check for DA Capability */
+      if (val_pcie_find_da_capability(rp_bdf, &da_cap_base) != PCIE_SUCCESS)
       {
           val_print(ACS_PRINT_ERR,
-                        "\n       PCIe IDE Capability not present for RP BDF: 0x%x", bdf);
-          test_fail++;
-          continue;
-      }
-
-      /* Check if Selective IDE Stream is supported */
-      val_pcie_read_cfg(bdf, ide_cap_base + IDE_CAP_REG, &reg_value);
-      sel_ide_str_supported = (reg_value & SEL_IDE_STR_MASK) >> SEL_IDE_STR_SHIFT;
-      if (!sel_ide_str_supported)
-      {
-          val_print(ACS_PRINT_ERR, "\n       Selective IDE str not supported for BDF: %x", bdf);
-          test_fail++;
-          continue;
-      }
-
-      ep_index = 0;
-      while (ep_index < bdf_tbl_ptr->num_entries)
-      {
-          ep_bdf = bdf_tbl_ptr->device[ep_index++].bdf;
-          dp_type = val_pcie_device_port_type(ep_bdf);
-          if (dp_type != EP)
-              continue;
-
-          val_pcie_get_rootport(ep_bdf, &rp_bdf);
-          if (bdf == rp_bdf)
-              break;
-      }
-
-      /* Check IDE Extended Capability register is present */
-      if (val_pcie_find_capability(ep_bdf, PCIE_ECAP, ECID_IDE, &ide_cap_base) != PCIE_SUCCESS)
-      {
-          val_print(ACS_PRINT_ERR,
-                        "\n       PCIe IDE Capability not present for BDF: 0x%x", ep_bdf);
-          test_fail++;
+                        "\n       PCIe DA DVSEC capability not present,bdf 0x%x", bdf);
           continue;
       }
 
       test_skip = 0;
-      count = 1;
-      stream_id = val_generate_stream_id();
+
+      /* Enable RMEDA_CTL1.TDISP_EN*/
       val_pcie_enable_tdisp(rp_bdf);
 
-      for (index = 0; index < table_entries; index++)
+      /* Transition the device to TDISP RUN state without establishing a stream */
+      if (val_device_lock(bdf))
       {
-          bf_entry = (pcie_cfgreg_bitfield_entry *)&(bf_info_table15[index]);
-
-          status = val_ide_establish_stream(ep_bdf, count, stream_id,
-                                     PCIE_CREATE_BDF_PACKED(ep_bdf));
-          if (status)
-          {
-              val_print(ACS_PRINT_ERR, "\n       Failed to establish stream for bdf: 0x%x", bdf);
-              test_fail++;
-              continue;
-          }
-
-          status = val_ide_establish_stream(rp_bdf, count, stream_id,
-                                     PCIE_CREATE_BDF_PACKED(ep_bdf));
-          if (status)
-          {
-              val_print(ACS_PRINT_ERR, "\n       Failed to establish stream for RP bdf: 0x%x", bdf);
-              test_fail++;
-              continue;
-          }
-
-          status = val_device_lock(ep_bdf);
-          if (status)
-          {
-              val_print(ACS_PRINT_ERR, "\n       TDISP RUN state fail for bdf: 0x%x", bdf);
-              test_fail++;
-              continue;
-          }
-
-          status = val_pcie_write_detect_bitfield_check(rp_bdf, (void *)bf_entry, count);
-          if (status && (status != PCIE_CAP_NOT_FOUND))
-          {
-              val_print(ACS_PRINT_ERR, "\n       Write detect failed for BDF: 0x%x", bdf);
-              test_fail++;
-              continue;
-          }
+          val_print(ACS_PRINT_ERR, "\n       Failed to lock the device: 0x%lx", bdf);
+          test_fail++;
+          continue;
       }
-      /* Put the device back to unlocked state and disable TDISP in RP */
-      val_pcie_disable_tdisp(rp_bdf);
-      val_device_unlock(ep_bdf);
+
+      /* Perform DMA using exerciser from source to target buffer */
+      val_exerciser_set_param(DMA_ATTRIBUTES, (uint64_t)dram_buf_in_virt, dma_len, instance);
+      if (val_exerciser_ops(START_DMA, EDMA_TO_DEVICE, instance))
+      {
+          val_print(ACS_PRINT_ERR, "\n        DMA write failure to exerciser %4x", instance);
+          test_fail++;
+          continue;
+      }
+
+      val_exerciser_set_param(DMA_ATTRIBUTES, (uint64_t)dram_buf_in_virt2, dma_len, instance);
+      if (val_exerciser_ops(START_DMA, EDMA_FROM_DEVICE, instance))
+      {
+          val_print(ACS_PRINT_ERR, "\n        DMA write failure to exerciser %4x", instance);
+          test_fail++;
+          continue;
+      }
+
+      /* Check the src and dst buff values are not same indicating the request is rejected by RP */
+      if (!(val_memory_compare(dram_buf_in_virt, dram_buf_in_virt2, dma_len)))
+      {
+          val_print(ACS_PRINT_ERR,
+                    "\n Incoming rqst not rejected when Str is not sec & lck inst %4x", instance);
+          test_fail++;
+          continue;
+      }
+
+      val_memory_set(dram_buf_in_virt, dma_len * 2, 0);
+
+      /* Return the buffer to the heap manager */
+      val_memory_free_pages(dram_buf_in_virt, TEST_DATA_NUM_PAGES);
+  }
+
+
+  while (instance--)
+  {
+    bdf = val_exerciser_get_bdf(instance);
+    if (val_pcie_get_rootport(bdf, &rp_bdf))
+          continue;
+
+    val_print(ACS_PRINT_DEBUG, "\n     Disabling TDISP for RP: 0x%x", rp_bdf);
+    val_pcie_disable_tdisp(rp_bdf);
+    val_print(ACS_PRINT_DEBUG, "\n     Putting the device into unlockes state for bdf: 0x%x", bdf);
+    val_device_unlock(bdf);
+
   }
 
   if (test_skip)
       val_set_status(pe_index, RESULT_SKIP(TEST_NUM, 01));
-  else if (test_fail++)
+  else if (test_fail)
       val_set_status(pe_index, RESULT_FAIL(TEST_NUM, 01));
   else
       val_set_status(pe_index, RESULT_PASS(TEST_NUM, 01));
 
   return;
-
 }
 
 uint32_t

@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022-2023, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2023, 2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -23,8 +23,6 @@ extern pcie_device_bdf_table *g_pcie_bdf_table;
 extern PCIE_INFO_TABLE platform_pcie_cfg;
 extern PCIE_READ_TABLE platform_pcie_device_hierarchy;
 extern PERIPHERAL_INFO_TABLE  *g_peripheral_info_table;
-
-void *pal_memcpy(void *dest_buffer, void *src_buffer, uint32_t len);
 
 uint64_t
 pal_pcie_get_mcfg_ecam()
@@ -79,24 +77,19 @@ pal_pcie_create_info_table(PCIE_INFO_TABLE *PcieTable)
 uint64_t
 pal_pcie_ecam_base(uint32_t seg, uint32_t bus, uint32_t dev, uint32_t func)
 {
-
+  (void) dev;
+  (void) func;
   uint8_t ecam_index;
-  uint8_t sec_bus;
-  uint8_t sub_bus;
-  uint32_t reg_value;
   uint64_t ecam_base;
 
   ecam_index = 0;
   ecam_base = 0;
 
-  pal_pci_cfg_read(bus, dev, func, BUS_NUM_REG_OFFSET, &reg_value);
-  sec_bus = ((reg_value >> SECBN_SHIFT) & SECBN_MASK);
-  sub_bus = ((reg_value >> SUBBN_SHIFT) & SUBBN_MASK);
 
   while (ecam_index < platform_pcie_cfg.num_entries)
   {
-      if ((sec_bus >= platform_pcie_cfg.block[ecam_index].start_bus_num) &&
-          (sub_bus <= platform_pcie_cfg.block[ecam_index].end_bus_num) &&
+      if ((bus >= platform_pcie_cfg.block[ecam_index].start_bus_num) &&
+          (bus <= platform_pcie_cfg.block[ecam_index].end_bus_num) &&
           (seg == platform_pcie_cfg.block[ecam_index].segment_num ))
       {
           ecam_base = platform_pcie_cfg.block[ecam_index].ecam_base;
@@ -560,7 +553,10 @@ pal_pcie_is_devicedma_64bit(uint32_t seg, uint32_t bus, uint32_t dev, uint32_t f
 uint32_t
 pal_pcie_device_driver_present(uint32_t seg, uint32_t bus, uint32_t dev, uint32_t fn)
 {
-
+  (void) seg;
+  (void) bus;
+  (void) dev;
+  (void) fn;
   return 1;
 
 }
@@ -605,6 +601,11 @@ pal_pcie_is_cache_present(uint32_t seg, uint32_t bus, uint32_t dev, uint32_t fn)
 uint32_t
 pal_get_msi_vectors(uint32_t Seg, uint32_t Bus, uint32_t Dev, uint32_t Fn, PERIPHERAL_VECTOR_LIST **MVector)
 {
+  (void) Seg;
+  (void) Bus;
+  (void) Dev;
+  (void) Fn;
+  (void) MVector;
 
   return 0;
 }
@@ -728,6 +729,11 @@ pal_pcie_get_root_port_bdf(uint32_t *Seg, uint32_t *Bus, uint32_t *Dev, uint32_t
 uint32_t
 pal_pcie_get_rp_transaction_frwd_support(uint32_t seg, uint32_t bus, uint32_t dev, uint32_t fn)
 {
+  (void) seg;
+  (void) bus;
+  (void) dev;
+  (void) fn;
+
   return 1;
 }
 
@@ -741,6 +747,7 @@ pal_pcie_get_rp_transaction_frwd_support(uint32_t seg, uint32_t bus, uint32_t de
 uint32_t
 pal_pcie_is_onchip_peripheral(uint32_t bdf)
 {
+  (void) bdf;
   return 0;
 }
 
@@ -775,4 +782,39 @@ pal_pcie_mem_get_offset(uint32_t type)
       default:
          return MEM_OFFSET_SMALL;
   }
+}
+
+/**
+    @brief   Write 32-bit data to BAR space pointed by Bus,
+             Device, Function and register offset.
+
+    @param   Bdf     - BDF value for the device
+    @param   address - BAR memory address
+    @param   data    - 32 bit value to writw BAR address
+    @return  success/failure
+**/
+
+uint32_t
+pal_pcie_bar_mem_write(uint32_t Bdf, uint64_t address, uint32_t data)
+{
+  (void) Bdf;
+  pal_mmio_write(address, data);
+  return 0;
+}
+
+/**
+    @brief   Reads 32-bit data from BAR space pointed by Bus,
+             Device, Function and register offset.
+
+    @param   Bdf     - BDF value for the device
+    @param   address - BAR memory address
+    @param   *data   - 32 bit value at BAR address
+    @return  success/failure
+**/
+uint32_t
+pal_pcie_bar_mem_read(uint32_t Bdf, uint64_t address, uint32_t *data)
+{
+  (void) Bdf;
+  *data = pal_mmio_read(address);
+  return 0;
 }

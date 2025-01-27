@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2023-2024, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2023-2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -52,7 +52,7 @@ payload()
   //Get the registers content
   num_reg = root_registers_cfg.num_reg;
   attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(NON_SHAREABLE) | PGT_ENTRY_AP_RW);
-  for (int reg_cnt = 0; reg_cnt < num_reg; ++reg_cnt) {
+  for (uint64_t reg_cnt = 0; reg_cnt < num_reg; ++reg_cnt) {
 
     VA = val_get_free_va(size);
     PA = root_registers_cfg.rt_reg_info[reg_cnt].rt_reg_base_addr;

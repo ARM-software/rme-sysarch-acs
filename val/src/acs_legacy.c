@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2023-2024, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2023-2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -37,6 +37,7 @@ val_legacy_execute_tests(uint32_t num_pe)
 {
   uint32_t status, i, reset_status, attr;
   uint64_t sp_val;
+  (void) num_pe;
 
   for (i = 0 ; i < MAX_TEST_SKIP_NUM ; i++) {
       if (g_skip_test_num[i] == ACS_LEGACY_TEST_NUM_BASE) {
@@ -59,7 +60,7 @@ support the feature \n", 0);
   if (g_single_module != SINGLE_MODULE_SENTINEL && g_single_module != ACS_RME_TEST_NUM_BASE &&
        (g_single_test == SINGLE_MODULE_SENTINEL ||
        (g_single_test - ACS_RME_TEST_NUM_BASE > 100 ||
-          g_single_test - ACS_RME_TEST_NUM_BASE < 0))) {
+          g_single_test - ACS_RME_TEST_NUM_BASE <= 0))) {
     val_print(ACS_PRINT_TEST, " RME module is skipped\n", 0);
     val_print(ACS_PRINT_TEST, " Installing the handler for legacy tests\n", 0);
     //struct_sh_data *shared_data = (struct_sh_data *)SHARED_ADDRESS;

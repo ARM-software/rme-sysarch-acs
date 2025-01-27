@@ -1,5 +1,5 @@
 /** @file
-  * Copyright (c) 2022-2024, Arm Limited or its affiliates. All rights reserved.
+  * Copyright (c) 2022-2025, Arm Limited or its affiliates. All rights reserved.
   * SPDX-License-Identifier : Apache-2.0
 
   * Licensed under the Apache License, Version 2.0 (the "License");
@@ -243,9 +243,9 @@ void plat_arm_acs_smc_handler(uint64_t services, uint64_t arg0, uint64_t arg1, u
       INFO("Security STte change service \n");
       val_security_state_change(arg0);
       break;
-    case SMMU_ROOT_REG_CHK:
+    case SMMU_CONFIG_SERVICE:
       INFO("SMMU ROOT Register Configuration validate \n");
-      val_smmu_root_reg_chk(arg0);
+      val_smmu_root_config_service(arg0, arg1);
       break;
     default:
       INFO(" Service not present\n");

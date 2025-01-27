@@ -1,5 +1,5 @@
 /** @file
-  * Copyright (c) 2022-2024, Arm Limited or its affiliates. All rights reserved.
+  * Copyright (c) 2022-2025, Arm Limited or its affiliates. All rights reserved.
   * SPDX-License-Identifier : Apache-2.0
 
   * Licensed under the Apache License, Version 2.0 (the "License");
@@ -46,7 +46,10 @@
 /* SMMU_V3 ROOT register defines */
 #define ROOT_IOVIRT_SMMUV3_BASE (0x2b400000)
 #define SMMUV3_ROOT_REG_OFFSET  (0x20000)
+#define SMMU_R_PAGE_0_OFFSET    0x40000
+#define SMMU_R_PAGE_1_OFFSET    0x50000
 #define SMMU_ROOT_CR0           (SMMUV3_ROOT_REG_OFFSET + 0x0020)
+#define SMMU_ROOT_CR0_ACK       (SMMUV3_ROOT_REG_OFFSET + 0x0024)
 #define SMMU_ROOT_IDRO          (SMMUV3_ROOT_REG_OFFSET + 0x0000)
 
 /**
@@ -59,7 +62,8 @@
 #define FREE_MEM_START   0x880000000ULL
 #define FREE_VA_TEST     0x880200000ULL
 #define FREE_PA_TEST     0x880300000ULL
-#define SHARED_ADDRESS 0xE0000000ULL
+#define SHARED_ADDRESS   0xE0000000ULL
+#define FREE_MEM_SMMU    0x880400000ULL
 
 #else
 
@@ -90,7 +94,10 @@
 /* SMMU_V3 ROOT register defines */
 #define ROOT_IOVIRT_SMMUV3_BASE (0x288000000)
 #define SMMUV3_ROOT_REG_OFFSET  (0xA0000)
+#define SMMU_R_PAGE_0_OFFSET    0x40000
+#define SMMU_R_PAGE_1_OFFSET    0x50000
 #define SMMU_ROOT_CR0           (SMMUV3_ROOT_REG_OFFSET + 0x0020)
+#define SMMU_ROOT_CR0_ACK       (SMMUV3_ROOT_REG_OFFSET + 0x0024)
 #define SMMU_ROOT_IDRO          (SMMUV3_ROOT_REG_OFFSET + 0x0000)
 
 /**
@@ -104,6 +111,7 @@
 #define FREE_VA_TEST     0x8080200000ULL
 #define FREE_PA_TEST     0x8080300000ULL
 #define SHARED_ADDRESS 0xE0000000ULL
+#define FREE_MEM_SMMU    0x8080400000ULL
 
 #endif
 

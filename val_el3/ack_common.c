@@ -1,5 +1,5 @@
 /** @file
-  * Copyright (c) 2023-2024, Arm Limited or its affiliates. All rights reserved.
+  * Copyright (c) 2023-2025, Arm Limited or its affiliates. All rights reserved.
   * SPDX-License-Identifier : Apache-2.0
 
   * Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,7 +15,7 @@
   * limitations under the License.
   **/
 
-#include <val_el3/ack_include.h>
+#include "val_el3/ack_include.h"
 
 /**
  *  @brief  Clean and Invalidate the Data cache line containing
@@ -309,18 +309,38 @@ void val_security_state_change(uint64_t attr_nse_ns)
 
 }
 
-void val_smmu_root_reg_chk(uint64_t reg_config)
+void val_smmu_root_config_service(uint64_t reg_config, uint32_t smmu_info)
 {
   uint64_t data;
+  uint32_t idr5;
+  smmu_master_attributes_t smmu_attr;
+  pgt_descriptor_t pgt_attr;
+  uint32_t smmu_oas[SMMU_OAS_MAX_IDX] = {32, 36, 40, 42, 44, 48, 52};
 
   switch (reg_config)
   {
        case SMMU_ROOT_RME_IMPL_CHK:
          INFO("SMMU base address & offset: 0x%lx \n",
-                             (uint64_t)ROOT_IOVIRT_SMMUV3_BASE + SMMU_ROOT_IDRO);
+                         (uint64_t)ROOT_IOVIRT_SMMUV3_BASE + SMMU_ROOT_IDRO);
          data = *(uint32_t *)(ROOT_IOVIRT_SMMUV3_BASE + SMMU_ROOT_IDRO);
          INFO("SMMU ROOT IDRO: 0x%lx", data);
          shared_data->shared_data_access[0].data = data;
+         break;
+       case SMMU_RLM_PGT_INIT:
+         INFO("SMMU Realm Initialisation\n");
+         val_smmu_init(smmu_info);
+         break;
+       case SMMU_RLM_SMMU_MAP:
+         INFO("SMMU realm page table map\n");
+         idr5 = *(uint32_t *)(ROOT_IOVIRT_SMMUV3_BASE + SMMU_IDR5_OFFSET);
+         val_get_tcr_info(&pgt_attr.tcr);
+         pgt_attr.pgt_base = read_ttbr_el3() & AARCH64_TTBR_ADDR_MASK;
+         pgt_attr.ias = smmu_oas[VAL_EXTRACT_BITS(idr5, 0, 2)];
+         pgt_attr.oas = get_max(40, pgt_attr.oas);
+         pgt_attr.mair = read_mair_el3();
+         smmu_attr.streamid = smmu_info;
+         smmu_attr.bypass = 1;
+         val_smmu_rlm_map(smmu_attr, pgt_attr);
          break;
        default:
          INFO(" Invalid SMMU ROOT register config\n");

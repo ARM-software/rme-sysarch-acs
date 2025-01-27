@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022-2024, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -45,29 +45,32 @@ struct_sh_data *shared_data = (struct_sh_data *)SHARED_ADDRESS;
 void
 val_print(uint32_t level, char8_t *string, uint64_t data)
 {
-
+#ifndef TARGET_BM_BOOT
   if (level >= g_print_level)
-      pal_print(string, data);
-
+    pal_print(string, data);
+#else
+  if (level >= g_print_level) {
+      pal_uart_print(level, string, data);
+  }
+#endif
 }
 
 void
 val_print_test_end(uint32_t status, char8_t *string)
 {
-  pal_print("\n      ", 0);
+  val_print(ACS_PRINT_TEST, "\n      ", 0);
 
   if (status != ACS_STATUS_PASS) {
-      pal_print("One or more ", 0);
-      pal_print(string, 0);
-      pal_print(" tests failed or were skipped.", 0);
+      val_print(ACS_PRINT_TEST, "One or more ", 0);
+      val_print(ACS_PRINT_TEST, string, 0);
+      val_print(ACS_PRINT_TEST, " tests failed or were skipped.", 0);
   } else {
-      pal_print("All ", 0);
-      pal_print(string, 0);
-      pal_print(" tests passed.", 0);
+      val_print(ACS_PRINT_TEST, "All ", 0);
+      val_print(ACS_PRINT_TEST, string, 0);
+      val_print(ACS_PRINT_TEST, " tests passed.", 0);
   }
 
-  pal_print("\n", 0);
-
+  val_print(ACS_PRINT_TEST, "\n", 0);
 }
 
 /**
@@ -271,7 +274,7 @@ val_initialize_test(uint32_t test_num, char8_t *desc, uint32_t num_pe, char8_t *
   if ((g_single_test != SINGLE_TEST_SENTINEL && test_num != g_single_test) &&
         (g_single_module == SINGLE_MODULE_SENTINEL ||
           (test_num - g_single_module >= 100 ||
-           test_num - g_single_module < 0))) {
+           test_num - g_single_module <= 0))) {
     val_print(ACS_PRINT_TEST, "\n       USER OVERRIDE VIA SINGLE TEST - Skip Test        ", 0);
     val_set_status(index, RESULT_SKIP(test_num, 0));
     return ACS_STATUS_SKIP;
@@ -467,6 +470,7 @@ val_check_for_error(uint32_t test_num, uint32_t num_pe, char8_t *ruleid)
   uint32_t status = 0;
   uint32_t error_flag = 0;
   uint32_t my_index = val_pe_get_index_mpid(val_pe_get_mpid());
+  (void) test_num;
 
   /* this special case is needed when the Main PE is not the first entry
      of pe_info_table but num_pe is 1 for SOC tests */
@@ -683,7 +687,8 @@ val_restore_global_test_data()
 
 uint32_t val_configure_acs(void)
 {
-  uint64_t sp_val, smmu_root_page;
+  uint64_t sp_val, smmu_root_page, smmu_base;
+  uint64_t smmu_rlm_page0, smmu_rlm_page1;
   uint32_t num_smmus, attr;
 
   sp_val = AA64ReadSP_EL0();
@@ -695,10 +700,16 @@ uint32_t val_configure_acs(void)
                   (attr | LOWER_ATTRS(PAS_ATTR(NONSECURE_PAS))));
   val_add_mmu_entry_el3(sp_val, sp_val, (attr | LOWER_ATTRS(PAS_ATTR(NONSECURE_PAS))));
 
-  /* Map the SMMU root page as ROOT PAS */
+  /* Map the SMMU root, NS and realm pages as ROOT PAS */
+  smmu_base = ROOT_IOVIRT_SMMUV3_BASE;
   smmu_root_page = ROOT_IOVIRT_SMMUV3_BASE + SMMUV3_ROOT_REG_OFFSET;
+  smmu_rlm_page0 = ROOT_IOVIRT_SMMUV3_BASE + SMMU_R_PAGE_0_OFFSET;
+  smmu_rlm_page1 = ROOT_IOVIRT_SMMUV3_BASE + SMMU_R_PAGE_1_OFFSET;
   attr |= LOWER_ATTRS(GET_ATTR_INDEX(DEV_MEM_nGnRnE));
+  val_add_mmu_entry_el3(smmu_base, smmu_base, attr | LOWER_ATTRS(PAS_ATTR(ROOT_PAS)));
   val_add_mmu_entry_el3(smmu_root_page, smmu_root_page, attr | LOWER_ATTRS(PAS_ATTR(ROOT_PAS)));
+  val_add_mmu_entry_el3(smmu_rlm_page0, smmu_rlm_page0, attr | LOWER_ATTRS(PAS_ATTR(ROOT_PAS)));
+  val_add_mmu_entry_el3(smmu_rlm_page1, smmu_rlm_page1, attr | LOWER_ATTRS(PAS_ATTR(ROOT_PAS)));
   val_rme_install_handler_el3();
 
   /* Create the list of valid Pcie Device Functions, Exerciser table

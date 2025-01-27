@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2024, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2024-2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -48,7 +48,7 @@ get_target_exer_bdf(uint32_t req_rp_bdf, uint32_t *tgt_e_bdf,
   uint32_t erp_ecam_index;
   uint32_t status;
 
-  instance = val_exerciser_get_info(EXERCISER_NUM_CARDS, 0);
+  instance = val_exerciser_get_info(EXERCISER_NUM_CARDS);
 
   while (instance-- != 0)
   {
@@ -134,7 +134,7 @@ payload(void)
 
   test_skip = 1;
   index = val_pe_get_index_mpid(val_pe_get_mpid());
-  instance = val_exerciser_get_info(EXERCISER_NUM_CARDS, 0);
+  instance = val_exerciser_get_info(EXERCISER_NUM_CARDS);
 
   /* Check If PCIe Hierarchy supports P2P. */
   if (!val_pcie_p2p_support())

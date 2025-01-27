@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022, 2024, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022, 2024-2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -46,7 +46,7 @@ val_gic_execute_tests(uint32_t num_pe)
   if (g_single_module != SINGLE_MODULE_SENTINEL && g_single_module != ACS_GIC_TEST_NUM_BASE &&
        (g_single_test == SINGLE_MODULE_SENTINEL ||
          (g_single_test - ACS_GIC_TEST_NUM_BASE > 100 ||
-          g_single_test - ACS_GIC_TEST_NUM_BASE < 0))) {
+          g_single_test - ACS_GIC_TEST_NUM_BASE <= 0))) {
     val_print(ACS_PRINT_TEST, "      USER Override - Skipping all GIC tests (running only a single module)\n", 0);
     return ACS_STATUS_SKIP;
   }
@@ -103,7 +103,7 @@ val_gic_create_info_table(uint64_t *gic_info_table)
   @return  None
 **/
 void
-val_gic_free_info_table()
+val_gic_free_info_table(void)
 {
   pal_mem_free((void *)g_gic_info_table);
 }
@@ -130,8 +130,9 @@ val_get_gicd_base(void)
   gic_entry = g_gic_info_table->gic_info;
 
   while (gic_entry->type != 0xFF) {
-    if (gic_entry->type == ENTRY_TYPE_GICD)
+    if (gic_entry->type == ENTRY_TYPE_GICD) {
         return gic_entry->base;
+    }
     gic_entry++;
   }
 
@@ -139,19 +140,84 @@ val_get_gicd_base(void)
 }
 
 /**
-  @brief   This API returns the base address of the GIC Redistributor for the current PE
+  @brief   This API returns the base address of the GIC Redistributor for a PE
            1. Caller       -  Test Suite
            2. Prerequisite -  val_gic_create_info_table
-  @param   rdbase_len - To Store the Length of the Redistributor
+  @param   mpidr - PE mpidr value
   @return  Address of GIC Redistributor
 **/
 addr_t
-val_get_gicr_base(uint32_t *rdbase_len)
+val_gic_get_pe_rdbase(uint64_t mpidr)
 {
+  uint32_t     gicrd_baselen;
+  uint32_t     gicr_rdindex = 0;
+  uint64_t     affinity, pe_affinity;
+  uint64_t     gicrd_granularity;
+  uint64_t     gicrd_base, pe_gicrd_base;
+
+  pe_affinity = (mpidr & (PE_AFF0 | PE_AFF1 | PE_AFF2)) | ((mpidr & PE_AFF3) >> 8);
+  gicrd_granularity = GICR_CTLR_FRAME_SIZE + GICR_SGI_PPI_FRAME_SIZE;
+
+  gicr_rdindex = 0;
+
+  /* If System doesn't have GICR RD strcture, then use GICCC RD base */
+  if (g_gic_info_table->header.num_gicrd == 0) {
+      gicrd_base = val_get_gicr_base(&gicrd_baselen, 0);
+      val_print(ACS_PRINT_DEBUG, "       gicrd_base 0x%lx\n", gicrd_base);
+
+      /* If information is present in GICC Structure */
+      if (gicrd_baselen == 0)
+      {
+          affinity = (val_mmio_read64(gicrd_base + GICR_TYPER) & GICR_TYPER_AFF) >> 32;
+          if (affinity == pe_affinity) {
+              return gicrd_base;
+          }
+          return 0;
+      }
+  }
+
+  /* Use GICR RD base structure */
+  while (gicr_rdindex < g_gic_info_table->header.num_gicrd) {
+      gicrd_base = val_get_gicr_base(&gicrd_baselen, gicr_rdindex);
+      val_print(ACS_PRINT_INFO, "       gicr_rdindex %d", gicr_rdindex);
+      val_print(ACS_PRINT_INFO, "       gicrd_base 0x%lx\n", gicrd_base);
+
+      pe_gicrd_base = gicrd_base;
+      while (pe_gicrd_base < (gicrd_base + gicrd_baselen))
+      {
+          val_print(ACS_PRINT_INFO, "       GICR_TYPER 0x%lx\n",
+                    val_mmio_read64(pe_gicrd_base + GICR_TYPER));
+
+          affinity = (val_mmio_read64(pe_gicrd_base + GICR_TYPER) & GICR_TYPER_AFF) >> 32;
+          if (affinity == pe_affinity)
+              return pe_gicrd_base;
+
+          /* Move to the next GIC Redistributor frame */
+          pe_gicrd_base += gicrd_granularity;
+      }
+      gicr_rdindex++;
+  }
+
+  return 0;
+}
+
+/**
+  @brief   This API returns the base address of the GIC Redistributor
+           1. Caller       -  Test Suite
+           2. Prerequisite -  val_gic_create_info_table
+  @param   rdbase_len - To Store the Lenght of the Redistributor
+  @param   gicr_rd_index - Used to obtain correct GICR RD base structure
+                           address for cases when system has multiple GICR RD structure.
+  @return  Address of GIC Redistributor
+**/
+addr_t
+val_get_gicr_base(uint32_t *rdbase_len, uint32_t gicr_rd_index)
+{
+  uint32_t index = 0;
   GIC_INFO_ENTRY  *gic_entry;
 
   if (g_gic_info_table == NULL) {
-      val_print(ACS_PRINT_ERR, "GIC INFO table not available \n", 0);
+      val_print(ACS_PRINT_ERR, "GIC INFO table not available\n", 0);
       return 0;
   }
 
@@ -159,8 +225,11 @@ val_get_gicr_base(uint32_t *rdbase_len)
 
   while (gic_entry->type != 0xFF) {
       if (gic_entry->type == ENTRY_TYPE_GICR_GICRD) {
+          if (index == gicr_rd_index) {
               *rdbase_len = gic_entry->length;
               return gic_entry->base;
+          }
+          index++;
       }
       if (gic_entry->type == ENTRY_TYPE_GICC_GICRD) {
               *rdbase_len = 0;
@@ -187,15 +256,16 @@ val_get_gich_base(void)
   GIC_INFO_ENTRY  *gic_entry;
 
   if (g_gic_info_table == NULL) {
-      val_print(ACS_PRINT_ERR, "GIC INFO table not available \n", 0);
+      val_print(ACS_PRINT_ERR, "GIC INFO table not available\n", 0);
       return 0;
   }
 
   gic_entry = g_gic_info_table->gic_info;
 
   while (gic_entry->type != 0xFF) {
-    if (gic_entry->type == ENTRY_TYPE_GICH)
+    if (gic_entry->type == ENTRY_TYPE_GICH) {
         return gic_entry->base;
+    }
     gic_entry++;
   }
 
@@ -214,7 +284,7 @@ val_get_cpuif_base(void)
   GIC_INFO_ENTRY  *gic_entry;
 
   if (g_gic_info_table == NULL) {
-      val_print(ACS_PRINT_ERR, "GIC INFO table not available \n", 0);
+      val_print(ACS_PRINT_ERR, "GIC INFO table not available\n", 0);
       return 0;
   }
 
@@ -249,12 +319,13 @@ val_gic_get_info(GIC_INFO_e type)
       return 0;
   }
 
-  switch (type)
-  {
+  switch (type) {
+
       case GIC_INFO_VERSION:
           if (g_gic_info_table->header.gic_version != 0) {
-             val_print(ACS_PRINT_INFO, "\n       gic version from ACPI table = %d ", g_gic_info_table->header.gic_version);
-                return g_gic_info_table->header.gic_version;
+             val_print(ACS_PRINT_INFO, "\n       gic version from info table = %d\n",
+                       g_gic_info_table->header.gic_version);
+             return g_gic_info_table->header.gic_version;
           }
           /* Read Version from GICD_PIDR2 bit [7:4] */
           return VAL_EXTRACT_BITS(val_mmio_read(val_get_gicd_base() + GICD_PIDR2), 4, 7);
@@ -273,7 +344,7 @@ val_gic_get_info(GIC_INFO_e type)
 
       case GIC_INFO_SGI_NON_SECURE:
           /* The non-RAZ/WI bits from GICR_ISENABLER0 correspond to non-secure SGIs */
-          return val_mmio_read(val_get_gicr_base(&rdbase_len) + RD_FRAME_SIZE + GICR_ISENABLER);
+          return val_mmio_read(val_get_gicr_base(&rdbase_len, 0) + RD_FRAME_SIZE + GICR_ISENABLER);
 
       case GIC_INFO_SGI_NON_SECURE_LEGACY:
           /* The non-RAZ/WI bits from GICD_ISENABLER<n> correspond to non-secure SGIs */
@@ -461,14 +532,26 @@ uint32_t val_gic_get_espi_intr_trigger_type(uint32_t int_id,
 **/
 void val_gic_set_intr_trigger(uint32_t int_id, INTR_TRIGGER_INFO_TYPE_e trigger_type)
 {
-  uint32_t status;
+   uint32_t reg_value;
+   uint32_t reg_offset;
+   uint32_t config_bit_shift;
 
-  val_print(ACS_PRINT_DEBUG, "\n       Setting Trigger type as %d  ", trigger_type);
-  status = pal_gic_set_intr_trigger(int_id, trigger_type);
+   val_print(ACS_PRINT_DEBUG, "\n       Setting Trigger type as %d", trigger_type);
 
-  if (status)
-    val_print(ACS_PRINT_ERR, "\n       Error Could Not Configure Trigger Type",
-                                                                            0);
+   reg_offset = int_id / GICD_ICFGR_INTR_STRIDE;
+   config_bit_shift  = GICD_ICFGR_INTR_CONFIG1(int_id);
+
+   reg_value = val_mmio_read(val_get_gicd_base() + GICD_ICFGR + (4 * reg_offset));
+
+   if (trigger_type == INTR_TRIGGER_INFO_EDGE_RISING)
+       reg_value = reg_value | ((uint32_t)1 << config_bit_shift);
+   else
+       reg_value = reg_value & (~((uint32_t)1 << config_bit_shift));
+
+   val_print(ACS_PRINT_INFO, "\n       Writing to Register Address : 0x%llx ",
+                           val_get_gicd_base() + GICD_ICFGR + (4 * reg_offset));
+
+   val_mmio_write(val_get_gicd_base() + GICD_ICFGR + (4 * reg_offset), reg_value);
 }
 
 /**

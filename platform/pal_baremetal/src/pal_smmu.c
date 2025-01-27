@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2020, 2022 Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2020, 2022, 2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -31,6 +31,8 @@
 uint32_t
 pal_smmu_create_pasid_entry (uint64_t SmmuBase, uint32_t PasId)
 {
+    (void) SmmuBase;
+    (void) PasId;
     return 1;
 }
 
@@ -42,6 +44,7 @@ pal_smmu_create_pasid_entry (uint64_t SmmuBase, uint32_t PasId)
 uint32_t
 pal_smmu_disable (uint64_t SmmuBase)
 {
+  (void) SmmuBase;
   return 0;
 }
 
@@ -55,6 +58,8 @@ pal_smmu_disable (uint64_t SmmuBase)
 uint64_t
 pal_smmu_pa2iova (uint64_t SmmuBase, uint64_t Pa)
 {
+  (void) SmmuBase;
+  (void) Pa;
   return 0;
 }
 
@@ -75,7 +80,8 @@ pal_smmu_max_pasids(uint64_t smmu_base)
 **/
 uint32_t pal_smmu_check_device_iova(void *port, uint64_t dma_addr)
 {
-
+  (void) port;
+  (void) dma_addr;
   return 0;
 }
 
@@ -86,6 +92,7 @@ uint32_t pal_smmu_check_device_iova(void *port, uint64_t dma_addr)
 **/
 void pal_smmu_device_start_monitor_iova(void *port)
 {
+  (void) port;
   return;
 }
 
@@ -96,5 +103,6 @@ void pal_smmu_device_start_monitor_iova(void *port)
 **/
 void pal_smmu_device_stop_monitor_iova(void *port)
 {
+  (void) port;
   return;
 }

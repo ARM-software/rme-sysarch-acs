@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022-2024, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -134,10 +134,9 @@ uint32_t val_get_exerciser_err_info(EXERCISER_ERROR_CODE type)
 /**
   @brief   This API returns the requested information about the PCIe stimulus hardware
   @param   type         - Information type required from the stimulus hadrware
-  @param   instance     - Stimulus hadrware instance number
   @return  value        - Information value for input type
 **/
-uint32_t val_exerciser_get_info(EXERCISER_INFO_TYPE type, uint32_t instance)
+uint32_t val_exerciser_get_info(EXERCISER_INFO_TYPE type)
 {
     switch (type) {
     case EXERCISER_NUM_CARDS:

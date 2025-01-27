@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022-2023, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2023, 2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -29,7 +29,6 @@
 
 #include "include/pal_uefi.h"
 #include "include/rme_pcie_enum.h"
-#include "include/platform_override.h"
 
 #define USB_CLASSCODE   0x0C0300
 #define SATA_CLASSCODE  0x010600

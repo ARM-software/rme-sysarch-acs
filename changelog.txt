@@ -1,3 +1,13 @@
+vB.a_EAC_25.01
+
+Baremetal Boot Framework:
+* Introduced a Baremetal Boot Framework that eliminates the requirement for UEFI in running the RME ACS suite.
+* This new framework simplifies deployment in environments where UEFI support is unavailable or not preferred.
+* Added comprehensive instructions on setting up and using the Baremetal Boot Framework.
+Test Updates:
+* Expanded test coverage incorporating the feedback received, adding new tests for the rules.
+
+
 vB.a_BETA_24.12
 
 Release Highlights:

@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022-2023, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2023, 2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,8 +15,8 @@
  * limitations under the License.
 **/
 
-#ifndef __BSA_GIC_ITS_H
-#define __BSA_GIC_ITS_H
+#ifndef __RME_GIC_ITS_H
+#define __RME_GIC_ITS_H
 
 #ifndef _TEST_
 #include "include/val_interface.h"
@@ -26,6 +26,10 @@
 
 #define SIZE_4KB    0x00001000
 #define SIZE_64KB   0x00010000
+
+#define PAGE_SIZE_4K        0x1000
+#define PAGE_SIZE_16K       (4 * 0x1000)
+#define PAGE_SIZE_64K       (16 * 0x1000)
 
 #define PAGE_MASK   0xFFF
 #define PAGE_SHIFT   12
@@ -76,6 +80,8 @@
 #define PROPBASER_PA_SHIFT                   12
 #define PROPBASER_PA_LEN                     40
 #define ARM_GICR_PROPBASER_PA_MASK           (((1ul << PROPBASER_PA_LEN) - 1) << PROPBASER_PA_SHIFT)
+#define ARM_GICR_PROPBASER_ATTR_MASK         (0xf80ul)
+#define ARM_GICR_PROPBASER_ATTR_VALUE        (0xB80ul) /* OS NM WB RWA*/
 
 #define PENDBASER_PA_SHIFT                   16
 #define PENDBASER_PA_LEN                     36
@@ -104,6 +110,16 @@
 #define BASER_PA_LEN                                36
 #define ARM_GITS_BASER_PA_MASK                      (((1ul << BASER_PA_LEN) - 1) << BASER_PA_SHIFT)
 #define ARM_GITS_BASER_VALID                        (1ul << 63)
+#define ARM_GITS_BASER_PAGE_SHIFT                   8
+#define ARM_GITS_BASER_PAGE_MASK                    (3ul << ARM_GITS_BASER_PAGE_SHIFT)
+#define ARM_GITS_BASER_MAX_PAGES 256
+#define ARM_GITS_BASER_INDIRECT_LVL1_ENTRY_SIZE 8
+
+#define ARM_GITS_BASER_MAX_PAGESZ 3
+#define ARM_GITS_BASER_PGSZ_4K    0
+#define ARM_GITS_BASER_PGSZ_16K   1
+#define ARM_GITS_BASER_PGSZ_64K   2
+
 
 #define ARM_GITS_TBL_TYPE_DEVICE    0x1
 #define ARM_GITS_TBL_TYPE_CLCN      0x4
@@ -159,6 +175,7 @@
 #define ARM_ITS_CMD_MAPD    0x8
 #define ARM_ITS_CMD_MAPC    0x9
 #define ARM_ITS_CMD_MAPI    0xB
+#define ARM_ITS_CMD_MAPTI   0xA
 #define ARM_ITS_CMD_INV     0xC
 #define ARM_ITS_CMD_DISCARD 0xF
 #define ARM_ITS_CMD_SYNC    0x5
@@ -171,7 +188,7 @@
 #define ITS_NEXT_CMD_PTR    4
 #define NUM_BYTES_IN_DW     8
 
-uint32_t ArmGicRedistributorConfigurationForLPI(uint64_t gicd_base, uint64_t rd_base);
+uint32_t ArmGicRedistributorConfigurationForLPI(uint64_t rd_base);
 
 void ClearConfigTable(uint32_t int_id);
 void SetConfigTable(uint32_t int_id, uint32_t Priority);

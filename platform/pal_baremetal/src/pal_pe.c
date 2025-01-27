@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022-2023, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2023, 2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -49,6 +49,34 @@ uint64_t  gMpidrMax;
 
 #define SIZE_STACK_SECONDARY_PE  0x100          //256 bytes per core
 #define UPDATE_AFF_MAX(src,dest,mask)  ((dest & mask) > (src & mask) ? (dest & mask) : (src & mask))
+
+/* Populate phy_mpid_array with mpidr value of CPUs available
+ * in the system. */
+static const uint64_t phy_mpidr_array[PLATFORM_OVERRIDE_PE_CNT] = {
+    PLATFORM_OVERRIDE_PE0_MPIDR,
+#if (PLATFORM_OVERRIDE_PE_CNT > 1)
+    PLATFORM_OVERRIDE_PE1_MPIDR,
+#endif
+#if (PLATFORM_OVERRIDE_PE_CNT > 2)
+    PLATFORM_OVERRIDE_PE2_MPIDR,
+#endif
+#if (PLATFORM_OVERRIDE_PE_CNT > 3)
+    PLATFORM_OVERRIDE_PE3_MPIDR,
+#endif
+#if (PLATFORM_OVERRIDE_PE_CNT > 4)
+    PLATFORM_OVERRIDE_PE4_MPIDR,
+#endif
+#if (PLATFORM_OVERRIDE_PE_CNT > 5)
+    PLATFORM_OVERRIDE_PE5_MPIDR,
+#endif
+#if (PLATFORM_OVERRIDE_PE_CNT > 6)
+    PLATFORM_OVERRIDE_PE6_MPIDR,
+#endif
+#if (PLATFORM_OVERRIDE_PE_CNT > 7)
+    PLATFORM_OVERRIDE_PE7_MPIDR,
+#endif
+};
+
 
 uint64_t
 pal_get_madt_ptr();
@@ -204,6 +232,9 @@ pal_pe_install_esr(uint32_t ExceptionType,  void (*esr)(uint64_t, void *))
     }
     return EFI_SUCCESS;
 #endif
+  (void) ExceptionType;
+  (void) esr;
+
   return 1;
 }
 
@@ -269,6 +300,8 @@ pal_pe_update_elr(void *context, uint64_t offset)
 
     ((EFI_SYSTEM_CONTEXT_AARCH64*)context)->ELR = offset;
 #endif
+  (void) context;
+  (void) offset;
 }
 
 /**
@@ -281,7 +314,8 @@ pal_pe_update_elr(void *context, uint64_t offset)
 uint64_t
 pal_pe_get_esr(void *context)
 {
-   return 0;
+  (void) context;
+  return 0;
 }
 
 /**
@@ -297,6 +331,7 @@ pal_pe_get_far(void *context)
   /*
    * Place holder to return FAR from context saving structure
    */
+  (void) context;
   return 0;
 }
 
@@ -369,4 +404,14 @@ pal_psci_get_conduit(void)
       return CONDUIT_HVC;
    #endif
   return CONDUIT_NONE;
+}
+
+uint32_t pal_get_cpu_count(void)
+{
+    return PLATFORM_OVERRIDE_PE_CNT;
+}
+
+uint64_t *pal_get_phy_mpidr_list_base(void)
+{
+    return (uint64_t *)&phy_mpidr_array[0];
 }
