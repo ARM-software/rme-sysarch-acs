@@ -1,5 +1,5 @@
 /** @file:
- * Copyright (c) 2022-2023, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2023, 2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,12 +15,39 @@
  * limitations under the License.
 **/
 
-
+#include <stdint.h>
+#include <stdarg.h>
 #include "include/pal_pcie_enum.h"
 #include "include/pal_common_support.h"
+#include "platform_image_def.h"
+#include "pal_pl011_uart.h"
 
+#define __ADDR_ALIGN_MASK(a, mask)    (((a) + (mask)) & ~(mask))
+#define ADDR_ALIGN(a, b)              __ADDR_ALIGN_MASK(a, (typeof(a))(b) - 1)
+
+void *mem_alloc(size_t alignment, size_t size);
+void mem_free(void *ptr);
+
+#define get_num_va_args(_args, _lcount)             \
+    (((_lcount) > 1)  ? va_arg(_args, long long int) :  \
+    (((_lcount) == 1) ? va_arg(_args, long int) :       \
+                va_arg(_args, int)))
+
+#define get_unum_va_args(_args, _lcount)                \
+    (((_lcount) > 1)  ? va_arg(_args, unsigned long long int) : \
+    (((_lcount) == 1) ? va_arg(_args, unsigned long int) :      \
+                va_arg(_args, unsigned int)))
+
+
+typedef struct {
+    uint64_t base;
+    uint64_t size;
+} val_host_alloc_region_ts;
+
+static uint64_t heap_base;
+static uint64_t heap_top;
+static uint64_t heap_init_done = 0;
 extern void* g_rme_log_file_handle;
-
 uint8_t   *gSharedMemory;
 
 #ifdef ENABLE_OOB
@@ -110,10 +137,6 @@ pal_mmio_read(uint64_t addr)
 {
   uint32_t data;
 
-  if (addr & 0x3) {
-      print(ACS_PRINT_WARN, "\n  Error-Input address is not aligned. Masking the last 2 bits \n");
-      addr = addr & ~(0x3);  //make sure addr is aligned to 4 bytes
-  }
   data = (*(volatile uint32_t *)addr);
 
   if (g_print_mmio || (g_curr_module & g_enable_module))
@@ -218,6 +241,8 @@ pal_print(char *string, uint64_t data)
    */
     AsciiPrint(string, data);
   #endif
+  (void) string;
+  (void) data;
 }
 
 /**
@@ -253,7 +278,7 @@ pal_print_raw(uint64_t addr, char *string, uint64_t data)
                 }
             }
             if(i>0) {
-                while(i>=0)
+                while(i!=0)
                     *(volatile uint8_t *)addr = buffer[--i];
             } else
                 *(volatile uint8_t *)addr = 48;
@@ -261,21 +286,6 @@ pal_print_raw(uint64_t addr, char *string, uint64_t data)
         } else
             *(volatile uint8_t *)addr = *string;
     }
-}
-
-/**
-  @brief  Compares two strings
-
-  @param  FirstString   The pointer to a Null-terminated ASCII string.
-  @param  SecondString  The pointer to a Null-terminated ASCII string.
-  @param  Length        The maximum number of ASCII characters for compare.
-
-  @return Zero if strings are identical, else non-zero value
-**/
-uint32_t
-pal_strncmp(char *FirstString, char *SecondString, uint32_t Length)
-{
-  return strncmp(FirstString, SecondString, Length);
 }
 
 /**
@@ -287,35 +297,11 @@ pal_strncmp(char *FirstString, char *SecondString, uint32_t Length)
 void
 pal_mem_free(void *Buffer)
 {
+#ifndef TARGET_BM_BOOT
   free(Buffer);
-}
-
-/**
-  @brief  Compare the contents of the src and dest buffers
-  @param  Src   - source buffer to be compared
-  @param  Dest  - destination buffer to be compared
-  @param  Len   - Length of the comparison to be performed
-
-  @return Zero if the buffer contecnts are same, else Nonzero
-**/
-uint32_t
-pal_mem_compare(void *Src, void *Dest, uint32_t Len)
-{
-  return memcmp(Src, Dest, Len);
-}
-
-/**
-  @brief a buffer with a known specified input value
-  @param  Buf   - Pointer to the buffer to fill
-  @param  Size  - Number of bytes in buffer to fill
-  @param  Value - Value to fill buffer with
-
-  @return None
-**/
-void
-pal_mem_set(void *Buf, uint32_t Size, uint8_t Value)
-{
-  memset(Buf, Value, Size);
+#else
+  pal_mem_free_aligned(Buffer);
+#endif
 }
 
 uint64_t
@@ -334,7 +320,11 @@ pal_mem_get_shared_addr()
 void
 pal_mem_free_shared()
 {
+#ifndef TARGET_BM_BOOT
   free ((void *)gSharedMemory);
+#else
+  pal_mem_free_aligned((void *)gSharedMemory);
+#endif
 }
 
 /**
@@ -348,7 +338,13 @@ pal_mem_free_shared()
 void *
 pal_mem_alloc(uint32_t Size)
 {
+
+#ifndef TARGET_BM_BOOT
   return malloc(Size);
+#else
+  uint32_t alignment = 0x08;
+  return (void *)mem_alloc(alignment, Size);
+#endif
 }
 
 /**
@@ -362,7 +358,22 @@ pal_mem_alloc(uint32_t Size)
 void *
 pal_mem_calloc(uint32_t num, uint32_t Size)
 {
+
+#ifndef TARGET_BM_BOOT
   return calloc(num, Size);
+#else
+  void* ptr;
+  uint32_t alignment = 0x08;
+
+  ptr = mem_alloc(alignment, num * Size);
+
+  if (ptr != NULL)
+  {
+    pal_mem_set(ptr, num * Size, 0);
+  }
+  return ptr;
+#endif
+
 }
 
 
@@ -429,7 +440,14 @@ pal_mem_alloc_cacheable(uint32_t Bdf, uint32_t Size, void **Pa)
 
   *Pa = (VOID *)Address;
   return (VOID *)Address;
-  #endif
+#elif defined (TARGET_BM_BOOT)
+  void *address;
+  uint32_t alignment = 0x08;
+  (void) Bdf;
+  address = (void *)mem_alloc(alignment, Size);
+  *Pa = (void *)address;
+  return (void *)address;
+#endif
   return 0;
 }
 
@@ -444,14 +462,19 @@ pal_mem_alloc_cacheable(uint32_t Bdf, uint32_t Size, void **Pa)
 void
 pal_mem_free_cacheable(uint32_t Bdf, uint32_t Size, void *Va, void *Pa)
 {
-  #ifdef ENABLE_OOB
-  /* Below code is not applicable for Bare-metal
-   * Only for FVP OOB experience
-   */
+
+#ifdef ENABLE_OOB
+ /* Below code is not applicable for Bare-metal
+  * Only for FVP OOB experience
+  */
 
   gBS->FreePages((EFI_PHYSICAL_ADDRESS)(UINTN)Va, EFI_SIZE_TO_PAGES(Size));
-  #endif
-
+#else
+  (void) Bdf;
+  (void) Size;
+  (void) Va;
+  (void) Pa;
+#endif
 
 }
 
@@ -488,23 +511,6 @@ pal_mem_phys_to_virt (
 }
 
 /**
-  Copies a source buffer to a destination buffer, and returns the destination buffer.
-
-  @param  DestinationBuffer   The pointer to the destination buffer of the memory copy.
-  @param  SourceBuffer        The pointer to the source buffer of the memory copy.
-  @param  Length              The number of bytes to copy from SourceBuffer to DestinationBuffer.
-
-  @return DestinationBuffer.
-
-**/
-void *
-pal_memcpy(void *DestinationBuffer, void *SourceBuffer, uint32_t Length)
-{
-
-  return memcpy(DestinationBuffer, SourceBuffer, Length);
-}
-
-/**
   Stalls the CPU for the number of microseconds specified by MicroSeconds.
 
   @param  MicroSeconds  The minimum number of microseconds to delay.
@@ -521,7 +527,7 @@ pal_time_delay_ms(uint64_t MicroSeconds)
    */
   gBS->Stall(MicroSeconds);
   #endif
-
+  (void) MicroSeconds;
   return 0;
 }
 
@@ -539,7 +545,7 @@ pal_mem_page_size()
     */
    return EFI_PAGE_SIZE;
   #endif
-   return 0;
+   return PLATFORM_PAGE_SIZE;;
 }
 
 /**
@@ -566,8 +572,9 @@ pal_mem_alloc_pages (uint32_t NumPages)
   }
 
   return (VOID*)(UINTN)PageBase;
-  #endif
-  return 0;
+#else
+  return (void *)mem_alloc(MEM_ALIGN_4K, NumPages * PLATFORM_PAGE_SIZE);
+#endif
 }
 
 /**
@@ -585,6 +592,8 @@ pal_mem_free_pages(void *PageBase, uint32_t NumPages)
 
   gBS->FreePages((EFI_PHYSICAL_ADDRESS)(UINTN)PageBase, NumPages);
   #endif
+  (void) PageBase;
+  (void) NumPages;
 }
 
 /**
@@ -620,20 +629,20 @@ void
 
   return Aligned_Ptr;
   #else
-  return (void *)memalign(alignment, size);
+  return (void *)mem_alloc(alignment, size);
   #endif
 }
 
 void
 pal_mem_free_aligned (void *Buffer)
 {
-  #ifdef ENABLE_OOB
+#ifdef ENABLE_OOB
     free(((VOID **)Buffer)[-1]);
     return;
-  #else
-    free(Buffer);
+#else
+    mem_free(Buffer);
     return;
-  #endif
+#endif
 }
 
 /**
@@ -652,6 +661,99 @@ pal_target_is_bm()
 }
 
 /**
+  Copies a source buffer to a destination buffer, and returns the destination buffer.
+
+  @param  DestinationBuffer   The pointer to the destination buffer of the memory copy.
+  @param  SourceBuffer        The pointer to the source buffer of the memory copy.
+  @param  Length              The number of bytes to copy from SourceBuffer to DestinationBuffer.
+
+  @return DestinationBuffer.
+
+**/
+void *
+pal_memcpy(void *DestinationBuffer, const void *SourceBuffer, uint32_t Length)
+{
+
+    uint32_t i;
+    const char *s = (char *)SourceBuffer;
+    char *d = (char *) DestinationBuffer;
+
+    for(i = 0; i < Length; i++)
+    {
+        d[i] = s[i];
+    }
+
+    return d;
+}
+
+uint32_t pal_strncmp(const char8_t *str1, const char8_t *str2, uint32_t len)
+{
+    while ( len && *str1 && ( *str1 == *str2 ) )
+    {
+        ++str1;
+        ++str2;
+        --len;
+    }
+    if ( len == 0 )
+    {
+        return 0;
+    }
+    else
+    {
+        return ( *(unsigned char *)str1 - *(unsigned char *)str2 );
+    }
+}
+
+void *pal_strncpy(void *DestinationStr, const void *SourceStr, uint32_t Length)
+{
+  const char *s = SourceStr;
+  char *d = DestinationStr;
+
+  if (d == NULL) {
+      return NULL;
+  }
+
+  char* ptr = d;
+
+  while (*s && Length--)
+  {
+      *d = *s;
+      d++;
+      s++;
+  }
+  *d = '\0';
+
+  return ptr;
+}
+
+int32_t
+pal_mem_compare(void *Src, void *Dest, uint32_t Len)
+{
+    if (Len != 0) {
+    register const unsigned char *p1 = Dest, *p2 = Src;
+
+    do {
+      if (*p1++ != *p2++)
+        return (*--p1 - *--p2);
+    } while (--Len != 0);
+  }
+  return (0);
+}
+
+void
+pal_mem_set(void *buf, uint32_t size, uint8_t value)
+{
+    unsigned char *ptr = buf;
+
+    while (size--)
+    {
+        *ptr++ = (unsigned char)value;
+    }
+
+    return (void) buf;
+}
+
+/**
  @brief Writes the reset status on Non-Volatile memory.
 
  @param RME_ACS_NVM_MEM Address of Non-Volatile memory
@@ -659,7 +761,7 @@ pal_target_is_bm()
 
  @return None
 **/
-VOID
+void
 pal_write_reset_status(
   uint64_t RME_ACS_NVM_MEM,
   uint32_t status
@@ -695,7 +797,7 @@ pal_read_reset_status(
 
   @return None
 **/
-VOID
+void
 pal_save_global_test_data(
   uint64_t RME_ACS_NVM_MEM,
   uint32_t rme_tests_total,
@@ -706,7 +808,7 @@ pal_save_global_test_data(
 
   uint32_t *addr;
 
-  addr = (UINT32 *)(RME_ACS_NVM_MEM + 0x10);
+  addr = (uint32_t *)(RME_ACS_NVM_MEM + 0x10);
   *addr = rme_tests_total;
   *(addr + 1) = rme_tests_pass;
   *(addr + 2) = rme_tests_fail;
@@ -723,7 +825,7 @@ pal_save_global_test_data(
 
   @return None
 **/
-VOID
+void
 pal_restore_global_test_data(
   uint64_t RME_ACS_NVM_MEM,
   uint32_t *rme_tests_total,
@@ -739,3 +841,297 @@ pal_restore_global_test_data(
   *rme_tests_fail = *(addr + 2);
 }
 
+/* Functions implemented below are used to allocate memory from heap. Baremetal implementation
+   of memory allocation.
+*/
+
+static int is_power_of_2(uint32_t n)
+{
+    return n && !(n & (n - 1));
+}
+
+/**
+ * @brief Allocates contiguous memory of requested size(no_of_bytes) and alignment.
+ * @param alignment - alignment for the address. It must be in power of 2.
+ * @param Size - Size of the region. It must not be zero.
+ * @return - Returns allocated memory base address if allocation is successful.
+ *           Otherwise returns NULL.
+ **/
+void *heap_alloc(size_t alignment, size_t size)
+{
+    uint64_t addr;
+
+    addr = ADDR_ALIGN(heap_base, alignment);
+    size += addr - heap_base;
+
+    if ((heap_top - heap_base) < size)
+    {
+       return NULL;
+    }
+
+    heap_base += size;
+
+    return (void *)addr;
+}
+
+/**
+ * @brief  Initialisation of allocation data structure
+ * @param  void
+ * @return Void
+ **/
+void mem_alloc_init(void)
+{
+    heap_base = PLATFORM_HEAP_REGION_BASE;
+    heap_top = PLATFORM_HEAP_REGION_BASE + PLATFORM_HEAP_REGION_SIZE;
+    heap_init_done = 1;
+}
+
+/**
+ * @brief Allocates contiguous memory of requested size(no_of_bytes) and alignment.
+ * @param alignment - alignment for the address. It must be in power of 2.
+ * @param Size - Size of the region. It must not be zero.
+ * @return - Returns allocated memory base address if allocation is successful.
+ *           Otherwise returns NULL.
+ **/
+void *mem_alloc(size_t alignment, size_t size)
+{
+  void *addr = NULL;
+
+  if(heap_init_done != 1)
+    mem_alloc_init();
+
+  if (size <= 0)
+  {
+    return NULL;
+  }
+
+  if (!is_power_of_2((uint32_t)alignment))
+  {
+    return NULL;
+  }
+
+  size += alignment - 1;
+  addr = heap_alloc(alignment, size);
+
+  return addr;
+}
+
+/**
+ * TODO: Free the memory for given memory address
+ * Currently acs code is initialisazing from base for every test,
+ * the regions data structure is internal and below code only setting to zero
+ * not actually freeing memory.
+ * If require can revisit in future.
+ **/
+void mem_free(void *ptr)
+{
+  if (!ptr)
+    return;
+
+  return;
+}
+
+/* The functions implemented below are to enable console prints via UART driver */
+
+static int string_print(const char *str)
+{
+    int count = 0;
+
+    for ( ; *str != '\0'; str++) {
+        (void)pal_uart_putc(*str);
+        count++;
+    }
+
+    return count;
+}
+
+static int unsigned_num_print(unsigned long long int unum, unsigned int radix,
+                  char padc, int padn)
+{
+    /* Just need enough space to store 64 bit decimal integer */
+    char num_buf[20];
+    int i = 0, count = 0;
+    unsigned int rem;
+
+    /* num_buf is only large enough for radix >= 10 */
+    if (radix < 10) {
+        return 0;
+    }
+
+    do {
+        rem = unum % radix;
+        if (rem < 0xa)
+            num_buf[i] = '0' + rem;
+        else
+            num_buf[i] = 'a' + (rem - 0xa);
+        i++;
+        unum /= radix;
+    } while (unum > 0U);
+
+    if (padn > 0) {
+        while (i < padn) {
+            (void)pal_uart_putc(padc);
+            count++;
+            padn--;
+        }
+    }
+
+    while (--i >= 0) {
+        (void)pal_uart_putc(num_buf[i]);
+        count++;
+    }
+
+    return count;
+}
+
+int vprintf(const char *fmt, va_list args)
+{
+    int l_count;
+    long long int num;
+    unsigned long long int unum;
+    char *str;
+    char padc = '\0'; /* Padding character */
+    int padn;         /* Number of characters to pad */
+    int count = 0;    /* Number of printed characters */
+
+    while (*fmt != '\0') {
+        l_count = 0;
+        padn = 0;
+
+        if (*fmt == '%') {
+            fmt++;
+            /* Check the format specifier */
+loop:
+            switch (*fmt) {
+            case '%':
+                (void)pal_uart_putc('%');
+                break;
+            case 'i': /* Fall through to next one */
+            case 'd':
+                num = get_num_va_args(args, l_count);
+                if (num < 0) {
+                    (void)pal_uart_putc('-');
+                    unum = (unsigned long long int)-num;
+                    padn--;
+                } else
+                    unum = (unsigned long long int)num;
+
+                count += unsigned_num_print(unum, 10,
+                                padc, padn);
+                break;
+            case 's':
+                str = va_arg(args, char *);
+                count += string_print(str);
+                break;
+            case 'p':
+                unum = (uintptr_t)va_arg(args, void *);
+                if (unum > 0U) {
+                    count += string_print("0x");
+                    padn -= 2;
+                }
+
+                count += unsigned_num_print(unum, 16,
+                                padc, padn);
+                break;
+            case 'x':
+                unum = get_unum_va_args(args, l_count);
+                count += unsigned_num_print(unum, 16,
+                                padc, padn);
+                break;
+            case 'z':
+                if (sizeof(size_t) == 8U)
+                    l_count = 2;
+
+                fmt++;
+                goto loop;
+            case 'l':
+                l_count++;
+                fmt++;
+                goto loop;
+            case 'u':
+                unum = get_unum_va_args(args, l_count);
+                count += unsigned_num_print(unum, 10,
+                                padc, padn);
+                break;
+            case '1':
+            case '2':
+            case '3':
+            case '4':
+            case '5':
+            case '6':
+            case '7':
+            case '8':
+            case '9':
+            case '0':
+                padc = '0';
+                padn = 0;
+                fmt++;
+
+                for (;;) {
+                    char ch = *fmt;
+                    if ((ch < '0') || (ch > '9')) {
+                        goto loop;
+                    }
+                    padn = (padn * 10) + (ch - '0');
+                    fmt++;
+                }
+
+            default:
+                /* Exit on any other format specifier */
+                return -1;
+            }
+
+            fmt++;
+            continue;
+        }
+        else
+        {
+            (void)pal_uart_putc(*fmt);
+            if (*fmt == '\n')
+            {
+                (void)pal_uart_putc('\r');
+            }
+        }
+
+        fmt++;
+        count++;
+    }
+
+    return count;
+}
+
+static const char *prefix_str[] = {
+        "", "", "", "", ""};
+
+const char *log_get_prefix(int log_level)
+{
+        int level;
+
+        if (log_level > ACS_PRINT_ERR) {
+                level = ACS_PRINT_ERR;
+        } else if (log_level < ACS_PRINT_INFO) {
+                level = ACS_PRINT_TEST;
+        } else {
+                level = log_level;
+        }
+
+        return prefix_str[level - 1];
+}
+
+void pal_uart_print(int log, const char *fmt, ...)
+{
+        va_list args;
+        const char *prefix_str;
+
+        prefix_str = log_get_prefix(log);
+
+        while (*prefix_str != '\0') {
+                pal_uart_putc(*prefix_str);
+                prefix_str++;
+        }
+
+        va_start(args, fmt);
+        (void)vprintf(fmt, args);
+        va_end(args);
+        (void) log;
+}

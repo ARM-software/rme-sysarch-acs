@@ -19,7 +19,7 @@ This suite includes a set of examples of the invariant behaviors that are provid
 Most of the tests are executed from UEFI Shell by executing the RME UEFI shell application.
 
 ## Release details
-  - Code Quality: Beta
+  - Code Quality: EAC
   - The tests are written for version B.a of the Arm Realm Management Extension (RME) System Architecture.
   - The compliance suite is not a substitute for design verification.
 
@@ -77,38 +77,6 @@ To start the ACS build, perform the following steps:
    - Add  RmeValLib|ShellPkg/Application/rme-acs/val/RmeValLib.inf
    - Add  RmePalLib|ShellPkg/Application/rme-acs/platform/pal_uefi/RmePalLib.inf
    - Add ShellPkg/Application/rme-acs/uefi_app/RmeAcs.inf in the [components] section of ShellPkg/ShellPkg.dsc <br>
-    If Baremetal platform, checkout to ACS tag v23.12_REL1.0 then add the following to [LibraryClasses.common] section in ShellPkg/ShellPkg.dsc
-   - Add  RmeValLib|ShellPkg/Application/rme-acs/val/RmeValLib.inf
-   - Add  RmePalBaremetalLib|ShellPkg/Application/rme-acs/platform/pal_baremetal/RmePalBaremetalLib.inf
-   - Add  RmePalFVPLib|ShellPkg/Application/rme-acs/platform/pal_baremetal/FVP/RmePalFVPLib.inf
-   - Modify CC Flags in the [BuildOptions] section of ShellPkg/ShellPkg.dsc
-```
-      *_*_*_CC_FLAGS = -DENABLE_OOB
-
-      !include StdLib/StdLib.inc
-```
-   - Modify the following in the edk2-libc/StdLib/LibC/Main/Main.c
-```
-      -extern int main( int, char**);
-      +extern int ShellAppMainrme( int, char**);
-```
-   - Modify the following in ShellAppMain() of edk2-libc/StdLib/LibC/Main/Main.c
-```
-      -ExitVal = (INTN)main( (int)Argc, gMD->NArgV);
-      +ExitVal = (INTN)ShellAppMainrme( (int)Argc, gMD->NArgV);
-```
-   - Comment the map[] variable in edk2-libc/StdLib/LibC/Main/Arm/flt_rounds.c to avoid -werror=unused-variable
-```
-      +#if 0
-      static const int map[] = {
-      1,  /* round to nearest */
-      2,  /* round to positive infinity */
-      3,  /* round to negative infinity */
-      0   /* round to zero */
-      };
-      +#endif
-```
-   - Add ShellPkg/Application/rme-acs/baremetal_app/RmeAcs.inf in the [components] section of ShellPkg/ShellPkg.dsc
 
 ### Linux build environment
 If the build environment is Linux, perform the following steps:
@@ -193,10 +161,12 @@ Below tests are not qualified in model. These are expected to pass in any valid 
   - test_pool/legacy_system/test_ls002.c - Require Legacy TZ Support.
   - test_pool/legacy_system/test_ls003.c - Require Legacy TZ Support.
   - test_pool/legacy_system/test_ls004.c - Require Legacy TZ Support.
-  - test_pool/rme/test_rme029.c - Reference Validation Platform Issue.
+  - test_pool/rme/test_rme029.c - Model Issue.
   - test_pool/rme/test_rme022.c - Require NS encryption to be programmable.
-  - test_pool/rme/test_rme015.c - Reference Validation Platform limitation.
-  - test_pool/da/test_da008.c - Reference Validation Platform Issue.
+  - test_pool/gic/test_g001.c -   Model issue.
+  - test_pool/rme/test_rme015.c - Model limitation.
+  - test_pool/da/test_da019.c - ImpDef RP write-protect and full-protect registers not present in Model.
+  - test_pool/da/test_da020.c - ImpDef interconnect registers not present in Model.
 
 ## License
 RME System ACS is distributed under Apache v2.0 License.
@@ -208,4 +178,4 @@ RME System ACS is distributed under Apache v2.0 License.
 
 --------------
 
-*Copyright (c) 2022-2024, Arm Limited and Contributors. All rights reserved.*
+*Copyright (c) 2022-2025, Arm Limited and Contributors. All rights reserved.*

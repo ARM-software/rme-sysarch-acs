@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022-2023, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,7 +20,7 @@
 
 #include <stdio.h>
 #include <stdint.h>
-
+#include <pal_common_support.h>
 
 /* Header Offset and Type*/
 #define HEADER_OFFSET      0xC
@@ -42,7 +42,7 @@
 /*BAR offset */
 #define BAR0_OFFSET        0x10
 #define TYPE1_BAR_MAX_OFF  0x14
-#define BAR_MAX_OFFSET     0x24
+#define TYPE0_BAR_MAX_OFF  0x24
 #define BAR_64_BIT         1
 #define BAR_32_BIT         0
 
@@ -85,15 +85,28 @@ void     pal_mmio_write(uint64_t addr, uint32_t data);
 void     pal_mmio_write64(uint64_t addr, uint64_t data);
 void     *pal_mem_alloc(uint32_t size);
 void     *pal_mem_calloc(uint32_t num, uint32_t size);
-
+void     pal_mem_set(void *buf, uint32_t size, uint8_t value);
+void     pal_mem_free_aligned(void *Buffer);
 uint32_t pal_increment_bus_dev(uint32_t StartBdf);
 
 uint32_t pal_pcie_get_bdf(uint32_t class_code, uint32_t start_busdev);
 
 uint64_t pal_pcie_get_base(uint32_t bdf, uint32_t bar_index);
 
-uint32_t pal_pci_cfg_read(uint32_t bus, uint32_t dev, uint32_t func, uint32_t offset, uint32_t *value);
+uint32_t pal_pci_cfg_read(uint32_t seg, uint32_t bus, uint32_t dev, uint32_t func, uint32_t offset, uint32_t *value);
 
 uint32_t pal_pcie_read_cfg(uint32_t seg, uint32_t bus, uint32_t dev, uint32_t func, uint32_t offset, uint32_t *value);
+
+uint64_t pal_pcie_ecam_base(uint32_t seg, uint32_t bus, uint32_t dev, uint32_t func);
+
+uint64_t pal_pcie_get_mcfg_ecam();
+uint64_t pal_exerciser_get_pcie_config_offset(uint32_t Bdf);
+uint32_t pal_exerciser_find_pcie_capability(uint32_t ID, uint32_t Bdf, uint32_t Value, uint32_t *Offset);
+uint32_t pal_exerciser_set_param(EXERCISER_PARAM_TYPE Type, uint64_t Value1, uint64_t Value2, uint32_t Bdf);
+uint32_t pal_exerciser_get_param(EXERCISER_PARAM_TYPE Type, uint64_t *Value1, uint64_t *Value2, uint32_t Bdf);
+uint32_t pal_exerciser_set_state(EXERCISER_STATE State, uint64_t *Value, uint32_t Bdf);
+uint32_t pal_exerciser_get_state(EXERCISER_STATE *State, uint32_t Bdf);
+uint32_t pal_exerciser_ops(EXERCISER_OPS Ops, uint64_t Param, uint32_t Bdf);
+uint32_t pal_exerciser_get_data(EXERCISER_DATA_TYPE Type, exerciser_data_t *Data, uint32_t Bdf, uint64_t Ecam);
 
 #endif

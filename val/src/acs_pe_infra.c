@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022-2023, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2023, 2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,6 +22,9 @@
 #include "sys_arch_src/gic/rme_exception.h"
 
 int32_t gPsciConduit;
+
+/* Global variable to store mpidr of primary cpu */
+uint64_t g_primary_mpidr = PAL_INVALID_MPID;
 
 /**
   @brief   Pointer to the memory location of the PE Information table
@@ -317,7 +320,7 @@ void
 val_pe_context_restore(uint64_t sp)
 {
     sp = 0;
-    *(uint64_t *)(g_stack_pointer+8) = g_ret_addr;
+    *(uint64_t *)(g_stack_pointer+8+sp) = g_ret_addr;
 }
 
 /**
@@ -347,7 +350,8 @@ val_pe_default_esr(uint64_t interrupt_type, void *context)
 {
     uint32_t index = val_pe_get_index_mpid(val_pe_get_mpid());
 
-    val_print(ACS_PRINT_WARN, "\n        Unexpected exception occurred", 0);
+    val_print(ACS_PRINT_WARN,
+                 "\n        Unexpected exception of type %d occurred", interrupt_type);
 
 #ifndef TARGET_LINUX
     if (pal_target_is_bm()) {
@@ -386,3 +390,69 @@ val_pe_cache_clean_range(uint64_t start_addr, uint64_t length)
   }
 #endif
 }
+
+/**
+ *   @brief    Returns mpidr of primary cpu set during boot.
+ *   @param    void
+ *   @return   primary mpidr
+**/
+uint64_t val_get_primary_mpidr(void)
+{
+    return g_primary_mpidr;
+}
+/**
+ *   @brief    Convert mpidr to logical cpu number
+ *   @param    mpidr    - mpidr value
+ *   @return   Logical cpu number
+**/
+uint32_t val_get_cpuid(uint64_t mpidr)
+{
+    uint32_t cpu_index = 0;
+    uint32_t total_cpu_num = pal_get_cpu_count();
+    uint64_t *phy_mpidr_list = pal_get_phy_mpidr_list_base();
+    mpidr = mpidr & PAL_MPIDR_AFFINITY_MASK;
+    for (cpu_index = 0; cpu_index < total_cpu_num; cpu_index++)
+    {
+        if (mpidr == phy_mpidr_list[cpu_index])
+            return cpu_index;
+    }
+    /* In case virtual mpidr returned for realm */
+    for (cpu_index = 0; cpu_index < total_cpu_num; cpu_index++)
+    {
+        if (mpidr == cpu_index)
+            return cpu_index;
+    }
+    return PAL_INVALID_MPID;
+}
+
+#ifdef TARGET_BM_BOOT
+/**
+ *   @brief    Convert mpidr to logical cpu number
+ *   @param    mpidr    - mpidr value
+ *   @return   Logical cpu number
+**/
+// This API is only used for baremetal boot at which point PE info table is not created.
+uint32_t val_get_pe_id(uint64_t mpidr)
+{
+    uint32_t pe_index = 0;
+    uint32_t total_pe_num = pal_get_cpu_count();
+    uint64_t *phy_mpidr_list = pal_get_phy_mpidr_list_base();
+
+    mpidr = mpidr & PAL_MPIDR_AFFINITY_MASK;
+
+    for (pe_index = 0; pe_index < total_pe_num; pe_index++)
+    {
+        if (mpidr == phy_mpidr_list[pe_index])
+            return pe_index;
+    }
+
+    /* In case virtual mpidr returned for realm */
+    for (pe_index = 0; pe_index < total_pe_num; pe_index++)
+    {
+        if (mpidr == pe_index)
+            return pe_index;
+    }
+
+    return PAL_INVALID_MPID;
+}
+#endif //TARGET_BM_BOOT

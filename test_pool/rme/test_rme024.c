@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2023, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2023, 2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -88,7 +88,7 @@ payload()
 
   /* Develop the register list to be checked */
   shared_data->reg_info.num_regs = 7;
-  for (int reg_num = 0; reg_num < shared_data->reg_info.num_regs; ++reg_num)
+  for (uint32_t reg_num = 0; reg_num < shared_data->reg_info.num_regs; ++reg_num)
   {
     val_reg_update_shared_struct_msd(reg_list_chck[reg_num], reg_num);
   }

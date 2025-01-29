@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022-2024, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,6 +17,8 @@
 
 #ifndef __PAL_UEFI_H__
 #define __PAL_UEFI_H__
+
+#include <include/platform_override.h>
 
 extern VOID* g_rme_log_file_handle;
 extern UINT32 g_print_level;
@@ -400,5 +402,4 @@ UINT64  pal_memory_get_unpopulated_addr(UINT64 *addr, UINT32 instance);
 VOID pal_mem_free(VOID *buffer);
 
 UINT32 pal_pe_get_num();
-
 #endif

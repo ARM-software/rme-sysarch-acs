@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2023-2024, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2023-2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -169,6 +169,7 @@ val_cmpr_pe_regs_aftr_low_pwr_el3(void)
 void
 val_prog_legacy_tz(int enable)
 {
+  (void) enable;
   UserCallSMC(ARM_ACS_SMC_FID, LEGACY_TZ_ENABLE, SET, 0, 0);
 }
 
@@ -222,5 +223,25 @@ void val_change_security_state_el3(int sec_state)
  */
 void val_smmu_check_rmeda_el3(void)
 {
-  UserCallSMC(ARM_ACS_SMC_FID, SMMU_ROOT_REG_CHK, SMMU_ROOT_RME_IMPL_CHK, 0, 0);
+  UserCallSMC(ARM_ACS_SMC_FID, SMMU_CONFIG_SERVICE, SMMU_ROOT_RME_IMPL_CHK, 0, 0);
+}
+
+/**
+ *  @brief  This API is used to initialise the REALM page table for SMMU in el3.
+ *          1. Caller       -  Test suite
+ *  @return None
+ */
+void val_rlm_smmu_init(uint32_t num_smmu)
+{
+  UserCallSMC(ARM_ACS_SMC_FID, SMMU_CONFIG_SERVICE, SMMU_RLM_PGT_INIT, num_smmu, 0);
+}
+
+/**
+ *  @brief  This API is used to map the REALM page table for SMMU in el3.
+ *          1. Caller       -  Test suite
+ *  @return None
+ */
+void val_rlm_smmu_map(uint32_t smmu_info)
+{
+  UserCallSMC(ARM_ACS_SMC_FID, SMMU_CONFIG_SERVICE, SMMU_RLM_SMMU_MAP, smmu_info, 0);
 }

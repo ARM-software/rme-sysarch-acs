@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022-2024, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -46,7 +46,6 @@
 #define ACS_STATUS_ERR       0xEDCB1234  //some impropable value?
 #define ACS_STATUS_SKIP      0x10000000
 #define ACS_STATUS_PASS      0x0
-#define ACS_STATUS_NIST_PASS 0x1
 #define ACS_INVALID_INDEX    0xFFFFFFFF
 
 #define NOT_IMPLEMENTED         0x4B1D  /* Feature or API not imeplemented */
@@ -84,6 +83,7 @@ uint32_t val_pe_get_pmu_gsiv(uint32_t index);
 uint64_t val_pe_get_mpid(void);
 uint32_t val_pe_get_index_mpid(uint64_t mpid);
 uint32_t val_pe_install_esr(uint32_t exception_type, void (*esr)(uint64_t, void *));
+uint64_t val_get_primary_mpidr(void);
 
 void     val_execute_on_pe(uint32_t index, void (*payload)(void), uint64_t args);
 int      val_suspend_pe(uint64_t entry, uint32_t context_id);
@@ -91,6 +91,19 @@ void     UserCallSMC(uint64_t smc_fid, uint64_t service, uint64_t arg0,
                      uint64_t arg1, uint64_t arg2);
 void     tlbi_alle2(void);
 uint64_t ats1e2r(uint64_t VA);
+
+/* Memory Tests APIs */
+#define MEM_ALIGN_4K       0x1000
+#define MEM_ALIGN_8K       0x2000
+#define MEM_ALIGN_16K      0x4000
+#define MEM_ALIGN_32K      0x8000
+#define MEM_ALIGN_64K      0x10000
+
+/* Mem Map APIs */
+void val_mmap_add_region(uint64_t va_base, uint64_t pa_base,
+                uint64_t length, uint64_t attributes);
+uint32_t val_setup_mmu(void);
+uint32_t val_enable_mmu(void);
 
 /* VAL RME APIs */
 uint32_t val_rme_execute_tests(uint32_t num_pe);
@@ -113,7 +126,9 @@ void val_change_security_state_el3(int sec_state);
 void write_gpr_and_reset(void);
 uint32_t check_gpr_after_reset(void);
 void val_smmu_check_rmeda_el3(void);
-
+void val_rlm_smmu_init(uint32_t num_smmu);
+void val_rlm_smmu_map(uint32_t smmu_sid);
+void val_register_create_info_table(uint64_t *register_info_table);
 //Legacy system VAL APIs
 uint32_t val_legacy_execute_tests(uint32_t num_pe);
 
@@ -352,6 +367,20 @@ typedef struct {
   uint64_t   test_arg02;
   uint64_t   test_arg03;
 } RME_SMC_t;
+
+/**
+  Trigger an SMC call
+
+  SMC calls can take up to 7 arguments and return up to 4 return values.
+  Therefore, the 4 first fields in the ARM_SMC_ARGS structure are used
+  for both input and output values.
+
+**/
+void
+ArmCallSmc(
+  ARM_SMC_ARGS  *Args,
+  int32_t      Conduit
+  );
 
 void     val_secure_call_smc(RME_SMC_t *smc);
 uint32_t val_secure_get_result(RME_SMC_t *smc, uint32_t timeout);

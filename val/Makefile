@@ -23,7 +23,6 @@ ACS_DIR ?= .
 
 VAL_SRC = $(ACS_DIR)/src
 
-obj-m += sbsa_acs_val.o
 rme_acs_val-objs += $(VAL_SRC)/avs_status.o      $(VAL_SRC)/acs_memory.o \
     $(VAL_SRC)/acs_peripherals.o $(VAL_SRC)/acs_dma.o  $(VAL_SRC)/acs_smmu.o \
     $(VAL_SRC)/acs_test_infra.o  $(VAL_SRC)/acs_pcie.o $(VAL_SRC)/acs_pe_infra.o \

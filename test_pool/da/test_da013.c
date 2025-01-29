@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2024, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2024-2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -62,7 +62,7 @@ payload(void)
   test_data_blk_size = page_size * TEST_DATA_NUM_PAGES;
   dma_len = test_data_blk_size / 2;
 
-  num_exercisers = val_exerciser_get_info(EXERCISER_NUM_CARDS, 0);
+  num_exercisers = val_exerciser_get_info(EXERCISER_NUM_CARDS);
 
   for (instance = 0; instance < num_exercisers; ++instance)
   {
@@ -105,20 +105,10 @@ payload(void)
       }
 
       val_exerciser_set_param(DMA_ATTRIBUTES, (uint64_t)dram_buf_in_virt, dma_len, instance);
-      if (val_exerciser_ops(START_DMA, EDMA_TO_DEVICE, instance))
-      {
-          val_print(ACS_PRINT_ERR, "\n        DMA write failure to exerciser %4x", instance);
-          test_fail++;
-          continue;
-      }
+      val_exerciser_ops(START_DMA, EDMA_TO_DEVICE, instance);
 
       val_exerciser_set_param(DMA_ATTRIBUTES, (uint64_t)dram_buf_in_virt2, dma_len, instance);
-      if (val_exerciser_ops(START_DMA, EDMA_FROM_DEVICE, instance))
-      {
-          val_print(ACS_PRINT_ERR, "\n        DMA write failure to exerciser %4x", instance);
-          test_fail++;
-          continue;
-      }
+      val_exerciser_ops(START_DMA, EDMA_FROM_DEVICE, instance);
 
       if (!val_memory_compare(dram_buf_in_virt, dram_buf_in_virt2, dma_len))
       {

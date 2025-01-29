@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022-2024, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -164,6 +164,8 @@ uint32_t val_pcie_bar_mem_read(uint32_t bdf, uint64_t address, uint32_t *data);
 uint32_t val_pcie_bar_mem_write(uint32_t bdf, uint64_t address, uint32_t data);
 uint32_t val_pcie_enable_tdisp(uint32_t bdf);
 uint32_t val_pcie_disable_tdisp(uint32_t bdf);
+void *val_register_table_ptr(void);
+uint32_t val_pcie_rp_sec_prpty_check(uint64_t *register_entry_info);
 
 typedef enum {
   PCIE_INFO_NUM_ECAM = 1,
@@ -203,9 +205,6 @@ val_pcie_io_read_cfg(uint32_t bdf, uint32_t offset, uint32_t *data);
 
 uint32_t
 val_pcie_get_rp_transaction_frwd_support(uint32_t bdf);
-
-uint32_t
-val_pcie_get_atomicop_requester_capable(uint32_t bdf);
 
 uint32_t
 val_pcie_is_cache_present(uint32_t bdf);

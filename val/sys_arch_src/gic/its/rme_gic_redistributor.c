@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022, 2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,7 +22,6 @@ static uint64_t ConfigBase;
 
 uint32_t
 ArmGicSetItsConfigTableBase(
-    uint64_t    GicDistributorBase,
     uint64_t    GicRedistributorBase
   )
 {
@@ -54,6 +53,8 @@ ArmGicSetItsConfigTableBase(
   write_value = val_mmio_read64(GicRedistributorBase + ARM_GICR_PROPBASER);
   write_value = write_value & (~ARM_GICR_PROPBASER_PA_MASK);
   write_value = write_value | (Address & ARM_GICR_PROPBASER_PA_MASK);
+  write_value = write_value & (~ARM_GICR_PROPBASER_ATTR_MASK);
+  write_value = write_value | (ARM_GICR_PROPBASER_ATTR_VALUE);
 
   val_mmio_write64(GicRedistributorBase + ARM_GICR_PROPBASER, write_value);
 
@@ -65,7 +66,6 @@ ArmGicSetItsConfigTableBase(
 
 uint32_t
 ArmGicSetItsPendingTableBase(
-    uint64_t    GicDistributorBase,
     uint64_t    GicRedistributorBase
   )
 {
@@ -133,19 +133,18 @@ void EnableLPIsRD(uint64_t GicRedistributorBase)
 
 uint32_t
 ArmGicRedistributorConfigurationForLPI(
-    uint64_t    GicDistributorBase,
     uint64_t    GicRedistributorBase
   )
 {
   uint32_t    Status;
   /* Set Configuration Table Base */
 
-  Status = ArmGicSetItsConfigTableBase(GicDistributorBase, GicRedistributorBase);
+  Status = ArmGicSetItsConfigTableBase(GicRedistributorBase);
   if ((Status))
     return Status;
 
   /* Set Pending Table Base For Each Redistributor */
-  Status = ArmGicSetItsPendingTableBase(GicDistributorBase, GicRedistributorBase);
+  Status = ArmGicSetItsPendingTableBase(GicRedistributorBase);
   if ((Status))
     return Status;
 

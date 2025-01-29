@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022-2024, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -109,7 +109,7 @@ typedef struct {
 
 void val_exerciser_create_info_table(void);
 uint32_t val_exerciser_init(uint32_t instance);
-uint32_t val_exerciser_get_info(EXERCISER_INFO_TYPE type, uint32_t instance);
+uint32_t val_exerciser_get_info(EXERCISER_INFO_TYPE type);
 uint32_t val_exerciser_set_param(EXERCISER_PARAM_TYPE type, uint64_t value1,
                                  uint64_t value2, uint32_t instance);
 uint32_t val_exerciser_get_param(EXERCISER_PARAM_TYPE type, uint64_t *value1,

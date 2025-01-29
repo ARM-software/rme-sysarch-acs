@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022-2023, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2023, 2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -98,19 +98,5 @@
 #define ARM_SMC_ID_PSCI_AFFINITY_INFO_ON          0
 #define ARM_SMC_ID_PSCI_AFFINITY_INFO_OFF         1
 #define ARM_SMC_ID_PSCI_AFFINITY_INFO_ON_PENDING  2
-
-/**
-  Trigger an SMC call
-
-  SMC calls can take up to 7 arguments and return up to 4 return values.
-  Therefore, the 4 first fields in the ARM_SMC_ARGS structure are used
-  for both input and output values.
-
-**/
-void
-ArmCallSmc(
-  ARM_SMC_ARGS  *Args,
-  int32_t      Conduit
-  );
 
 #endif

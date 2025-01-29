@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2024, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2024-2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -57,7 +57,7 @@ intr_handler(void)
 
 static
 void
-inject_error(uint32_t e_bdf, uint32_t instance)
+inject_error(uint32_t instance)
 {
 
     /* Set the interrupt trigger status to pending */
@@ -88,7 +88,7 @@ payload(void)
   uint32_t timeout, rp_aer_offset, value;
 
   pe_index = val_pe_get_index_mpid(val_pe_get_mpid());
-  instance = val_exerciser_get_info(EXERCISER_NUM_CARDS, 0);
+  instance = val_exerciser_get_info(EXERCISER_NUM_CARDS);
 
   while (instance-- != 0) {
 
@@ -160,7 +160,7 @@ payload(void)
           return;
       }
 
-      inject_error(e_bdf, instance);
+      inject_error(instance);
 
       /* PE busy polls to check the completion of interrupt service routine */
       timeout = TIMEOUT_MEDIUM;
@@ -199,7 +199,7 @@ payload(void)
           return;
       }
 
-      inject_error(e_bdf, instance);
+      inject_error(instance);
 
       /* PE busy polls to check the completion of interrupt service routine */
       timeout = TIMEOUT_LARGE;

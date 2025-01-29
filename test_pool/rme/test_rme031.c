@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2023, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2023, 2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -88,7 +88,7 @@ void payload(uint32_t num_pe)
   write_reg();
 
   /* Execute the same write operation from the rest of the PEs */
-  for (int i = 0; i < num_pe; i++) {
+  for (uint32_t i = 0; i < num_pe; i++) {
     if (i != index) {
           timeout = TIMEOUT_LARGE;
           val_execute_on_pe(i, write_reg, 0);
@@ -122,7 +122,7 @@ reset_done:
   /* Read the SCTLR_EL1 register after reset from the current PE */
   check_reg_val();
   /* Execute the same read operation from the rest of the PEs */
-  for (int i = 0; i < num_pe; i++) {
+  for (uint32_t i = 0; i < num_pe; i++) {
     if (i != index) {
           timeout = TIMEOUT_LARGE;
           val_execute_on_pe(i, check_reg_val, 0);

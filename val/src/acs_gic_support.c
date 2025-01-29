@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022-2023, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2023, 2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -126,7 +126,7 @@ val_gic_is_valid_lpi(uint32_t int_id)
 uint32_t
 val_gic_install_isr(uint32_t int_id, void (*isr)(void))
 {
-  uint32_t      ret_val;
+  uint32_t ret_val;
 #ifndef TARGET_LINUX
   uint32_t      reg_offset = int_id / 32;
   uint32_t      reg_shift  = int_id % 32;
@@ -143,11 +143,12 @@ val_gic_install_isr(uint32_t int_id, void (*isr)(void))
   else {
       ret_val = pal_gic_install_isr(int_id, isr);
 #ifndef TARGET_LINUX
-  if (int_id > 31 && int_id < 1024) {
-      /**** UEFI GIC code is not enabling interrupt in the Distributor ***/
-      /**** So, do this here as a fail-safe. Remove if PAL guarantees this ***/
-      val_mmio_write(val_get_gicd_base() + GICD_ISENABLER + (4 * reg_offset), 1 << reg_shift);
-  }
+      if (int_id > 31 && int_id < 1024) {
+          /**** UEFI GIC code is not enabling interrupt in the Distributor ***/
+          /**** So, do this here as a fail-safe. Remove if PAL guarantees this ***/
+          val_mmio_write(val_get_gicd_base() + GICD_ISENABLER + (4 * reg_offset),
+                         (uint32_t)1 << reg_shift);
+      }
 #endif
   }
 
@@ -212,7 +213,7 @@ uint32_t val_gic_its_configure(void)
     goto its_fail;
 
   /* Allocate memory to store ITS info */
-  g_gic_its_info = (GIC_ITS_INFO *) val_memory_alloc(1024);
+  g_gic_its_info = (GIC_ITS_INFO *) val_aligned_alloc(MEM_ALIGN_4K, 1024);
   if (!g_gic_its_info) {
       val_print(ACS_PRINT_ERR, "GIC : ITS table memory allocation failed\n", 0);
       return ACS_STATUS_ERR;
@@ -232,7 +233,7 @@ uint32_t val_gic_its_configure(void)
       if (g_gic_its_info->GicRdBase == 0) {
         if (g_gic_entry->type == ENTRY_TYPE_GICR_GICRD)
           g_gic_its_info->GicRdBase = val_its_get_curr_rdbase(g_gic_entry->base,
-                                                              g_gic_entry->length);
+                                                              (uint32_t)g_gic_entry->length);
         else
           g_gic_its_info->GicRdBase = val_its_get_curr_rdbase(g_gic_entry->base, 0);
       }
@@ -372,7 +373,7 @@ uint32_t fill_msi_x_table(uint32_t bdf, uint32_t msi_index, uint64_t msi_addr, u
 
   /* Enable MSI-X in MSI-X Capability */
   val_pcie_read_cfg(bdf, msi_cap_offset, &read_value);
-  val_pcie_write_cfg(bdf, msi_cap_offset, read_value | (1 << MSI_X_ENABLE_SHIFT));
+  val_pcie_write_cfg(bdf, msi_cap_offset, (read_value | ((uint32_t)1 << MSI_X_ENABLE_SHIFT)));
 
   /* Read MSI-X Table Address from the BAR Register */
   val_pcie_read_cfg(bdf, msi_cap_offset + MSI_X_TOR_OFFSET, &table_offset_reg);
@@ -391,9 +392,9 @@ uint32_t fill_msi_x_table(uint32_t bdf, uint32_t msi_index, uint64_t msi_addr, u
 
   /* Fill MSI Table with msi_addr, msi_data */
   val_mmio_write(table_address + msi_index*MSI_X_ENTRY_SIZE + MSI_X_MSG_TBL_LOWER_ADDR_OFFSET,
-                                                                                      msi_addr);
+                                                                          (uint32_t)msi_addr);
   val_mmio_write(table_address + msi_index*MSI_X_ENTRY_SIZE + MSI_X_MSG_TBL_HIGHER_ADDR_OFFSET,
-                                                                  msi_addr >> MSI_X_ADDR_SHIFT);
+                                                     (uint32_t)(msi_addr >> MSI_X_ADDR_SHIFT));
   val_mmio_write(table_address + msi_index*MSI_X_ENTRY_SIZE + MSI_X_MSG_TBL_DATA_OFFSET, msi_data);
   val_mmio_write(table_address + msi_index*MSI_X_ENTRY_SIZE + MSI_X_MSG_TBL_MVC_OFFSET, 0x0);
 
@@ -434,7 +435,9 @@ void val_gic_free_msi(uint32_t bdf, uint32_t device_id, uint32_t its_id,
   @brief   This function creates the MSI mappings, and programs the MSI Table.
 
   @param   bdf          B:D:F for the device
-  @param   IntID        Interrupt ID
+  @param   device_id    Device ID
+  @param   its_id       ITS ID
+  @param   int_id       Interrupt ID
   @param   msi_index    msi index in the table
 
   @return  status

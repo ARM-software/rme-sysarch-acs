@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022-2023, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2023, 2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,8 +19,6 @@
 #include "include/rme_acs_pe.h"
 #include "include/rme_acs_common.h"
 #include "include/rme_std_smc.h"
-
-#include "include/rme_acs_wakeup.h"
 
 extern uint32_t gPsciConduit;
 

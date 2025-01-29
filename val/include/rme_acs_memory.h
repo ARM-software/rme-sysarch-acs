@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022-2023, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2023, 2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,6 +22,8 @@
 #define MEM_MAP_NO_MEM   0x1
 #define MEM_MAP_FAILURE  0x2
 
+extern uint64_t tt_l0_base[];
+
 addr_t val_memory_ioremap(void *addr, uint32_t size, uint64_t attr);
 
 void val_memory_unmap(void *ptr);
@@ -39,5 +41,18 @@ void *val_memory_alloc_pages(uint32_t num_pages);
 void val_memory_free_pages(void *page_base, uint32_t num_pages);
 void *val_aligned_alloc(uint32_t alignment, uint32_t size);
 void val_memory_free_aligned(void *addr);
+
+// NSEL2 MMU mem map APIs
+void val_mmu_add_mmap(void);
+void *val_mmu_get_mmap_list(void);
+uint32_t val_mmu_get_mapping_count(void);
+
+extern void val_mair_write(uint64_t value, uint64_t el_num);
+extern void val_tcr_write(uint64_t value, uint64_t el_num);
+extern void val_ttbr0_write(uint64_t value, uint64_t el_num);
+extern void val_sctlr_write(uint64_t value, uint64_t el_num);
+extern uint64_t val_sctlr_read(uint64_t el_num);
+extern uint64_t val_ttbr0_read(uint64_t el_num);
+extern uint64_t val_read_current_el(void);
 
 #endif // __RME_ACS_PERIPHERAL_H__

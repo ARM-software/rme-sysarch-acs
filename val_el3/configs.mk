@@ -1,5 +1,5 @@
 ## @file
- # Copyright (c) 2022-2024, Arm Limited or its affiliates. All rights reserved.
+ # Copyright (c) 2022-2024, 2025, Arm Limited or its affiliates. All rights reserved.
  # SPDX-License-Identifier : Apache-2.0
  #
  # Licensed under the Apache License, Version 2.0 (the "License");
@@ -33,7 +33,8 @@ EXTRA_SOURCES = ${ACS_HOME}/val_el3/aarch64/ack_helper_functions.S  \
                 ${ACS_HOME}/val_el3/pgt_common.c  \
                 ${ACS_HOME}/pal_el3/acs_el3.c  \
                 ${ACS_HOME}/val_el3/plat_acs_smc_handler.c  \
-                ${ACS_HOME}/val_el3/ack_common.c
+                ${ACS_HOME}/val_el3/ack_common.c \
+                ${ACS_HOME}/val_el3/smmuv3_realm.c
 
 INCDIRS = -I ${ACS_HOME}/ -I ${RDINFRA} -I ${RDINFRA}/tf-a/include -I ${RDINFRA}/tf-a/include/arch/aarch64 -I ${RDINFRA}/tf-a/include/lib/cpus/aarch64 -I ${RDINFRA}/tf-a/include/lib/el3_runtime/aarch64 -I ${RDINFRA}/tf-a/include/plat/arm/common/aarch64 -I ${RDINFRA}/tf-a/include/plat/arm/css/common/aarch64 -I ${RDINFRA}/tf-a/plat/arm/board/neoverse_rd/platform/rdv3/include/  -I ${RDINFRA}/tf-a/include/lib/libc -I ${RDINFRA}/tf-a/include/lib/libc/aarch64  -I ${RDINFRA}/tf-a/include/lib/libfdt
 #${RDINFRA}/tf-a/plat/arm/css/sgi/include

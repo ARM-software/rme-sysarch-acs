@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022-2024, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -31,6 +31,7 @@
   #define IOVIRT_INFO_TBL_SZ     32768/*Supports maximum 240 nodes of a typical iort table*/
   #define PERIPHERAL_INFO_TBL_SZ 1024 /*Supports maximum 20 PCIe EPs (USB and SATA controllers only) */
   #define PCIE_INFO_TBL_SZ       512  /*Supports maximum 20 RC's*/
+  #define REGISTER_INFO_TBL_SZ   512  /*Supports maximum 128 register regions */
 
   #ifdef _AARCH64_BUILD_
   unsigned long __stack_chk_guard = 0xBAAAAAAD;

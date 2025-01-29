@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022, 2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -84,7 +84,11 @@ addr_t
 val_get_gicd_base(void);
 
 addr_t
-val_get_gicr_base(uint32_t *rdbase_len);
+val_gic_get_pe_rdbase(uint64_t mpidr);
+
+addr_t
+val_get_gicr_base(uint32_t *rdbase_len, uint32_t gicr_rd_index);
+
 
 addr_t
 val_get_gich_base(void);
@@ -107,4 +111,5 @@ val_gic_is_valid_espi(uint32_t int_id);
 uint32_t
 val_gic_is_valid_eppi(uint32_t int_id);
 
+uint32_t val_gic_is_valid_ppi(uint32_t int_id);
 #endif

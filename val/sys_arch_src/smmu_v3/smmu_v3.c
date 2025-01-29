@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022-2023, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2023, 2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -982,7 +982,7 @@ uint32_t smmu_init(smmu_dev_t *smmu)
 **/
 void val_smmu_stop(void)
 {
-    int i;
+    uint32_t i;
     smmu_dev_t *smmu;
 
     for (i = 0; i < g_num_smmus; i++)
@@ -1004,7 +1004,7 @@ void val_smmu_stop(void)
 **/
 uint32_t val_smmu_init(void)
 {
-    int i;
+    uint32_t i;
 
     g_num_smmus = val_iovirt_get_smmu_info(SMMU_NUM_CTRL, 0);
     if (g_num_smmus == 0)

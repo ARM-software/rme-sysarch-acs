@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022-2024, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,12 +19,10 @@
 #include "val/include/rme_acs_pe.h"
 #include "val/include/rme_acs_val.h"
 #include "val/include/rme_acs_memory.h"
-#include "platform/pal_baremetal/FVP/include/platform_override_fvp.h"
 #include "RmeAcs.h"
 
 uint32_t  g_enable_pcie_tests;
 uint32_t  g_print_level;
-uint32_t  g_execute_nist;
 uint32_t  g_print_mmio;
 uint32_t  g_curr_module;
 uint32_t  g_enable_module;
@@ -34,10 +32,10 @@ uint32_t  g_rme_tests_fail;
 uint64_t  g_stack_pointer;
 uint64_t  g_exception_ret_addr;
 uint64_t  g_ret_addr;
-uint32_t  g_skip_test_num[MAX_TEST_SKIP_NUM] = {10000, 10000, 10000, 10000, 10000,
-                                                 10000, 10000, 10000, 10000, 10000};
-uint32_t  g_single_test = SINGLE_TEST_SENTINEL;
-uint32_t  g_single_module = SINGLE_MODULE_SENTINEL;
+
+extern uint32_t g_skip_test_num[];
+extern uint32_t g_single_test;
+extern uint32_t g_single_module;
 
 uint32_t
 createPeInfoTable(
@@ -102,11 +100,17 @@ createPcieVirtInfoTable(
 {
   uint64_t   *PcieInfoTable;
   uint64_t   *IoVirtInfoTable;
+  uint64_t   *RegisterInfoTable;
 
   PcieInfoTable = val_aligned_alloc(SIZE_4K, sizeof(PCIE_INFO_TABLE)
                   + (PLATFORM_OVERRIDE_NUM_ECAM * sizeof(PCIE_INFO_BLOCK)));
 
   val_pcie_create_info_table(PcieInfoTable);
+
+  RegisterInfoTable = val_aligned_alloc(SIZE_4K, sizeof(REGISTER_INFO_TABLE)
+                  + (PLATFORM_OVERRIDE_RP_REG_NUM_ENTRIES * sizeof(REGISTER_INFO_TABLE)));
+
+  val_register_create_info_table(RegisterInfoTable);
 
   IoVirtInfoTable = val_aligned_alloc(SIZE_4K, sizeof(IOVIRT_INFO_TABLE)
                     + ((NUM_ITS_COUNT + IOVIRT_SMMUV3_COUNT + IOVIRT_RC_COUNT
@@ -168,8 +172,16 @@ ShellAppMainrme(
       g_print_level = ACS_PRINT_ERR;
   }
 
+#ifdef TARGET_BM_BOOT
+  /* Write page tables */
+  if (val_setup_mmu())
+      return ACS_STATUS_FAIL;
 
-  g_execute_nist = FALSE;
+  /* Enable Stage-1 MMU */
+  if (val_enable_mmu())
+      return ACS_STATUS_FAIL;
+#endif
+
   g_print_mmio = FALSE;
   g_enable_pcie_tests = 1;
 
@@ -181,7 +193,7 @@ ShellAppMainrme(
   g_rme_tests_fail  = 0;
 
   val_print(g_print_level, "\n\n RME Architecture Compliance Suite \n", 0);
-  val_print(g_print_level, "    Version: Issue B.a ACS BETA  \n", 0);
+  val_print(g_print_level, "    Version: Issue B.a ACS EAC   \n", 0);
 
   val_print(g_print_level, " (Print level is %2d)\n\n", g_print_level);
 
@@ -212,6 +224,11 @@ ShellAppMainrme(
   */
   configureGicIts();
 
+  /* Configure SMMUs, PCIe and Exerciser tables required for the ACS */
+  Status = val_configure_acs();
+  if (Status)
+    return Status;
+
   val_print(ACS_PRINT_TEST, "\n  *** Starting RME tests ***  \n", 0);
   Status |= val_rme_execute_tests(val_pe_get_num());
 
@@ -224,6 +241,8 @@ ShellAppMainrme(
   val_print(ACS_PRINT_TEST, "\n   *** Starting IO Virtualization tests ***      \n", 0);
   Status |= val_smmu_execute_tests(val_pe_get_num());
 
+  val_print(ACS_PRINT_TEST, "\n      *** Starting RME DA tests ***  \n", 0);
+  Status = val_rme_da_execute_tests(val_pe_get_num());
 
 print_test_status:
   val_print(ACS_PRINT_TEST, "\n     ------------------------------------------------------- \n", 0);
@@ -237,6 +256,7 @@ print_test_status:
   val_print(g_print_level, "\n      *** RME tests complete. Reset the system. *** \n\n", 0);
 
   val_pe_context_restore(AA64WriteSp(g_stack_pointer));
+  while (1);
 
   return 0;
 }

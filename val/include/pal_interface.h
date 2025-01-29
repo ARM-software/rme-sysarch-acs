@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022-2024, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,6 +22,39 @@
 #include <linux/slab.h>
 #endif
 
+#if TARGET_BM_BOOT
+
+#include "platform_override_fvp.h"
+
+  #define VAL_TG0_4K      0x0
+  #define VAL_TG0_64K     0x1
+  #define VAL_TG0_16K     0x2
+
+  #define PAGE_SIZE_4K    0x1000
+  #define PAGE_SIZE_16K   (4 * 0x1000)
+  #define PAGE_SIZE_64K   (16 * 0x1000)
+  #define PAGE_BITS_4K    12
+  #define PAGE_BITS_16K   14
+  #define PAGE_BITS_64K   16
+
+  #if (PLATFORM_PAGE_SIZE == PAGE_SIZE_4K)
+    #define PAGE_ALIGNMENT      PAGE_SIZE_4K
+    #define PAGE_SIZE           PAGE_SIZE_4K
+    #define TCR_TG0             VAL_TG0_4K
+  #elif (PLATFORM_PAGE_SIZE == PAGE_SIZE_16K)
+    #define PAGE_ALIGNMENT      PAGE_SIZE_16K
+    #define PAGE_SIZE           PAGE_SIZE_16K
+    #define TCR_TG0             VAL_TG0_16K
+  #elif (PLATFORM_PAGE_SIZE == PAGE_SIZE_64K)
+    #define PAGE_ALIGNMENT      PAGE_SIZE_64K
+    #define PAGE_SIZE           PAGE_SIZE_64K
+    #define TCR_TG0             VAL_TG0_64K
+  #endif
+
+  #define MMU_PGT_IAS      PLATFORM_OVERRIDE_MMU_PGT_IAS
+  #define MMU_PGT_OAS      PLATFORM_OVERRIDE_MMU_PGT_OAS
+#endif
+
 #ifdef TARGET_LINUX
   typedef char          char8_t;
   typedef long long int addr_t;
@@ -37,6 +70,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <stddef.h>
+#include "../platform/pal_baremetal/FVP/include/platform_override_fvp.h"
   typedef uint64_t addr_t;
   typedef char     char8_t;
   typedef uint64_t dma_addr_t;
@@ -45,9 +79,9 @@
 #define TIMEOUT_MEDIUM   PLATFORM_OVERRIDE_TIMEOUT_MEDIUM
 #define TIMEOUT_SMALL    PLATFORM_OVERRIDE_TIMEOUT_SMALL
 
-#define PCIE_MAX_BUS    PLATFORM_OVERRIDE_PCIE_MAX_BUS
-#define PCIE_MAX_DEV    PLATFORM_OVERRIDE_PCIE_MAX_DEV
-#define PCIE_MAX_FUNC   PLATFORM_OVERRIDE_PCIE_MAX_FUNC
+#define PCIE_MAX_BUS    PLATFORM_BM_OVERRIDE_PCIE_MAX_BUS
+#define PCIE_MAX_DEV    PLATFORM_BM_OVERRIDE_PCIE_MAX_DEV
+#define PCIE_MAX_FUNC   PLATFORM_BM_OVERRIDE_PCIE_MAX_FUNC
 
 #else
   typedef INT8   int8_t;
@@ -156,6 +190,8 @@ typedef struct {
 void pal_pe_call_smc(ARM_SMC_ARGS *args, int32_t conduit);
 void pal_pe_execute_payload(ARM_SMC_ARGS *args);
 uint32_t pal_pe_install_esr(uint32_t exception_type, void (*esr)(uint64_t, void *));
+uint32_t pal_get_cpu_count(void);
+uint64_t *pal_get_phy_mpidr_list_base(void);
 /* ********** PE INFO END **********/
 
 
@@ -393,6 +429,7 @@ typedef struct {
 } IOVIRT_BLOCK;
 
 #define IOVIRT_NEXT_BLOCK(b) (IOVIRT_BLOCK *)((uint8_t *)(&b->data_map[0]) + b->num_data_map * sizeof(NODE_DATA_MAP))
+#define ALIGN_MEMORY(b, bound) (IOVIRT_BLOCK *) (((uint64_t)b + bound - 1) & (~(bound - 1)))
 #define IOVIRT_CCA_MASK ~((uint32_t)0)
 
 typedef struct {
@@ -550,6 +587,7 @@ uint32_t pal_device_unlock(uint32_t bdf);
 
 /* Common Definitions */
 void     pal_print(char8_t *string, uint64_t data);
+void     pal_uart_print(int log, const char *fmt, ...);
 void     pal_print_raw(uint64_t addr, char8_t *string, uint64_t data);
 uint32_t pal_strncmp(char8_t *str1, char8_t *str2, uint32_t len);
 void    *pal_memcpy(void *dest_buffer, void *src_buffer, uint32_t len);
@@ -562,6 +600,9 @@ void     pal_mem_set(void *buf, uint32_t size, uint8_t value);
 void     pal_mem_free_cacheable(uint32_t bdf, unsigned int size, void *va, void *pa);
 void    *pal_mem_virt_to_phys(void *va);
 void    *pal_mem_phys_to_virt(uint64_t pa);
+void     pal_mmu_add_mmap(void);
+void    *pal_mmu_get_mmap_list(void);
+uint32_t pal_mmu_get_mapping_count(void);
 
 uint64_t pal_time_delay_ms(uint64_t time_ms);
 void     pal_mem_allocate_shared(uint32_t num_pe, uint32_t sizeofentry);
@@ -738,7 +779,26 @@ uint32_t pal_exerciser_get_state(EXERCISER_STATE *state, uint32_t bdf);
 uint32_t pal_exerciser_ops(EXERCISER_OPS ops, uint64_t param, uint32_t instance);
 uint32_t pal_exerciser_get_data(EXERCISER_DATA_TYPE type, exerciser_data_t *data, uint32_t bdf, uint64_t ecam);
 
+typedef enum {
+  RMSD_WRITE_PROTECT = 0,
+  RMSD_FULL_PROTECT = 1,
+  RMSD_PROTECT = 2
+} RMSD_SECURITY_PROPERTY;
 
-uint32_t pal_nist_generate_rng(uint32_t *rng_buffer);
+typedef enum {
+  PCIE_RP = 0,
+  INTERCONNECT = 1
+} REGISTER_TYPE;
+
+typedef struct {
+  uint32_t type;
+  uint32_t bdf;
+  uint64_t address;
+  uint32_t property;
+} REGISTER_INFO_TABLE;
+
+uint32_t pal_register_get_num_entries(void);
+void pal_register_create_info_table(REGISTER_INFO_TABLE *registerInfoTable);
+
 #endif
 

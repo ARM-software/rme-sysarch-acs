@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022, 2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -42,6 +42,19 @@
 #define PGT_STAGE1_AP_RW (0x1ull << 6)
 #define PGT_STAGE2_AP_RO (0x1ull << 6)
 #define PGT_STAGE2_AP_RW (0x3ull << 6)
+
+#define PGT_LEVEL_0   0
+#define PGT_LEVEL_1   1
+#define PGT_LEVEL_2   2
+#define PGT_LEVEL_3   3
+
+#define MAX_ENTRIES_4K      512L
+#define MAX_ENTRIES_16K     2048L
+#define MAX_ENTRIES_64K     8192L
+
+#define PAGE_SIZE_4K        0x1000
+#define PAGE_SIZE_16K       (4 * 0x1000)
+#define PAGE_SIZE_64K       (16 * 0x1000)
 
 uint32_t val_pgt_create(memory_region_descriptor_t *mem_desc, pgt_descriptor_t *pgt_desc);
 void val_pgt_destroy(pgt_descriptor_t pgt_desc);

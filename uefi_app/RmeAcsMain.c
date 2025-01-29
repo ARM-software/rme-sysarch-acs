@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022-2024, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -34,7 +34,6 @@ UINT32 g_pcie_p2p;
 UINT32 g_pcie_cache_present;
 
 UINT32  g_print_level;
-UINT32  g_execute_nist;
 UINT32 g_print_mmio;
 UINT32 g_curr_module;
 UINT32 g_enable_module;
@@ -152,6 +151,7 @@ createPcieVirtInfoTable(
 {
   UINT64   *PcieInfoTable;
   UINT64   *IoVirtInfoTable;
+  UINT64   *RegisterInfoTable;
 
   EFI_STATUS Status;
 
@@ -165,6 +165,19 @@ createPcieVirtInfoTable(
     return Status;
   }
   val_pcie_create_info_table(PcieInfoTable);
+
+  Status = gBS->AllocatePool (EfiBootServicesData,
+                              REGISTER_INFO_TBL_SZ,
+                              (VOID **) &RegisterInfoTable);
+
+  if (EFI_ERROR(Status))
+  {
+    Print(L"Allocate Pool failed %x \n", Status);
+    return Status;
+  }
+
+  val_register_create_info_table(RegisterInfoTable);
+
 
   Status = gBS->AllocatePool (EfiBootServicesData,
                               IOVIRT_INFO_TBL_SZ,
@@ -220,8 +233,8 @@ HelpMsg (
   VOID
   )
 {
-  Print (L"\nUsage: Rme.efi [-v <n>] | [-l <n>] | [-f <filename>] | [-skip <n>] | [-nist] | [-p <n>] | [-t <n>] | [-m <n>]\n"
-         "[-skip <n>] | [-nist] | [-p <n>]\n"
+  Print (L"\nUsage: Rme.efi [-v <n>] | [-l <n>] | [-f <filename>] | [-skip <n>] | [-p <n>] | [-t <n>] | [-m <n>]\n"
+         "[-skip <n>] | [-p <n>]\n"
          "Options:\n"
          "-v      Verbosity of the Prints\n"
          "        1 shows all prints, 5 shows Errors\n"
@@ -237,7 +250,6 @@ HelpMsg (
          "        Refer to section 4 of RME_ACS_User_Guide\n"
          "        To skip a module, use Model_ID as mentioned in user guide\n"
          "        To skip a particular test within a module, use the exact testcase number\n"
-         "-nist   Enable the NIST Statistical test suite\n"
          "-p      Enable/disable PCIe RME 6.0 (RCiEP) compliance tests\n"
          "        1 - enables PCIe tests, 0 - disables PCIe tests\n"
          "-t      If set, will only run the specified test, all others will be skipped.\n"
@@ -256,7 +268,6 @@ STATIC CONST SHELL_PARAM_ITEM ParamList[] = {
   {L"-skip" , TypeValue},    // -skip # test(s) to skip execution
   {L"-help" , TypeFlag},     // -help # help : info about commands
   {L"-h"    , TypeFlag},     // -h    # help : info about commands
-  {L"-nist" , TypeFlag},     // -nist # Binary Flag to enable the execution of NIST STS
   {L"-p"    , TypeValue},    // -p    # Enable/disable PCIe RME 6.0 (RCiEP) compliance tests.
   {L"-mmio" , TypeFlag},     // -mmio # Enable pal_mmio prints
   {L"-t"    , TypeValue},    // -t    # Test to be run
@@ -363,13 +374,6 @@ ShellAppMainrme (
      return 0;
   }
 
-  // Options with Flags
-  if (ShellCommandLineGetFlag (ParamPackage, L"-nist")) {
-    g_execute_nist = TRUE;
-  } else {
-    g_execute_nist = FALSE;
-  }
-
   if (ShellCommandLineGetFlag (ParamPackage, L"-mmio")) {
     g_print_mmio = TRUE;
   } else {
@@ -409,7 +413,7 @@ ShellAppMainrme (
   g_rme_tests_fail  = 0;
 
   Print(L"\n\n RME Architecture Compliance Suite \n");
-  Print(L"    Version: Issue B.a ACS BETA  \n");
+  Print(L"    Version: Issue B.a ACS EAC   \n");
 
   Print(L"\n Starting tests for (Print level is %2d)\n\n", g_print_level);
 
@@ -445,9 +449,6 @@ ShellAppMainrme (
   if (Status)
     return Status;
 
-  Print(L"\n      *** Starting RME DA tests ***  \n");
-  Status = val_rme_da_execute_tests(val_pe_get_num());
-
   Print(L"\n      *** Starting RME tests ***  \n");
   Status |= val_rme_execute_tests(val_pe_get_num());
 
@@ -459,6 +460,9 @@ ShellAppMainrme (
 
   Print(L"\n      *** Starting IO Virtualization tests ***  \n");
   Status |= val_smmu_execute_tests(val_pe_get_num());
+
+  Print(L"\n      *** Starting RME DA tests ***  \n");
+  Status = val_rme_da_execute_tests(val_pe_get_num());
 
 print_test_status:
   val_print(ACS_PRINT_TEST, "\n     ------------------------------------------------------- \n", 0);
@@ -480,10 +484,9 @@ print_test_status:
   return(0);
 }
 
-#ifndef ENABLE_NIST
 /***
   RME Compliance Suite Entry Point. This function is to
-  support compilation of RME without NIST changes in edk2
+  support compilation of RME changes in edk2
 
   Call the Entry points of individual modules.
 
@@ -499,4 +502,3 @@ ShellAppMain(
 {
  return ShellAppMainrme(Argc, Argv);
 }
-#endif

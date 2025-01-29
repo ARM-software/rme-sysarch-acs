@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022-2023, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2023, 2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -49,7 +49,7 @@ pal_exerciser_get_ecam(uint32_t bdf)
     }
     i++;
   }
-  print(ACS_PRINT_ERR, "\n No ECAM base ",0);
+  print(ACS_PRINT_ERR, "\n No ECAM base ");
   return 0;
 }
 
@@ -85,7 +85,6 @@ pal_exerciser_get_pcie_config_offset(uint32_t Bdf)
 uint32_t
 pal_is_bdf_exerciser(uint32_t bdf)
 {
-  #ifdef ENABLE_OOB
   uint64_t Ecam;
   uint32_t vendor_dev_id;
   Ecam = pal_pcie_get_mcfg_ecam();
@@ -95,8 +94,6 @@ pal_is_bdf_exerciser(uint32_t bdf)
      return 1;
   else
      return 0;
-  #endif
-  return 0;
 }
 
 /**
@@ -109,11 +106,19 @@ pal_is_bdf_exerciser(uint32_t bdf)
 **/
 uint32_t pal_exerciser_set_param(EXERCISER_PARAM_TYPE Type, uint64_t Value1, uint64_t Value2, uint32_t Bdf)
 {
-  #ifdef ENABLE_OOB
+ /* Below code is not applicable for Bare-metal
+  * Only for FVP OOB experience
+  */
+
   uint32_t Data;
+  uint32_t CapabilityOffset = 0;
   uint64_t Base;
+  uint64_t Ecam;
+  uint32_t bdf;
 
   Base = pal_exerciser_get_ecsr_base(Bdf,0);
+  Ecam = pal_exerciser_get_ecam(Bdf);
+
   switch (Type) {
 
       case SNOOP_ATTRIBUTES:
@@ -141,7 +146,7 @@ uint32_t pal_exerciser_set_param(EXERCISER_PARAM_TYPE Type, uint64_t Value1, uin
           return 0;
 
       case CFG_TXN_ATTRIBUTES:
-           switch (Value1) {
+          switch (Value1) {
 
             case TXN_REQ_ID:
                 /* Change Requester ID for DMA Transaction.*/
@@ -160,6 +165,7 @@ uint32_t pal_exerciser_set_param(EXERCISER_PARAM_TYPE Type, uint64_t Value1, uin
                         pal_mmio_write(Base + RID_CTL_REG, 0);
                         return 0;
                 }
+                return 0;
             case TXN_ADDR_TYPE:
                 /* Change Address Type for DMA Transaction.*/
                 switch (Value2)
@@ -181,12 +187,49 @@ uint32_t pal_exerciser_set_param(EXERCISER_PARAM_TYPE Type, uint64_t Value1, uin
             default:
                 return 1;
           }
+
+     case ERROR_INJECT_TYPE:
+        pal_exerciser_find_pcie_capability(DVSEC, Bdf, PCIE, &CapabilityOffset);
+        Data = pal_mmio_read(Ecam + CapabilityOffset +
+                             pal_exerciser_get_pcie_config_offset(Bdf) + DVSEC_CTRL);
+        Data = ((Value1 << ERR_CODE_SHIFT) | (Value2 << FATAL_SHIFT));
+        pal_mmio_write(Ecam + CapabilityOffset + DVSEC_CTRL +
+                             pal_exerciser_get_pcie_config_offset(Bdf), Data);
+        if (Value1 <= 0x7)
+                return 2;
+        else
+                return 3;
+
+      case ENABLE_POISON_MODE:
+        pal_exerciser_find_pcie_capability(DVSEC, Bdf, PCIE, &CapabilityOffset);
+        Data = pal_mmio_read(Ecam + CapabilityOffset +
+                             pal_exerciser_get_pcie_config_offset(Bdf) + DVSEC_CTRL);
+        Data = Data | (1 << 18);
+        pal_mmio_write(Ecam + CapabilityOffset + DVSEC_CTRL +
+                             pal_exerciser_get_pcie_config_offset(Bdf), Data);
+        return 0;
+
+      case ENABLE_RAS_CTRL:
+        bdf = (uint32_t)Value2;
+        Base = pal_exerciser_get_ecsr_base(bdf, 0);
+        Base = Base & BAR64_MASK;
+        pal_mmio_write((Base + RAS_OFFSET + CTRL_OFFSET), 0x1);
+        return 0;
+
+      case DISABLE_POISON_MODE:
+        pal_exerciser_find_pcie_capability(DVSEC, Bdf, PCIE, &CapabilityOffset);
+        Data = pal_mmio_read(Ecam + CapabilityOffset +
+                             pal_exerciser_get_pcie_config_offset(Bdf) + DVSEC_CTRL);
+        Data = Data & (0 << 18);
+        pal_mmio_write(Ecam + CapabilityOffset + DVSEC_CTRL +
+                             pal_exerciser_get_pcie_config_offset(Bdf), Data);
+        return 0;
+
       default:
           return 1;
   }
-  #endif
 
- return 1;
+  return 1;
 }
 
 /**
@@ -194,7 +237,6 @@ uint32_t pal_exerciser_set_param(EXERCISER_PARAM_TYPE Type, uint64_t Value1, uin
 **/
 uint32_t pal_exerciser_start_dma_direction (uint64_t Base, EXERCISER_DMA_ATTR Direction)
 {
-  #ifdef ENABLE_OOB
 
     uint32_t Mask;
     uint32_t Status;
@@ -215,10 +257,6 @@ uint32_t pal_exerciser_start_dma_direction (uint64_t Base, EXERCISER_DMA_ATTR Di
    // Reading the Status of the DMA
    Status = (pal_mmio_read(Base + DMASTATUS) & ((MASK_BIT << 1) | MASK_BIT));
    return Status;
-
-  #endif
-
-  return 0;
 }
 
 
@@ -273,7 +311,6 @@ uint32_t pal_exerciser_find_pcie_capability (uint32_t ID, uint32_t Bdf, uint32_t
 **/
 uint32_t pal_exerciser_get_param(EXERCISER_PARAM_TYPE Type, uint64_t *Value1, uint64_t *Value2, uint32_t Bdf)
 {
-  #ifdef ENABLE_OOB
   uint32_t Status;
   uint32_t Temp;
   uint64_t Base;
@@ -306,9 +343,6 @@ uint32_t pal_exerciser_get_param(EXERCISER_PARAM_TYPE Type, uint64_t *Value1, ui
       default:
           return 1;
   }
-
-  #endif
-  return 0;
 }
 
 /**
@@ -319,14 +353,11 @@ uint32_t pal_exerciser_get_param(EXERCISER_PARAM_TYPE Type, uint64_t *Value1, ui
 **/
 uint32_t pal_exerciser_get_state(EXERCISER_STATE *State, uint32_t Bdf)
 {
-  #ifdef ENABLE_OOB
    /* Below code is not applicable for Bare-metal
     * Only for FVP OOB experience
     */
-
+    (void) Bdf;
     *State = EXERCISER_ON;
-    return 0;
-  #endif
     return 0;
 }
 
@@ -339,7 +370,6 @@ uint32_t pal_exerciser_get_state(EXERCISER_STATE *State, uint32_t Bdf)
 **/
 uint32_t pal_exerciser_ops(EXERCISER_OPS Ops, uint64_t Param, uint32_t Bdf)
 {
-  #ifdef ENABLE_OOB
   uint64_t Base;
   uint64_t Ecam;
   uint32_t CapabilityOffset;
@@ -421,10 +451,18 @@ uint32_t pal_exerciser_ops(EXERCISER_OPS Ops, uint64_t Param, uint32_t Bdf)
         pal_mmio_write(Base + ATSCTL, ATS_TRIGGER);
         return !(pal_mmio_read(Base + ATSCTL) & ATS_STATUS);
 
+    case INJECT_ERROR:
+        pal_exerciser_find_pcie_capability(DVSEC, Bdf, PCIE, &CapabilityOffset);
+        data = pal_mmio_read(Ecam + pal_exerciser_get_pcie_config_offset(Bdf) +
+                             CapabilityOffset + DVSEC_CTRL);
+        data = data | (1 << ERROR_INJECT_BIT);
+        pal_mmio_write(Ecam + pal_exerciser_get_pcie_config_offset(Bdf) + CapabilityOffset +
+                       DVSEC_CTRL, data);
+        return Param;
+
     default:
         return PCIE_CAP_NOT_FOUND;
   }
-  #endif
   return 1;
 }
 
@@ -437,6 +475,9 @@ uint32_t pal_exerciser_ops(EXERCISER_OPS Ops, uint64_t Param, uint32_t Bdf)
 **/
 uint32_t pal_exerciser_set_state (EXERCISER_STATE State, uint64_t *Value, uint32_t Instance)
 {
+    (void) State;
+    (void) Value;
+    (void) Instance;
     return 0;
 }
 
@@ -449,7 +490,6 @@ uint32_t pal_exerciser_set_state (EXERCISER_STATE State, uint64_t *Value, uint32
 **/
 uint32_t pal_exerciser_get_data(EXERCISER_DATA_TYPE Type, exerciser_data_t *Data, uint32_t Bdf, uint64_t Ecam)
 {
-  #ifdef ENABLE_OOB
  /* Below code is not applicable for Bare-metal
   * Only for FVP OOB experience
   */
@@ -515,6 +555,4 @@ uint32_t pal_exerciser_get_data(EXERCISER_DATA_TYPE Type, exerciser_data_t *Data
       default:
           return 1;
     }
-  #endif
-  return NOT_IMPLEMENTED;
 }

@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022, 2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,6 +19,7 @@
 #include "include/rme_acs_pe.h"
 #include "gic_v3.h"
 #include "gic_v2.h"
+#include "../gic.h"
 
 /**
   @brief  Initializes the GIC
@@ -132,15 +133,21 @@ val_rme_gic_max_espi_val(void)
 {
   uint32_t gic_version;
   uint32_t espi_range;
+  uint32_t max_espi_val = 0;
 
   gic_version = val_gic_get_info(GIC_INFO_VERSION);
   if (gic_version >= 3) {
       espi_range = (v3_read_gicdTyper() >> GICD_TYPER_ESPI_RANGE_SHIFT) &
                                                                     GICD_TYPER_ESPI_RANGE_MASK;
-      return (32 * (espi_range + 1) + 4095);
+      max_espi_val = (32 * (espi_range + 1) + 4095);
+
+      val_print(ACS_PRINT_INFO, "\n    max ESPI value %d  ", max_espi_val);
+      return max_espi_val;
   }
-  else
+  else {
+      val_print(ACS_PRINT_INFO, "\n    max ESPI value %d  ", max_espi_val);
       return 0;
+  }
 }
 
 
@@ -228,3 +235,18 @@ val_rme_gic_check_eppi_interrupt(uint32_t int_id)
   else
     return 0;
 }
+
+/**
+  @brief  API used to check whether int_id is a ppi interrupt
+  @param  interrupt
+  @return 1: ppi interrupt
+**/
+uint32_t
+val_rme_gic_check_ppi(uint32_t int_id)
+{
+  if ((val_rme_gic_eppi_support() && v3_is_extended_ppi(int_id)) || (int_id > 15 && int_id < 32))
+    return 1;
+  else
+    return 0;
+}
+

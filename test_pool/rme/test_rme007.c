@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022-2023, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -44,13 +44,13 @@ void payload(void)
   num_regn = mem_region_cfg.header.num_of_regn_gpc;
   status_fail_cnt = 0;
 
-  for (int regn_cnt = 0; regn_cnt < num_regn; ++regn_cnt) {
+  for (uint32_t regn_cnt = 0; regn_cnt < num_regn; ++regn_cnt) {
 
     Base_Addr = mem_region_cfg.regn_info[regn_cnt].base_addr;
     region_size = mem_region_cfg.regn_info[regn_cnt].regn_size;
     Top_Addr = Base_Addr + region_size - 1;
 
-    for (int cmpr_regn_cnt = regn_cnt + 1; cmpr_regn_cnt < num_regn; ++cmpr_regn_cnt)
+    for (uint32_t cmpr_regn_cnt = regn_cnt + 1; cmpr_regn_cnt < num_regn; ++cmpr_regn_cnt)
     {
 
       Base_Addr_cmpr = mem_region_cfg.regn_info[cmpr_regn_cnt].base_addr;

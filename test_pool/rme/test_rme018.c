@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2023-2024, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2023-2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -74,7 +74,7 @@ void payload2(void)
  * 6. Read the status form PE2 in PE1 and set the result status.
 **/
 static
-void payload1(uint32_t num_pe)
+void payload1(void)
 {
   uint32_t my_index = val_pe_get_index_mpid(val_pe_get_mpid());
   uint32_t timeout, sec_index;
@@ -149,7 +149,7 @@ rme018_entry(uint32_t num_pe)
   status = val_initialize_test(TEST_NUM, TEST_DESC, num_pe, TEST_RULE);
 
   if (status != ACS_STATUS_SKIP)
-      payload1(num_pe);
+      payload1();
 
   status = val_check_for_error(TEST_NUM, num_pe, TEST_RULE);
 

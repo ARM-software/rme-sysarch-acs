@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022-2024, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -90,6 +90,7 @@
 #ifndef __ASSEMBLER__
 
 #include <stdbool.h>
+#include <string.h>
 #include <stdint.h>
 #include "pal_el3/pal_el3_print.h"
 #include "pal_el3/acs_el3.h"
@@ -150,6 +151,22 @@ typedef struct {
   TCR_EL3_INFO tcr;
 } pgt_descriptor_t;
 
+/* SMMU Realm Defines */
+#define SMMU_IDR5_OFFSET 0x14
+#define SMMU_IAS_MAX     40
+#define SMMU_OAS_MAX_IDX 7
+
+typedef struct {
+    uint32_t smmu_index;
+    uint32_t streamid;
+    uint32_t substreamid;
+    uint32_t ssid_bits;
+    uint32_t stage2;
+    uint32_t bypass;
+} smmu_master_attributes_t;
+
+uint32_t val_smmu_init(uint32_t num_smmu);
+uint32_t val_smmu_rlm_map(smmu_master_attributes_t master_attr, pgt_descriptor_t pgt_desc);
 void val_security_state_change(uint64_t attr_nse_ns);
 void set_daif(void);
 void val_pas_filter_active_mode(int enable);
@@ -212,7 +229,7 @@ uint32_t log2_page_size(uint64_t size);
 void acs_str(uint64_t *address, uint64_t data);
 void acs_ldr_pas_filter(uint64_t *address, uint64_t data);
 uint32_t val_get_pgt_attr_indx(uint64_t table_desc);
-void val_smmu_root_reg_chk(uint64_t reg_config);
+void val_smmu_root_config_service(uint64_t reg_config, uint32_t smmu_info);
 void val_get_tcr_info(TCR_EL3_INFO *tcr_el3);
 
 #endif //__ASSEMBLER__

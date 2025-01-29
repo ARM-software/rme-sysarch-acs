@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2023-2024, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2023-2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -58,7 +58,7 @@ void payload(void)
   VA = val_get_free_va(num_regn * size);
   attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(NON_SHAREABLE) | PGT_ENTRY_AP_RW);
 
-  for (int regn_cnt = 0; regn_cnt < num_regn; ++regn_cnt)
+  for (uint32_t regn_cnt = 0; regn_cnt < num_regn; ++regn_cnt)
   {
 
     shared_data->arg0 = mem_region_pas_filter_cfg.regn_info[regn_cnt].base_addr;

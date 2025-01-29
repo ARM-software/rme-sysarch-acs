@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022-2023, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,8 +20,10 @@
 
 #include <stdio.h>
 #include <stdint.h>
-#include <string.h>
-#include <stdlib.h>
+#include <platform_override_struct.h>
+
+typedef uintptr_t addr_t;
+typedef char     char8_t;
 
 extern uint32_t g_print_level;
 extern uint32_t g_print_mmio;
@@ -34,6 +36,16 @@ extern uint32_t g_enable_module;
 #define ACS_PRINT_DEBUG 2      /* For Debug statements. contains register dumps etc */
 #define ACS_PRINT_INFO  1      /* Print all statements. Do not use unless really needed */
 
+#define MEM_ALIGN_4K       0x1000
+#define MEM_ALIGN_8K       0x2000
+#define MEM_ALIGN_16K      0x4000
+#define MEM_ALIGN_32K      0x8000
+#define MEM_ALIGN_64K      0x10000
+
+#define MAX_TEST_SKIP_NUM      10
+#define SINGLE_TEST_SENTINEL   10000
+#define SINGLE_MODULE_SENTINEL 10001
+
 #define PCIE_EXTRACT_BDF_SEG(bdf)  ((bdf >> 24) & 0xFF)
 #define PCIE_EXTRACT_BDF_BUS(bdf)  ((bdf >> 16) & 0xFF)
 #define PCIE_EXTRACT_BDF_DEV(bdf)  ((bdf >> 8) & 0xFF)
@@ -45,10 +57,20 @@ extern uint32_t g_enable_module;
 #define PCIE_MAX_DEV   32
 #define PCIE_MAX_FUNC  8
 
+#ifdef TARGET_BM_BOOT
+void pal_uart_print(int log, const char *fmt, ...);
+void *mem_alloc(size_t alignment, size_t size);
+#define print(verbose, string, ...)  if(verbose >= g_print_level) \
+                                                   pal_uart_print(verbose, string, ##__VA_ARGS__)
+#else
 #define print(verbose, string, ...)  if(verbose >= g_print_level) \
                                                    printf(string, ##__VA_ARGS__)
+#endif
 
 #define PCIE_CREATE_BDF(Seg, Bus, Dev, Func) ((Seg << 24) | (Bus << 16) | (Dev << 8) | Func)
+#define PCIE_CREATE_BDF_PACKED(bdf)  PCIE_EXTRACT_BDF_FUNC(bdf) | \
+                                    (PCIE_EXTRACT_BDF_DEV(bdf) << 3) | \
+                                    (PCIE_EXTRACT_BDF_BUS(bdf) << 8)
 
 #define PCIE_SUCCESS            0x00000000  /* Operation completed successfully */
 #define PCIE_NO_MAPPING         0x10000001  /* A mapping to a Function does not exist */
@@ -62,6 +84,7 @@ extern uint32_t g_enable_module;
 #define REG_ACC_DATA         0x7
 
 #define BAR_MASK        0xFFFFFFF0
+#define BAR64_MASK      0xFFFFFFFFFFFFFFF0
 
 /* Class Code Masks */
 #define CC_SUB_MASK     0xFF   /* Sub Class */
@@ -117,6 +140,11 @@ extern uint32_t g_enable_module;
 #define DCAP2R_OFFSET  0x24
 #define DCTL2R_OFFSET  0x28
 
+/* RAS related Offset, shift and mask */
+#define RAS_OFFSET     0x10000
+#define CTRL_OFFSET    0x08
+#define STATUS_OFFSET  0x10
+
 /* PCIe capabilities reg shifts and masks */
 #define PCIECR_DPT_SHIFT 4
 #define PCIECR_DPT_MASK  0xf
@@ -125,6 +153,19 @@ extern uint32_t g_enable_module;
 #define PASID_NUM_SHIFT      8
 #define PASID_NUM_MASK       0x1f
 #define PER_FLAG_MSI_ENABLED 0x2
+
+/* DOE Capability Register */
+#define DOE_CAP_ID 0x002E
+
+#define DOE_CAP_REG                     0x4
+#define DOE_CTRL_REG                    0x8
+#define DOE_STATUS_REG                  0xC
+#define DOE_WRITE_DATA_MAILBOX_REG      0x10
+#define DOE_READ_DATA_MAILBOX_REG       0x14
+
+#define DOE_STATUS_REG_BUSY     0
+#define DOE_STATUS_REG_ERROR    2
+#define DOE_STATUS_REG_READY    31
 
 /* Device bitmask definitions */
 #define RCiEP    (1 << 0b1001)
@@ -141,6 +182,60 @@ extern uint32_t g_enable_module;
 #define INVALIDATE            0x3
 
 #define NOT_IMPLEMENTED       0x4B1D
+
+#define MEM_SIZE_64K              0x10000
+
+#define ATTR_NORMAL_NONCACHEABLE  (0x0ull << 2)
+#define ATTR_NORMAL_WB_WA_RA      (0x1ull << 2)
+#define ATTR_DEVICE               (0x2ull << 2)
+#define ATTR_NORMAL_WB            (0x1ull << 3)
+
+/* Stage 1 Inner and Outer Cacheability attribute encoding without TEX remap */
+#define ATTR_S1_NONCACHEABLE   (0x0ull << 2)
+#define ATTR_S1_WB_WA_RA       (0x1ull << 2)
+#define ATTR_S1_WT_RA          (0x2ull << 2)
+#define ATTR_S1_WB_RA          (0x3ull << 2)
+
+/* Stage 2 MemAttr[1:0] encoding for Normal memory */
+#define ATTR_S2_INNER_NONCACHEABLE   (0x1ull << 2)
+#define ATTR_S2_INNER_WT_CACHEABLE   (0x2ull << 2)
+#define ATTR_S2_INNER_WB_CACHEABLE   (0x3ull << 2)
+
+#define ATTR_NS   (0x1ull << 5)
+#define ATTR_S    (0x0ull << 5)
+
+#define ATTR_STAGE1_AP_RW    (0x1ull << 6)
+#define ATTR_STAGE2_AP_RW    (0x3ull << 6)
+#define ATTR_STAGE2_MASK     (0x3ull << 6 | 0x1ull << 4)
+#define ATTR_STAGE2_MASK_RO  (0x1ull << 6 | 0x1ull << 4)
+
+#define ATTR_NON_SHARED     (0x0ull << 8)
+#define ATTR_OUTER_SHARED   (0x2ull << 8)
+#define ATTR_INNER_SHARED   (0x3ull << 8)
+
+#define ATTR_AF     (0x1ull << 10)
+#define ATTR_nG     (0x1ull << 11)
+#define ATTR_UXN    (0x1ull << 54)
+#define ATTR_PXN    (0x1ull << 53)
+
+#define ATTR_PRIV_RW        (0x0ull << 6)
+#define ATTR_PRIV_RO        (0x2ull << 6)
+#define ATTR_USER_RW        (0x1ull << 6)
+#define ATTR_USER_RO        (0x3ull << 6)
+
+#define ATTR_CODE           (ATTR_S1_WB_WA_RA | ATTR_USER_RO | \
+                              ATTR_AF | ATTR_INNER_SHARED | ATTR_NS)
+#define ATTR_RO_DATA        (ATTR_S1_WB_WA_RA | ATTR_USER_RO | \
+                              ATTR_UXN | ATTR_PXN | ATTR_AF | \
+                              ATTR_INNER_SHARED | ATTR_NS)
+#define ATTR_RW_DATA        (ATTR_S1_WB_WA_RA | \
+                              ATTR_USER_RW | ATTR_UXN | ATTR_PXN | ATTR_AF \
+                              | ATTR_INNER_SHARED | ATTR_NS)
+#define ATTR_DEVICE_RW      (ATTR_DEVICE | ATTR_USER_RW | ATTR_UXN | \
+                              ATTR_PXN | ATTR_AF | ATTR_INNER_SHARED | ATTR_NS)
+#define ATTR_RW_DATA_NC      (ATTR_S1_NONCACHEABLE | \
+                              ATTR_USER_RW | ATTR_UXN | ATTR_PXN | ATTR_AF \
+                              | ATTR_INNER_SHARED | ATTR_NS)
 
 typedef struct {
   uint64_t   Arg0;
@@ -441,6 +536,13 @@ typedef union {
   ID_MAP map;
 }NODE_DATA_MAP;
 
+typedef struct {
+  uint64_t physical_address;
+  uint64_t virtual_address;
+  uint64_t length;
+  uint64_t attributes;
+} memory_region_descriptor_t;
+
 #define MAX_NAMED_COMP_LENGTH 256
 
 typedef union {
@@ -470,6 +572,8 @@ typedef struct {
 }IOVIRT_INFO_TABLE;
 
 #define IOVIRT_NEXT_BLOCK(b) (IOVIRT_BLOCK *)((uint8_t*)(&b->data_map[0]) + b->num_data_map * sizeof(NODE_DATA_MAP))
+#define ALIGN_MEMORY(b, bound) (IOVIRT_BLOCK *) (((uint64_t)b + bound - 1) & (~(bound - 1)))
+#define VAL_EXTRACT_BITS(data, start, end) ((data >> start) & ((1ul << (end-start+1))-1))
 #define IOVIRT_CCA_MASK ~((uint32_t)0)
 
 /**
@@ -510,7 +614,15 @@ typedef enum {
     P2P_ATTRIBUTES   = 0x5,
     PASID_ATTRIBUTES = 0x6,
     CFG_TXN_ATTRIBUTES = 0x7,
-    ATS_RES_ATTRIBUTES = 0x8
+    ATS_RES_ATTRIBUTES = 0x8,
+    TRANSACTION_TYPE  = 0x9,
+    NUM_TRANSACTIONS  = 0xA,
+    ADDRESS_ATTRIBUTES = 0xB,
+    DATA_ATTRIBUTES = 0xC,
+    ERROR_INJECT_TYPE = 0xD,
+    ENABLE_POISON_MODE = 0xE,
+    ENABLE_RAS_CTRL = 0xF,
+    DISABLE_POISON_MODE = 0x10
 } EXERCISER_PARAM_TYPE;
 
 typedef enum {
@@ -533,7 +645,24 @@ typedef enum {
     TXN_NO_SNOOP_DISABLE  = 0xa,
     START_TXN_MONITOR    = 0xb,
     STOP_TXN_MONITOR     = 0xc,
-    ATS_TXN_REQ          = 0xd
+    ATS_TXN_REQ          = 0xd,
+    INJECT_ERROR         = 0xe
 } EXERCISER_OPS;
+
+/* LibC functions declaration */
+
+int32_t pal_mem_compare(void *Src, void *Dest, uint32_t Len);
+void *pal_memcpy(void *DestinationBuffer, const void *SourceBuffer, uint32_t Length);
+void *pal_strncpy(void *DestinationStr, const void *SourceStr, uint32_t Length);
+uint32_t pal_strncmp(const char8_t *str1, const char8_t *str2, uint32_t len);
+void pal_mem_set(void *buf, uint32_t size, uint8_t value);
+
+/* TDISP SPDM calls */
+uint32_t pal_host_pcie_doe_recv_resp(uint32_t bdf, uint32_t *resp_addr, uint64_t *resp_len);
+uint32_t pal_write_doe_msgo_doe_mailbox(uint32_t bdf, uint32_t *request, uint64_t req_length);
+void pal_form_get_version_msg(uint32_t req_id, uint8_t *request, uint64_t *req_length);
+uint32_t pal_check_doe_response(uint32_t bdf);
+void pal_form_tdisp_lock_msg(uint32_t req_id, uint8_t *request, uint64_t *req_length);
+void pal_form_tdisp_get_state_msg(uint32_t req_id, uint8_t *request, uint64_t *req_length);
 
 #endif

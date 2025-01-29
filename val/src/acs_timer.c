@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022-2023, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2023, 2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -60,22 +60,27 @@ val_timer_get_info(TIMER_INFO_e info_type, uint64_t instance)
           val_platform_timer_get_entry_index(instance, &block_num, &block_index);
           if (block_num != 0xFFFF)
               return ((g_timer_info_table->gt_info[block_num].flags[block_index] >> 16) & 1);
+          break;
       case TIMER_INFO_SYS_CNTL_BASE:
           val_platform_timer_get_entry_index(instance, &block_num, &block_index);
           if (block_num != 0xFFFF)
               return g_timer_info_table->gt_info[block_num].block_cntl_base;
+          break;
       case TIMER_INFO_SYS_CNT_BASE_N:
           val_platform_timer_get_entry_index(instance, &block_num, &block_index);
           if (block_num != 0xFFFF)
               return g_timer_info_table->gt_info[block_num].GtCntBase[block_index];
+          break;
       case TIMER_INFO_FRAME_NUM:
           val_platform_timer_get_entry_index(instance, &block_num, &block_index);
           if (block_num != 0xFFFF)
               return g_timer_info_table->gt_info[block_num].frame_num[block_index];
+          break;
       case TIMER_INFO_SYS_INTID:
           val_platform_timer_get_entry_index(instance, &block_num, &block_index);
           if (block_num != 0xFFFF)
             return g_timer_info_table->gt_info[block_num].gsiv[block_index];
+          break;
       case TIMER_INFO_PHY_EL1_FLAGS:
           return g_timer_info_table->header.ns_el1_timer_flag;
       case TIMER_INFO_VIR_EL1_FLAGS:
@@ -87,6 +92,7 @@ val_timer_get_info(TIMER_INFO_e info_type, uint64_t instance)
     default:
       return 0;
   }
+  return 0;
 }
 
 void

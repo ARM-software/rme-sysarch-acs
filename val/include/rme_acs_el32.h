@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2023-2024, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2023-2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -31,7 +31,7 @@
 #define PAS_FILTER_SERVICE 0xD
 #define SMMU_ROOT_SERVICE 0xE
 #define SEC_STATE_CHANGE 0xF
-#define SMMU_ROOT_REG_CHK 0x10
+#define SMMU_CONFIG_SERVICE 0x10
 
 /* General Defines used by tests */
 #define INIT_DATA   0x11
@@ -49,6 +49,8 @@
 
 /* smmu root register configuration */
 #define SMMU_ROOT_RME_IMPL_CHK 0x1
+#define SMMU_RLM_PGT_INIT      0x2
+#define SMMU_RLM_SMMU_MAP      0x3
 
 /* Defines related to PGT attrinutes of an address */
 #define MAIR_REG_VAL_EL3  0x00000000004404ff
