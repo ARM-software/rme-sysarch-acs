@@ -43,6 +43,8 @@ void *val_aligned_alloc(uint32_t alignment, uint32_t size);
 void val_memory_free_aligned(void *addr);
 uint32_t val_memory_compare_src_el3(uint32_t *src, uint32_t *dest, uint32_t size);
 // NSEL2 MMU mem map APIs
+uint32_t val_setup_mmu(void);
+uint32_t val_enable_mmu(void);
 void val_mmu_add_mmap(void);
 void *val_mmu_get_mmap_list(void);
 uint32_t val_mmu_get_mapping_count(void);

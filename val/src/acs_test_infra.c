@@ -19,6 +19,7 @@
 #include "include/rme_acs_pe.h"
 #include "include/rme_acs_common.h"
 #include "include/val_interface.h"
+#include "include/rme_acs_iovirt.h"
 #include "include/mem_interface.h"
 #include "include/rme_acs_el32.h"
 #include "include/sys_config.h"

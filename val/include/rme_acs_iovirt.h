@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022, 2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,6 +17,29 @@
 
 #ifndef __RME_ACS_IOVIRT_H__
 #define __RME_ACS_IOVIRT_H__
+
+typedef enum {
+  SMMU_NUM_CTRL = 1,
+  SMMU_CTRL_BASE,
+  SMMU_CTRL_ARCH_MAJOR_REV,
+  SMMU_IOVIRT_BLOCK,
+  SMMU_SSID_BITS,
+  SMMU_IN_ADDR_SIZE,
+  SMMU_OUT_ADDR_SIZE
+} SMMU_INFO_e;
+
+typedef enum {
+  NUM_PCIE_RC = 1,
+  RC_SEGMENT_NUM,
+  RC_ATS_ATTRIBUTE,
+  RC_MEM_ATTRIBUTE,
+  RC_IOVIRT_BLOCK,
+  RC_SMMU_BASE
+} PCIE_RC_INFO_e;
+
+uint32_t val_iovirt_get_rc_smmu_index(uint32_t rc_seg_num, uint32_t rid);
+uint64_t val_smmu_get_info(SMMU_INFO_e type, uint32_t index);
+uint64_t val_iovirt_get_smmu_info(SMMU_INFO_e type, uint32_t index);
 
 uint64_t val_iovirt_get_smmu_info(SMMU_INFO_e type, uint32_t index);
 uint32_t val_iovirt_check_unique_ctx_intid(uint32_t smmu_index);

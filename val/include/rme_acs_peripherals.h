@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022-2023, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2023, 2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -31,5 +31,31 @@
 #define RME_UARTRIS   0x3C
 #define RME_UARTMIS   0x40
 #define RME_UARTICR   0x44
+
+typedef enum {
+  NUM_USB,
+  NUM_SATA,
+  NUM_UART,
+  NUM_ALL,
+  USB_BASE0,
+  USB_FLAGS,
+  USB_GSIV,
+  USB_BDF,
+  SATA_BASE0,
+  SATA_BASE1,
+  SATA_FLAGS,
+  SATA_GSIV,
+  SATA_BDF,
+  UART_BASE0,
+  UART_GSIV,
+  UART_FLAGS,
+  ANY_FLAGS,
+  ANY_GSIV,
+  ANY_BDF,
+  MAX_PASIDS
+} PERIPHERAL_INFO_e;
+
+uint64_t val_peripheral_get_info(PERIPHERAL_INFO_e info_type, uint32_t index);
+uint32_t val_peripheral_is_pcie(uint32_t bdf);
 
 #endif // __RME_ACS_PERIPHERAL_H__

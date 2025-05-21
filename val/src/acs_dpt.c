@@ -21,6 +21,7 @@
 #include "include/rme_acs_da.h"
 #include "include/rme_acs_dpt.h"
 #include "include/rme_acs_smmu.h"
+#include "include/rme_acs_iovirt.h"
 #include "include/sys_config.h"
 #include "include/rme_acs_memory.h"
 #include "include/mem_interface.h"

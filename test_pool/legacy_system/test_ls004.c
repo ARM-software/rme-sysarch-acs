@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2023, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2023-2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,6 +20,7 @@
 
 #include "val/include/rme_acs_pe.h"
 #include "val/include/rme_acs_smmu.h"
+#include "val/include/rme_acs_iovirt.h"
 #include "val/include/rme_acs_pcie.h"
 #include "val/include/rme_acs_el32.h"
 

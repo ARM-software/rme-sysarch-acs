@@ -391,10 +391,6 @@ void ArmCallWFI(void);
 
 void ArmExecuteMemoryBarrier(void);
 
-void SpeProgramUnderProfiling(uint64_t interval, uint64_t address);
-
-void DisableSpe(void);
-
 void val_pe_update_elr(void *context, uint64_t offset);
 
 uint64_t val_pe_get_esr(void *context);
@@ -418,6 +414,7 @@ void AA64WriteSctlr1(uint64_t write_data);
 void AA64WriteHcr(uint64_t write_data);
 void AA64WriteVttbr(uint64_t write_data);
 void AA64WriteVtcr(uint64_t write_data);
+
 
 #endif
 

@@ -166,6 +166,46 @@ uint32_t val_pcie_enable_tdisp(uint32_t bdf);
 uint32_t val_pcie_disable_tdisp(uint32_t bdf);
 void *val_register_table_ptr(void);
 uint32_t val_pcie_rp_sec_prpty_check(uint64_t *register_entry_info);
+/* PCIE VAL APIs */
+void val_pcie_enumerate(void);
+addr_t val_pcie_get_ecam_base(uint32_t rp_bdf);
+void *val_pcie_bdf_table_ptr(void);
+uint32_t val_pcie_get_max_bdf(void);
+uint32_t val_pcie_is_devicedma_64bit(uint32_t bdf);
+uint32_t val_pcie_device_driver_present(uint32_t bdf);
+uint32_t val_pcie_scan_bridge_devices_and_check_memtype(uint32_t bdf);
+void val_pcie_read_ext_cap_word(uint32_t bdf, uint32_t ext_cap_id, uint8_t offset, uint16_t *val);
+uint32_t val_pcie_get_pcie_type(uint32_t bdf);
+uint32_t val_pcie_p2p_support(void);
+uint32_t val_pcie_dev_p2p_support(uint32_t bdf);
+uint32_t val_pcie_multifunction_support(uint32_t bdf);
+uint32_t val_pcie_is_onchip_peripheral(uint32_t bdf);
+uint32_t val_pcie_device_port_type(uint32_t bdf);
+uint32_t val_pcie_find_capability(uint32_t bdf, uint32_t cid_type,
+                                           uint32_t cid, uint32_t *cid_offset);
+void val_pcie_disable_bme(uint32_t bdf);
+void val_pcie_enable_bme(uint32_t bdf);
+void val_pcie_disable_msa(uint32_t bdf);
+void val_pcie_enable_msa(uint32_t bdf);
+uint32_t val_pcie_is_msa_enabled(uint32_t bdf);
+void val_pcie_clear_urd(uint32_t bdf);
+uint32_t val_pcie_is_urd(uint32_t bdf);
+void val_pcie_enable_eru(uint32_t bdf);
+void val_pcie_disable_eru(uint32_t bdf);
+uint32_t val_pcie_bitfield_check(uint32_t bdf, uint64_t *bf_entry);
+uint32_t val_pcie_register_bitfields_check(uint64_t *bf_info_table, uint32_t table_size);
+uint32_t val_pcie_function_header_type(uint32_t bdf);
+void val_pcie_get_mmio_bar(uint32_t bdf, void *base);
+uint32_t val_pcie_get_downstream_function(uint32_t bdf, uint32_t *dsf_bdf);
+uint32_t val_pcie_get_rootport(uint32_t bdf, uint32_t *rp_bdf);
+uint8_t val_pcie_parent_is_rootport(uint32_t dsf_bdf, uint32_t *rp_bdf);
+uint8_t val_pcie_is_host_bridge(uint32_t bdf);
+void val_pcie_clear_device_status_error(uint32_t bdf);
+uint32_t val_pcie_is_device_status_error(uint32_t bdf);
+uint32_t val_pcie_is_sig_target_abort(uint32_t bdf);
+void val_pcie_clear_sig_target_abort(uint32_t bdf);
+uint32_t val_pcie_mem_get_offset(uint32_t type);
+uint32_t val_pcie_get_bar_index(uint32_t bdf, uint64_t bar_address, uint32_t *bar_index);
 
 typedef enum {
   PCIE_INFO_NUM_ECAM = 1,
@@ -223,4 +263,8 @@ val_pcie_get_ecam_index(uint32_t bdf, uint32_t *ecam_index);
 
 uint32_t
 val_pcie_write_detect_bitfield_check(uint32_t bdf, uint64_t *bitfield_entry, uint32_t str_count);
+
+uint32_t
+val_pcie_find_da_capability(uint32_t bdf, uint32_t *cid_offset);
+
 #endif

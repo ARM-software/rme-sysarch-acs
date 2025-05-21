@@ -39,11 +39,8 @@
 .align 3
 
 GCC_ASM_EXPORT (ArmCallWFI)
-GCC_ASM_EXPORT (SpeProgramUnderProfiling)
-GCC_ASM_EXPORT (DisableSpe)
 GCC_ASM_EXPORT (ArmExecuteMemoryBarrier)
 GCC_ASM_EXPORT (UserCallSMC)
-GCC_ASM_EXPORT (tlbi_alle2)
 GCC_ASM_EXPORT (set_daif)
 GCC_ASM_EXPORT (write_gpr_and_reset)
 GCC_ASM_EXPORT (check_gpr_after_reset)
@@ -104,12 +101,6 @@ ASM_PFX(set_daif):
   isb
   ret
 
-ASM_PFX(tlbi_alle2):
-  tlbi alle2
-  dsb sy
-  isb
-  ret
-
 ASM_PFX(UserCallSMC):
   stp x29, x30, [sp, #-0x10]!
   smc #0
@@ -118,43 +109,6 @@ ASM_PFX(UserCallSMC):
 
 ASM_PFX(ArmCallWFI):
   wfi
-  ret
-
-ASM_PFX(SpeProgramUnderProfiling):
-  mov   x2,#12    // No of instructions in the loop
-  udiv  x2,x0,x2  //iteration count = interval/(no of instructions in loop)
-  add   x2,x2,#6  //add a tolerance above which profiler is guaranteed to generate event
-ASM_PFX(label_if_not_zero):
-ASM_PFX(loop):
-  ldr   x0,[x1],#8
-  str   x0,[x1],#8
-  cmp   x0,#0
-  bne   ASM_PFX(label_if_not_zero)
-  ldr   x0,[x1],#8
-  str   x0,[x1],#8
-  cmp   x0,#0
-  bne   ASM_PFX(label_if_not_zero)
-  ldr   x0,[x1],#8
-  str   x0,[x1],#8
-  cmp   x0,#0
-  bne   ASM_PFX(label_if_not_zero)
-  sub   x2,x2,#1
-  cbnz  x2,ASM_PFX(loop)
-  ret
-
-ASM_PFX(DisableSpe):
-  //mrs   x0,pmscr_el2
-  bic   x0,x0,#1
-  //msr   pmscr_el2,x0
-  isb
-  //psb   csync
-  //dci   0xD503223F  // opcode of psb csync
-  dsb   sy
-  //mrs   x0,pmblimitr_el1
-  bic   x0,x0,#1
-  //msr   pmblimitr_el1,x0
-  isb
-
   ret
 
 ASM_PFX(ArmExecuteMemoryBarrier):
