@@ -21,9 +21,9 @@
 
 #include "include/val_interface.h"
 #include "include/rme_acs_el32.h"
-#include "include/platform_overrride_fvp.h"
-#include "include/sys_config.h"
 #include "include/mem_interface.h"
+
+ROOT_REGSTR_TABLE *g_root_reg_info_table;
 
 /**
   @brief   This API will execute all Legacy system related tests designated.
@@ -36,7 +36,7 @@ uint32_t
 val_legacy_execute_tests(uint32_t num_pe)
 {
   uint32_t status = ACS_STATUS_SKIP, i, reset_status, attr;
-  uint64_t sp_val;
+  uint64_t sp_val, shared_address;
   (void) num_pe;
 
   for (i = 0 ; i < MAX_TEST_SKIP_NUM ; i++) {
@@ -51,7 +51,7 @@ val_legacy_execute_tests(uint32_t num_pe)
     val_print(ACS_PRINT_TEST, " (Running only a single module)\n", 0);
     return ACS_STATUS_SKIP;
   }
-  if (!IS_LEGACY_TZ_ENABLED) {
+  if (!pal_is_legacy_tz_enabled()) {
     val_print(ACS_PRINT_TEST, " Skipping Legacy system tests since the system doesn't \
 support the feature \n", 0);
     return ACS_STATUS_SKIP;
@@ -65,8 +65,9 @@ support the feature \n", 0);
     val_print(ACS_PRINT_TEST, " Installing the handler for legacy tests\n", 0);
 
     sp_val = AA64ReadSP_EL0();
+    shared_address = PLAT_SHARED_ADDRESS;
     attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(OUTER_SHAREABLE) | PGT_ENTRY_AP_RW);
-    val_add_mmu_entry_el3(SHARED_ADDRESS, SHARED_ADDRESS,
+    val_add_mmu_entry_el3(shared_address, shared_address,
                     (attr | LOWER_ATTRS(PAS_ATTR(NONSECURE_PAS))));
     val_add_mmu_entry_el3(sp_val, sp_val,
                     (attr | LOWER_ATTRS(PAS_ATTR(NONSECURE_PAS))));
@@ -105,4 +106,22 @@ reset_done_ls_dis:
 
   return status;
 
+}
+
+/**
+  @brief   This API will populate the ROOT_REGSTR_TABLE from PAL.
+           1. Caller       -  Test.
+  @param   root_registers_cfg - Pointer to the structure ROOT_REGSTR_TABLE.
+  @return  NULL
+**/
+void val_root_register_create_info_table(uint64_t *root_registers_cfg)
+{
+  g_root_reg_info_table = (ROOT_REGSTR_TABLE *)root_registers_cfg;
+
+  pal_root_register_create_info_table(g_root_reg_info_table);
+}
+
+ROOT_REGSTR_TABLE *val_root_reg_info_table(void)
+{
+  return g_root_reg_info_table;
 }

@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2023-2024, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2023-2024, 2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,8 +21,8 @@
 
 #include "val/include/rme_test_entry.h"
 #include "val/include/val_interface.h"
+#include "val/include/rme_acs_memory.h"
 #include "val/include/rme_acs_el32.h"
-#include "val/include/sys_config.h"
 #include "val/include/mem_interface.h"
 
 #define TEST_NUM   (ACS_RME_TEST_NUM_BASE  +  22)
@@ -48,7 +48,7 @@ void payload(void)
   uint32_t index = val_pe_get_index_mpid(val_pe_get_mpid()), attr;
   uint64_t PA, VA_NS, size, wt_ns_data, rd_data_encrpt_enbl, rd_data_encrpt_disbl;
 
-  if (IS_NS_ENCRYPTION_PROGRAMMABLE == CLEAR) {
+  if (!val_is_ns_encryption_programmable()) {
     val_print(ACS_PRINT_DEBUG, "\n  The test is Skipped as the NS_Enrypition is \
                     not programmable in this model", 0);
     val_set_status(index, RESULT_SKIP(TEST_NUM, 01));

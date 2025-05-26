@@ -120,6 +120,26 @@ void
   return pal_aligned_alloc(alignment, size);
 }
 
+/**
+ * @brief Check if non-secure memory encryption is programmable on this platform.
+ *
+ * @return 1 if programmable, 0 otherwise.
+ */
+uint32_t val_is_ns_encryption_programmable(void)
+{
+    return pal_is_ns_encryption_programmable();
+}
+
+/**
+ * @brief Check if PAS filter mode is programmable on this platform.
+ *
+ * @return 1 if programmable, 0 otherwise.
+ */
+uint32_t val_is_pas_filter_mode_programmable(void)
+{
+    return pal_is_pas_filter_mode_programmable();
+}
+
 #ifdef TARGET_BM_BOOT
 /**
  *   @brief    Add regions assigned to host into its translation table data structure.

@@ -20,6 +20,7 @@
 
 #include <stdio.h>
 #include <stdint.h>
+#include <stdbool.h>
 #include "platform_override_fvp.h"
 
 typedef struct {
@@ -255,4 +256,44 @@ typedef enum {
 } RMSD_SECURITY_PROPERTY;
 
 extern REGISTER_INFO_TABLE rp_regs[PLATFORM_OVERRIDE_RP_REG_NUM_ENTRIES];
+
+/**
+ * @brief structure instance for ROOT registers
+ */
+typedef struct {
+  uint64_t rt_reg_base_addr;
+  uint64_t rt_reg_size;
+} RT_REG_INFO_ENTRY;
+
+typedef struct {
+  uint32_t num_reg;
+  RT_REG_INFO_ENTRY rt_reg_info[];
+} ROOT_REGSTR_TABLE;
+
+/**
+  @brief  structure instance for region types
+**/
+typedef struct {
+  uint32_t num_of_regn_gpc;
+  uint32_t num_of_regn_pas_filter;
+} MEM_REGN_INFO_HDR;
+
+/**
+  @brief  structure instance for Region details
+**/
+typedef struct {
+  uint32_t   base_addr;
+  uint32_t   regn_size;
+  uint64_t   resourse_pas;
+} MEM_REGN_INFO_ENTRY;
+
+typedef struct {
+  MEM_REGN_INFO_HDR    header;
+  MEM_REGN_INFO_ENTRY  regn_info[];
+} MEM_REGN_INFO_TABLE;
+
+extern MEM_REGN_INFO_TABLE mem_region_cfg;
+extern MEM_REGN_INFO_TABLE mem_region_pas_filter_cfg;
+extern ROOT_REGSTR_TABLE root_registers_cfg;
+
 #endif //__PAL_OVERRIDE_STRUCT_H_

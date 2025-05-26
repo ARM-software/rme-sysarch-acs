@@ -27,7 +27,6 @@
 #include "val/include/rme_acs_smmu.h"
 #include "val/include/rme_acs_pe.h"
 #include "val/include/rme_acs_da.h"
-#include "val/include/sys_config.h"
 
 #define TEST_NUM (ACS_RME_DA_TEST_NUM_BASE  +  11)
 #define TEST_DESC "Check TDISP from 1 to 0 transitions to Insecure state  "

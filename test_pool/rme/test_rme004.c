@@ -22,7 +22,6 @@
 #include "val/include/val_interface.h"
 #include "val/include/rme_test_entry.h"
 #include "val/include/rme_acs_el32.h"
-#include "val/include/sys_config.h"
 
 #define NUM_PAS 4
 
@@ -41,19 +40,22 @@ static
 void payload(void)
 {
   uint8_t status_fail_cnt = 0;
+  MEM_REGN_INFO_TABLE *mem_region_cfg;
   uint32_t index = val_pe_get_index_mpid(val_pe_get_mpid()), security_state, num_regn, attr;
   uint64_t pas_list[4] = {REALM_PAS, NONSECURE_PAS, SECURE_PAS, ROOT_PAS}, VA, size;
 
   size = val_get_min_tg();
-  num_regn = mem_region_cfg.header.num_of_regn_gpc;
+
+  mem_region_cfg = val_mem_gpc_info_table();
+  num_regn = mem_region_cfg->header.num_of_regn_gpc;
   VA = val_get_free_va(num_regn * NUM_PAS * size);
   attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(NON_SHAREABLE) | PGT_ENTRY_AP_RW);
 
   for (uint32_t regn_cnt = 0; regn_cnt < num_regn; ++regn_cnt)
   {
 
-    shared_data->arg0 = mem_region_cfg.regn_info[regn_cnt].base_addr;
-    security_state = mem_region_cfg.regn_info[regn_cnt].resourse_pas;
+    shared_data->arg0 = mem_region_cfg->regn_info[regn_cnt].base_addr;
+    security_state = mem_region_cfg->regn_info[regn_cnt].resourse_pas;
 
     for (int pas_cnt = 0; pas_cnt < 4; ++pas_cnt)
     {

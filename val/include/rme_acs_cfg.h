@@ -18,11 +18,7 @@
 #ifndef __RME_ACS_CFG_H__
 #define __RME_ACS_CFG_H__
 
-#ifndef TARGET_LINUX
 #define MAX_TEST_SKIP_NUM  10
-#else
-#define MAX_TEST_SKIP_NUM  3
-#endif
 
 extern uint32_t g_print_level;
 extern uint32_t g_execute_secure;

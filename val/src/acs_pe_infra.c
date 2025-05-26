@@ -121,11 +121,7 @@ val_pe_get_mpid()
 {
   uint64_t data;
 
-  #ifdef TARGET_LINUX
-    data = 0;
-  #else
-    data = val_pe_reg_read(MPIDR_EL1);
-  #endif
+  data = val_pe_reg_read(MPIDR_EL1);
   /* Return the Affinity bits */
   data = data & MPIDR_AFF_MASK;
   return data;
@@ -282,12 +278,10 @@ val_pe_install_esr(uint32_t exception_type, void (*esr)(uint64_t, void *))
       return ACS_STATUS_ERR;
   }
 
-#ifndef TARGET_LINUX
   if (pal_target_is_bm())
       val_gic_rme_install_esr(exception_type, esr);
   else
       pal_pe_install_esr(exception_type, esr);
-#endif
 
   return 0;
 }
@@ -353,7 +347,6 @@ val_pe_default_esr(uint64_t interrupt_type, void *context)
     val_print(ACS_PRINT_WARN,
                  "\n        Unexpected exception of type %d occurred", interrupt_type);
 
-#ifndef TARGET_LINUX
     if (pal_target_is_bm()) {
         val_print(ACS_PRINT_WARN, "\n        FAR reported = 0x%llx", rme_gic_get_far());
         val_print(ACS_PRINT_WARN, "\n        ESR reported = 0x%llx", rme_gic_get_esr());
@@ -363,7 +356,7 @@ val_pe_default_esr(uint64_t interrupt_type, void *context)
         val_print(ACS_PRINT_WARN, "\n        ESR reported = 0x%llx", val_pe_get_esr(context));
         val_print(ACS_PRINT_WARN, "\n        ELR reported = 0x%llx", val_pe_get_elr(context));
     }
-#endif
+
     val_set_status(index, RESULT_FAIL(0, 01));
     val_pe_update_elr(context, g_exception_ret_addr);
 }
@@ -427,7 +420,6 @@ val_pe_cache_clean_invalidate_range(uint64_t start_addr, uint64_t length)
 void
 val_pe_cache_clean_range(uint64_t start_addr, uint64_t length)
 {
-#ifndef TARGET_LINUX
   uint64_t aligned_addr, end_addr, line_length;
 
   line_length = 2 << ((val_pe_reg_read(CTR_EL0) >> 16) & 0xf);
@@ -438,7 +430,6 @@ val_pe_cache_clean_range(uint64_t start_addr, uint64_t length)
       val_data_cache_ops_by_va(aligned_addr, CLEAN);
       aligned_addr += line_length;
   }
-#endif
 }
 
 /**

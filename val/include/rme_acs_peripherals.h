@@ -56,6 +56,5 @@ typedef enum {
 } PERIPHERAL_INFO_e;
 
 uint64_t val_peripheral_get_info(PERIPHERAL_INFO_e info_type, uint32_t index);
-uint32_t val_peripheral_is_pcie(uint32_t bdf);
 
 #endif // __RME_ACS_PERIPHERAL_H__

@@ -402,41 +402,6 @@ pal_iovirt_create_info_table(IOVIRT_INFO_TABLE *IoVirtTable)
   check_mapping_overlap(IoVirtTable);
 }
 
-/**
-  @brief  Check if given SMMU node has unique context bank interrupt ids
-
-  @param  smmu_block smmu IOVIRT block base address
-
-  @return 0 if test fails, 1 if test passes
-**/
-UINT32
-pal_iovirt_check_unique_ctx_intid(UINT64 smmu_block)
-{
-  IOVIRT_BLOCK *block = (IOVIRT_BLOCK *)smmu_block;
-  /* This test has already been done while parsing IORT */
-  /* Check the flags to get the test result */
-  if(block->flags & (1 << IOVIRT_FLAG_SMMU_CTX_INT_SHIFT))
-    return 0;
-  return 1;
-}
-
-/**
-  @brief  Check if given root complex node has unique requestor id to stream id mapping
-
-  @param  rc_block root complex IOVIRT block base address
-
-  @return 0 if test fails, 1 if test passes
-**/
-
-UINT32
-pal_iovirt_unique_rid_strid_map(UINT64 rc_block)
-{
-  IOVIRT_BLOCK *block = (IOVIRT_BLOCK *)rc_block;
-  if(block->flags & (1 << IOVIRT_FLAG_STRID_OVERLAP_SHIFT))
-    return 0;
-  return 1;
-}
-
 UINT64
 pal_iovirt_get_rc_smmu_base (
   IOVIRT_INFO_TABLE *Iovirt,

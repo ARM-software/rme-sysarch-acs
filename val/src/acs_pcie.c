@@ -18,7 +18,6 @@
 #include "include/rme_acs_val.h"
 #include "include/rme_acs_common.h"
 #include "include/rme_acs_pcie.h"
-#include "include/sys_config.h"
 #include "include/rme_acs_da.h"
 #include "include/rme_acs_el32.h"
 

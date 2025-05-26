@@ -22,7 +22,6 @@
 #include "val/include/val_interface.h"
 #include "val/include/rme_test_entry.h"
 #include "val/include/rme_acs_el32.h"
-#include "val/include/sys_config.h"
 
 #define NUM_PAS 4
 
@@ -42,13 +41,19 @@ void payload(void)
   uint32_t index = val_pe_get_index_mpid(val_pe_get_mpid()), security_state, attr;
   uint64_t pas_list[4] = {ROOT_PAS, REALM_PAS, NONSECURE_PAS, SECURE_PAS};
   uint64_t VA, PA, size, rd_data;
+  uint64_t msd_save_restore_mem = val_get_msd_save_restore_mem();
 
   shared_data->shared_data_access[0].data = INIT_DATA;
   size = val_get_min_tg();
-  PA = val_get_free_pa(size, size);
 
-  /* Map the PA as ROOT memory in GPT */
-  val_add_gpt_entry_el3(PA, GPT_ROOT);
+  if (msd_save_restore_mem)
+    PA = msd_save_restore_mem;
+  else {
+    PA = val_get_free_pa(size, size);
+    /* Map the PA as ROOT memory in GPT */
+    val_add_gpt_entry_el3(PA, GPT_ROOT);
+  }
+
   VA = val_get_free_va(NUM_PAS * size);
   security_state = ROOT_PAS;
   attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(NON_SHAREABLE) | PGT_ENTRY_AP_RW);

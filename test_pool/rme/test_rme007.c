@@ -21,7 +21,6 @@
 
 #include "val/include/val_interface.h"
 #include "val/include/rme_acs_el32.h"
-#include "val/include/sys_config.h"
 
 #define TEST_NUM   (ACS_RME_TEST_NUM_BASE  +  07)
 #define TEST_DESC  "To check if resources are not physically aliased       "
@@ -40,21 +39,23 @@ void payload(void)
   uint32_t index = val_pe_get_index_mpid(val_pe_get_mpid()), num_regn;
   uint8_t status_fail_cnt;
   uint64_t region_size, Top_Addr, Base_Addr, Top_Addr_cmpr, Base_Addr_cmpr, region_size_cmpr;
+  MEM_REGN_INFO_TABLE *mem_region_cfg;
 
-  num_regn = mem_region_cfg.header.num_of_regn_gpc;
+  mem_region_cfg = val_mem_gpc_info_table();
+  num_regn = mem_region_cfg->header.num_of_regn_gpc;
   status_fail_cnt = 0;
 
   for (uint32_t regn_cnt = 0; regn_cnt < num_regn; ++regn_cnt) {
 
-    Base_Addr = mem_region_cfg.regn_info[regn_cnt].base_addr;
-    region_size = mem_region_cfg.regn_info[regn_cnt].regn_size;
+    Base_Addr = mem_region_cfg->regn_info[regn_cnt].base_addr;
+    region_size = mem_region_cfg->regn_info[regn_cnt].regn_size;
     Top_Addr = Base_Addr + region_size - 1;
 
     for (uint32_t cmpr_regn_cnt = regn_cnt + 1; cmpr_regn_cnt < num_regn; ++cmpr_regn_cnt)
     {
 
-      Base_Addr_cmpr = mem_region_cfg.regn_info[cmpr_regn_cnt].base_addr;
-      region_size_cmpr = mem_region_cfg.regn_info[cmpr_regn_cnt].regn_size;
+      Base_Addr_cmpr = mem_region_cfg->regn_info[cmpr_regn_cnt].base_addr;
+      region_size_cmpr = mem_region_cfg->regn_info[cmpr_regn_cnt].regn_size;
       Top_Addr_cmpr = Base_Addr_cmpr + region_size_cmpr - 1;
       if (Top_Addr < Base_Addr_cmpr)
         continue;

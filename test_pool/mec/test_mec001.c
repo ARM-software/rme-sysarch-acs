@@ -16,6 +16,8 @@
 
 #include "val/include/rme_acs_val.h"
 #include "val/include/val_interface.h"
+
+#include "val/include/rme_acs_iovirt.h"
 #include "val/include/rme_acs_smmu.h"
 #include "val/include/rme_acs_mec.h"
 #include "val/include/rme_acs_pe.h"

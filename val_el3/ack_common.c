@@ -18,8 +18,8 @@
 #include "val_el3/ack_include.h"
 
 static MemoryPool mem_pool = {
-    .base = (uint8_t *)FREE_MEM_SMMU, // Hardcoded address
-    .size = MEMORY_POOL_SIZE,
+    .base = (uint8_t *)PLAT_FREE_MEM_SMMU, // Hardcoded address
+    .size = PLAT_MEMORY_POOL_SIZE,
     .free_list = NULL,
 };
 
@@ -287,9 +287,9 @@ void val_wd_set_ws0_el3(uint64_t VA_RT_WDOG, uint32_t timeout, uint64_t counter_
            by writing to ACCESSEN bit of SMMU_ROOT_CR0 register.
   @return  None
  **/
-void val_smmu_access_disable(void)
+void val_smmu_access_disable(uint64_t smmu_base)
 {
-  *(uint32_t *)(ROOT_IOVIRT_SMMUV3_BASE + SMMU_ROOT_CR0) = CLEAR;
+  *(uint32_t *)(smmu_base + SMMU_ROOT_CR0) = CLEAR;
 }
 
 /**
@@ -471,7 +471,7 @@ void *val_memory_calloc_el3(size_t num, size_t size, size_t alignment)
  * @param  Va  Virtual address
  * @return Va  Returns the VA because of the 1:1 memory mapping
  */
-void *val_memory_virt_to_phys(void *va)
+void *val_memory_virt_to_phys_el3(void *va)
 {
   return va;
 }
@@ -497,27 +497,29 @@ void val_smmu_root_config_service(uint64_t arg0, uint64_t arg1, uint64_t arg2)
   uint64_t data;
   smmu_master_attributes_t smmu_attr;
   pgt_descriptor_t pgt_attr;
+  uint64_t smmu_base;
+
+  smmu_base = arg1;
 
   switch (arg0)
   {
-      case SMMU_ROOT_RME_IMPL_CHK:
-          INFO("SMMU base address & offset: 0x%lx \n",
-                      (uint64_t)ROOT_IOVIRT_SMMUV3_BASE + SMMU_ROOT_IDRO);
-          data = *(uint32_t *)(ROOT_IOVIRT_SMMUV3_BASE + SMMU_ROOT_IDRO);
-          INFO("SMMU ROOT IDRO: 0x%lx", data);
-          shared_data->shared_data_access[0].data = data;
-          break;
-      case SMMU_RLM_PGT_INIT:
-          INFO("SMMU Realm Initialisation\n");
-          val_smmu_init(arg1);
-          break;
-      case SMMU_RLM_SMMU_MAP:
-          INFO("SMMU realm page table map\n");
-          memcpy((void *)&smmu_attr, (void *)arg1, sizeof(smmu_master_attributes_t));
-          memcpy((void *)&pgt_attr, (void *)arg2, sizeof(pgt_descriptor_t));
-          val_smmu_rlm_map((smmu_master_attributes_t)smmu_attr, (pgt_descriptor_t)pgt_attr);
-          break;
-      case SMMU_RLM_ADD_DPT_ENTRY:
+       case SMMU_ROOT_RME_IMPL_CHK:
+         INFO("SMMU base address & offset: 0x%lx \n", (uint64_t)smmu_base + SMMU_ROOT_IDRO);
+         data = *(uint32_t *)(smmu_base + SMMU_ROOT_IDRO);
+         INFO("SMMU ROOT IDRO: 0x%lx", data);
+         shared_data->shared_data_access[0].data = data;
+         break;
+       case SMMU_RLM_PGT_INIT:
+         INFO("SMMU Realm Initialisation\n");
+         val_smmu_init_el3(arg1, (uint64_t *)arg2);
+         break;
+       case SMMU_RLM_SMMU_MAP:
+         INFO("SMMU realm page table map\n");
+         memcpy((void *)&smmu_attr, (void *)arg1, sizeof(smmu_master_attributes_t));
+         memcpy((void *)&pgt_attr, (void *)arg2, sizeof(pgt_descriptor_t));
+         val_smmu_rlm_map((smmu_master_attributes_t)smmu_attr, (pgt_descriptor_t)pgt_attr);
+         break;
+       case SMMU_RLM_ADD_DPT_ENTRY:
           INFO("SMMU add DPT entry\n");
           val_dpt_add_entry(arg1, arg2);
           break;

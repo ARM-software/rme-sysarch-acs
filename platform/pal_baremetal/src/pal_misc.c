@@ -704,28 +704,6 @@ uint32_t pal_strncmp(const char8_t *str1, const char8_t *str2, uint32_t len)
     }
 }
 
-void *pal_strncpy(void *DestinationStr, const void *SourceStr, uint32_t Length)
-{
-  const char *s = SourceStr;
-  char *d = DestinationStr;
-
-  if (d == NULL) {
-      return NULL;
-  }
-
-  char* ptr = d;
-
-  while (*s && Length--)
-  {
-      *d = *s;
-      d++;
-      s++;
-  }
-  *d = '\0';
-
-  return ptr;
-}
-
 int32_t
 pal_mem_compare(void *Src, void *Dest, uint32_t Len)
 {

@@ -28,7 +28,7 @@
 #define PGT_LEVEL_2   2
 #define PGT_LEVEL_3   3
 
-uint64_t free_pa = FREE_MEM_START;
+uint64_t free_pa = PLAT_FREE_MEM_START;
 
 static uint32_t pg_size;
 static uint32_t bits_p_level;
@@ -661,8 +661,8 @@ static uint32_t fill_translation_table(tt_descriptor_t tt_desc,
         }
 
         *table_desc = PGT_ENTRY_TABLE_MASK | PGT_ENTRY_VALID_MASK;
-        *table_desc |= (uint64_t)val_memory_virt_to_phys(tt_base_next_level)
-                                                         & ~(uint64_t)(pg_size - 1);
+        *table_desc |= (uint64_t)val_memory_virt_to_phys_el3(tt_base_next_level)
+                                                             & ~(uint64_t)(pg_size - 1);
         INFO("      Table descriptor address = 0x%lx\n", (uint64_t) table_desc);
         INFO("      table_descriptor = 0x%lx\n", *table_desc);
     }
@@ -757,7 +757,7 @@ uint32_t val_realm_pgt_create(memory_region_descriptor_t *mem_desc, pgt_descript
         }
     }
 
-    pgt_desc->pgt_base = (uint64_t)val_memory_virt_to_phys(tt_base);
+    pgt_desc->pgt_base = (uint64_t)val_memory_virt_to_phys_el3(tt_base);
 
     return 0;
 }

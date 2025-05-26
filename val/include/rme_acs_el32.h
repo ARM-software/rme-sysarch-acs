@@ -15,6 +15,12 @@
  * limitations under the License.
  **/
 
+#if TARGET_EMULATION
+#include "platform_override_fvp.h"
+#else
+#include "../../platform/pal_uefi/include/platform_override.h"
+#endif
+
 /* Defines related to User SMC Call services */
 #define RME_INSTALL_HANDLER 0x1
 #define RME_ADD_GPT_ENTRY 0x2
@@ -60,6 +66,15 @@
 #define SMMU_CHECK_MEC_IMPL    0x7
 #define SMMU_GET_MECIDW        0x8
 #define SMMU_CONFIG_MECID      0x9
+
+#define SMMU_R_PAGE_0_OFFSET    0x40000
+#define SMMU_R_PAGE_1_OFFSET    0x50000
+#define SMMU_ROOT_CR0           (SMMUV3_ROOT_REG_OFFSET + 0x0020)
+#define SMMU_ROOT_CR0_ACK       (SMMUV3_ROOT_REG_OFFSET + 0x0024)
+#define SMMU_ROOT_IDRO          (SMMUV3_ROOT_REG_OFFSET + 0x0000)
+
+/* WatchDog register offset */
+#define  WD_IIDR_OFFSET     0xFCC
 
 /* MEC services */
 #define ENABLE_MEC   0x1
@@ -119,6 +134,8 @@
 /* MECID stores */
 #define VAL_GMECID  0x0
 
+#ifndef __ASSEMBLER__
+
 /* Shared data structure instances */
 typedef struct shared_data_access {
   uint64_t access_type;
@@ -168,3 +185,4 @@ typedef enum {
   SCTLR_EL3_MSD
 } RME_ACS_REGS_MSD;
 
+#endif

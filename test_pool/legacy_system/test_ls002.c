@@ -22,7 +22,6 @@
 #include "val/include/rme_acs_smmu.h"
 #include "val/include/rme_acs_pcie.h"
 #include "val/include/rme_acs_el32.h"
-#include "val/include/sys_config.h"
 
 #define TEST_NUM  (ACS_LEGACY_TEST_NUM_BASE + 02)
 #define TEST_DESC  "Check if LEGACY_TZ_EN=1, root PAS is driven to sec PAS "
@@ -46,16 +45,18 @@ payload()
   uint32_t index = val_pe_get_index_mpid(val_pe_get_mpid());
   uint32_t status_fail_cnt, attr;
   uint64_t VA, PA, size, num_reg;
+  ROOT_REGSTR_TABLE *root_registers_cfg;
 
   size = val_get_min_tg();
 
   //Get the registers content
-  num_reg = root_registers_cfg.num_reg;
+  root_registers_cfg = val_root_reg_info_table();
+  num_reg = root_registers_cfg->num_reg;
   attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(NON_SHAREABLE) | PGT_ENTRY_AP_RW);
   for (uint64_t reg_cnt = 0; reg_cnt < num_reg; ++reg_cnt) {
 
     VA = val_get_free_va(size);
-    PA = root_registers_cfg.rt_reg_info[reg_cnt].rt_reg_base_addr;
+    PA = root_registers_cfg->rt_reg_info[reg_cnt].rt_reg_base_addr;
     /* Use the register addresses as PAs to map them with secure access PAS */
     val_add_mmu_entry_el3(VA, PA, (attr | LOWER_ATTRS(PAS_ATTR(SECURE_PAS))));
 

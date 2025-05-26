@@ -125,37 +125,6 @@ pal_peripheral_create_info_table(PERIPHERAL_INFO_TABLE *peripheralInfoTable)
   per_info->type = 0xFF; //indicate end of table
 
 }
-/**
-    @brief   Check if PCI device is PCI Express capable
-
-    @param   seg        PCI segment number
-    @param   bus        PCI bus address
-    @param   dev        PCI device address
-    @param   fn         PCI function number
-
-    @return  staus code:
-             1: PCIe capable,  0: No PCIe capable
-**/
-uint32_t pal_peripheral_is_pcie(uint32_t seg, uint32_t bus, uint32_t dev, uint32_t fn)
-{
-
-  uint32_t reg_value;
-  uint32_t next_cap_offset;
-  pal_pcie_read_cfg(seg, bus, dev, fn, TYPE01_CPR, &reg_value);
-  next_cap_offset = (reg_value & TYPE01_CPR_MASK);
-  while (next_cap_offset)
-  {
-     pal_pcie_read_cfg(seg, bus, dev, fn, next_cap_offset, &reg_value);
-     if ((reg_value & PCIE_CIDR_MASK) == CID_PCIECS)
-     {
-         print(ACS_PRINT_INFO, "PCIe Capable", 0);
-         return 1;
-     }
-     next_cap_offset = ((reg_value >> PCIE_NCPR_SHIFT) & PCIE_NCPR_MASK);
-  }
-
-  return 0;
-}
 
 uint64_t
 pal_memory_ioremap(void *ptr, uint32_t size, uint32_t attr)

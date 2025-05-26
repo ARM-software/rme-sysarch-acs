@@ -201,9 +201,9 @@ void val_pas_filter_active_mode_el3(int enable)
  *          1. Caller       -  Test Suite
  *  @return None
 **/
-void val_smmu_access_disable(void)
+void val_smmu_access_disable(uint64_t smmu_base)
 {
-  UserCallSMC(ARM_ACS_SMC_FID, SMMU_ROOT_SERVICE, 0, 0, 0);
+  UserCallSMC(ARM_ACS_SMC_FID, SMMU_ROOT_SERVICE, smmu_base, 0, 0);
 }
 
 /**
@@ -222,9 +222,9 @@ void val_change_security_state_el3(int sec_state)
  *          1. Caller       -  Test suite
  *  @return None
  */
-void val_smmu_check_rmeda_el3(void)
+void val_smmu_check_rmeda_el3(uint64_t smmu_base)
 {
-  UserCallSMC(ARM_ACS_SMC_FID, SMMU_CONFIG_SERVICE, SMMU_ROOT_RME_IMPL_CHK, 0, 0);
+  UserCallSMC(ARM_ACS_SMC_FID, SMMU_CONFIG_SERVICE, SMMU_ROOT_RME_IMPL_CHK, smmu_base, 0);
 }
 
 /**
@@ -232,9 +232,10 @@ void val_smmu_check_rmeda_el3(void)
  *          1. Caller       -  Test suite
  *  @return None
  */
-void val_rlm_smmu_init(uint32_t num_smmu)
+void val_rlm_smmu_init(uint64_t num_smmu, uint64_t *smmu_base_arr)
 {
-  UserCallSMC(ARM_ACS_SMC_FID, SMMU_CONFIG_SERVICE, SMMU_RLM_PGT_INIT, num_smmu, 0);
+  UserCallSMC(ARM_ACS_SMC_FID, SMMU_CONFIG_SERVICE, SMMU_RLM_PGT_INIT, num_smmu,
+              (uint64_t)smmu_base_arr);
 }
 
 /**

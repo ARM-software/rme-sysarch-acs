@@ -28,7 +28,6 @@
 #include "val/include/rme_acs_smmu.h"
 #include "val/include/rme_acs_pe.h"
 #include "val/include/rme_acs_da.h"
-#include "val/include/sys_config.h"
 #include "val/include/rme_acs_iovirt.h"
 #include "val/include/rme_acs_gic.h"
 #include "val/include/rme_acs_gic_support.h"

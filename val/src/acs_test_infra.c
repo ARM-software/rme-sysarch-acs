@@ -22,14 +22,14 @@
 #include "include/rme_acs_iovirt.h"
 #include "include/mem_interface.h"
 #include "include/rme_acs_el32.h"
-#include "include/sys_config.h"
 #include "include/rme_acs_exerciser.h"
 #include "include/rme_acs_smmu.h"
 
-uint64_t free_mem_var_pa = FREE_PA_TEST;
-uint64_t free_mem_var_va = FREE_VA_TEST;
+uint64_t free_mem_var_pa = PLAT_FREE_PA_TEST;
+uint64_t free_mem_var_va = PLAT_FREE_VA_TEST;
+uint64_t rme_nvm_mem = PLAT_RME_ACS_NVM_MEM;
 
-struct_sh_data *shared_data = (struct_sh_data *)SHARED_ADDRESS;
+struct_sh_data *shared_data = (struct_sh_data *) PLAT_SHARED_ADDRESS;
 
 /**
   @brief  This API calls PAL layer to print a formatted string
@@ -250,7 +250,6 @@ val_mmio_write64(addr_t addr, uint64_t data)
 uint32_t
 val_initialize_test(uint32_t test_num, char8_t *desc, uint32_t num_pe, char8_t *ruleid)
 {
-
   uint32_t i;
   uint32_t index = val_pe_get_index_mpid(val_pe_get_mpid());
 
@@ -618,13 +617,13 @@ val_time_delay_ms(uint64_t timer_ms)
 void
 val_write_reset_status(uint32_t status)
 {
-  pal_write_reset_status(RME_ACS_NVM_MEM, status);
+  pal_write_reset_status(rme_nvm_mem, status);
 }
 
 uint32_t
 val_read_reset_status()
 {
-  return pal_read_reset_status(RME_ACS_NVM_MEM);
+  return pal_read_reset_status(rme_nvm_mem);
 }
 
 uint64_t
@@ -683,7 +682,7 @@ void
 val_save_global_test_data()
 {
 
-  pal_save_global_test_data(RME_ACS_NVM_MEM, g_rme_tests_total,
+  pal_save_global_test_data(rme_nvm_mem, g_rme_tests_total,
                             g_rme_tests_pass, g_rme_tests_fail);
 }
 
@@ -691,7 +690,7 @@ void
 val_restore_global_test_data()
 {
 
-  pal_restore_global_test_data(RME_ACS_NVM_MEM, &g_rme_tests_total,
+  pal_restore_global_test_data(rme_nvm_mem, &g_rme_tests_total,
                                &g_rme_tests_pass, &g_rme_tests_fail);
 }
 
@@ -700,21 +699,23 @@ uint32_t val_configure_acs(void)
   uint64_t sp_val, smmu_root_page, smmu_base;
   uint64_t smmu_rlm_page0, smmu_rlm_page1;
   uint32_t num_smmus, attr;
+  uint64_t shared_address;
 
   sp_val = AA64ReadSP_EL0();
-  val_print(ACS_PRINT_INFO, "\n SHARED_ADDRESS = 0x%llx", SHARED_ADDRESS);
+  shared_address = PLAT_SHARED_ADDRESS;
+  val_print(ACS_PRINT_INFO, "\n SHARED_ADDRESS = 0x%llx", shared_address);
 
   /* Map the SHARED_ADDRESS and the sp_el0 as NS in EL3 */
   attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(OUTER_SHAREABLE) | PGT_ENTRY_AP_RW);
-  val_add_mmu_entry_el3(SHARED_ADDRESS, SHARED_ADDRESS,
+  val_add_mmu_entry_el3(shared_address, shared_address,
                   (attr | LOWER_ATTRS(PAS_ATTR(NONSECURE_PAS))));
   val_add_mmu_entry_el3(sp_val, sp_val, (attr | LOWER_ATTRS(PAS_ATTR(NONSECURE_PAS))));
 
   /* Map the SMMU root, NS and realm pages as ROOT PAS */
-  smmu_base = ROOT_IOVIRT_SMMUV3_BASE;
-  smmu_root_page = ROOT_IOVIRT_SMMUV3_BASE + SMMUV3_ROOT_REG_OFFSET;
-  smmu_rlm_page0 = ROOT_IOVIRT_SMMUV3_BASE + SMMU_R_PAGE_0_OFFSET;
-  smmu_rlm_page1 = ROOT_IOVIRT_SMMUV3_BASE + SMMU_R_PAGE_1_OFFSET;
+  smmu_base = val_iovirt_get_smmu_info(SMMU_CTRL_BASE, 0);
+  smmu_root_page = smmu_base + SMMUV3_ROOT_REG_OFFSET;
+  smmu_rlm_page0 = smmu_base + SMMU_R_PAGE_0_OFFSET;
+  smmu_rlm_page1 = smmu_base + SMMU_R_PAGE_1_OFFSET;
   attr |= LOWER_ATTRS(GET_ATTR_INDEX(DEV_MEM_nGnRnE));
   val_add_mmu_entry_el3(smmu_base, smmu_base, attr | LOWER_ATTRS(PAS_ATTR(ROOT_PAS)));
   val_add_mmu_entry_el3(smmu_root_page, smmu_root_page, attr | LOWER_ATTRS(PAS_ATTR(ROOT_PAS)));

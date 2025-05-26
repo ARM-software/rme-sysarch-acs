@@ -56,11 +56,8 @@ For more information, see [arm RME System ACS Validation Methodology document](D
     Before starting the ACS build, ensure that the following requirements are met.
 
 - Partner needs to provide their inputs to these following files...
-   - val/src/sys_config.c, 
-   - val/include/sys_config.h
-   - val/include/platform_overrride_fvp.h.
-- Partner can refer [RME_ACS_SysARCUI_Tool](tools/SysARCUI/README.md) for generating val/src/sys_config.c and val/include/platform_overrride_fvp.h files based on the memory mapping of their respective platform.
-- Partners are welcome to give their feedback on this tool improvement.
+   - platform/pal_baremetal/FVP/include/platform_override_fvp.h -> For Bare-metal platform,
+   - platform/pal_uefi/include/platform_overrride_fvp.h -> For UEFI platform.
 - Any mainstream Linux based OS distribution running on a x86 or aarch64 machine.
 - git clone --branch edk2-stable202208 --depth 1 https://github.com/tianocore/edk2
 - git clone https://github.com/tianocore/edk2-libc [ Checkout SHA: 61687168fe02ac4d933a36c9145fdd242ac424d1]
@@ -87,16 +84,6 @@ If the build environment is Linux, perform the following steps:
 4.  make -C BaseTools/Source/C
 5.  Change each "SBSA" string to "RME" string in MdePkg/Include/IndustryStandard/Acpi61.h using the command, ":%s/SBSA/RME/g"
 5.  source ShellPkg/Application/rme-acs/tools/scripts/acsbuild.sh
-
-### Windows build environment
-If the build environment is Windows, perform the following steps:
-1. Set the toolchain path to GCC13.2 or above.
-2. Setup the environment for AARCH64 EDK2 build.
-3. Setup the environment for PACKAGES_PATH.
-4. Build the RME shell application.
-   For example,
-   build -a AARCH64 -t GCC49 -p ShellPkg/ShellPkg.dsc -m
-   ShellPkg/Application/rme-acs/uefi_app/RmeAcs.inf
 
 ### Build output
 
@@ -173,7 +160,7 @@ Below tests are not qualified in model. These are expected to pass in any valid 
 RME System ACS is distributed under Apache v2.0 License.
 
 ## [Feedback, contributions, and support]
--   For support, send an email to "[support-rme-sysarch-acs@arm.com](mailto:support-systemready-acs@arm.com)" with details.
+-   For support, send an email to "[support-rme-sysarch-acs@arm.com](mailto:support-rme-sysarch-acs@arm.com)" with details.
 -   Arm licensees may contact Arm directly through their partner managers.
 -   Arm welcomes code contributions through GitHub pull requests. See GitHub documentation on how to raise pull requests.
 

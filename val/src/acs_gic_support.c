@@ -29,7 +29,6 @@ extern GIC_INFO_TABLE  *g_gic_info_table;
 GIC_INFO_ENTRY  *g_gic_entry = NULL;
 GIC_ITS_INFO    *g_gic_its_info;
 
-#ifndef TARGET_LINUX
 /**
   @brief   This API provides a 'C' interface to call GIC System register reads
            1. Caller       -  Test Suite
@@ -90,7 +89,6 @@ val_gic_reg_write(uint32_t reg_id, uint64_t write_data)
   }
 
 }
-#endif
 
 /**
   @brief   This function checks if Interrupt ID is a valid LPI or not
@@ -127,7 +125,6 @@ uint32_t
 val_gic_install_isr(uint32_t int_id, void (*isr)(void))
 {
   uint32_t ret_val;
-#ifndef TARGET_LINUX
   uint32_t      reg_offset = int_id / 32;
   uint32_t      reg_shift  = int_id % 32;
 
@@ -136,20 +133,17 @@ val_gic_install_isr(uint32_t int_id, void (*isr)(void))
       val_print(ACS_PRINT_ERR, "\n       Invalid Interrupt ID number 0x%x ", int_id);
       return ACS_STATUS_ERR;
   }
-#endif
 
   if (pal_target_is_bm())
       return val_gic_rme_install_isr(int_id, isr);
   else {
       ret_val = pal_gic_install_isr(int_id, isr);
-#ifndef TARGET_LINUX
       if (int_id > 31 && int_id < 1024) {
           /**** UEFI GIC code is not enabling interrupt in the Distributor ***/
           /**** So, do this here as a fail-safe. Remove if PAL guarantees this ***/
           val_mmio_write(val_get_gicd_base() + GICD_ISENABLER + (4 * reg_offset),
                          (uint32_t)1 << reg_shift);
       }
-#endif
   }
 
   return ret_val;

@@ -26,7 +26,6 @@
 #include "val/include/pal_interface.h"
 #include "val/include/rme_acs_pe.h"
 #include "val/include/rme_acs_da.h"
-#include "val/include/sys_config.h"
 
 #define TEST_NUM (ACS_RME_DA_TEST_NUM_BASE  +  19)
 #define TEST_DESC "Check RP RMSD Write-protect & full-protect properties"

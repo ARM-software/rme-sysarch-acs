@@ -24,8 +24,6 @@
 
 extern uint64_t tt_l0_base[];
 
-addr_t val_memory_ioremap(void *addr, uint32_t size, uint64_t attr);
-
 void val_memory_unmap(void *ptr);
 void *val_memory_alloc(uint32_t size);
 void *val_memory_calloc(uint32_t num, uint32_t size);
@@ -56,5 +54,8 @@ extern void val_sctlr_write(uint64_t value, uint64_t el_num);
 extern uint64_t val_sctlr_read(uint64_t el_num);
 extern uint64_t val_ttbr0_read(uint64_t el_num);
 extern uint64_t val_read_current_el(void);
+
+uint32_t val_is_ns_encryption_programmable(void);
+uint32_t val_is_pas_filter_mode_programmable(void);
 
 #endif // __RME_ACS_MEMORY_H__

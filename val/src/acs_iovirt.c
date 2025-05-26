@@ -150,14 +150,6 @@ val_iovirt_get_pcie_rc_info(PCIE_RC_INFO_e type, uint32_t index)
 
 }
 
-uint32_t
-val_iovirt_unique_rid_strid_map(uint32_t rc_index)
-{
-  uint64_t block = val_iovirt_get_pcie_rc_info(RC_IOVIRT_BLOCK, rc_index);
-
-  return pal_iovirt_unique_rid_strid_map(block);
-}
-
 /**
   @brief  Calculate the device id and stream id orresponding to the requestor id
   @param  rid          Requestor ID
@@ -168,7 +160,7 @@ val_iovirt_unique_rid_strid_map(uint32_t rc_index)
   @return status
 **/
 
-int
+uint32_t
 val_iovirt_get_device_info(uint32_t rid, uint32_t segment, uint32_t *device_id,
                            uint32_t *stream_id, uint32_t *its_id)
 {
@@ -290,14 +282,6 @@ val_iovirt_create_info_table(uint64_t *iovirt_info_table)
   g_num_smmus = val_iovirt_get_smmu_info(SMMU_NUM_CTRL, 0);
   val_print(ACS_PRINT_TEST,
             " SMMU_INFO: Number of SMMU CTRL       :    %x \n", g_num_smmus);
-}
-
-uint32_t
-val_iovirt_check_unique_ctx_intid(uint32_t smmu_index)
-{
-  uint64_t smmu_block = val_iovirt_get_smmu_info(SMMU_IOVIRT_BLOCK, smmu_index);
-
-  return pal_iovirt_check_unique_ctx_intid(smmu_block);
 }
 
 void

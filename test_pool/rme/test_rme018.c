@@ -22,7 +22,6 @@
 #include "val/include/val_interface.h"
 #include "val/include/rme_test_entry.h"
 #include "val/include/rme_acs_el32.h"
-#include "val/include/sys_config.h"
 #include "val/include/mem_interface.h"
 
 #define TEST_NUM   (ACS_RME_TEST_NUM_BASE  +  18)
@@ -82,6 +81,7 @@ void payload1(void)
 
   size = val_get_min_tg();
   PA = val_get_free_pa(size, size);
+  val_add_gpt_entry_el3(PA, GPT_ANY);
   attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(INNER_SHAREABLE)
                      | PGT_ENTRY_AP_RW | PAS_ATTR(ROOT_PAS));
   VA1 = val_get_free_va(size);

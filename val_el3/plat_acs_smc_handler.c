@@ -19,7 +19,7 @@
 
 #define TEST_DATA 0x999
 
-struct_sh_data *shared_data = (struct_sh_data *) SHARED_ADDRESS;
+struct_sh_data *shared_data = (struct_sh_data *) PLAT_SHARED_ADDRESS;
 
 void map_shared_mem(void)
 {
@@ -37,6 +37,7 @@ void rme_install_handler(void)
 {
   save_vbar_el3(armtf_handler);
   INFO("armtf_handler: 0x%lx\n", *(armtf_handler));
+  INFO("armtf_handler address: 0x%llx\n", ARM_TF_SHARED_ADDRESS);
   program_vbar_el3(&exception_handler_user);
 }
 
@@ -238,7 +239,7 @@ void plat_arm_acs_smc_handler(uint64_t services, uint64_t arg0, uint64_t arg1, u
       break;
     case SMMU_ROOT_SERVICE:
       INFO("ROOT SMMU service \n");
-      val_smmu_access_disable();
+      val_smmu_access_disable(arg0);
       break;
     case SEC_STATE_CHANGE:
       INFO("Security STte change service \n");

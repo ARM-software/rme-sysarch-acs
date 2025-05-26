@@ -22,7 +22,6 @@
 #include "val/include/rme_test_entry.h"
 #include "val/include/val_interface.h"
 #include "val/include/rme_acs_el32.h"
-#include "val/include/sys_config.h"
 #include "val/include/mem_interface.h"
 
 #define TEST_NUM   (ACS_RME_TEST_NUM_BASE + 12)
@@ -39,15 +38,21 @@ static
 void payload(void)
 {
 
-  struct_sh_data *shared_data = (struct_sh_data *) SHARED_ADDRESS;
+  struct_sh_data *shared_data = (struct_sh_data *) val_get_shared_address();
   uint32_t index = val_pe_get_index_mpid(val_pe_get_mpid()), attr;
   uint64_t wt_data, rd_data, PA_RLM, size;
+  uint64_t realm_smem_available = val_get_realm_smem_base();
 
   wt_data = RANDOM_DATA_1;
   size = val_get_min_tg();
-  PA_RLM = val_get_free_pa(size, size);
-  /* Map the PA as REALM in GPT table */
-  val_add_gpt_entry_el3(PA_RLM, GPT_REALM);
+
+  if (realm_smem_available)
+    PA_RLM = realm_smem_available;
+  else {
+    /* Map the PA as REALM in GPT table */
+    PA_RLM = val_get_free_pa(size, size);
+    val_add_gpt_entry_el3(PA_RLM, GPT_REALM);
+  }
 
   if (val_read_reset_status() == RESET_TST12_FLAG)
           goto reset_done;

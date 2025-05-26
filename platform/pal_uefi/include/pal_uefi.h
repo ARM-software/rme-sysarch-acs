@@ -57,6 +57,56 @@ extern UINT32 g_pcie_cache_present;
 #define BAR_MT_SHIFT    3
 #define BAR_BASE_SHIFT  4
 
+typedef struct {
+  UINT32 type;
+  UINT32 bdf;
+  UINT64 address;
+  UINT32 property;
+} REGISTER_INFO_TABLE;
+
+typedef enum {
+  PCIE_RP = 0,
+  INTERCONNECT = 1
+} REGISTER_TYPE;
+
+typedef enum {
+  RMSD_WRITE_PROTECT = 0,
+  RMSD_FULL_PROTECT = 1,
+  RMSD_PROTECT = 2
+} RMSD_SECURITY_PROPERTY;
+
+/**
+  @brief  structure instance for region types
+**/
+typedef struct {
+  UINT32 num_of_regn_gpc;
+  UINT32 num_of_regn_pas_filter;
+} MEM_REGN_INFO_HDR;
+
+/**
+  @brief  structure instance for Region details
+**/
+typedef struct {
+  UINT32   base_addr;
+  UINT32   regn_size;
+  UINT64   resourse_pas;
+} MEM_REGN_INFO_ENTRY;
+
+typedef struct {
+  MEM_REGN_INFO_HDR    header;
+  MEM_REGN_INFO_ENTRY  regn_info[];
+} MEM_REGN_INFO_TABLE;
+
+typedef struct {
+  UINT64 rt_reg_base_addr;
+  UINT64 rt_reg_size;
+} RT_REG_INFO_ENTRY;
+
+typedef struct {
+  UINT32 num_reg;
+  RT_REG_INFO_ENTRY rt_reg_info[];
+} ROOT_REGSTR_TABLE;
+
 typedef enum {
   MMIO = 0,
   IO = 1
@@ -398,7 +448,6 @@ VOID    *pal_mem_alloc_cacheable(UINT32 bdf, UINT32 size, VOID **pa);
 VOID    pal_mem_free_cacheable(UINT32 bdf, UINT32 size, VOID *va, VOID *pa);
 VOID    *pal_mem_virt_to_phys(VOID *va);
 VOID    *pal_mem_phys_to_virt(UINT64 pa);
-UINT64  pal_memory_get_unpopulated_addr(UINT64 *addr, UINT32 instance);
 VOID pal_mem_free(VOID *buffer);
 
 UINT32 pal_pe_get_num();

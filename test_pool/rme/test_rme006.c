@@ -21,7 +21,6 @@
 
 #include "val/include/val_interface.h"
 #include "val/include/rme_acs_el32.h"
-#include "val/include/sys_config.h"
 
 #define TEST_NUM   (ACS_RME_TEST_NUM_BASE  +  06)
 #define TEST_DESC  "To check if resources are aligned to page granularity  "
@@ -41,14 +40,16 @@ void payload(void)
   uint32_t index = val_pe_get_index_mpid(val_pe_get_mpid()), num_regn;
   uint8_t status_fail_cnt, pgs, p[3] = {12 /*4KB*/, 16 /*64KB*/, 14 /*16KB*/};
   uint64_t PA;
+  MEM_REGN_INFO_TABLE *mem_region_cfg;
 
-  num_regn = mem_region_cfg.header.num_of_regn_gpc;
+  mem_region_cfg = val_mem_gpc_info_table();
+  num_regn = mem_region_cfg->header.num_of_regn_gpc;
   status_fail_cnt = 0;
 
   for (uint32_t regn_cnt = 0; regn_cnt < num_regn; ++regn_cnt)
   {
 
-    PA = mem_region_cfg.regn_info[regn_cnt].base_addr;
+    PA = mem_region_cfg->regn_info[regn_cnt].base_addr;
     /* The page granularity is always assumed to be 4KB for the current resources*/
     pgs = p[0];
 

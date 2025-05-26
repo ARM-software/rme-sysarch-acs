@@ -25,7 +25,6 @@
 #include "val/include/rme_acs_pcie_enumeration.h"
 #include "val/include/rme_acs_pgt.h"
 #include "val/include/rme_acs_el32.h"
-#include "val/include/sys_config.h"
 
 #define TEST_NUM   (ACS_RME_TEST_NUM_BASE  +  13)
 #define TEST_DESC  "PCiE devices subjected to PAS protection check or not  "

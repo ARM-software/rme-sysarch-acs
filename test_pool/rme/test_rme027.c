@@ -22,7 +22,6 @@
 #include "val/include/rme_acs_wd.h"
 #include "val/include/rme_acs_timer.h"
 #include "val/include/rme_acs_el32.h"
-#include "val/include/sys_config.h"
 
 #define TEST_NUM   (ACS_RME_TEST_NUM_BASE + 27)
 #define TEST_DESC  "Check Root Watchdog interrupt from Root state          "
@@ -62,22 +61,32 @@ payload()
 
     uint64_t timer_expire_ticks = 1;
     uint32_t index = val_pe_get_index_mpid(val_pe_get_mpid()), timeout, attr;
-    uint64_t size;
+    uint64_t size, rt_wdog_ctl_reg;
+    uint64_t rt_wdog_ctl_available = val_get_rt_wdog_ctrl();
 
     size = val_get_min_tg();
+
+    if (rt_wdog_ctl_available) {
+        rt_wdog_ctl_reg = rt_wdog_ctl_available;
+        /* INT_ID for RT_WDOG is 114 */
+        int_id = val_get_rt_wdog_int_id();
+    } else {
+        val_print(ACS_PRINT_ERR, " ROOT Watchdog not available in the platform", 0);
+        val_set_status(index, RESULT_FAIL(TEST_NUM, 2));
+        return;
+    }
+
     VA_RT_WDOG = val_get_free_va(size);
 
     timeout = val_get_counter_frequency() * 2;
     counter_freq = val_get_counter_frequency();
     val_print(ACS_PRINT_DEBUG, "\n       Timer value = 0x%lx  ", timeout);
-    /* INT_ID for RT_WDOG is 114 */
-    int_id       = RT_WDOG_INT_ID;
     val_print(ACS_PRINT_DEBUG, "\n       Root watchdog Interrupt id  %d        ", int_id);
 
     if (val_gic_install_isr(int_id, isr)) {
-            val_print(ACS_PRINT_ERR, "\n       GIC Install Handler Failed...", 0);
-            val_set_status(index, RESULT_FAIL(TEST_NUM, 2));
-            return;
+        val_print(ACS_PRINT_ERR, "\n       GIC Install Handler Failed...", 0);
+        val_set_status(index, RESULT_FAIL(TEST_NUM, 2));
+        return;
     }
 
     /* Set Interrupt Type: Level Trigger */
@@ -85,15 +94,15 @@ payload()
 
     shared_data->generic_flag = CLEAR;
     attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(NON_SHAREABLE) | PGT_ENTRY_AP_RW);
-    val_add_mmu_entry_el3(VA_RT_WDOG, RT_WDOG_CTRL,  (attr | LOWER_ATTRS(PAS_ATTR(ROOT_PAS))));
+    val_add_mmu_entry_el3(VA_RT_WDOG, rt_wdog_ctl_reg,  (attr | LOWER_ATTRS(PAS_ATTR(ROOT_PAS))));
     val_wd_set_ws0_el3(VA_RT_WDOG, timer_expire_ticks, counter_freq);
 
     while ((--timeout > 0) && (IS_RESULT_PENDING(val_get_status(index))));
 
     if (timeout == 0) {
-            val_print(ACS_PRINT_ERR, "\n       WS0 Interrupt not received on %d   ", int_id);
-            val_set_status(index, RESULT_FAIL(TEST_NUM, 4));
-            return;
+        val_print(ACS_PRINT_ERR, "\n       WS0 Interrupt not received on %d   ", int_id);
+        val_set_status(index, RESULT_FAIL(TEST_NUM, 4));
+        return;
     }
 }
 

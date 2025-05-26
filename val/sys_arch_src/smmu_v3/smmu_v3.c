@@ -100,9 +100,7 @@ static int smmu_cmdq_write_cmd(smmu_dev_t *smmu, uint64_t *cmd)
         cmd_dst[i] = cmd[i];
     queue.prod = smmu_cmdq_inc_prod(&queue);
 
-#ifndef TARGET_LINUX
     ArmExecuteMemoryBarrier();
-#endif
     val_mmio_write((uint64_t)cmdq->prod_reg, queue.prod);
 
     return ret;

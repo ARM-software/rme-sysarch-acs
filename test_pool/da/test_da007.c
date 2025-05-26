@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2024, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2024-2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -26,7 +26,6 @@
 #include "val/include/rme_acs_exerciser.h"
 #include "val/include/rme_acs_smmu.h"
 #include "val/include/rme_acs_pe.h"
-#include "val/include/sys_config.h"
 
 #define TEST_NUM (ACS_RME_DA_TEST_NUM_BASE  +  07)
 #define TEST_DESC "Check outgoing request with IDE-Tbit = 1               "

@@ -26,7 +26,6 @@
 #include "val/include/val_interface.h"
 #include "val/include/rme_acs_pe.h"
 #include "val/include/rme_acs_val.h"
-#include "val/include/sys_config.h"
 
 #include "RmeAcs.h"
 
@@ -109,6 +108,47 @@ createGicInfoTable (
   }
 
   Status = val_gic_create_info_table(GicInfoTable);
+
+  return Status;
+
+}
+
+EFI_STATUS
+createMemCfgInfoTable (
+)
+{
+  EFI_STATUS Status;
+  UINT64     *GPCInfoTable;
+  UINT64     *PASInfoTable;
+  UINT64     *RootRegInfoTable;
+
+  Status = gBS->AllocatePool (EfiBootServicesData,
+                               MEM_GPC_REGION_TBL_SZ,
+                               (VOID **) &GPCInfoTable);
+
+  Status = gBS->AllocatePool (EfiBootServicesData,
+                               MEM_PAS_REGION_TBL_SZ,
+                               (VOID **) &PASInfoTable);
+
+  if (EFI_ERROR(Status))
+  {
+    Print(L"Allocate Pool failed %x \n", Status);
+    return Status;
+  }
+
+  val_mem_region_create_info_table(GPCInfoTable, PASInfoTable);
+
+  Status = gBS->AllocatePool (EfiBootServicesData,
+                               ROOT_REG_TBL_SZ,
+                               (VOID **) &RootRegInfoTable);
+
+  if (EFI_ERROR(Status))
+  {
+    Print(L"Allocate Pool failed %x \n", Status);
+    return Status;
+  }
+
+  val_root_register_create_info_table(RootRegInfoTable);
 
   return Status;
 
@@ -444,6 +484,9 @@ ShellAppMainrme (
    * Generation of LPIs.
   */
   configureGicIts();
+
+  /* Create the platform config tables for the RME Issue A tests */
+  createMemCfgInfoTable();
 
   /* Configure SMMUs, PCIe and Exerciser tables required for the ACS */
   Status = val_configure_acs();

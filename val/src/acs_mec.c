@@ -18,6 +18,7 @@
 #include "include/rme_acs_val.h"
 #include "include/rme_acs_common.h"
 #include "include/rme_acs_mec.h"
+#include "include/rme_acs_iovirt.h"
 #include "include/rme_acs_el32.h"
 #include "include/mem_interface.h"
 #include "include/val_interface.h"
@@ -34,7 +35,9 @@
 uint32_t
 val_rme_mec_execute_tests(uint32_t num_pe)
 {
-  uint32_t status, i, reset_status, num_smmus;
+  uint32_t status, i, reset_status, smmu_cnt;
+  uint64_t num_smmus = val_smmu_get_info(SMMU_NUM_CTRL, 0);
+  uint64_t smmu_base_arr[num_smmus], pgt_attr_el3;
 
   for (i = 0 ; i < MAX_TEST_SKIP_NUM ; i++) {
       if (g_skip_test_num[i] == ACS_RME_MEC_TEST_NUM_BASE) {
@@ -63,8 +66,18 @@ val_rme_mec_execute_tests(uint32_t num_pe)
 
   if (!g_rl_smmu_init)
   {
-      num_smmus = val_iovirt_get_smmu_info(SMMU_NUM_CTRL, 0);
-      val_rlm_smmu_init(num_smmus);
+      smmu_cnt = 0;
+
+      while (smmu_cnt < num_smmus)
+      {
+        smmu_base_arr[smmu_cnt] = val_smmu_get_info(SMMU_CTRL_BASE, smmu_cnt);
+        smmu_cnt++;
+      }
+      /* Map the Pointer in EL3 as NS Access PAS so that EL3 can access this struct pointers */
+      pgt_attr_el3 = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(OUTER_SHAREABLE) |
+                                 PGT_ENTRY_AP_RW | PAS_ATTR(NONSECURE_PAS));
+      val_add_mmu_entry_el3((uint64_t)(smmu_base_arr), (uint64_t)(smmu_base_arr), pgt_attr_el3);
+      val_rlm_smmu_init(num_smmus, smmu_base_arr);
 
       g_rl_smmu_init = 1;
   }

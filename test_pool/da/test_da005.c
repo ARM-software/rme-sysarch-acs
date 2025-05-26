@@ -21,7 +21,6 @@
 #include "val/include/rme_acs_pcie.h"
 #include "val/include/rme_acs_el32.h"
 #include "val/include/rme_acs_da.h"
-#include "val/include/sys_config.h"
 
 #define TEST_NUM (ACS_RME_DA_TEST_NUM_BASE  +  5)
 #define TEST_DESC "To Check the attribute of RMEDA_CTL registers          "

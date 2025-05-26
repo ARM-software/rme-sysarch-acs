@@ -34,6 +34,7 @@ payload()
 
   uint64_t rme_impl_smmu, root_impl_smmu;
   uint32_t num_smmu;
+  uint64_t smmu_base;
   uint32_t index = val_pe_get_index_mpid(val_pe_get_mpid());
 
   num_smmu = val_smmu_get_info(SMMU_NUM_CTRL, 0);
@@ -51,8 +52,8 @@ payload()
           return;
       }
 
-      /* Check the SMMU_ROOT_IDR0 register for the feature implementations */
-      val_smmu_check_rmeda_el3();
+      smmu_base = val_smmu_get_info(SMMU_CTRL_BASE, num_smmu);
+      val_smmu_check_rmeda_el3(smmu_base);
       root_impl_smmu = VAL_EXTRACT_BITS(shared_data->shared_data_access[0].data, 0, 0);
 
       /* Check If SMMU__ROOT_IDR0.RME_IMPL[3] && SMMU_ROOT_IDR0.ROOT_IMPL[0] == 0b1 */

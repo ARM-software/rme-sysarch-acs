@@ -135,7 +135,7 @@ acs_str:
 
        str    x1, [x0]
        dsb    sy
-       ldr    x0, =SHARED_ADDRESS
+       ldr    x0, =PLAT_SHARED_ADDRESS
        ldr    x1, [x0, #0x8]
        ldr    x2, [x0, #0x10]
        msr    elr_el3, x1
@@ -174,7 +174,7 @@ acs_ldr_pas_filter:
 
        ldr    x1, [x0]
        dsb    sy
-       ldr    x0, =SHARED_ADDRESS
+       ldr    x0, =PLAT_SHARED_ADDRESS
        ldr    x2, [x0, #0x8]
        ldr    x3, [x0, #0x10]
        msr    elr_el3, x2

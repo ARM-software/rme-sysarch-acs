@@ -32,6 +32,9 @@
   #define PERIPHERAL_INFO_TBL_SZ 1024 /*Supports maximum 20 PCIe EPs (USB and SATA controllers only) */
   #define PCIE_INFO_TBL_SZ       512  /*Supports maximum 20 RC's*/
   #define REGISTER_INFO_TBL_SZ   512  /*Supports maximum 128 register regions */
+  #define MEM_GPC_REGION_TBL_SZ  19200 /* Supports maximum of 800 entries, Not fixed */
+  #define MEM_PAS_REGION_TBL_SZ  19200 /* Supports maximum of 800 entries, Not fixed */
+  #define ROOT_REG_TBL_SZ        2560  /* Supports maximum 128 register regions */
 
   #ifdef _AARCH64_BUILD_
   unsigned long __stack_chk_guard = 0xBAAAAAAD;

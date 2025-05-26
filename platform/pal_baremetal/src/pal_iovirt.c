@@ -274,32 +274,3 @@ pal_iovirt_create_info_table(IOVIRT_INFO_TABLE *IoVirtTable)
     dump_block(block);
   }
 }
-
-/**
-  @brief  Check if given SMMU node has unique context bank interrupt ids
-
-  @param  smmu_block smmu IOVIRT block base address
-
-  @return 0 if test fails, 1 if test passes
-**/
-uint32_t
-pal_iovirt_check_unique_ctx_intid(uint64_t smmu_block)
-{
-  IOVIRT_BLOCK *block = (IOVIRT_BLOCK *)smmu_block;
-  /* This test has already been done while parsing IORT */
-  /* Check the flags to get the test result */
-  if(block->flags & (1 << IOVIRT_FLAG_SMMU_CTX_INT_SHIFT)) {
-    return 0;
-  }
-  return 1;
-
-}
-
-uint32_t
-pal_iovirt_unique_rid_strid_map(uint64_t rc_block)
-{
-  IOVIRT_BLOCK *block = (IOVIRT_BLOCK *)rc_block;
-  if(block->flags & (1 << IOVIRT_FLAG_STRID_OVERLAP_SHIFT))
-    return 0;
-  return 1;
-}

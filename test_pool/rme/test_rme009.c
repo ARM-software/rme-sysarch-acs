@@ -22,7 +22,6 @@
 #include "val/include/rme_test_entry.h"
 #include "val/include/val_interface.h"
 #include "val/include/rme_acs_el32.h"
-#include "val/include/sys_config.h"
 
 #define NUM_PAS 4
 #define NUM_MTE_RGN 3
@@ -40,21 +39,33 @@
 static
 void payload(void)
 {
-  struct_sh_data *shared_data = (struct_sh_data *) SHARED_ADDRESS;
+  struct_sh_data *shared_data = (struct_sh_data *) val_get_shared_address();
   uint32_t index = val_pe_get_index_mpid(val_pe_get_mpid()), attr;
   uint64_t pas_list[4] = {REALM_PAS, NONSECURE_PAS, SECURE_PAS, ROOT_PAS}, VA, size;
+  uint64_t mte_base, mte_size, mte_mid, mte_end;
   uint8_t status_fail_cnt;
+  uint64_t mte_mem_available = val_get_mte_protected_region_base();
 
   status_fail_cnt = 0;
   size = val_get_min_tg();
   VA = val_get_free_va(NUM_MTE_RGN * NUM_PAS * size);
   attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(NON_SHAREABLE) | PGT_ENTRY_AP_RW);
 
+  if (mte_mem_available) {
+    mte_base = mte_mem_available;
+    mte_size = val_get_mte_protected_region_size();
+  } else {
+    mte_size = size;
+    mte_base = val_get_free_pa(mte_size, size);
+    val_add_gpt_entry_el3(mte_base, GPT_ROOT);
+  }
+  mte_end = (mte_base + mte_size - 1);
+  mte_mid = (mte_end - (mte_size / 2));
+
   for (int pas_cnt = 0; pas_cnt < 4; ++pas_cnt)
   {
     /* MTE carve-out region: Base Address */
-    val_add_mmu_entry_el3(VA, MTE_PROTECTED_REGION_BASE,
-                    (attr | LOWER_ATTRS(PAS_ATTR(pas_list[pas_cnt]))));
+    val_add_mmu_entry_el3(VA, mte_base, (attr | LOWER_ATTRS(PAS_ATTR(pas_list[pas_cnt]))));
 
     if (pas_list[pas_cnt] == ROOT_PAS) {
         shared_data->exception_expected = CLEAR;
@@ -85,8 +96,7 @@ void payload(void)
     VA += size;
 
     /* MTE carve-out region: Middle Address */
-    val_add_mmu_entry_el3(VA, MTE_PROTECTED_REGION_MID,
-                    (attr | LOWER_ATTRS(PAS_ATTR(pas_list[pas_cnt]))));
+    val_add_mmu_entry_el3(VA, mte_mid, (attr | LOWER_ATTRS(PAS_ATTR(pas_list[pas_cnt]))));
 
     if (pas_list[pas_cnt] == ROOT_PAS) {
         shared_data->exception_expected = CLEAR;
@@ -117,8 +127,7 @@ void payload(void)
     VA += size;
 
     /* MTE carve-out region: End Address */
-    val_add_mmu_entry_el3(VA, MTE_PROTECTED_REGION_END,
-                    (attr | LOWER_ATTRS(PAS_ATTR(pas_list[pas_cnt]))));
+    val_add_mmu_entry_el3(VA, mte_end, (attr | LOWER_ATTRS(PAS_ATTR(pas_list[pas_cnt]))));
 
     if (pas_list[pas_cnt] == ROOT_PAS) {
         shared_data->exception_expected = CLEAR;

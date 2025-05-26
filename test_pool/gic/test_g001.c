@@ -29,7 +29,6 @@
 #include "val/include/rme_acs_gic_support.h"
 #include "val/include/rme_acs_exerciser.h"
 #include "val/include/rme_acs_el32.h"
-#include "val/include/sys_config.h"
 #include "val/sys_arch_src/gic/its/rme_gic_its.h"
 
 #define TEST_NUM   (ACS_GIC_TEST_NUM_BASE + 01)

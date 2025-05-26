@@ -20,6 +20,7 @@
 #include "val/include/rme_acs_exerciser.h"
 
 #include "val/include/rme_acs_smmu.h"
+#include "val/include/rme_acs_iovirt.h"
 #include "val/include/rme_acs_pcie.h"
 #include "val/include/rme_acs_pcie_enumeration.h"
 #include "val/include/mem_interface.h"
@@ -81,6 +82,7 @@ payload(void)
   uint32_t instance;
   uint32_t e_bdf, num_smmu;
   uint32_t smmu_index;
+  uint64_t smmu_base;
   void *dram_buf1_virt;
   void *dram_buf1_phys;
 
@@ -111,11 +113,12 @@ payload(void)
     smmu_index = val_iovirt_get_rc_smmu_index(PCIE_EXTRACT_BDF_SEG(e_bdf),
                     PCIE_CREATE_BDF_PACKED(e_bdf));
 
+    smmu_base = val_smmu_get_info(SMMU_CTRL_BASE, smmu_index);
     /* Disable SMMU globally by writing reset values to SMMU_CR0.SMMUEN and
      * SMMU_ROOT_CR0.ACCESSEN thereby setting the SMMU in reset state.
      */
     if (smmu_index != ACS_INVALID_INDEX) {
-        val_smmu_access_disable();
+        val_smmu_access_disable(smmu_base);
         if (val_smmu_disable(smmu_index)) {
             val_print(ACS_PRINT_ERR, "\n       Exerciser %x smmu disable error", instance);
             val_set_status(pe_index, RESULT_FAIL(TEST_NUM, 02));

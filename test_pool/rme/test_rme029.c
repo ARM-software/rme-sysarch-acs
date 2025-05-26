@@ -21,8 +21,8 @@
 
 #include "val/include/rme_test_entry.h"
 #include "val/include/val_interface.h"
+#include "val/include/rme_acs_memory.h"
 #include "val/include/rme_acs_el32.h"
-#include "val/include/sys_config.h"
 
 #define NUM_PAS 4
 
@@ -44,8 +44,12 @@ void payload(void)
   uint8_t status_fail_cnt = 0;
   uint32_t index = val_pe_get_index_mpid(val_pe_get_mpid()), security_state, num_regn, attr;
   uint64_t VA, rd_data, size;
+  MEM_REGN_INFO_TABLE *mem_region_pas_filter_cfg;
 
-  if (!IS_PAS_FILTER_MODE_PROGRAMMABLE) {
+  mem_region_pas_filter_cfg = val_mem_pas_info_table();
+  num_regn = mem_region_pas_filter_cfg->header.num_of_regn_gpc;
+
+  if (!val_is_pas_filter_mode_programmable()) {
     val_print(ACS_PRINT_ERR, "\n       The pas filter mode is not programmable in this system", 0);
     val_set_status(index, RESULT_SKIP(TEST_NUM, 01));
     return;
@@ -54,15 +58,14 @@ void payload(void)
   val_pas_filter_active_mode_el3(CLEAR);
   shared_data->shared_data_access[0].data = INIT_DATA;
   size = val_get_min_tg();
-  num_regn = mem_region_pas_filter_cfg.header.num_of_regn_gpc;
   VA = val_get_free_va(num_regn * size);
   attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(NON_SHAREABLE) | PGT_ENTRY_AP_RW);
 
   for (uint32_t regn_cnt = 0; regn_cnt < num_regn; ++regn_cnt)
   {
 
-    shared_data->arg0 = mem_region_pas_filter_cfg.regn_info[regn_cnt].base_addr;
-    security_state = mem_region_pas_filter_cfg.regn_info[regn_cnt].resourse_pas;
+    shared_data->arg0 = mem_region_pas_filter_cfg->regn_info[regn_cnt].base_addr;
+    security_state = mem_region_pas_filter_cfg->regn_info[regn_cnt].resourse_pas;
     val_add_mmu_entry_el3(VA, shared_data->arg0, (attr | LOWER_ATTRS(PAS_ATTR(security_state))));
 
     shared_data->exception_expected = CLEAR;

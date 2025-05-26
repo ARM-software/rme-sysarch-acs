@@ -26,8 +26,9 @@
 #include "include/val_interface.h"
 #include "include/rme_acs_el32.h"
 #include "include/mem_interface.h"
-#include "include/sys_config.h"
 
+MEM_REGN_INFO_TABLE *g_mem_region_cfg;
+MEM_REGN_INFO_TABLE *g_mem_region_pas_filter_cfg;
 
 /**
   @brief   This API will execute all RME tests designated for a given compliance level
@@ -56,7 +57,6 @@ val_rme_execute_tests(uint32_t num_pe)
     val_print(ACS_PRINT_TEST, " (Running only a single module)\n", 0);
     return ACS_STATUS_SKIP;
   }
-
 
   reset_status = val_read_reset_status();
   val_print(ACS_PRINT_TEST, "      reset_status = %lx\n", reset_status);
@@ -125,3 +125,23 @@ reset_done_ls:
 
 }
 
+void
+val_mem_region_create_info_table(uint64_t *mem_gpc_region_table, uint64_t *mem_pas_region_table)
+{
+  g_mem_region_cfg = (MEM_REGN_INFO_TABLE *)mem_gpc_region_table;
+  g_mem_region_pas_filter_cfg = (MEM_REGN_INFO_TABLE *)mem_pas_region_table;
+
+  pal_mem_region_create_info_table(g_mem_region_cfg, g_mem_region_pas_filter_cfg);
+}
+
+MEM_REGN_INFO_TABLE *
+val_mem_gpc_info_table(void)
+{
+  return g_mem_region_cfg;
+}
+
+MEM_REGN_INFO_TABLE *
+val_mem_pas_info_table(void)
+{
+  return g_mem_region_pas_filter_cfg;
+}

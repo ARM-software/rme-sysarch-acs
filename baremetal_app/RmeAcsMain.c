@@ -74,6 +74,29 @@ createGicInfoTable(
 
 }
 
+void
+createMemCfgInfoTable (
+)
+{
+  uint64_t     *GPCInfoTable;
+  uint64_t     *PASInfoTable;
+  uint64_t     *RootRegInfoTable;
+
+  GPCInfoTable = val_aligned_alloc(SIZE_4K, sizeof(MEM_REGN_INFO_TABLE)
+                                   + GPC_PROTECTED_REGION_CNT * sizeof(MEM_REGN_INFO_TABLE));
+
+  PASInfoTable = val_aligned_alloc(SIZE_4K, sizeof(MEM_REGN_INFO_TABLE)
+                                   + PAS_PROTECTED_REGION_CNT * sizeof(MEM_REGN_INFO_TABLE));
+
+  val_mem_region_create_info_table(GPCInfoTable, PASInfoTable);
+
+  RootRegInfoTable = val_aligned_alloc(SIZE_4K, sizeof(ROOT_REGSTR_TABLE)
+                                       + RT_REG_CNT * sizeof(ROOT_REGSTR_TABLE));
+
+  val_root_register_create_info_table(RootRegInfoTable);
+
+}
+
 uint32_t
 configureGicIts(
 )
@@ -224,6 +247,9 @@ ShellAppMainrme(
    * Generation of LPIs.
   */
   configureGicIts();
+
+  /* Create the platform config tables for the RME Issue A tests */
+  createMemCfgInfoTable();
 
   /* Configure SMMUs, PCIe and Exerciser tables required for the ACS */
   Status = val_configure_acs();

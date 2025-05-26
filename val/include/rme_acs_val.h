@@ -23,7 +23,6 @@
 #include "rme_acs_cfg.h"
 #include "rme_acs_common.h"
 
-
 typedef struct {
   uint64_t    data0;
   uint64_t    data1;
@@ -86,6 +85,16 @@ val_pe_get_vtcr(VTCR_EL2_INFO *vtcr);
 
 uint32_t
 val_pe_get_vtbr(uint64_t *ttbr_ptr);
+
+void
+val_mem_region_create_info_table(uint64_t *mem_gpc_region_table,
+                                 uint64_t *mem_pas_region_table);
+
+MEM_REGN_INFO_TABLE *
+val_mem_gpc_info_table(void);
+
+MEM_REGN_INFO_TABLE *
+val_mem_pas_info_table(void);
 
 #endif
 

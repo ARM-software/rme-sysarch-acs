@@ -28,7 +28,6 @@
 #include "val/include/rme_acs_pgt.h"
 #include "val/include/rme_acs_iovirt.h"
 #include "val/include/mem_interface.h"
-#include "val/include/sys_config.h"
 #include "val/include/rme_acs_da.h"
 #include "val/include/rme_acs_mec.h"
 
