@@ -21,6 +21,8 @@
 #include  <Library/ShellLib.h>
 #include  <Library/UefiBootServicesTableLib.h>
 #include  <Library/CacheMaintenanceLib.h>
+#include  <Library/BaseLib.h>
+#include  <Library/MemoryAllocationLib.h>
 #include  <Protocol/LoadedImage.h>
 
 #include "val/include/val_interface.h"
@@ -32,22 +34,27 @@
 UINT32 g_pcie_p2p;
 UINT32 g_pcie_cache_present;
 
-UINT32  g_print_level;
+UINT32 g_print_level;
+UINT32 g_print_in_test_context;
+UINT32 g_print_test_check_id;
 UINT32 g_print_mmio;
 UINT32 g_curr_module;
 UINT32 g_enable_module;
-UINT32  g_skip_test_num[MAX_TEST_SKIP_NUM] = { 10000, 10000, 10000, 10000, 10000,
-                                               10000, 10000, 10000, 10000, 10000 };
-UINT32  g_single_test = SINGLE_TEST_SENTINEL;
-UINT32  g_single_module = SINGLE_MODULE_SENTINEL;
-UINT32  g_rme_tests_total;
-UINT32  g_rme_tests_pass;
-UINT32  g_rme_tests_fail;
-UINT64  g_stack_pointer;
-UINT64  g_exception_ret_addr;
-UINT64  g_ret_addr;
-UINT32  g_wakeup_timeout;
-UINT32  g_rl_smmu_init;
+CHAR8 *g_skip_test_str[MAX_TEST_SKIP_NUM] = {
+  SKIP_TEST_SENTINEL, SKIP_TEST_SENTINEL, SKIP_TEST_SENTINEL, SKIP_TEST_SENTINEL,
+  SKIP_TEST_SENTINEL, SKIP_TEST_SENTINEL, SKIP_TEST_SENTINEL, SKIP_TEST_SENTINEL,
+  SKIP_TEST_SENTINEL, SKIP_TEST_SENTINEL,
+};
+CHAR8 *g_single_test_str = SINGLE_TEST_SENTINEL_STR;
+CHAR8 *g_single_module_str = SINGLE_MODULE_SENTINEL_STR;
+UINT32 g_rme_tests_total;
+UINT32 g_rme_tests_pass;
+UINT32 g_rme_tests_fail;
+UINT64 g_stack_pointer;
+UINT64 g_exception_ret_addr;
+UINT64 g_ret_addr;
+UINT32 g_wakeup_timeout;
+UINT32 g_rl_smmu_init;
 SHELL_FILE_HANDLE g_rme_log_file_handle;
 
 STATIC VOID FlushImage (VOID)
@@ -80,7 +87,7 @@ createPeInfoTable (
 
   if (EFI_ERROR(Status))
   {
-    Print(L"Allocate Pool failed %x \n", Status);
+    Print(L"\nAllocate Pool failed %x ", Status);
     return Status;
   }
 
@@ -103,7 +110,7 @@ createGicInfoTable (
 
   if (EFI_ERROR(Status))
   {
-    Print(L"Allocate Pool failed %x \n", Status);
+    Print(L"\nAllocate Pool failed %x ", Status);
     return Status;
   }
 
@@ -178,7 +185,7 @@ createTimerInfoTable(
 
   if (EFI_ERROR(Status))
   {
-    Print(L"Allocate Pool failed %x \n", Status);
+    Print(L"\nAllocate Pool failed %x ", Status);
     return Status;
   }
   val_timer_create_info_table(TimerInfoTable);
@@ -202,7 +209,7 @@ createPcieVirtInfoTable(
 
   if (EFI_ERROR(Status))
   {
-    Print(L"Allocate Pool failed %x \n", Status);
+    Print(L"\nAllocate Pool failed %x ", Status);
     return Status;
   }
   val_pcie_create_info_table(PcieInfoTable);
@@ -213,7 +220,7 @@ createPcieVirtInfoTable(
 
   if (EFI_ERROR(Status))
   {
-    Print(L"Allocate Pool failed %x \n", Status);
+    Print(L"\nAllocate Pool failed %x ", Status);
     return Status;
   }
 
@@ -226,7 +233,7 @@ createPcieVirtInfoTable(
 
   if (EFI_ERROR(Status))
   {
-    Print(L"Allocate Pool failed %x \n", Status);
+    Print(L"\nAllocate Pool failed %x ", Status);
     return Status;
   }
   val_iovirt_create_info_table(IoVirtInfoTable);
@@ -248,7 +255,7 @@ createPeripheralInfoTable(
 
   if (EFI_ERROR(Status))
   {
-    Print(L"Allocate Pool failed %x \n", Status);
+    Print(L"\nAllocate Pool failed %x ", Status);
     return Status;
   }
   val_peripheral_create_info_table(PeripheralInfoTable);
@@ -288,9 +295,9 @@ HelpMsg (
          "        As per RME spec, 3 to 6\n"
          "-f      Name of the log file to record the test results in\n"
          "-skip   Test(s) to be skipped\n"
-         "        Refer to section 4 of RME_ACS_User_Guide\n"
+         "        Refer to section 2.3 of RME_ACS_Platform_Porting_Guide\n"
          "        To skip a module, use Model_ID as mentioned in user guide\n"
-         "        To skip a particular test within a module, use the exact testcase number\n"
+         "        To skip a particular test within a module, use the exact testcase name\n"
          "-p      Enable/disable PCIe RME 6.0 (RCiEP) compliance tests\n"
          "        1 - enables PCIe tests, 0 - disables PCIe tests\n"
          "-t      If set, will only run the specified test, all others will be skipped.\n"
@@ -339,8 +346,6 @@ ShellAppMainrme (
   CONST CHAR16       *CmdLineArg;
   CHAR16             *ProbParam;
   UINT32             Status;
-  UINT32             ReadVerbosity;
-  UINT32             i,j=0;
   VOID               *branch_label;
 
 
@@ -350,38 +355,92 @@ ShellAppMainrme (
   Status = ShellInitialize();
   Status = ShellCommandLineParse (ParamList, &ParamPackage, &ProbParam, TRUE);
   if (Status) {
-    Print(L"Shell command line parse error %x\n", Status);
-    Print(L"Unrecognized option %s passed\n", ProbParam);
+    Print(L"\nShell command line parse error %x", Status);
+    Print(L"\nUnrecognized option %s passed", ProbParam);
     HelpMsg();
     return SHELL_INVALID_PARAMETER;
   }
 
   // Options with Values
-  if (ShellCommandLineGetFlag (ParamPackage, L"-skip")) {
-      CmdLineArg  = ShellCommandLineGetValue (ParamPackage, L"-skip");
-      for (i=0 ; i < StrLen(CmdLineArg) ; i++){
-        g_skip_test_num[0] = StrDecimalToUintn((CONST CHAR16 *)(CmdLineArg+0));
-          if(*(CmdLineArg+i) == L','){
-              g_skip_test_num[++j] = StrDecimalToUintn((CONST CHAR16 *)(CmdLineArg+i+1));
+  if (ShellCommandLineGetFlag(ParamPackage, L"-skip")) {
+      CmdLineArg = ShellCommandLineGetValue(ParamPackage, L"-skip");
+
+      if (CmdLineArg != NULL) {
+          CHAR16 *WorkingStr = AllocateCopyPool(StrSize(CmdLineArg), CmdLineArg);
+          if (WorkingStr == NULL) {
+              Print(L"\nError: Unable to allocate memory for skip string");
+              return SHELL_OUT_OF_RESOURCES;
+          }
+
+          CHAR16 *Token = WorkingStr;
+          UINTN j = 0;
+
+          while (*Token != L'\0' && j < MAX_TEST_SKIP_NUM) {
+              CHAR16 *Next = StrStr(Token, L",");
+              if (Next != NULL)
+                  *Next = L'\0';
+
+              // Trim leading spaces
+              while (*Token == L' ') Token++;
+
+              // Trim trailing spaces
+              CHAR16 *End = Token + StrLen(Token) - 1;
+              while (End > Token && *End == L' ') {
+                  *End = L'\0';
+                  End--;
+              }
+
+              UINTN Len = StrLen(Token);
+              g_skip_test_str[j] = AllocateZeroPool(Len + 1);
+              if (g_skip_test_str[j]) {
+                  UnicodeStrToAsciiStrS(Token, g_skip_test_str[j], Len + 1);
+                  j++;
+              }
+
+              if (Next != NULL)
+                  Token = Next + 1;
+              else
+                  break;
           }
       }
   }
 
 
+
     // Options with Values
   CmdLineArg  = ShellCommandLineGetValue (ParamPackage, L"-v");
-  if (CmdLineArg == NULL) {
-    g_print_level = G_PRINT_LEVEL;
+  if (CmdLineArg != NULL) {
+    CHAR16 *token;
+    CHAR16 *next = (CHAR16 *)CmdLineArg;
+
+    g_print_level = 1;  // Default to verbose
+
+      while ((token = StrStr(next, L",")) != NULL) {
+        *token = L'\0'; // Null-terminate current token
+
+        if (StrCmp(next, L"rme") == 0)         g_enable_module |= (1 << 0);
+        else if (StrCmp(next, L"gic") == 0)    g_enable_module |= (1 << 1);
+        else if (StrCmp(next, L"smmu") == 0)   g_enable_module |= (1 << 2);
+        else if (StrCmp(next, L"da") == 0)     g_enable_module |= (1 << 3);
+        else if (StrCmp(next, L"dpt") == 0)    g_enable_module |= (1 << 4);
+        else if (StrCmp(next, L"mec") == 0)    g_enable_module |= (1 << 5);
+        else if (StrCmp(next, L"ls") == 0)     g_enable_module |= (1 << 6);
+
+        next = token + 1; // Move past the comma
+      }
+
+      // Handle the last (or only) token
+      if (*next != L'\0') {
+        if (StrCmp(next, L"rme") == 0)         g_enable_module |= (1 << 0);
+        else if (StrCmp(next, L"gic") == 0)    g_enable_module |= (1 << 1);
+        else if (StrCmp(next, L"smmu") == 0)   g_enable_module |= (1 << 2);
+        else if (StrCmp(next, L"da") == 0)     g_enable_module |= (1 << 3);
+        else if (StrCmp(next, L"dpt") == 0)    g_enable_module |= (1 << 4);
+        else if (StrCmp(next, L"mec") == 0)    g_enable_module |= (1 << 5);
+        else if (StrCmp(next, L"ls") == 0)     g_enable_module |= (1 << 6);
+      }
   } else {
-    ReadVerbosity = StrDecimalToUintn(CmdLineArg);
-    while (ReadVerbosity/10) {
-      g_enable_module |= (1 << ReadVerbosity%10);
-      ReadVerbosity /= 10;
-    }
-    g_print_level = ReadVerbosity;
-    if (g_print_level > 5) {
-      g_print_level = G_PRINT_LEVEL;
-    }
+    g_print_level = G_PRINT_LEVEL;
   }
 
   // Options with Values
@@ -390,7 +449,7 @@ ShellAppMainrme (
     g_wakeup_timeout = 1;
   } else {
     g_wakeup_timeout = StrDecimalToUintn(CmdLineArg);
-    Print(L"Wakeup timeout multiple %d.\n", g_wakeup_timeout);
+    Print(L"\nWakeup timeout multiple %d.", g_wakeup_timeout);
     if (g_wakeup_timeout > 5)
         g_wakeup_timeout = 5;
     }
@@ -403,7 +462,7 @@ ShellAppMainrme (
     Status = ShellOpenFileByName(CmdLineArg, &g_rme_log_file_handle,
              EFI_FILE_MODE_WRITE | EFI_FILE_MODE_READ | EFI_FILE_MODE_CREATE, 0x0);
     if(EFI_ERROR(Status)) {
-         Print(L"Failed to open log file %s\n", CmdLineArg);
+         Print(L"\nFailed to open log file %s", CmdLineArg);
          g_rme_log_file_handle = NULL;
     }
   }
@@ -437,18 +496,30 @@ ShellAppMainrme (
   // Options with Values
   CmdLineArg  = ShellCommandLineGetValue (ParamPackage, L"-t");
   if (CmdLineArg != NULL) {
-    g_single_test = StrDecimalToUintn(CmdLineArg);
+    UINTN Len = StrLen(CmdLineArg);
+    g_single_test_str = AllocateZeroPool(Len + 1);
+    if (g_single_test_str) {
+        UnicodeStrToAsciiStrS(CmdLineArg, g_single_test_str, Len + 1);
+        Print(L"\n[DEBUG] Single test selected: %s", g_single_test_str);
+    }
   }
 
   // Options with Values
   CmdLineArg  = ShellCommandLineGetValue (ParamPackage, L"-m");
   if (CmdLineArg != NULL) {
-    g_single_module = StrDecimalToUintn(CmdLineArg);
+    UINTN Len = StrLen(CmdLineArg);
+    g_single_module_str = AllocateZeroPool(Len + 1);
+    if (g_single_module_str) {
+        UnicodeStrToAsciiStrS(CmdLineArg, g_single_module_str, Len + 1);
+        Print(L"\n[DEBUG] Single module selected: %a", g_single_module_str);
+    }
   }
 
   //
   // Initialize global counters
   //
+  g_print_in_test_context = 0;
+  g_print_test_check_id = 0;
   g_rme_tests_total = 0;
   g_rme_tests_pass  = 0;
   g_rme_tests_fail  = 0;
@@ -459,7 +530,7 @@ ShellAppMainrme (
   Print(L"\n Starting tests for (Print level is %2d)\n\n", g_print_level);
 
 
-  Print(L" Creating Platform Information Tables \n");
+  Print(L" Creating Platform Information Tables ");
   Status = createPeInfoTable();
   if (Status)
     return Status;
@@ -493,34 +564,29 @@ ShellAppMainrme (
   if (Status)
     return Status;
 
-  Print(L"\n      *** Starting RME tests ***  \n");
+  val_print(ACS_PRINT_ALWAYS, "\n******************************************************* \n", 0);
+
   Status |= val_rme_execute_tests(val_pe_get_num());
 
-  Print(L"\n      *** Starting Legacy System tests ***  \n");
   Status |= val_legacy_execute_tests(val_pe_get_num());
 
-  Print(L"\n      *** Starting GIC test ***  \n");
   Status |= val_gic_execute_tests(val_pe_get_num());
 
-  Print(L"\n      *** Starting IO Virtualization tests ***  \n");
   Status |= val_smmu_execute_tests(val_pe_get_num());
 
-  Print(L"\n      *** Starting RME DA tests ***  \n");
   Status |= val_rme_da_execute_tests(val_pe_get_num());
 
-  Print(L"\n      *** Starting RME DPT tests ***  \n");
   Status |= val_rme_dpt_execute_tests(val_pe_get_num());
 
-  Print(L"\n      *** Starting RME MEC tests ***  \n");
   Status |= val_rme_mec_execute_tests(val_pe_get_num());
 
 
 print_test_status:
-  val_print(ACS_PRINT_TEST, "\n     ------------------------------------------------------- \n", 0);
-  val_print(ACS_PRINT_TEST, "     Total Tests run  = %4d;", g_rme_tests_total);
-  val_print(ACS_PRINT_TEST, "  Tests Passed  = %4d", g_rme_tests_pass);
-  val_print(ACS_PRINT_TEST, "  Tests Failed = %4d\n", g_rme_tests_fail);
-  val_print(ACS_PRINT_TEST, "     --------------------------------------------------------- \n", 0);
+  val_print(ACS_PRINT_ALWAYS, "\n------------------------------------------------------- \n", 0);
+  val_print(ACS_PRINT_ALWAYS, " Total Tests run  = %4d;", g_rme_tests_total);
+  val_print(ACS_PRINT_ALWAYS, " Tests Passed  = %4d", g_rme_tests_pass);
+  val_print(ACS_PRINT_ALWAYS, " Tests Failed = %4d\n", g_rme_tests_fail);
+  val_print(ACS_PRINT_ALWAYS, "--------------------------------------------------------- \n", 0);
 
   freeRmeAcsMem();
 
@@ -528,7 +594,7 @@ print_test_status:
     ShellCloseFile(&g_rme_log_file_handle);
   }
 
-  Print(L"\n      *** RME tests complete. Reset the system. *** \n\n");
+  Print(L"\n********* RME tests complete. Reset the system *********\n\n");
 
   val_pe_context_restore(AA64WriteSp(g_stack_pointer));
 

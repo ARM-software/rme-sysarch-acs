@@ -193,8 +193,8 @@ uint32_t val_setup_mmu(void)
     pgt_desc.pgt_base = (uint64_t) tt_l0_base;
     pgt_desc.stage = PGT_STAGE1;
 
-    val_print(ACS_PRINT_DEBUG, "       mmu: ias=%d\n", pgt_desc.ias);
-    val_print(ACS_PRINT_DEBUG, "       mmu: oas=%d\n", pgt_desc.oas);
+    val_print(ACS_PRINT_DEBUG, " mmu: ias=%d", pgt_desc.ias);
+    val_print(ACS_PRINT_DEBUG, " mmu: oas=%d", pgt_desc.oas);
 
     /* Map regions */
 
@@ -210,9 +210,10 @@ uint32_t val_setup_mmu(void)
         mem_desc->length = mmap_region_list[i].length;
         mem_desc->attributes = mmap_region_list[i].attributes;
 
-        val_print(ACS_PRINT_ERR, "\n       Creating page table for region  : 0x%lx",
+        val_print(ACS_PRINT_ALWAYS, "\n Creating page table for region  : 0x%lx",
                                                                         mem_desc->virtual_address);
-        val_print(ACS_PRINT_ERR, "- 0x%lx\n", (mem_desc->virtual_address + mem_desc->length) - 1);
+        val_print(ACS_PRINT_ALWAYS, "- 0x%lx\n",
+          (mem_desc->virtual_address + mem_desc->length) - 1);
 
         if (val_pgt_create(mem_desc, &pgt_desc))
         {
@@ -259,8 +260,8 @@ uint32_t val_enable_mmu(void)
 
     val_tcr_write(tcr, currentEL);
 
-    val_print(ACS_PRINT_DEBUG, "       val_setup_mmu: TG0=0x%x\n", TCR_TG0);
-    val_print(ACS_PRINT_DEBUG, "       val_setup_mmu: tcr=0x%lx\n", tcr);
+    val_print(ACS_PRINT_DEBUG, " val_setup_mmu: TG0=0x%x", TCR_TG0);
+    val_print(ACS_PRINT_DEBUG, " val_setup_mmu: tcr=0x%lx", tcr);
 
 /* Enable MMU */
     val_sctlr_write((1 << 0) |  // M=1 Enable the stage 1 MMU
@@ -269,8 +270,8 @@ uint32_t val_enable_mmu(void)
                     val_sctlr_read(currentEL),
                     currentEL);
 
-    val_print(ACS_PRINT_DEBUG, "       val_enable_mmu: successful\n", 0);
-    val_print(ACS_PRINT_DEBUG, "       System Control EL2 is %llx", val_sctlr_read(currentEL));
+    val_print(ACS_PRINT_DEBUG, " val_enable_mmu: successful", 0);
+    val_print(ACS_PRINT_DEBUG, " System Control EL2 is %llx", val_sctlr_read(currentEL));
 
     return ACS_STATUS_PASS;
 }
@@ -313,3 +314,20 @@ uint32_t val_memory_compare_src_el3(uint32_t *src, uint32_t *dest, uint32_t size
 
   return 0;
 }
+
+/**
+  @brief  Return the length of a null-terminated string
+
+  @param  str   The pointer to a Null-terminated ASCII string.
+
+  @return The number of characters in the string (not including null terminator)
+**/
+uint32_t
+val_strnlen(const char8_t *str)
+{
+  uint32_t len = 0;
+  while (str[len] != '\0')
+    len++;
+  return len;
+}
+

@@ -46,22 +46,25 @@ val_rme_dpt_execute_tests(uint32_t num_pe)
   (void)num_pe;
 
   for (i = 0 ; i < MAX_TEST_SKIP_NUM ; i++) {
-      if (g_skip_test_num[i] == ACS_RME_DPT_TEST_NUM_BASE) {
-          val_print(ACS_PRINT_TEST, "\n USER Override - Skipping all RME tests \n", 0);
+      if (val_memory_compare(g_skip_test_str[i], DPT_MODULE, val_strnlen(g_skip_test_str[i])) == 0)
+      {
+          val_print(ACS_PRINT_ALWAYS, "\n USER Override - Skipping all RME-DPT tests \n", 0);
           return ACS_STATUS_SKIP;
       }
   }
 
-  if (g_single_module != SINGLE_MODULE_SENTINEL && g_single_module != ACS_RME_DPT_TEST_NUM_BASE &&
-       (g_single_test == SINGLE_MODULE_SENTINEL ||
-       (g_single_test - ACS_RME_DPT_TEST_NUM_BASE > 100 ||
-          g_single_test - ACS_RME_DPT_TEST_NUM_BASE <= 0))) {
-    val_print(ACS_PRINT_TEST, " USER Override - Skipping all RME tests \
-                    (running only a single module)\n", 0);
+  if ((val_memory_compare(g_single_module_str, SINGLE_MODULE_SENTINEL_STR,
+                          val_strnlen(g_single_module_str)) != 0 &&
+      val_memory_compare(g_single_module_str, DPT_MODULE, val_strnlen(g_single_module_str)) != 0) &&
+      (val_memory_compare(g_single_test_str, SINGLE_TEST_SENTINEL_STR,
+                          val_strnlen(g_single_test_str)) == 0 ||
+       val_memory_compare(DPT_MODULE, g_single_test_str, val_strnlen(DPT_MODULE)) != 0)) {
+    val_print(ACS_PRINT_ALWAYS, "\n USER Override - Skipping all RME-DPT tests \n", 0);
+    val_print(ACS_PRINT_ALWAYS, " (Running only a single module)\n", 0);
     return ACS_STATUS_SKIP;
   }
 
-  g_curr_module = 1 << DPT_MODULE;
+  g_curr_module = 1 << DPT_MODULE_ID;
 
   if (!g_rl_smmu_init)
   {
@@ -89,14 +92,13 @@ val_rme_dpt_execute_tests(uint32_t num_pe)
       reset_status != RESET_LS_DISBL_FLAG &&
       reset_status != RESET_LS_TEST3_FLAG)
   {
-    status = dpt001_entry();
-    status |= dpt002_entry();
-    status |= dpt003_entry();
-    status |= dpt004_entry();
-    status |= dpt005_entry();
-    status |= dpt006_entry();
-    status |= dpt007_entry();
-    val_print_test_end(status, "RME-DPT");
+    status = dpt_system_resource_valid_without_dpti_entry();
+    status |= dpt_system_resource_valid_with_dpti_entry();
+    status |= dpt_system_resource_invalid_entry();
+    status |= dpt_p2p_different_rootport_valid_entry();
+    status |= dpt_p2p_different_rootport_invalid_entry();
+    status |= dpt_p2p_same_rootport_valid_entry();
+    status |= dpt_p2p_same_rootport_invalid_entry();
   }
 
   return status;

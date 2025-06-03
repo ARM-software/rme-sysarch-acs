@@ -187,7 +187,7 @@ pal_pcie_hb_program_bar(uint32_t seg, uint32_t bus, uint32_t dev, uint32_t func)
       pal_pci_cfg_read(seg, bus, dev, func, offset, &bar_reg_value);
       if (BAR_REG(bar_reg_value) == BAR_64_BIT)
       {
-          print(ACS_PRINT_INFO, "The HostBridge supports P_MEM 64-bit addr decoding capability\n", 0);
+          print(ACS_PRINT_INFO, "The HostBridge supports P_MEM 64-bit addr decoding capability", 0);
           /** BAR supports 64-bit address therefore, write all 1's
            *  to BARn and BARn+1 and identify the size requested
           **/
@@ -218,7 +218,7 @@ pal_pcie_hb_program_bar(uint32_t seg, uint32_t bus, uint32_t dev, uint32_t func)
 
       else
       {
-          print(ACS_PRINT_INFO, "The RP BAR supports P_MEM 32-bit addr decoding capability\n", 0);
+          print(ACS_PRINT_INFO, "The RP BAR supports P_MEM 32-bit addr decoding capability", 0);
 
           /**BAR supports 32-bit address. Write all 1's
             * to BARn and identify the size requested
@@ -236,7 +236,7 @@ pal_pcie_hb_program_bar(uint32_t seg, uint32_t bus, uint32_t dev, uint32_t func)
           }
 
           pal_pci_cfg_write(seg, bus, dev, func, offset, g_hb_bar32_value);
-          print(ACS_PRINT_INFO, "Value written to BAR register is %x\n", g_hb_bar32_value);
+          print(ACS_PRINT_INFO, "Value written to BAR register is %x", g_hb_bar32_value);
           g_hb_bar32_value = g_hb_bar32_value + bar_size;
           offset = offset + 4;
           g_hb_bar32_size = bar_size;
@@ -258,7 +258,7 @@ pal_pcie_rp_program_bar(uint32_t seg, uint32_t bus, uint32_t dev, uint32_t func)
       pal_pci_cfg_read(seg, bus, dev, func, offset, &bar_reg_value);
       if (BAR_REG(bar_reg_value) == BAR_64_BIT)
       {
-          print(ACS_PRINT_INFO, "The RP BAR supports P_MEM 64-bit addr decoding capability\n", 0);
+          print(ACS_PRINT_INFO, "The RP BAR supports P_MEM 64-bit addr decoding capability", 0);
 
           /** BAR supports 64-bit address therefore, write all 1's
             *  to BARn and BARn+1 and identify the size requested
@@ -289,7 +289,7 @@ pal_pcie_rp_program_bar(uint32_t seg, uint32_t bus, uint32_t dev, uint32_t func)
 
       else
       {
-          print(ACS_PRINT_INFO, "The RP BAR supports P_MEM 32-bit addr decoding capability\n", 0);
+          print(ACS_PRINT_INFO, "The RP BAR supports P_MEM 32-bit addr decoding capability", 0);
 
           /**BAR supports 32-bit address. Write all 1's
            * to BARn and identify the size requested
@@ -306,7 +306,7 @@ pal_pcie_rp_program_bar(uint32_t seg, uint32_t bus, uint32_t dev, uint32_t func)
               continue;
           }
           pal_pci_cfg_write(seg, bus, dev, func, offset, g_rp_bar32_value);
-          print(ACS_PRINT_INFO, "Value written to BAR register is %x\n", g_rp_bar32_value);
+          print(ACS_PRINT_INFO, "Value written to BAR register is %x", g_rp_bar32_value);
           g_rp_bar32_value = g_rp_bar32_value + bar_size;
           offset = offset + 4;
           g_rp_bar32_size = bar_size;
@@ -340,7 +340,7 @@ void pal_pcie_program_bar_reg(uint32_t seg, uint32_t bus, uint32_t dev, uint32_t
     {
         if (BAR_REG(bar_reg_value) == BAR_64_BIT)
         {
-            print(ACS_PRINT_INFO, "The BAR supports P_MEM 64-bit addr decoding capability\n", 0);
+            print(ACS_PRINT_INFO, "The BAR supports P_MEM 64-bit addr decoding capability", 0);
 
             /** BAR supports 64-bit address therefore, write all 1's
               *  to BARn and BARn+1 and identify the size requested
@@ -384,7 +384,7 @@ void pal_pcie_program_bar_reg(uint32_t seg, uint32_t bus, uint32_t dev, uint32_t
             pal_pci_cfg_write(seg, bus, dev, func, offset, g_bar64_p_start);
             pal_pci_cfg_write(seg, bus, dev, func, offset + 4, g_bar64_p_start >> 32);
 
-            print(ACS_PRINT_INFO, "Value written to BAR register is %llx\n", g_bar64_p_start);
+            print(ACS_PRINT_INFO, "Value written to BAR register is %llx", g_bar64_p_start);
             p_bar64_size = bar_size;
             g_bar64_size = bar_size;
             g_64_bus = bus;
@@ -394,7 +394,7 @@ void pal_pcie_program_bar_reg(uint32_t seg, uint32_t bus, uint32_t dev, uint32_t
 
         else
         {
-            print(ACS_PRINT_INFO, "The BAR supports P_MEM 32-bit addr decoding capability\n", 0);
+            print(ACS_PRINT_INFO, "The BAR supports P_MEM 32-bit addr decoding capability", 0);
 
             /**BAR supports 32-bit address. Write all 1's
              * to BARn and identify the size requested
@@ -431,7 +431,7 @@ void pal_pcie_program_bar_reg(uint32_t seg, uint32_t bus, uint32_t dev, uint32_t
                 g_bar32_p_start = g_bar32_p_start + p_bar_size;
 
             pal_pci_cfg_write(seg, bus, dev, func, offset, g_bar32_p_start);
-            print(ACS_PRINT_INFO, "Value written to BAR register is %x\n", g_bar32_p_start);
+            print(ACS_PRINT_INFO, "Value written to BAR register is %x", g_bar32_p_start);
             p_bar_size = bar_size;
             g_p_bar_size = bar_size;
             g_p_bus = bus;
@@ -442,7 +442,7 @@ void pal_pcie_program_bar_reg(uint32_t seg, uint32_t bus, uint32_t dev, uint32_t
 
     else
     {
-         print(ACS_PRINT_INFO, "The BAR supports NP_MEM 32-bit addr decoding capability\n", 0);
+         print(ACS_PRINT_INFO, "The BAR supports NP_MEM 32-bit addr decoding capability", 0);
 
          /**BAR supports 32-bit address. Write all 1's
           * to BARn and identify the size requested
@@ -481,7 +481,7 @@ void pal_pcie_program_bar_reg(uint32_t seg, uint32_t bus, uint32_t dev, uint32_t
              g_bar32_np_start = g_bar32_np_start + np_bar_size;
 
          pal_pci_cfg_write(seg, bus, dev, func, offset, g_bar32_np_start);
-         print(ACS_PRINT_INFO, "Value written to BAR register is %x\n", g_bar32_np_start);
+         print(ACS_PRINT_INFO, "Value written to BAR register is %x", g_bar32_np_start);
          np_bar_size = bar_size;
          g_np_bar_size = bar_size;
          g_np_bus = bus;
@@ -554,12 +554,12 @@ uint32_t pal_pcie_enumerate_device(uint32_t bus, uint32_t sec_bus)
             continue;
         }
 
-        print(ACS_PRINT_INFO, "The Vendor id read is %x\n", vendor_id);
+        print(ACS_PRINT_INFO, "The Vendor id read is %x", vendor_id);
         print(ACS_PRINT_INFO, "Valid PCIe device found at %x %x %x\n ", bus, dev, func);
         pal_pci_cfg_read(seg, bus, dev, func, HEADER_OFFSET, &header_value);
         if (PCIE_HEADER_TYPE(header_value) == TYPE1_HEADER)
         {
-            print(ACS_PRINT_INFO, "TYPE1 HEADER found\n", 0);
+            print(ACS_PRINT_INFO, "TYPE1 HEADER found", 0);
 
             /* Enable memory access, Bus master enable and I/O access*/
             pal_pci_cfg_read(seg, bus, dev, func, COMMAND_REG_OFFSET, &com_reg_value);
@@ -600,7 +600,7 @@ uint32_t pal_pcie_enumerate_device(uint32_t bus, uint32_t sec_bus)
 
         if (PCIE_HEADER_TYPE(header_value) == TYPE0_HEADER)
         {
-            print(ACS_PRINT_INFO, "END POINT found\n", 0);
+            print(ACS_PRINT_INFO, "END POINT found", 0);
             pal_pcie_program_bar_reg(seg, bus, dev, func);
             sub_bus = sec_bus - 1;
         }
@@ -658,11 +658,11 @@ void pal_pcie_enumerate(void)
     uint32_t hb_count = 0, count;
     if (g_pcie_info_table->num_entries == 0)
     {
-         print(ACS_PRINT_TEST, "\nSkipping Enumeration", 0);
+         print(ACS_PRINT_TEST, "Skipping Enumeration", 0);
          return;
     }
 
-    print(ACS_PRINT_INFO, "\nStarting Enumeration\n", 0);
+    print(ACS_PRINT_INFO, "Starting Enumeration", 0);
     while (pcie_index < g_pcie_info_table->num_entries)
     {
        hb_count = platform_root_pcie_cfg.block[pcie_index].hb_enteries;
@@ -794,7 +794,7 @@ pal_pcie_get_base(uint32_t bdf, uint32_t bar_index)
      bar_value = bar_value | (bar_upper_bits << 32 );
   }
 
-  print(ACS_PRINT_INFO, "value read from BAR 0x%llx\n", bar_value);
+  print(ACS_PRINT_INFO, "value read from BAR 0x%llx", bar_value);
 
   return bar_value;
 

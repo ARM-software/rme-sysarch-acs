@@ -18,10 +18,15 @@
 #include "../include/pal_common_support.h"
 #include "include/platform_override_struct.h"
 
-/* Populate the skip array with the module or test numbers to be excluded from the run */
-uint32_t  g_skip_test_num[MAX_TEST_SKIP_NUM] = { 0,100,200,300,400,500,614 };
-uint32_t  g_single_test = SINGLE_TEST_SENTINEL;
-uint32_t  g_single_module = SINGLE_MODULE_SENTINEL;
+/* Populate the skip array with the module or test names to be excluded from the run */
+char8_t *g_skip_test_str[MAX_TEST_SKIP_NUM] = {
+    "rme", "gic", "smmu", "legacy",
+    "da_autonomous_rootport_request_ns_pas",
+    SKIP_TEST_SENTINEL, SKIP_TEST_SENTINEL, SKIP_TEST_SENTINEL,
+    SKIP_TEST_SENTINEL, SKIP_TEST_SENTINEL
+};
+char8_t *g_single_test_str = SINGLE_TEST_SENTINEL_STR;
+char8_t *g_single_module_str = SINGLE_MODULE_SENTINEL_STR;
 
 PE_INFO_TABLE platform_pe_cfg = {
 

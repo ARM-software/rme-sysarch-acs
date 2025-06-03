@@ -211,6 +211,7 @@ void val_security_state_change(uint64_t attr_nse_ns);
 void set_daif(void);
 void val_pas_filter_active_mode(int enable);
 void val_smmu_access_disable(uint64_t smmu_base);
+void val_smmu_access_enable(uint64_t smmu_base);
 void val_wd_set_ws0_el3(uint64_t VA_RT_WDOG,
                         uint32_t timer_expire_ticks,
                         uint64_t counter_freq);

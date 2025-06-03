@@ -239,7 +239,10 @@ void plat_arm_acs_smc_handler(uint64_t services, uint64_t arg0, uint64_t arg1, u
       break;
     case SMMU_ROOT_SERVICE:
       INFO("ROOT SMMU service \n");
-      val_smmu_access_disable(arg0);
+      if (arg1)
+        val_smmu_access_enable(arg0);
+      else
+        val_smmu_access_disable(arg0);
       break;
     case SEC_STATE_CHANGE:
       INFO("Security STte change service \n");

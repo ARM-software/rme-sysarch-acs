@@ -135,7 +135,7 @@ PalAllocateSecondaryStack(uint64_t mpidr)
   {
       gSecondaryPeStack = pal_mem_alloc(NumPe * SIZE_STACK_SECONDARY_PE);
       if (gSecondaryPeStack == NULL){
-          print(ACS_PRINT_ERR, "FATAL - Allocation for Secondary stack failed \n", 0);
+          print(ACS_PRINT_ERR, "FATAL - Allocation for Secondary stack failed ", 0);
       }
       pal_pe_data_cache_ops_by_va((uint64_t)&gSecondaryPeStack, CLEAN_AND_INVALIDATE);
   }

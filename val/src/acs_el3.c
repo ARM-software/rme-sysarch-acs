@@ -199,11 +199,24 @@ void val_pas_filter_active_mode_el3(int enable)
  *  @brief  This API is called to disable the SMMU in EL3 writing to SMMU_ROOT_CR0 offset of
  *          SMMU_ROOT register.
  *          1. Caller       -  Test Suite
+ *          2. smmu_base    -  SMMU_Base address
  *  @return None
 **/
 void val_smmu_access_disable(uint64_t smmu_base)
 {
-  UserCallSMC(ARM_ACS_SMC_FID, SMMU_ROOT_SERVICE, smmu_base, 0, 0);
+  UserCallSMC(ARM_ACS_SMC_FID, SMMU_ROOT_SERVICE, smmu_base, CLEAR, 0);
+}
+
+/**
+ *  @brief  This API is called to enable the SMMU in EL3 writing to SMMU_ROOT_CR0 offset of
+ *          SMMU_ROOT register.
+ *          1. Caller       -  Test Suite
+ *          2. smmu_base    -  SMMU_Base address
+ *  @return None
+**/
+void val_smmu_access_enable(uint64_t smmu_base)
+{
+  UserCallSMC(ARM_ACS_SMC_FID, SMMU_ROOT_SERVICE, smmu_base, SET, 0);
 }
 
 /**

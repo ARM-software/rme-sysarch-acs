@@ -33,6 +33,7 @@
 
 /* set G_PRINT_LEVEL to one of the below values in your application entry
   to control the verbosity of the prints */
+#define ACS_PRINT_ALWAYS  6    /* No log-level prefix or newline. For inline/multi-part prints */
 #define ACS_PRINT_ERR   5      /* Only Errors. use this to de-clutter the
                                   terminal and focus only on specifics */
 #define ACS_PRINT_WARN  4      /* Only warnings & errors. use this to de-clutter
@@ -40,7 +41,6 @@
 #define ACS_PRINT_TEST  3      /* Test description and result descriptions. THIS is DEFAULT */
 #define ACS_PRINT_DEBUG 2      /* For Debug statements. contains register dumps etc */
 #define ACS_PRINT_INFO  1      /* Print all statements. Do not use unless really needed */
-
 
 #define ACS_STATUS_FAIL      0x90000000
 #define ACS_STATUS_ERR       0xEDCB1234  //some impropable value?
@@ -52,22 +52,24 @@
 
 #define VAL_EXTRACT_BITS(data, start, end) ((data >> start) & ((1ul << (end-start+1))-1))
 
-#define SINGLE_TEST_SENTINEL   10000
-#define SINGLE_MODULE_SENTINEL 10001
+#define SINGLE_TEST_SENTINEL_STR   "SINGLE_TEST_NONE"
+#define SINGLE_MODULE_SENTINEL_STR "SINGLE_MODULE_NONE"
+#define SKIP_TEST_SENTINEL         "SKIP_TEST_NONE"
 
 #define USER_SMC_IMM     0x100
 #define ARM_ACS_SMC_FID  0xC2000060
 
+#define FILENAME (__builtin_strrchr("/" __FILE__, '/') + 1)
+#define val_print(level, string, data) val_log_context(level, string, data, FILENAME, __LINE__)
+
 /* GENERIC VAL APIs */
-void     UserCallSMC(uint64_t smc_fid, uint64_t service, uint64_t arg0,
+void UserCallSMC(uint64_t smc_fid, uint64_t service, uint64_t arg0,
                      uint64_t arg1, uint64_t arg2);
 uint32_t val_configure_acs(void);
 void val_allocate_shared_mem(void);
 void val_free_shared_mem(void);
-void val_print(uint32_t level, char8_t *string, uint64_t data);
-void val_print_raw(uint64_t uart_address, uint32_t level, char8_t *string,
-                                                                uint64_t data);
-void val_print_test_end(uint32_t status, char8_t *string);
+void val_print_raw(uint64_t uart_address, uint32_t level, char8_t *string, uint64_t data);
+void val_log_context(uint32_t level, char8_t *string, uint64_t data, const char *file, int line);
 void val_set_test_data(uint32_t index, uint64_t addr, uint64_t test_data);
 void val_get_test_data(uint32_t index, uint64_t *data0, uint64_t *data1);
 uint32_t val_strncmp(char8_t *str1, char8_t *str2, uint32_t len);
@@ -112,6 +114,7 @@ void val_prog_legacy_tz(int enable);
 void val_wd_set_ws0_el3(uint64_t VA_RT_WDOG, uint32_t timeout, uint64_t counter_freq);
 void val_pas_filter_active_mode_el3(int enable);
 void val_smmu_access_disable(uint64_t smmu_base);
+void val_smmu_access_enable(uint64_t smmu_base);
 void val_change_security_state_el3(int sec_state);
 void write_gpr_and_reset(void);
 uint32_t check_gpr_after_reset(void);
@@ -140,7 +143,7 @@ void     val_pcie_free_info_table(void);
 uint32_t val_legacy_execute_tests(uint32_t num_pe);
 
 /* GIC VAL APIs */
-uint32_t    val_gic_create_info_table(uint64_t *gic_info_table);
+uint32_t val_gic_create_info_table(uint64_t *gic_info_table);
 
 typedef enum {
   GIC_INFO_VERSION = 1,

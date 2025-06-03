@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2023, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2023-2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,9 +20,9 @@
 
 #include "rme_acs_pe.h"
 
-uint32_t ls001_entry(void);
-uint32_t ls002_entry(void);
-uint32_t ls003_entry(void);
-uint32_t ls004_entry(void);
+uint32_t legacy_tz_support_check_entry(void);
+uint32_t legacy_tz_en_drives_root_to_secure_entry(void);
+uint32_t legacy_tz_enable_before_resetv_entry(void);
+uint32_t legacy_tz_enable_after_reset_entry(void);
 
 #endif /*__RME_TEST_ENTRY_H__*/

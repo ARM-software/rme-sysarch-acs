@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022-2023, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2023, 2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -41,7 +41,7 @@ pal_mmio_write8(UINT64 addr, UINT8 data)
 {
 
   if (g_print_mmio || (g_curr_module & g_enable_module))
-      rme_print(ACS_PRINT_INFO, L" pal_mmio_write8 Address = %llx  Data = %lx \n", addr, data);
+      rme_print(ACS_PRINT_INFO, L" pal_mmio_write8 Address = %llx  Data = %lx ", addr, data);
 
   *(volatile UINT8 *)addr = data;
 }
@@ -60,7 +60,7 @@ pal_mmio_write16(UINT64 addr, UINT16 data)
 {
 
   if (g_print_mmio || (g_curr_module & g_enable_module))
-      rme_print(ACS_PRINT_INFO, L" pal_mmio_write16 Address = %llx  Data = %lx \n", addr, data);
+      rme_print(ACS_PRINT_INFO, L" pal_mmio_write16 Address = %llx  Data = %lx ", addr, data);
 
   *(volatile UINT16 *)addr = data;
 }
@@ -79,7 +79,7 @@ pal_mmio_write64(UINT64 addr, UINT64 data)
 {
 
   if (g_print_mmio || (g_curr_module & g_enable_module))
-      rme_print(ACS_PRINT_INFO, L" pal_mmio_write64 Address = %llx  Data = %lx \n", addr, data);
+      rme_print(ACS_PRINT_INFO, L" pal_mmio_write64 Address = %llx  Data = %lx ", addr, data);
 
   *(volatile UINT64 *)addr = data;
 }
@@ -99,7 +99,7 @@ pal_mmio_read8(UINT64 addr)
 
   data = (*(volatile UINT8 *)addr);
   if (g_print_mmio || (g_curr_module & g_enable_module))
-      rme_print(ACS_PRINT_INFO, L" pal_mmio_read8 Address = %llx  Data = %lx \n", addr, data);
+      rme_print(ACS_PRINT_INFO, L" pal_mmio_read8 Address = %llx  Data = %lx ", addr, data);
 
   return data;
 }
@@ -119,7 +119,7 @@ pal_mmio_read16(UINT64 addr)
 
   data = (*(volatile UINT16 *)addr);
   if (g_print_mmio || (g_curr_module & g_enable_module))
-      rme_print(ACS_PRINT_INFO, L" pal_mmio_read16 Address = %llx  Data = %lx \n", addr, data);
+      rme_print(ACS_PRINT_INFO, L" pal_mmio_read16 Address = %llx  Data = %lx ", addr, data);
 
   return data;
 }
@@ -139,7 +139,7 @@ pal_mmio_read64(UINT64 addr)
 
   data = (*(volatile UINT64 *)addr);
   if (g_print_mmio || (g_curr_module & g_enable_module))
-      rme_print(ACS_PRINT_INFO, L" pal_mmio_read64 Address = %llx  Data = %lx \n", addr, data);
+      rme_print(ACS_PRINT_INFO, L" pal_mmio_read64 Address = %llx  Data = %lx ", addr, data);
 
   return data;
 }
@@ -158,13 +158,13 @@ pal_mmio_read(UINT64 addr)
   UINT32 data;
 
   if (addr & 0x3) {
-      rme_print(ACS_PRINT_WARN, L"\n  Error-Input address is not aligned. Masking the last 2 bits \n");
+      rme_print(ACS_PRINT_WARN, L" Error-Input address is not aligned. Masking the last 2 bits ");
       addr = addr & ~(0x3);  //make sure addr is aligned to 4 bytes
   }
   data = (*(volatile UINT32 *)addr);
 
   if (g_print_mmio || (g_curr_module & g_enable_module))
-      rme_print(ACS_PRINT_INFO, L" pal_mmio_read Address = %llx  Data = %x \n", addr, data);
+      rme_print(ACS_PRINT_INFO, L" pal_mmio_read Address = %llx  Data = %x ", addr, data);
 
   return data;
 }
@@ -182,7 +182,7 @@ VOID
 pal_mmio_write(UINT64 addr, UINT32 data)
 {
   if (g_print_mmio || (g_curr_module & g_enable_module))
-    rme_print(ACS_PRINT_INFO, L" pal_mmio_write Address = %llx  Data = %x \n", addr, data);
+    rme_print(ACS_PRINT_INFO, L" pal_mmio_write Address = %llx  Data = %x ", addr, data);
 
   *(volatile UINT32 *)addr = data;
 }
@@ -207,7 +207,7 @@ pal_print(CHAR8 *string, UINT64 data)
     AsciiPrint(Buffer);
     Status = ShellWriteFile(g_rme_log_file_handle, &BufferSize, (VOID*)Buffer);
     if(EFI_ERROR(Status))
-      rme_print(ACS_PRINT_ERR, L" Error in writing to log file\n");
+      rme_print(ACS_PRINT_ERR, L" Error in writing to log file");
   } else
       AsciiPrint(string, data);
 }
@@ -322,10 +322,10 @@ pal_mem_allocate_shared(UINT32 num_pe, UINT32 sizeofentry)
                                (num_pe * sizeofentry),
                                (VOID **) &gSharedMemory );
 
-  rme_print(ACS_PRINT_INFO, L" Shared memory is %llx \n", gSharedMemory);
+  rme_print(ACS_PRINT_INFO, L" Shared memory is %llx ", gSharedMemory);
 
   if (EFI_ERROR(Status)) {
-    rme_print(ACS_PRINT_ERR, L" Allocate Pool shared memory failed %x \n", Status);
+    rme_print(ACS_PRINT_ERR, L" Allocate Pool shared memory failed %x ", Status);
   }
   pal_pe_data_cache_ops_by_va((UINT64)&gSharedMemory, CLEAN_AND_INVALIDATE);
 
@@ -384,7 +384,7 @@ pal_mem_alloc (
                               (VOID **) &Buffer);
   if (EFI_ERROR(Status))
   {
-    rme_print(ACS_PRINT_ERR, L" Allocate Pool failed %x \n", Status);
+    rme_print(ACS_PRINT_ERR, L" Allocate Pool failed %x ", Status);
     return NULL;
   }
 
@@ -415,7 +415,7 @@ pal_mem_calloc (
                               (VOID **) &Buffer);
   if (EFI_ERROR(Status))
   {
-    rme_print(ACS_PRINT_ERR, L" Allocate Pool failed %x \n", Status);
+    rme_print(ACS_PRINT_ERR, L" Allocate Pool failed %x ", Status);
     return NULL;
   }
 
@@ -449,14 +449,14 @@ pal_mem_alloc_cacheable (
                                EFI_SIZE_TO_PAGES(Size),
                                &Address);
   if (EFI_ERROR(Status)) {
-    rme_print(ACS_PRINT_ERR, L" Allocate Pool failed %x \n", Status);
+    rme_print(ACS_PRINT_ERR, L" Allocate Pool failed %x ", Status);
     return NULL;
   }
 
   /* Check Whether Cpu architectural protocol is installed */
   Status = gBS->LocateProtocol (&gEfiCpuArchProtocolGuid, NULL, (VOID **)&Cpu);
   if (EFI_ERROR(Status)) {
-    rme_print(ACS_PRINT_ERR, L" Could not get Cpu Arch Protocol %x \n", Status);
+    rme_print(ACS_PRINT_ERR, L" Could not get Cpu Arch Protocol %x ", Status);
     return NULL;
   }
 
@@ -466,7 +466,7 @@ pal_mem_alloc_cacheable (
                                      Size,
                                      EFI_MEMORY_WB);
   if (EFI_ERROR (Status)) {
-    rme_print(ACS_PRINT_ERR, L" Could not Set Memory Attribute %x \n", Status);
+    rme_print(ACS_PRINT_ERR, L" Could not Set Memory Attribute %x ", Status);
     return NULL;
   }
 
@@ -602,7 +602,7 @@ pal_mem_alloc_pages (
                                &PageBase);
   if (EFI_ERROR(Status))
   {
-    rme_print(ACS_PRINT_ERR, L" Allocate Pages failed %x \n", Status);
+    rme_print(ACS_PRINT_ERR, L" Allocate Pages failed %x ", Status);
     return NULL;
   }
 
@@ -658,41 +658,41 @@ pal_mem_free_pages(
 /**
  @brief Writes the reset status on Non-Volatile memory.
 
- @param RME_ACS_NVM_MEM Address of Non-Volatile memory
+ @param rme_nvm_mem Address of Non-Volatile memory
  @param status          Status to be saved on the memory.
 
  @return None
 **/
 VOID
 pal_write_reset_status(
-  UINT64 RME_ACS_NVM_MEM,
+  UINT64 rme_nvm_mem,
   UINT32 status
   )
 {
-  *(UINT32 *)RME_ACS_NVM_MEM = status;
+  *(UINT32 *)rme_nvm_mem = status;
 }
 
 /**
  @brief Reads the reset status from Non-Volatile memory.
 
- @param RME_ACS_NVM_MEM Address of Non-Volatile memory
+ @param rme_nvm_mem Address of Non-Volatile memory
  @param status          Status to be saved on the memory.
 
  @return None
 **/
 UINT32
 pal_read_reset_status(
-  UINT64 RME_ACS_NVM_MEM
+  UINT64 rme_nvm_mem
   )
 {
-  return (*(UINT32 *)RME_ACS_NVM_MEM);
+  return (*(UINT32 *)rme_nvm_mem);
 }
 
 /**
   @brief Saves the test status, i.e., total tests, tests
          passed and tests failed before any system reset
          on Non-Volatile Memory.
-  @param RME_ACS_NVM_MEM Address for Non-Volatile memory
+  @param rme_nvm_mem Address for Non-Volatile memory
   @param rme_tests_total Total rme tests
   @param rme_tests_pass  Tests PASSED
   @param rme_tests_fail  Tests FAILED
@@ -701,7 +701,7 @@ pal_read_reset_status(
 **/
 VOID
 pal_save_global_test_data(
-  UINT64 RME_ACS_NVM_MEM,
+  UINT64 rme_nvm_mem,
   UINT32 rme_tests_total,
   UINT32 rme_tests_pass,
   UINT32 rme_tests_fail
@@ -710,7 +710,7 @@ pal_save_global_test_data(
 
   UINT32 *addr;
 
-  addr = (UINT32 *)(RME_ACS_NVM_MEM + 0x10);
+  addr = (UINT32 *)(rme_nvm_mem + 0x10);
   *addr = rme_tests_total;
   *(addr + 1) = rme_tests_pass;
   *(addr + 2) = rme_tests_fail;
@@ -720,7 +720,7 @@ pal_save_global_test_data(
   @brief Restores the tests status i.e., total tests, tests
          passed and tests failed from Non-Volatile Memory
          after a system reset.
-  @param RME_ACS_NVM_MEM Address for Non-Volatile memory
+  @param rme_nvm_mem Address for Non-Volatile memory
   @param rme_tests_total Total rme tests
   @param rme_tests_pass  Tests PASSED
   @param rme_tests_fail  Tests FAILED
@@ -729,7 +729,7 @@ pal_save_global_test_data(
 **/
 VOID
 pal_restore_global_test_data(
-  UINT64 RME_ACS_NVM_MEM,
+  UINT64 rme_nvm_mem,
   UINT32 *rme_tests_total,
   UINT32 *rme_tests_pass,
   UINT32 *rme_tests_fail
@@ -737,7 +737,7 @@ pal_restore_global_test_data(
 {
   UINT32 *addr;
 
-  addr = (UINT32 *)(RME_ACS_NVM_MEM + 0x10);
+  addr = (UINT32 *)(rme_nvm_mem + 0x10);
   *rme_tests_total = *addr;
   *rme_tests_pass = *(addr + 1);
   *rme_tests_fail = *(addr + 2);

@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -195,8 +195,8 @@ v3_extended_init(void)
   max_num_espi_interrupts = val_rme_gic_max_espi_val();
   max_num_eppi_interrupts = val_rme_gic_max_eppi_val();
 
-  val_print(ACS_PRINT_DEBUG, "\n GIC_INIT: Extended SPI Interrupts %d\n", max_num_espi_interrupts);
-  val_print(ACS_PRINT_DEBUG, "\n GIC_INIT: Extended PPI Interrupts %d\n", max_num_eppi_interrupts);
+  val_print(ACS_PRINT_DEBUG, " GIC_INIT: Extended SPI Interrupts %d\n", max_num_espi_interrupts);
+  val_print(ACS_PRINT_DEBUG, " GIC_INIT: Extended PPI Interrupts %d\n", max_num_eppi_interrupts);
 
   /* Disable all ESPI interrupt */
   for (index = EXTENDED_SPI_START_INTID; index <= max_num_espi_interrupts; index++)

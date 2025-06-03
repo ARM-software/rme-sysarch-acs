@@ -69,7 +69,7 @@ pal_timer_create_info_table(TIMER_INFO_TABLE *TimerTable)
   UINT32                      num_of_entries;
 
   if (TimerTable == NULL) {
-    rme_print(ACS_PRINT_ERR, L" Input Timer Table Pointer is NULL. Cannot create Timer INFO \n");
+    rme_print(ACS_PRINT_ERR, L" Input Timer Table Pointer is NULL. Cannot create Timer INFO ");
     return;
   }
 
@@ -79,10 +79,10 @@ pal_timer_create_info_table(TIMER_INFO_TABLE *TimerTable)
   gGtdtHdr = (EFI_ACPI_6_1_GENERIC_TIMER_DESCRIPTION_TABLE *) pal_get_gtdt_ptr();
 
   if (gGtdtHdr == NULL) {
-    rme_print(ACS_PRINT_ERR, L" GTDT not found \n");
+    rme_print(ACS_PRINT_ERR, L" GTDT not found ");
     return;
   }
-  rme_print(ACS_PRINT_INFO, L" GTDT is at %x and length is %x \n", gGtdtHdr, gGtdtHdr->Header.Length);
+  rme_print(ACS_PRINT_INFO, L" GTDT is at %x and length is %x ", gGtdtHdr, gGtdtHdr->Header.Length);
 
   //Fill in our internal table
   TimerTable->header.s_el1_timer_flag  = gGtdtHdr->SecurePL1TimerFlags;
@@ -102,14 +102,14 @@ pal_timer_create_info_table(TIMER_INFO_TABLE *TimerTable)
   while(num_of_entries) {
 
     if (Entry->Type == EFI_ACPI_6_1_GTDT_GT_BLOCK) {
-      rme_print(ACS_PRINT_INFO, L" Found block entry \n");
+      rme_print(ACS_PRINT_INFO, L" Found block entry ");
       GtEntry->type = TIMER_TYPE_SYS_TIMER;
       GtEntry->block_cntl_base = Entry->CntCtlBase;
       GtEntry->timer_count     = Entry->GTBlockTimerCount;
-      rme_print(ACS_PRINT_DEBUG, L" CNTCTLBase = %llx \n", GtEntry->block_cntl_base);
+      rme_print(ACS_PRINT_DEBUG, L" CNTCTLBase = %llx ", GtEntry->block_cntl_base);
       GtBlockTimer = (EFI_ACPI_6_1_GTDT_GT_BLOCK_TIMER_STRUCTURE *)(((UINT8 *)Entry) + Entry->GTBlockTimerOffset);
       for (i = 0; i < GtEntry->timer_count; i++) {
-        rme_print(ACS_PRINT_INFO, L" Found timer entry \n");
+        rme_print(ACS_PRINT_INFO, L" Found timer entry ");
         GtEntry->frame_num[i]    = GtBlockTimer->GTFrameNumber;
         GtEntry->GtCntBase[i]    = GtBlockTimer->CntBaseX;
         GtEntry->GtCntEl0Base[i] = GtBlockTimer->CntEL0BaseX;
@@ -117,7 +117,7 @@ pal_timer_create_info_table(TIMER_INFO_TABLE *TimerTable)
         GtEntry->virt_gsiv[i]    = GtBlockTimer->GTxVirtualTimerGSIV;
         GtEntry->flags[i]        = GtBlockTimer->GTxPhysicalTimerFlags | (GtBlockTimer->GTxVirtualTimerFlags << 8) | (GtBlockTimer->GTxCommonFlags << 16);
         rme_print(ACS_PRINT_DEBUG,
-                   L" CNTBaseN = %llx for sys counter = %d\n", GtEntry->GtCntBase[i], i);
+                   L" CNTBaseN = %llx for sys counter = %d", GtEntry->GtCntBase[i], i);
         GtBlockTimer++;
         TimerTable->header.num_platform_timer++;
       }

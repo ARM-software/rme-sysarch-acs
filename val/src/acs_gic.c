@@ -33,31 +33,32 @@ GIC_INFO_TABLE  *g_gic_info_table;
 uint32_t
 val_gic_execute_tests(uint32_t num_pe)
 {
-
   uint32_t status, i;
 
   for (i = 0; i < MAX_TEST_SKIP_NUM; i++) {
-      if (g_skip_test_num[i] == ACS_GIC_TEST_NUM_BASE) {
-          val_print(ACS_PRINT_TEST, "      USER Override - Skipping all GIC tests \n", 0);
+      if (val_memory_compare(g_skip_test_str[i], GIC_MODULE, val_strnlen(g_skip_test_str[i])) == 0)
+      {
+          val_print(ACS_PRINT_ALWAYS, "\n USER Override - Skipping all GIC tests \n", 0);
           return ACS_STATUS_SKIP;
       }
   }
 
-  if (g_single_module != SINGLE_MODULE_SENTINEL && g_single_module != ACS_GIC_TEST_NUM_BASE &&
-       (g_single_test == SINGLE_MODULE_SENTINEL ||
-         (g_single_test - ACS_GIC_TEST_NUM_BASE > 100 ||
-          g_single_test - ACS_GIC_TEST_NUM_BASE <= 0))) {
-    val_print(ACS_PRINT_TEST, "      USER Override - Skipping all GIC tests (running only a single module)\n", 0);
+  if ((val_memory_compare(g_single_module_str, SINGLE_MODULE_SENTINEL_STR,
+                          val_strnlen(g_single_module_str)) != 0 &&
+      val_memory_compare(g_single_module_str, GIC_MODULE, val_strnlen(g_single_module_str)) != 0) &&
+      (val_memory_compare(g_single_test_str, SINGLE_TEST_SENTINEL_STR,
+                          val_strnlen(SINGLE_TEST_SENTINEL_STR)) == 0 ||
+      val_memory_compare(GIC_MODULE, g_single_test_str,  val_strnlen(GIC_MODULE)) != 0)) {
+    val_print(ACS_PRINT_ALWAYS, "\n USER Override - Skipping all GIC tests \n", 0);
+    val_print(ACS_PRINT_ALWAYS, " (Running only a single module)\n", 0);
     return ACS_STATUS_SKIP;
   }
 
-  g_curr_module = 1 << GIC_MODULE;
-  status = g001_entry(num_pe);
+  g_curr_module = 1 << GIC_MODULE_ID;
 
-  val_print_test_end(status, "GIC");
+  status = gic_its_subjected_to_gpc_check_entry(num_pe);
 
   return status;
-
 }
 
 
@@ -74,7 +75,7 @@ val_gic_create_info_table(uint64_t *gic_info_table)
 {
 
   if (gic_info_table == NULL) {
-      val_print(ACS_PRINT_ERR, "Input for Create Info table cannot be NULL \n", 0);
+      val_print(ACS_PRINT_ERR, "Input for Create Info table cannot be NULL ", 0);
       return ACS_STATUS_ERR;
   }
 
@@ -82,11 +83,13 @@ val_gic_create_info_table(uint64_t *gic_info_table)
 
   pal_gic_create_info_table(g_gic_info_table);
 
-  val_print(ACS_PRINT_TEST, " GIC_INFO: Number of GICD             : %4d \n", g_gic_info_table->header.num_gicd);
-  val_print(ACS_PRINT_TEST, " GIC_INFO: Number of ITS              : %4d \n", g_gic_info_table->header.num_its);
+  val_print(ACS_PRINT_ALWAYS,
+    "\n GIC_INFO: Number of GICD             : %4d", g_gic_info_table->header.num_gicd);
+  val_print(ACS_PRINT_ALWAYS,
+    "\n GIC_INFO: Number of ITS              : %4d", g_gic_info_table->header.num_its);
 
   if (g_gic_info_table->header.num_gicd == 0) {
-      val_print(ACS_PRINT_ERR, "\n ** CRITICAL ERROR: GIC Distributor count is 0 **\n", 0);
+      val_print(ACS_PRINT_ERR, " ** CRITICAL ERROR: GIC Distributor count is 0 **", 0);
       return ACS_STATUS_ERR;
   }
 
@@ -123,7 +126,7 @@ val_get_gicd_base(void)
   GIC_INFO_ENTRY  *gic_entry;
 
   if (g_gic_info_table == NULL) {
-      val_print(ACS_PRINT_ERR, "GIC INFO table not available \n", 0);
+      val_print(ACS_PRINT_ERR, "GIC INFO table not available ", 0);
       return 0;
   }
 
@@ -163,7 +166,7 @@ val_gic_get_pe_rdbase(uint64_t mpidr)
   /* If System doesn't have GICR RD strcture, then use GICCC RD base */
   if (g_gic_info_table->header.num_gicrd == 0) {
       gicrd_base = val_get_gicr_base(&gicrd_baselen, 0);
-      val_print(ACS_PRINT_DEBUG, "       gicrd_base 0x%lx\n", gicrd_base);
+      val_print(ACS_PRINT_DEBUG, " gicrd_base 0x%lx", gicrd_base);
 
       /* If information is present in GICC Structure */
       if (gicrd_baselen == 0)
@@ -179,13 +182,13 @@ val_gic_get_pe_rdbase(uint64_t mpidr)
   /* Use GICR RD base structure */
   while (gicr_rdindex < g_gic_info_table->header.num_gicrd) {
       gicrd_base = val_get_gicr_base(&gicrd_baselen, gicr_rdindex);
-      val_print(ACS_PRINT_INFO, "       gicr_rdindex %d", gicr_rdindex);
-      val_print(ACS_PRINT_INFO, "       gicrd_base 0x%lx\n", gicrd_base);
+      val_print(ACS_PRINT_INFO, " gicr_rdindex %d", gicr_rdindex);
+      val_print(ACS_PRINT_INFO, " gicrd_base 0x%lx", gicrd_base);
 
       pe_gicrd_base = gicrd_base;
       while (pe_gicrd_base < (gicrd_base + gicrd_baselen))
       {
-          val_print(ACS_PRINT_INFO, "       GICR_TYPER 0x%lx\n",
+          val_print(ACS_PRINT_INFO, " GICR_TYPER 0x%lx",
                     val_mmio_read64(pe_gicrd_base + GICR_TYPER));
 
           affinity = (val_mmio_read64(pe_gicrd_base + GICR_TYPER) & GICR_TYPER_AFF) >> 32;
@@ -217,7 +220,7 @@ val_get_gicr_base(uint32_t *rdbase_len, uint32_t gicr_rd_index)
   GIC_INFO_ENTRY  *gic_entry;
 
   if (g_gic_info_table == NULL) {
-      val_print(ACS_PRINT_ERR, "GIC INFO table not available\n", 0);
+      val_print(ACS_PRINT_ERR, "GIC INFO table not available", 0);
       return 0;
   }
 
@@ -256,7 +259,7 @@ val_get_gich_base(void)
   GIC_INFO_ENTRY  *gic_entry;
 
   if (g_gic_info_table == NULL) {
-      val_print(ACS_PRINT_ERR, "GIC INFO table not available\n", 0);
+      val_print(ACS_PRINT_ERR, "GIC INFO table not available", 0);
       return 0;
   }
 
@@ -284,7 +287,7 @@ val_get_cpuif_base(void)
   GIC_INFO_ENTRY  *gic_entry;
 
   if (g_gic_info_table == NULL) {
-      val_print(ACS_PRINT_ERR, "GIC INFO table not available\n", 0);
+      val_print(ACS_PRINT_ERR, "GIC INFO table not available", 0);
       return 0;
   }
 
@@ -315,7 +318,7 @@ val_gic_get_info(GIC_INFO_e type)
   uint32_t rdbase_len;
 
   if (g_gic_info_table == NULL) {
-      val_print(ACS_PRINT_ERR, "\n   Get GIC info called before gic info table is filled ",        0);
+      val_print(ACS_PRINT_ERR, " Get GIC info called before gic info table is filled ",        0);
       return 0;
   }
 
@@ -323,7 +326,7 @@ val_gic_get_info(GIC_INFO_e type)
 
       case GIC_INFO_VERSION:
           if (g_gic_info_table->header.gic_version != 0) {
-             val_print(ACS_PRINT_INFO, "\n       gic version from info table = %d\n",
+             val_print(ACS_PRINT_INFO, " gic version from info table = %d",
                        g_gic_info_table->header.gic_version);
              return g_gic_info_table->header.gic_version;
           }
@@ -357,7 +360,7 @@ val_gic_get_info(GIC_INFO_e type)
           return g_gic_info_table->header.num_msi_frame;
 
       default:
-          val_print(ACS_PRINT_ERR, "\n    GIC Info - TYPE not recognized %d  ", type);
+          val_print(ACS_PRINT_ERR, " GIC Info - TYPE not recognized %d  ", type);
           break;
   }
   return ACS_STATUS_ERR;
@@ -393,7 +396,8 @@ uint32_t val_gic_route_interrupt_to_pe(uint32_t int_id, uint64_t mpidr)
       val_mmio_write64(val_get_gicd_base() + GICD_IROUTER + (8 * int_id), cpuaffinity);
   }
   else{
-      val_print(ACS_PRINT_ERR, "\n    Only SPIs can be routed, interrupt with INTID = %d cannot be routed", int_id);
+      val_print(ACS_PRINT_ERR,
+        " Only SPIs can be routed, interrupt with INTID = %d cannot be routed", int_id);
   }
 
   return 0;
@@ -438,7 +442,7 @@ void val_gic_clear_interrupt(uint32_t int_id)
         val_mmio_write(val_get_gicd_base() + GICD_ICACTIVER0 + (4 * reg_offset), (1 << reg_shift));
     }
     else
-        val_print(ACS_PRINT_ERR, "\n    Invalid SPI interrupt ID number %d", int_id);
+        val_print(ACS_PRINT_ERR, " Invalid SPI interrupt ID number %d", int_id);
 }
 
 /**
@@ -471,7 +475,7 @@ uint32_t val_gic_get_intr_trigger_type(uint32_t int_id, INTR_TRIGGER_INFO_TYPE_e
   uint32_t config_bit_shift;
 
   if (int_id > val_get_max_intid()) {
-    val_print(ACS_PRINT_ERR, "\n       Invalid Interrupt ID number 0x%x ", int_id);
+    val_print(ACS_PRINT_ERR, " Invalid Interrupt ID number 0x%x ", int_id);
     return ACS_STATUS_ERR;
   }
 
@@ -504,7 +508,7 @@ uint32_t val_gic_get_espi_intr_trigger_type(uint32_t int_id,
   uint32_t config_bit_shift;
 
   if (!(int_id >= 4096 && int_id <= val_gic_max_espi_val())) {
-    val_print(ACS_PRINT_ERR, "\n       Invalid Extended Int ID number 0x%x ", int_id);
+    val_print(ACS_PRINT_ERR, " Invalid Extended Int ID number 0x%x ", int_id);
     return ACS_STATUS_ERR;
   }
 
@@ -536,7 +540,7 @@ void val_gic_set_intr_trigger(uint32_t int_id, INTR_TRIGGER_INFO_TYPE_e trigger_
    uint32_t reg_offset;
    uint32_t config_bit_shift;
 
-   val_print(ACS_PRINT_DEBUG, "\n       Setting Trigger type as %d", trigger_type);
+   val_print(ACS_PRINT_DEBUG, " Setting Trigger type as %d", trigger_type);
 
    reg_offset = int_id / GICD_ICFGR_INTR_STRIDE;
    config_bit_shift  = GICD_ICFGR_INTR_CONFIG1(int_id);
@@ -548,7 +552,7 @@ void val_gic_set_intr_trigger(uint32_t int_id, INTR_TRIGGER_INFO_TYPE_e trigger_
    else
        reg_value = reg_value & (~((uint32_t)1 << config_bit_shift));
 
-   val_print(ACS_PRINT_INFO, "\n       Writing to Register Address : 0x%llx ",
+   val_print(ACS_PRINT_INFO, " Writing to Register Address : 0x%llx ",
                            val_get_gicd_base() + GICD_ICFGR + (4 * reg_offset));
 
    val_mmio_write(val_get_gicd_base() + GICD_ICFGR + (4 * reg_offset), reg_value);
@@ -566,7 +570,7 @@ val_gic_espi_supported(void)
 
   espi_support = val_rme_gic_espi_support();
 
-  val_print(ACS_PRINT_INFO, "\n    ESPI supported %d  ", espi_support);
+  val_print(ACS_PRINT_INFO, " ESPI supported %d  ", espi_support);
   return espi_support;
 }
 
@@ -582,7 +586,7 @@ val_gic_max_espi_val(void)
 
   max_espi_val = val_rme_gic_max_espi_val();
 
-  val_print(ACS_PRINT_INFO, "\n    max ESPI value %d  ", max_espi_val);
+  val_print(ACS_PRINT_INFO, " max ESPI value %d  ", max_espi_val);
   return max_espi_val;
 }
 
@@ -598,7 +602,7 @@ val_gic_max_eppi_val(void)
 
   max_eppi_val = val_rme_gic_max_eppi_val();
 
-  val_print(ACS_PRINT_INFO, "\n    max EPPI value %d  ", max_eppi_val);
+  val_print(ACS_PRINT_INFO, " max EPPI value %d  ", max_eppi_val);
   return max_eppi_val;
 }
 

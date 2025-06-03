@@ -199,6 +199,7 @@ void val_pas_filter_active_mode(int enable)
   //Change the mode to Active from In-active
   pal_pas_filter_active_mode(enable);
 }
+
 /**
   @brief   This API Enables root watchdog by writing to Control Base register
   @param   wdog_ctrl_base - Watchdog control base register
@@ -290,6 +291,16 @@ void val_wd_set_ws0_el3(uint64_t VA_RT_WDOG, uint32_t timeout, uint64_t counter_
 void val_smmu_access_disable(uint64_t smmu_base)
 {
   *(uint32_t *)(smmu_base + SMMU_ROOT_CR0) = CLEAR;
+}
+
+/**
+  @brief   This API Enables accesses from the SMMU and client devices
+           by writing to ACCESSEN bit of SMMU_ROOT_CR0 register.
+  @return  None
+ **/
+void val_smmu_access_enable(uint64_t smmu_base)
+{
+  *(uint32_t *)(smmu_base + SMMU_ROOT_CR0) = SET;
 }
 
 /**

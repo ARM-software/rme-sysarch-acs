@@ -151,7 +151,7 @@ PalAllocateSecondaryStack(UINT64 mpidr)
                     StackSize,
                     (VOID **) &Buffer);
       if (EFI_ERROR(Status)) {
-          rme_print(ACS_PRINT_ERR, L"\n FATAL - Allocation for Seconday stack failed %x \n", Status);
+          rme_print(ACS_PRINT_ERR, L" FATAL - Allocation for Seconday stack failed %x ", Status);
       }
       pal_pe_data_cache_ops_by_va((UINT64)&Buffer, CLEAN_AND_INVALIDATE);
 
@@ -188,7 +188,7 @@ pal_pe_create_info_table(PE_INFO_TABLE *PeTable)
 
 
   if (PeTable == NULL) {
-    rme_print(ACS_PRINT_ERR, L" Input PE Table Pointer is NULL. Cannot create PE INFO \n");
+    rme_print(ACS_PRINT_ERR, L" Input PE Table Pointer is NULL. Cannot create PE INFO ");
     return;
   }
 
@@ -196,9 +196,9 @@ pal_pe_create_info_table(PE_INFO_TABLE *PeTable)
 
   if (gMadtHdr != NULL) {
     TableLength =  gMadtHdr->Header.Length;
-    rme_print(ACS_PRINT_INFO, L" MADT is at %x and length is %x \n", gMadtHdr, TableLength);
+    rme_print(ACS_PRINT_INFO, L" MADT is at %x and length is %x ", gMadtHdr, TableLength);
   } else {
-    rme_print(ACS_PRINT_ERR, L" MADT not found \n");
+    rme_print(ACS_PRINT_ERR, L" MADT not found ");
     return;
   }
 
@@ -215,7 +215,7 @@ pal_pe_create_info_table(PE_INFO_TABLE *PeTable)
       Ptr->mpidr    = Entry->MPIDR;
       Ptr->pe_num   = PeTable->header.num_of_pe;
       Ptr->pmu_gsiv = Entry->PerformanceInterruptGsiv;
-      rme_print(ACS_PRINT_DEBUG, L" MPIDR %x PE num %x \n", Ptr->mpidr, Ptr->pe_num);
+      rme_print(ACS_PRINT_DEBUG, L" MPIDR %x PE num %x ", Ptr->mpidr, Ptr->pe_num);
       pal_pe_data_cache_ops_by_va((UINT64)Ptr, CLEAN_AND_INVALIDATE);
       Ptr++;
       PeTable->header.num_of_pe++;

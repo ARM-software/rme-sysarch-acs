@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022, 2025, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -190,11 +190,11 @@ val_peripheral_create_info_table(uint64_t *peripheral_info_table)
 
   pal_peripheral_create_info_table(g_peripheral_info_table);
 
-  val_print(ACS_PRINT_TEST, "\n Peripheral: Num of USB controllers   :    %d \n",
+  val_print(ACS_PRINT_ALWAYS, "\n Peripheral: Num of USB controllers   :    %d \n",
     val_peripheral_get_info(NUM_USB, 0));
-  val_print(ACS_PRINT_TEST, " Peripheral: Num of SATA controllers  :    %d \n",
+  val_print(ACS_PRINT_ALWAYS, " Peripheral: Num of SATA controllers  :    %d \n",
     val_peripheral_get_info(NUM_SATA, 0));
-  val_print(ACS_PRINT_TEST, " Peripheral: Num of UART controllers  :    %d \n",
+  val_print(ACS_PRINT_ALWAYS, " Peripheral: Num of UART controllers  :    %d \n",
     val_peripheral_get_info(NUM_UART, 0));
 
 }

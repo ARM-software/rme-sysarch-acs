@@ -62,7 +62,7 @@ In <shrinkwrap>/work/package/cca-da-edk2.yaml
 **Note:** The steps outlined above assume the user is running the Base FVP with the Shrinkwrap tool. If this is not the case, modify TF-A to ensure the PRELOADED_BL33_BASE option is set with the appropriate NS EL2 entry address.
 
 
-For more details on how to port the reference code to a specific platform and for further customisation please refer to the [User Guide](../../Docs/Arm_RME_System_Architecture_Compliance_Suite_Bare-metal_User_Guide.pdf)
+For more details on how to port the reference code to a specific platform and for further customisation please refer to the [Porting Guide](../../Docs/Arm_RME_System_ACS_Platform_porting_guide.rst)
 
 -----------------
 

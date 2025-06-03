@@ -49,7 +49,7 @@ pal_exerciser_get_ecam(uint32_t bdf)
     }
     i++;
   }
-  print(ACS_PRINT_ERR, "\n No ECAM base ");
+  print(ACS_PRINT_ERR, " No ECAM base ");
   return 0;
 }
 
@@ -297,7 +297,7 @@ uint32_t pal_exerciser_find_pcie_capability (uint32_t ID, uint32_t Bdf, uint32_t
     }
     NxtPtr = (Data >> PtrOffset) & PtrMask;
   }
-  print(ACS_PRINT_ERR,"\n No capabilities found",0);
+  print(ACS_PRINT_ERR," No capabilities found",0);
   return 1;
 }
 

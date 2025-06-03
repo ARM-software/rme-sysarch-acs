@@ -40,6 +40,7 @@ void val_memory_free_pages(void *page_base, uint32_t num_pages);
 void *val_aligned_alloc(uint32_t alignment, uint32_t size);
 void val_memory_free_aligned(void *addr);
 uint32_t val_memory_compare_src_el3(uint32_t *src, uint32_t *dest, uint32_t size);
+uint32_t val_strnlen(const char8_t *str);
 // NSEL2 MMU mem map APIs
 uint32_t val_setup_mmu(void);
 uint32_t val_enable_mmu(void);

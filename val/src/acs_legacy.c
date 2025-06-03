@@ -35,50 +35,34 @@ ROOT_REGSTR_TABLE *g_root_reg_info_table;
 uint32_t
 val_legacy_execute_tests(uint32_t num_pe)
 {
-  uint32_t status = ACS_STATUS_SKIP, i, reset_status, attr;
-  uint64_t sp_val, shared_address;
+  uint32_t status = ACS_STATUS_SKIP, i, reset_status;
   (void) num_pe;
 
   for (i = 0 ; i < MAX_TEST_SKIP_NUM ; i++) {
-      if (g_skip_test_num[i] == ACS_LEGACY_TEST_NUM_BASE) {
-          val_print(ACS_PRINT_TEST, "      USER Override - Skipping all Legacy tests \n", 0);
+      if (val_memory_compare(g_skip_test_str[i], LEGACY_MODULE, sizeof(LEGACY_MODULE) - 1) == 0 &&
+          g_skip_test_str[i][sizeof(LEGACY_MODULE) - 1] == '\0') {
+          val_print(ACS_PRINT_ALWAYS, "\n USER Override - Skipping all Legacy tests \n", 0);
           return ACS_STATUS_SKIP;
       }
   }
 
-  if (g_single_module != SINGLE_MODULE_SENTINEL && g_single_module != ACS_LEGACY_TEST_NUM_BASE) {
-    val_print(ACS_PRINT_TEST, " USER Override - Skipping all Legacy system related tests \n", 0);
-    val_print(ACS_PRINT_TEST, " (Running only a single module)\n", 0);
+  if ((val_memory_compare(g_single_module_str, SINGLE_MODULE_SENTINEL_STR,
+                          sizeof(SINGLE_MODULE_SENTINEL_STR) - 1) != 0 &&
+       val_memory_compare(g_single_module_str, LEGACY_MODULE, sizeof(LEGACY_MODULE) - 1) != 0) &&
+      (val_memory_compare(g_single_test_str, SINGLE_TEST_SENTINEL_STR,
+                          sizeof(SINGLE_TEST_SENTINEL_STR) - 1) == 0 ||
+       val_memory_compare(g_single_test_str, LEGACY_MODULE, sizeof(LEGACY_MODULE) - 1) != 0)) {
+    val_print(ACS_PRINT_ALWAYS, "\n USER Override - Skipping all Legacy system tests \n", 0);
+    val_print(ACS_PRINT_ALWAYS, " (Running only a single module)\n", 0);
     return ACS_STATUS_SKIP;
   }
   if (!pal_is_legacy_tz_enabled()) {
-    val_print(ACS_PRINT_TEST, " Skipping Legacy system tests since the system doesn't \
+    val_print(ACS_PRINT_ALWAYS, "\n Skipping Legacy system tests since the system doesn't \
 support the feature \n", 0);
     return ACS_STATUS_SKIP;
   }
 
-  if (g_single_module != SINGLE_MODULE_SENTINEL && g_single_module != ACS_RME_TEST_NUM_BASE &&
-       (g_single_test == SINGLE_MODULE_SENTINEL ||
-       (g_single_test - ACS_RME_TEST_NUM_BASE > 100 ||
-          g_single_test - ACS_RME_TEST_NUM_BASE <= 0))) {
-    val_print(ACS_PRINT_TEST, " RME module is skipped\n", 0);
-    val_print(ACS_PRINT_TEST, " Installing the handler for legacy tests\n", 0);
-
-    sp_val = AA64ReadSP_EL0();
-    shared_address = PLAT_SHARED_ADDRESS;
-    attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(OUTER_SHAREABLE) | PGT_ENTRY_AP_RW);
-    val_add_mmu_entry_el3(shared_address, shared_address,
-                    (attr | LOWER_ATTRS(PAS_ATTR(NONSECURE_PAS))));
-    val_add_mmu_entry_el3(sp_val, sp_val,
-                    (attr | LOWER_ATTRS(PAS_ATTR(NONSECURE_PAS))));
-    val_rme_install_handler_el3();
-    reset_status = val_read_reset_status();
-
-    if (reset_status == RESET_LS_DISBL_FLAG)
-            goto reset_done_ls_dis;
-    else if (reset_status == RESET_LS_TEST3_FLAG)
-            goto reset_done_ls3;
-  }
+  g_curr_module = 1 << LEGACY_MODULE_ID;
 
   reset_status = val_read_reset_status();
   if (reset_status == RESET_LS_TEST3_FLAG)
@@ -87,12 +71,12 @@ support the feature \n", 0);
   else if (reset_status == RESET_LS_DISBL_FLAG)
           goto reset_done_ls_dis;
 
-  status = ls001_entry();
-  status |= ls002_entry();
+  status = legacy_tz_support_check_entry();
+  status |= legacy_tz_en_drives_root_to_secure_entry();
 
-  status |= ls003_entry();
+  status |= legacy_tz_enable_before_resetv_entry();
 reset_done_ls3:
-  status = ls003_entry();
+  status = legacy_tz_enable_before_resetv_entry();
 
   //Disablie the legacy tie-off before moving on to the next tests
   val_prog_legacy_tz(CLEAR);
@@ -100,9 +84,7 @@ reset_done_ls3:
   val_system_reset();
 
 reset_done_ls_dis:
-  status |= ls004_entry();
-
-  val_print_test_end(status, "Legacy System");
+  status |= legacy_tz_enable_after_reset_entry();
 
   return status;
 

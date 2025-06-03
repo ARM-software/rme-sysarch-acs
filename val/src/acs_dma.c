@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -109,7 +109,7 @@ val_dma_create_info_table(uint64_t *dma_info_ptr)
 
   pal_dma_create_info_table(g_dma_info_table);
 
-  val_print(ACS_PRINT_TEST, " DMA_INFO: Number of DMA CTRL in PCIe :    %x \n",
+  val_print(ACS_PRINT_ALWAYS, " DMA_INFO: Number of DMA CTRL in PCIe :    %x \n",
 	    val_dma_get_info(DMA_NUM_CTRL, 0));
 }
 

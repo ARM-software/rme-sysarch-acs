@@ -37,41 +37,100 @@ struct_sh_data *shared_data = (struct_sh_data *) PLAT_SHARED_ADDRESS;
           1. Caller       - Application layer
           2. Prerequisite - None.
 
-  @param level   the print verbosity (1 to 5)
-  @param string  formatted ASCII string
-  @param data    64-bit data. set to 0 if no data is to sent to console.
+  @param level   The print verbosity (1 to 5)
+  @param string  Formatted ASCII string
+  @param data    64-bit data. Set to 0 if no data is to be sent to console.
+  @param file    File name from which the print was invoked (typically __FILE__)
+  @param line    Line number from which the print was invoked (typically __LINE__)
 
   @return        None
  **/
 void
-val_print(uint32_t level, char8_t *string, uint64_t data)
+val_log_context(uint32_t level, char8_t *string, uint64_t data, const char *file, int line)
 {
 #ifndef TARGET_BM_BOOT
-  if (level >= g_print_level)
+  if (level >= g_print_level) {
+    if (level == ACS_PRINT_DEBUG) {
+      if (g_print_in_test_context)
+        pal_print("\n\t\tDBG : ", 0);
+      else
+        pal_print("\n\tDBG : ", 0);
+    }
+    else if (level == ACS_PRINT_ERR) {
+      if (g_print_in_test_context)
+        pal_print("\n\t\tERR : ", 0);
+      else
+        pal_print("\n\tERR : ", 0);
+    }
+    else if (level == ACS_PRINT_INFO) {
+      if (g_print_in_test_context)
+        pal_print("\n\t\tINFO: ", 0);
+      else
+        pal_print("\n\tINFO: ", 0);
+    }
+    else if (level == ACS_PRINT_WARN) {
+      if (g_print_in_test_context)
+        pal_print("\n\t\tWARN: ", 0);
+      else
+        pal_print("\n\tWARN: ", 0);
+    }
+    else if (level == ACS_PRINT_ALWAYS) {
+        // Do not print prefix or newline
+        pal_print(string, data);
+        return;
+    }
+    else {
+      pal_print("\n  Check %d : ", ++g_print_test_check_id);
+    }
     pal_print(string, data);
+    /* Print file name and line number for ERR and WARN */
+    if (level == ACS_PRINT_ERR || level == ACS_PRINT_WARN) {
+        pal_print("  [FILE: %a]", (uint64_t)file);
+        pal_print("  [LINE: %d]", line);
+    }
+  }
 #else
   if (level >= g_print_level) {
+      if (level == ACS_PRINT_DEBUG) {
+        if (g_print_in_test_context)
+          pal_uart_print(level, "\n\t\tDBG: ", 0);
+        else
+          pal_uart_print(level, "\n\tDBG: ", 0);
+      }
+      else if (level == ACS_PRINT_ERR) {
+        if (g_print_in_test_context)
+          pal_uart_print(level, "\n\t\tERR: ", 0);
+        else
+          pal_uart_print(level, "\n\tERR: ", 0);
+      }
+      else if (level == ACS_PRINT_INFO) {
+        if (g_print_in_test_context)
+          pal_uart_print(level, "\n\t\tINFO: ", 0);
+        else
+          pal_uart_print(level, "\n\tINFO", 0);
+      }
+      else if (level == ACS_PRINT_WARN) {
+        if (g_print_in_test_context)
+          pal_uart_print(level, "\n\t\tWARN: ", 0);
+        else
+          pal_uart_print(level, "\n\tWARN: ", 0);
+      }
+      else if (level == ACS_PRINT_ALWAYS) {
+        // Do not print prefix or newline
+        pal_uart_print(level, string, data);
+        return;
+      }
+      else {
+        pal_uart_print(level, "\n  Check %d : ", ++g_print_test_check_id);
+      }
       pal_uart_print(level, string, data);
+      /* Print file name and line number for ERR and WARN */
+      if (level == ACS_PRINT_ERR || level == ACS_PRINT_WARN) {
+          pal_uart_print(level, "  [FILE: %a]", (uint64_t)file);
+          pal_uart_print(level, "  [LINE: %d]", line);
+      }
   }
 #endif
-}
-
-void
-val_print_test_end(uint32_t status, char8_t *string)
-{
-  val_print(ACS_PRINT_TEST, "\n      ", 0);
-
-  if (status != ACS_STATUS_PASS) {
-      val_print(ACS_PRINT_TEST, "One or more ", 0);
-      val_print(ACS_PRINT_TEST, string, 0);
-      val_print(ACS_PRINT_TEST, " tests failed or were skipped.", 0);
-  } else {
-      val_print(ACS_PRINT_TEST, "All ", 0);
-      val_print(ACS_PRINT_TEST, string, 0);
-      val_print(ACS_PRINT_TEST, " tests passed.", 0);
-  }
-
-  val_print(ACS_PRINT_TEST, "\n", 0);
 }
 
 /**
@@ -235,48 +294,68 @@ val_mmio_write64(addr_t addr, uint64_t data)
   pal_mmio_write64(addr, data);
 }
 
+void print_suite_from_testname(char8_t *testname)
+{
+    char8_t suite[32];
+    uint32_t i = 0;
+
+    // Extract characters until first '_' or end of string
+    while (testname[i] != '_' && testname[i] != '\0' && i < sizeof(suite) - 1) {
+        suite[i] = testname[i];
+        i++;
+    }
+    suite[i] = '\0';  // Null-terminate the suite name
+
+    val_print(ACS_PRINT_ALWAYS, "Suite: ", 0), val_print(ACS_PRINT_ALWAYS, suite, 0);
+}
+
 /**
-  @brief  This API prints the test number, description and
+  @brief  This API prints the test name, description and
           sets the test status to pending for the input number of PEs.
           1. Caller       - Application layer
           2. Prerequisite - val_allocate_shared_mem
 
-  @param test_num unique number identifying this test
+  @param testname pointer to the test name string
   @param desc     brief description of the test
   @param num_pe   the number of PE to execute this test on.
   @param ruleid   Pointer to the TEST_RULE string.
   @return         Skip - if the user has overridden to skip the test.
  **/
 uint32_t
-val_initialize_test(uint32_t test_num, char8_t *desc, uint32_t num_pe, char8_t *ruleid)
+val_initialize_test(char8_t *testname, char8_t *desc, uint32_t num_pe, char8_t *ruleid)
 {
   uint32_t i;
   uint32_t index = val_pe_get_index_mpid(val_pe_get_mpid());
 
-  val_print(ACS_PRINT_ERR, "%4d : ", test_num); //Always print this
-  val_print(ACS_PRINT_TEST, desc, 0);
-  val_report_status(0, RME_ACS_START(test_num), ruleid);
+  g_print_in_test_context = 1;
+  val_print(ACS_PRINT_ALWAYS, "\n", 0);
+  print_suite_from_testname(testname);
+  val_print(ACS_PRINT_ALWAYS, ", Test: ", 0), val_print(ACS_PRINT_ALWAYS, testname, 0);
+  val_print(ACS_PRINT_ALWAYS, "\nRule: ", 0), val_print(ACS_PRINT_ALWAYS, ruleid, 0);
+  val_print(ACS_PRINT_ALWAYS, "\nDesc: ", 0), val_print(ACS_PRINT_ALWAYS, desc, 0);
+  val_print(ACS_PRINT_ALWAYS, "\n", 0);
   val_pe_initialize_default_exception_handler(val_pe_default_esr);
 
   g_rme_tests_total++;
 
   for (i = 0; i < num_pe; i++)
-      val_set_status(i, RESULT_PENDING(test_num));
+      val_set_status(i, "PENDING", 0);
 
   for (i = 0 ; i < MAX_TEST_SKIP_NUM ; i++) {
-      if (g_skip_test_num[i] == test_num) {
-          val_print(ACS_PRINT_TEST, "\n       USER OVERRIDE  - Skip Test        ", 0);
-          val_set_status(index, RESULT_SKIP(test_num, 0));
+      if (val_memory_compare(g_skip_test_str[i], testname, val_strnlen(g_skip_test_str[i])) == 0) {
+          val_print(ACS_PRINT_ALWAYS, "\n USER OVERRIDE  - Skip Test        ", 0);
+          val_set_status(index, "SKIP", 0);
           return ACS_STATUS_SKIP;
       }
   }
-
-  if ((g_single_test != SINGLE_TEST_SENTINEL && test_num != g_single_test) &&
-        (g_single_module == SINGLE_MODULE_SENTINEL ||
-          (test_num - g_single_module >= 100 ||
-           test_num - g_single_module <= 0))) {
-    val_print(ACS_PRINT_TEST, "\n       USER OVERRIDE VIA SINGLE TEST - Skip Test        ", 0);
-    val_set_status(index, RESULT_SKIP(test_num, 0));
+  if ((val_memory_compare(g_single_test_str, SINGLE_TEST_SENTINEL_STR,
+                          val_strnlen(g_single_test_str)) != 0 &&
+       val_memory_compare(g_single_test_str, testname, val_strnlen(g_single_test_str)) != 0) &&
+      (val_memory_compare(g_single_module_str, SINGLE_MODULE_SENTINEL_STR,
+                          val_strnlen(g_single_module_str)) == 0 ||
+       val_memory_compare(g_single_module_str, testname, val_strnlen(g_single_module_str)) != 0)) {
+    val_print(ACS_PRINT_ALWAYS, "\n USER OVERRIDE VIA SINGLE TEST - Skip Test        ", 0);
+    val_set_status(index, "SKIP", 0);
     return ACS_STATUS_SKIP;
   }
 
@@ -334,7 +413,7 @@ val_set_test_data(uint32_t index, uint64_t addr, uint64_t test_data)
 
   if (index > val_pe_get_num())
   {
-      val_print(ACS_PRINT_ERR, "\n Incorrect PE index = %d", index);
+      val_print(ACS_PRINT_ERR, " Incorrect PE index = %d", index);
       return;
   }
 
@@ -367,7 +446,7 @@ val_get_test_data(uint32_t index, uint64_t *data0, uint64_t *data1)
 
   if (index > val_pe_get_num())
   {
-      val_print(ACS_PRINT_ERR, "\n Incorrect PE index = %d", index);
+      val_print(ACS_PRINT_ERR, " Incorrect PE index = %d", index);
       return;
   }
 
@@ -388,7 +467,6 @@ val_get_test_data(uint32_t index, uint64_t *data0, uint64_t *data1)
           1. Caller       - Application layer
           2. Prerequisite - val_set_status
 
-  @param test_num  Unique test number
   @param num_pe    Number of PE who are executing this test
   @param timeout   integer value ob expiry the API will timeout and return
 
@@ -396,9 +474,8 @@ val_get_test_data(uint32_t index, uint64_t *data0, uint64_t *data1)
  **/
 
 void
-val_wait_for_test_completion(uint32_t test_num, uint32_t num_pe, uint32_t timeout)
+val_wait_for_test_completion(uint32_t num_pe, uint32_t timeout)
 {
-
   uint32_t i = 0, j = 0;
 
   //For single PE tests, there is no need to wait for the results
@@ -410,7 +487,7 @@ val_wait_for_test_completion(uint32_t test_num, uint32_t num_pe, uint32_t timeou
       j = 0;
       for (i = 0; i < num_pe; i++)
       {
-          if (IS_RESULT_PENDING(val_get_status(i)))
+          if (val_memory_compare(val_get_status(i), "PENDING", val_strnlen(val_get_status(i))) == 0)
               j = i+1;
       }
       //If None of the PE have the status as Pending, return
@@ -418,7 +495,7 @@ val_wait_for_test_completion(uint32_t test_num, uint32_t num_pe, uint32_t timeou
           return;
   }
   //We are here if we timed-out, set the last index PE as failed
-  val_set_status(j-1, RESULT_FAIL(test_num, 0xF));
+  val_set_status(j-1, "FAIL", 0xF);
 }
 
 /**
@@ -426,7 +503,6 @@ val_wait_for_test_completion(uint32_t test_num, uint32_t num_pe, uint32_t timeou
           1. Caller       - Application layer
           2. Prerequisite - val_pe_create_info_table
 
-  @param test_num   unique test number
   @param num_pe     The number of PEs to run this test on
   @param payload    Function pointer of the test entry function
   @param test_input optional parameter for the test payload
@@ -434,9 +510,8 @@ val_wait_for_test_completion(uint32_t test_num, uint32_t num_pe, uint32_t timeou
   @return        None
  **/
 void
-val_run_test_payload(uint32_t test_num, uint32_t num_pe, void (*payload)(void), uint64_t test_input)
+val_run_test_payload(uint32_t num_pe, void (*payload)(void), uint64_t test_input)
 {
-
   uint32_t my_index = val_pe_get_index_mpid(val_pe_get_mpid());
   uint32_t i;
 
@@ -450,38 +525,37 @@ val_run_test_payload(uint32_t test_num, uint32_t num_pe, void (*payload)(void), 
           val_execute_on_pe(i, payload, test_input);
   }
 
-  val_wait_for_test_completion(test_num, num_pe, TIMEOUT_LARGE);
+  val_wait_for_test_completion(num_pe, TIMEOUT_LARGE);
 }
 
 /**
-  @brief  Prints the status of the completed test
+  @brief  Checks and reports the status of a completed test
           1. Caller       - Test Suite
           2. Prerequisite - val_set_status
 
-  @param test_num   unique test number
   @param num_pe     The number of PEs to query for status
-  @oaram *ruleid    The pointer to TEST_RULE string.
-  @return     Success or on failure - status of the last failed PE
+  @return           ACS_STATUS_PASS if all PEs passed,
+                    ACS_STATUS_FAIL if any PE failed,
+                    ACS_STATUS_SKIP if all were skipped
  **/
 uint32_t
-val_check_for_error(uint32_t test_num, uint32_t num_pe, char8_t *ruleid)
+val_check_for_error(uint32_t num_pe)
 {
   uint32_t i;
-  uint32_t status = 0;
+  char8_t *status = 0;
   uint32_t error_flag = 0;
   uint32_t my_index = val_pe_get_index_mpid(val_pe_get_mpid());
-  (void) test_num;
 
   /* this special case is needed when the Main PE is not the first entry
      of pe_info_table but num_pe is 1 for SOC tests */
   if (num_pe == 1) {
       status = val_get_status(my_index);
-      val_report_status(my_index, status, ruleid);
-      if (IS_TEST_PASS(status)) {
+      val_report_status(my_index, status);
+      if (val_memory_compare(status, "PASS", val_strnlen(status)) == 0) {
           g_rme_tests_pass++;
           return ACS_STATUS_PASS;
       }
-      if (IS_TEST_SKIP(status))
+      if (val_memory_compare(status, "SKIP", val_strnlen(status)) == 0)
           return ACS_STATUS_SKIP;
 
       g_rme_tests_fail++;
@@ -490,22 +564,22 @@ val_check_for_error(uint32_t test_num, uint32_t num_pe, char8_t *ruleid)
 
   for (i = 0; i < num_pe; i++) {
       status = val_get_status(i);
-      //val_print(ACS_PRINT_ERR, "Status %4x \n", status);
-      if (IS_TEST_FAIL_SKIP(status)) {
-          val_report_status(i, status, ruleid);
+      if ((val_memory_compare(status, "FAIL", val_strnlen(status)) == 0) ||
+          (val_memory_compare(status, "SKIP", val_strnlen(status)) == 0)) {
+          val_report_status(i, status);
           error_flag += 1;
           break;
       }
   }
 
   if (!error_flag)
-      val_report_status(my_index, status, ruleid);
+      val_report_status(my_index, status);
 
-  if (IS_TEST_PASS(status)) {
+  if (val_memory_compare(status, "PASS", val_strnlen(status)) == 0) {
       g_rme_tests_pass++;
       return ACS_STATUS_PASS;
   }
-  if (IS_TEST_SKIP(status))
+  if (val_memory_compare(status, "SKIP", val_strnlen(status)) == 0)
       return ACS_STATUS_SKIP;
 
   g_rme_tests_fail++;
@@ -638,7 +712,7 @@ val_get_free_pa(uint64_t size, uint64_t alignment)
   else
     free_mem_var_pa = mem_base + alignment;
 
-  val_print(ACS_PRINT_DEBUG, "The PA allocated = 0x%lx\n", mem_base);
+  val_print(ACS_PRINT_DEBUG, "The PA allocated = 0x%lx", mem_base);
   return mem_base;
 }
 
@@ -703,7 +777,7 @@ uint32_t val_configure_acs(void)
 
   sp_val = AA64ReadSP_EL0();
   shared_address = PLAT_SHARED_ADDRESS;
-  val_print(ACS_PRINT_INFO, "\n SHARED_ADDRESS = 0x%llx", shared_address);
+  val_print(ACS_PRINT_INFO, " SHARED_ADDRESS = 0x%llx", shared_address);
 
   /* Map the SHARED_ADDRESS and the sp_el0 as NS in EL3 */
   attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(OUTER_SHAREABLE) | PGT_ENTRY_AP_RW);
@@ -727,7 +801,7 @@ uint32_t val_configure_acs(void)
    * and initialise smmu for the tests that require exerciser and smmu required
    **/
   if (val_pcie_create_device_bdf_table()) {
-      val_print(ACS_PRINT_WARN, "\n     Create BDF Table Failed \n", 0);
+      val_print(ACS_PRINT_WARN, " Create BDF Table Failed \n", 0);
       return ACS_STATUS_SKIP;
   }
 

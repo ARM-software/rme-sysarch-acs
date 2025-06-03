@@ -18,7 +18,7 @@
 /** Begin config **/
 
 /* Settings */
-#define PLATFORM_OVERRIDE_PRINT_LEVEL  0x3    //The permissible levels are 1,2,3,4 and 5
+#define PLATFORM_OVERRIDE_PRINT_LEVEL  0x1    //The permissible levels are 1,2,3,4 and 5
 
 /* MMU PGT config parameters */
 #define PLATFORM_PAGE_SIZE                 0x1000

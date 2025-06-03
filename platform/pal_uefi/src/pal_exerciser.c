@@ -153,7 +153,7 @@ pal_exerciser_find_error_injection_capability (
     }
     NxtPtr = (Data >> PtrOffset) & PtrMask;
   }
-  rme_print(ACS_PRINT_ERR,L"\n No capabilities found",0);
+  rme_print(ACS_PRINT_ERR,L" No capabilities found",0);
   return 1;
 }
 
@@ -200,7 +200,7 @@ pal_exerciser_find_pcie_capability (
     }
     NxtPtr = (Data >> PtrOffset) & PtrMask;
   }
-  rme_print(ACS_PRINT_ERR,L"\n No capabilities found",0);
+  rme_print(ACS_PRINT_ERR,L" No capabilities found",0);
   return 1;
 }
 

@@ -56,8 +56,8 @@ void
 val_smmu_unmap(smmu_master_attributes_t master);
 
 uint32_t
-i001_entry(uint32_t num_pe);
+smmu_implements_rme_entry(uint32_t num_pe);
 uint32_t
-i002_entry(void);
+smmu_responds_to_gpt_tlb_entry(void);
 
 #endif

@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2024, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2024-2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -57,10 +57,11 @@ void pal_form_get_version_msg(UINT32 req_id, UINT8 *request, UINT64 *req_length)
     request[28] = 0x01; // version count
     request[29] = 0x10; // version 1
     *req_length = 0x1e;
-    rme_print(ACS_PRINT_INFO, L"Request message: 0x", 0);
+    //Reads and prints many characters in the logs, so avoiding now
+    //rme_print(ACS_PRINT_INFO, L"Request message: 0x", 0);
     for (int  i = 0; i < *req_length; i++)
     {
-        rme_print(ACS_PRINT_INFO, L"%x ", request[i]);
+        //rme_print(ACS_PRINT_INFO, L"%x ", request[i]);
     }
 
 }
@@ -95,10 +96,11 @@ void pal_form_tdisp_lock_msg(UINT32 req_id, UINT8 *request, UINT64 *req_length)
     // MMIO Reporting Offset for 8 bytes is treated as 0
     // BIND_P2P_ADDRESS_MASK for 8 bytes is treated as 0
     *req_length = 0x30;
-    rme_print(ACS_PRINT_DEBUG, L"Request message: 0x", 0);
+    //Reads and prints many characters in the logs, so avoiding now
+    //rme_print(ACS_PRINT_DEBUG, L"Request message: 0x", 0);
     for (int  i = 0; i < *req_length; i++)
     {
-        rme_print(ACS_PRINT_INFO, L"%x ", request[i]);
+        //rme_print(ACS_PRINT_INFO, L"%x ", request[i]);
     }
 
 }
@@ -131,10 +133,11 @@ void pal_form_tdisp_run_msg(UINT32 req_id, UINT8 *request, UINT64 *req_length)
         request[28 + nonce_cnt] = response_8bit[28 + nonce_cnt];
     }
     *req_length = 0x3c;
-    rme_print(ACS_PRINT_DEBUG, L"Request message: 0x", 0);
+    //Reads and prints many characters in the logs, so avoiding now
+    //rme_print(ACS_PRINT_DEBUG, L"Request message: 0x", 0);
     for (int  i = 0; i < *req_length; i++)
     {
-        rme_print(ACS_PRINT_INFO, L"%x ", request[i]);
+        //rme_print(ACS_PRINT_INFO, L"%x ", request[i]);
     }
 
 }
@@ -162,10 +165,11 @@ void pal_form_tdisp_get_state_msg(UINT32 req_id, UINT8 *request, UINT64 *req_len
     request[17] = VAL_EXTRACT_BITS(req_id, 8, 15);
     // Reserved till [27]
     *req_length = 0x1c;
-    rme_print(ACS_PRINT_DEBUG, L"Request message: 0x", 0);
+    //Reads and prints many characters in the logs, so avoiding now
+    //rme_print(ACS_PRINT_DEBUG, L"Request message: 0x", 0);
     for (int  i = 0; i < *req_length; i++)
     {
-        rme_print(ACS_PRINT_INFO, L"%x ", request[i]);
+        //rme_print(ACS_PRINT_INFO, L"%x ", request[i]);
     }
 
 }
@@ -183,21 +187,21 @@ UINT32 pal_write_doe_msgo_doe_mailbox(UINT32 bdf, UINT32 *request, UINT64 req_le
 
     if (status)
     {
-        rme_print(ACS_PRINT_ERR, L"\n       DOE capability not found", 0);
+        rme_print(ACS_PRINT_ERR, L" DOE capability not found", 0);
         return 1;
     }
 
     value = pal_mmio_read(Ecam + config_addr + doe_cap_base + DOE_STATUS_REG);
     if (VAL_EXTRACT_BITS(value, DOE_STATUS_REG_BUSY, DOE_STATUS_REG_BUSY))
     {
-        rme_print(ACS_PRINT_ERR, L"\nDOE Busy bit is set", 0);
+        rme_print(ACS_PRINT_ERR, L" DOE Busy bit is set", 0);
         return 1;
     }
 
     value = pal_mmio_read(Ecam + config_addr + doe_cap_base + DOE_STATUS_REG);
     if (VAL_EXTRACT_BITS(value, DOE_STATUS_REG_ERROR, DOE_STATUS_REG_ERROR))
     {
-        rme_print(ACS_PRINT_ERR, L"\nDOE Error bit is set", 0);
+        rme_print(ACS_PRINT_ERR, L" DOE Error bit is set", 0);
         return 1;
     }
 
@@ -209,7 +213,7 @@ UINT32 pal_write_doe_msgo_doe_mailbox(UINT32 bdf, UINT32 *request, UINT64 req_le
 
     for (i = 0; i < doe_length; i++)
     {
-        rme_print(ACS_PRINT_INFO, L"\n Writing request[%lld]: 0x%lx to DOE mailbox", i, request[i]);
+        rme_print(ACS_PRINT_INFO, L" Writing request[%lld]: 0x%lx to DOE mailbox", i, request[i]);
         pal_mmio_write(Ecam + config_addr + doe_cap_base + DOE_WRITE_DATA_MAILBOX_REG, request[i]);
     }
 
@@ -230,14 +234,14 @@ UINT32 pal_host_pcie_doe_recv_resp(UINT32 bdf, UINT32 *resp_addr, UINT64 *resp_l
 
     if (status)
     {
-        rme_print(ACS_PRINT_ERR, L"\n       DOE capability not found", 0);
+        rme_print(ACS_PRINT_ERR, L" DOE capability not found", 0);
         return 1;
     }
 
     value = pal_mmio_read(Ecam + config_addr + doe_cap_base + DOE_STATUS_REG);
     if (!(VAL_EXTRACT_BITS(value, DOE_STATUS_REG_READY, DOE_STATUS_REG_READY)))
     {
-        rme_print(ACS_PRINT_ERR, L"\nDOE Ready bit is not set", 0);
+        rme_print(ACS_PRINT_ERR, L" DOE Ready bit is not set", 0);
         return 1;
     }
 
@@ -245,7 +249,7 @@ UINT32 pal_host_pcie_doe_recv_resp(UINT32 bdf, UINT32 *resp_addr, UINT64 *resp_l
 
     if (VAL_EXTRACT_BITS(value, DOE_STATUS_REG_ERROR, DOE_STATUS_REG_ERROR))
     {
-        rme_print(ACS_PRINT_ERR, L"\nDOE Error bit is set", 0);
+        rme_print(ACS_PRINT_ERR, L" DOE Error bit is set", 0);
         return 1;
     }
 
@@ -259,7 +263,7 @@ UINT32 pal_host_pcie_doe_recv_resp(UINT32 bdf, UINT32 *resp_addr, UINT64 *resp_l
 
     length = value - 0x2;
     *resp_len = (UINT64)(length * 4);
-    rme_print(ACS_PRINT_INFO, L"\n Length of the DW: 0x%llx in bytes", *resp_len);
+    rme_print(ACS_PRINT_INFO, L" Length of the DW: 0x%llx in bytes", *resp_len);
 
     for (i = 0; i < length; i++)
     {
@@ -271,7 +275,7 @@ UINT32 pal_host_pcie_doe_recv_resp(UINT32 bdf, UINT32 *resp_addr, UINT64 *resp_l
     value = pal_mmio_read(Ecam + config_addr + doe_cap_base + DOE_STATUS_REG);
     if (VAL_EXTRACT_BITS(value, DOE_STATUS_REG_READY, DOE_STATUS_REG_READY))
     {
-        rme_print(ACS_PRINT_ERR, L"\nDOE Busy bit is not clear", 0);
+        rme_print(ACS_PRINT_ERR, L" DOE Busy bit is not clear", 0);
         return 1;
     }
 
@@ -285,14 +289,15 @@ UINT32 pal_check_doe_response(UINT32 bdf)
 
     if (pal_host_pcie_doe_recv_resp(bdf, &response[0], &resp_len))
     {
-        rme_print(ACS_PRINT_ERR, L"\n Responose failed ", 0);
+        rme_print(ACS_PRINT_ERR, L" Responose failed ", 0);
         return 1;
     }
 
-    rme_print(ACS_PRINT_INFO, L"\n       Response: 0x", 0);
+    //Reads and prints many characters in the logs, so avoiding now
+    //rme_print(ACS_PRINT_INFO, L" Response: 0x", 0);
     for (int i = 0; i < resp_len; i++)
     {
-        rme_print(ACS_PRINT_INFO, L"%02x ", response_8bit[i]);
+        //rme_print(ACS_PRINT_INFO, L"%02x ", response_8bit[i]);
     }
 
     return 0;
@@ -328,16 +333,17 @@ UINT32 pal_device_unlock(UINT32 bdf)
     req_addr[17] = VAL_EXTRACT_BITS(req_id, 8, 15);
     // Reserved till [27]
     req_length = 0x1c;
-    rme_print(ACS_PRINT_DEBUG, L"Request message: 0x", 0);
+    //Reads and prints many characters in the logs, so avoiding now
+    //rme_print(ACS_PRINT_DEBUG, L"Request message: 0x", 0);
     for (int  i = 0; i < req_length; i++)
     {
-        rme_print(ACS_PRINT_INFO, L"%x ", req_addr[i]);
+        //rme_print(ACS_PRINT_INFO, L"%x ", req_addr[i]);
     }
 
     req_addr_4byte = (UINT32 *)req_addr;
     pal_write_doe_msgo_doe_mailbox(bdf, req_addr_4byte, req_length);
     if (pal_check_doe_response(bdf))
-        rme_print(ACS_PRINT_ERR, L"\n       TDSIP Locking failed", 0);
+        rme_print(ACS_PRINT_ERR, L" TDSIP Locking failed", 0);
 
     /* Get the device state */
     SetMem(&req_addr, sizeof(req_addr), 0);
@@ -346,7 +352,7 @@ UINT32 pal_device_unlock(UINT32 bdf)
     req_addr_4byte = (UINT32 *)req_addr;
     pal_write_doe_msgo_doe_mailbox(bdf, req_addr_4byte, req_length);
     if (pal_check_doe_response(bdf))
-      rme_print(ACS_PRINT_ERR, L"\n       TDSIP Locking failed", 0);
+      rme_print(ACS_PRINT_ERR, L" TDSIP Locking failed", 0);
 
   return 0;
 }
@@ -380,7 +386,7 @@ UINT32 pal_device_lock(UINT32 bdf)
 
   /* Finally check the response from the doe_read_data_mailbox register */
   if (pal_check_doe_response(bdf))
-    rme_print(ACS_PRINT_ERR, L"\n       TDSIP Get version failed", 0);
+    rme_print(ACS_PRINT_ERR, L" TDSIP Get version failed", 0);
 
   /* Get device state */
   SetMem(&req_addr, sizeof(req_addr), 0);
@@ -389,7 +395,7 @@ UINT32 pal_device_lock(UINT32 bdf)
   req_addr_4byte = (UINT32 *)req_addr;
   pal_write_doe_msgo_doe_mailbox(bdf, req_addr_4byte, req_length);
   if (pal_check_doe_response(bdf))
-    rme_print(ACS_PRINT_ERR, L"\n       TDSIP Locking failed", 0);
+    rme_print(ACS_PRINT_ERR, L" TDSIP Locking failed", 0);
 
   /* Lock the device */
   SetMem(&req_addr, sizeof(req_addr), 0);
@@ -398,7 +404,7 @@ UINT32 pal_device_lock(UINT32 bdf)
   req_addr_4byte = (UINT32 *)req_addr;
   pal_write_doe_msgo_doe_mailbox(bdf, req_addr_4byte, req_length);
   if (pal_check_doe_response(bdf))
-    rme_print(ACS_PRINT_ERR, L"\n       TDSIP Locking failed", 0);
+    rme_print(ACS_PRINT_ERR, L" TDSIP Locking failed", 0);
 
   /* Start the TDI (RUN) */
   SetMem(&req_addr, sizeof(req_addr), 0);
@@ -407,7 +413,7 @@ UINT32 pal_device_lock(UINT32 bdf)
   req_addr_4byte = (UINT32 *)req_addr;
   pal_write_doe_msgo_doe_mailbox(bdf, req_addr_4byte, req_length);
   if (pal_check_doe_response(bdf))
-    rme_print(ACS_PRINT_ERR, L"\n       TDSIP Locking failed", 0);
+    rme_print(ACS_PRINT_ERR, L" TDSIP Locking failed", 0);
 
   /* Get the device state */
   SetMem(&req_addr, sizeof(req_addr), 0);
@@ -416,7 +422,7 @@ UINT32 pal_device_lock(UINT32 bdf)
   req_addr_4byte = (UINT32 *)req_addr;
   pal_write_doe_msgo_doe_mailbox(bdf, req_addr_4byte, req_length);
   if (pal_check_doe_response(bdf))
-    rme_print(ACS_PRINT_ERR, L"\n       TDSIP Locking failed", 0);
+    rme_print(ACS_PRINT_ERR, L" TDSIP Locking failed", 0);
 
   return 0;
 }

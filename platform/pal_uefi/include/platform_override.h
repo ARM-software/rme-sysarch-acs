@@ -63,7 +63,7 @@
 
 /* Platform Specifc details and system configurations */
 
-#define PLATFORM_BASEFVP 0
+#define PLATFORM_BASEFVP 1
 
 #define IS_LEGACY_TZ_ENABLED 0x0
 

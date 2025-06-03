@@ -48,22 +48,24 @@ val_rme_da_execute_tests(uint32_t num_pe)
   uint64_t smmu_base_arr[num_smmus], pgt_attr_el3;
 
   for (i = 0 ; i < MAX_TEST_SKIP_NUM ; i++) {
-      if (g_skip_test_num[i] == ACS_RME_DA_TEST_NUM_BASE) {
-          val_print(ACS_PRINT_TEST, "      USER Override - Skipping all RME tests \n", 0);
+      if (val_memory_compare(g_skip_test_str[i], DA_MODULE, val_strnlen(g_skip_test_str[i])) == 0) {
+          val_print(ACS_PRINT_ALWAYS, "\n USER Override - Skipping all RME-DA tests \n", 0);
           return ACS_STATUS_SKIP;
       }
   }
 
-  if (g_single_module != SINGLE_MODULE_SENTINEL && g_single_module != ACS_RME_DA_TEST_NUM_BASE &&
-       (g_single_test == SINGLE_MODULE_SENTINEL ||
-       (g_single_test - ACS_RME_DA_TEST_NUM_BASE > 100 ||
-          g_single_test - ACS_RME_DA_TEST_NUM_BASE <= 0))) {
-    val_print(ACS_PRINT_TEST, " USER Override - Skipping all RME tests \n", 0);
-    val_print(ACS_PRINT_TEST, " (Running only a single module)\n", 0);
+  if ((val_memory_compare(g_single_module_str, SINGLE_MODULE_SENTINEL_STR,
+                          val_strnlen(g_single_module_str)) != 0 &&
+       val_memory_compare(g_single_module_str, DA_MODULE, val_strnlen(g_single_module_str)) != 0) &&
+      (val_memory_compare(g_single_test_str, SINGLE_TEST_SENTINEL_STR,
+                          val_strnlen(g_single_test_str)) == 0 ||
+       val_memory_compare(DA_MODULE, g_single_test_str, val_strnlen(DA_MODULE)) != 0)) {
+    val_print(ACS_PRINT_ALWAYS, "\n USER Override - Skipping all RME-DA tests \n", 0);
+    val_print(ACS_PRINT_ALWAYS, " (Running only a single module)\n", 0);
     return ACS_STATUS_SKIP;
   }
 
-  g_curr_module = 1 << DA_MODULE;
+  g_curr_module = 1 << DA_MODULE_ID;
 
   if (!g_rl_smmu_init)
   {
@@ -92,28 +94,27 @@ val_rme_da_execute_tests(uint32_t num_pe)
       reset_status != RESET_LS_TEST3_FLAG)
   {
       /* DA-ACS tests */
-      status = da001_entry();
-      status |= da002_entry();
-      status |= da003_entry();
-      status |= da004_entry();
-      status |= da005_entry();
-      status |= da006_entry();
-      status |= da007_entry();
-      status |= da008_entry();
-      status |= da009_entry();
-      status |= da010_entry();
-      status |= da011_entry();
-      status |= da012_entry();
-      status |= da013_entry();
-      status |= da014_entry();
-      status |= da015_entry();
-      status |= da016_entry();
-      status |= da017_entry();
-      status |= da018_entry();
-      status |= da019_entry();
-      status |= da020_entry();
+      status = da_dvsec_register_config_entry();
+      status |= da_smmu_implementation_entry();
+      status |= da_tee_io_capability_entry();
+      status |= da_rootport_ide_features_entry();
+      status |= da_attribute_rmeda_ctl_registers_entry();
+      status |= da_p2p_btw_2_tdisp_devices_entry();
+      status |= da_outgoing_request_with_ide_tbit_entry();
+      status |= da_incoming_request_ide_sec_locked_entry();
+      status |= da_ctl_regs_rmsd_write_protect_property_entry();
+      status |= da_ide_state_rootport_error_entry();
+      status |= da_ide_state_tdisp_disable_entry();
+      status |= da_selective_ide_register_property_entry();
+      status |= da_rootport_tdisp_disabled_entry();
+      status |= da_autonomous_rootport_request_ns_pas_entry();
+      status |= da_incoming_request_ide_non_sec_unlocked_entry();
+      status |= da_outgoing_realm_rqst_ide_tbit_1_entry();
+      status |= da_ide_tbit_0_for_root_request_entry();
+      status |= da_rmsd_write_detect_property_entry();
+      status |= da_rootport_write_protect_full_protect_property_entry();
+      status |= da_interconnect_regs_rmsd_protected_entry();
 
-      val_print_test_end(status, "RME-DA");
   }
 
   return status;
@@ -171,14 +172,14 @@ val_da_get_addr_asso_block_base(uint32_t *num_sel_ide_stream_supp,
 
   /* Get the RID Limit from IDE RID Association Register 1 */
   *rid_limit = VAL_EXTRACT_BITS(val_pcie_read_cfg(bdf, *current_base_offset, rid_limit), 8, 23);
-  val_print(ACS_PRINT_INFO, "\n       RID Limit: %x", *rid_limit);
+  val_print(ACS_PRINT_INFO, " RID Limit: %x", *rid_limit);
 
   /* Base offset of IDE RID Association Register 2 */
   *current_base_offset = *current_base_offset + RID_ADDR_REG1_SIZE;
 
   /* Get the RID Limit from IDE RID Association Register 2 */
   *rid_base = VAL_EXTRACT_BITS(val_pcie_read_cfg(bdf, *current_base_offset, rid_base), 8, 23);
-  val_print(ACS_PRINT_INFO, "\n       RID Base: %x", *rid_base);
+  val_print(ACS_PRINT_INFO, " RID Base: %x", *rid_base);
 
   /* Base offset of IDE Address Association Register Block */
   *current_base_offset = *current_base_offset + RID_ADDR_REG2_SIZE; // Addr ass base
@@ -207,7 +208,7 @@ val_da_get_next_rid_values(uint32_t *current_base_offset,
   *next_rid_limit = VAL_EXTRACT_BITS(
                     val_pcie_read_cfg(bdf, *current_base_offset, next_rid_limit),
                     8, 23);
-  val_print(ACS_PRINT_INFO, "\n       RID Limit: %x", *next_rid_limit);
+  val_print(ACS_PRINT_INFO, " RID Limit: %x", *next_rid_limit);
 
   /* Base offset of IDE RID Association Register 2 */
   *current_base_offset = *current_base_offset + RID_ADDR_REG1_SIZE;
@@ -216,7 +217,7 @@ val_da_get_next_rid_values(uint32_t *current_base_offset,
   *next_rid_base = VAL_EXTRACT_BITS(
                    val_pcie_read_cfg(bdf, *current_base_offset, next_rid_base),
                    8, 23);
-  val_print(ACS_PRINT_INFO, "\n       RID Base: %x", *next_rid_base);
+  val_print(ACS_PRINT_INFO, " RID Base: %x", *next_rid_base);
 }
 
 uint32_t
@@ -246,7 +247,7 @@ uint32_t val_ide_set_sel_stream(uint32_t bdf, uint32_t str_cnt, uint32_t enable)
   if (val_pcie_find_capability(bdf, PCIE_ECAP, ECID_IDE, &ide_cap_base) != PCIE_SUCCESS)
   {
       val_print(ACS_PRINT_ERR,
-                    "\n       PCIe IDE Capability not present for BDF: 0x%x", bdf);
+                    " PCIe IDE Capability not present for BDF: 0x%x", bdf);
       return 1;
   }
 
@@ -255,7 +256,7 @@ uint32_t val_ide_set_sel_stream(uint32_t bdf, uint32_t str_cnt, uint32_t enable)
   sel_ide_str_supported = (reg_value & SEL_IDE_STR_MASK) >> SEL_IDE_STR_SHIFT;
   if (!sel_ide_str_supported)
   {
-      val_print(ACS_PRINT_ERR, "\n       Selective IDE str not supported for BDF: %x", bdf);
+      val_print(ACS_PRINT_ERR, " Selective IDE str not supported for BDF: %x", bdf);
       return 1;
   }
 
@@ -318,7 +319,7 @@ uint32_t val_ide_program_stream_id(uint32_t bdf, uint32_t str_cnt, uint32_t stre
   if (val_pcie_find_capability(bdf, PCIE_ECAP, ECID_IDE, &ide_cap_base) != PCIE_SUCCESS)
   {
       val_print(ACS_PRINT_ERR,
-                    "\n       PCIe IDE Capability not present for BDF: 0x%x", bdf);
+                    " PCIe IDE Capability not present for BDF: 0x%x", bdf);
       return 1;
   }
 
@@ -327,7 +328,7 @@ uint32_t val_ide_program_stream_id(uint32_t bdf, uint32_t str_cnt, uint32_t stre
   sel_ide_str_supported = (reg_value & SEL_IDE_STR_MASK) >> SEL_IDE_STR_SHIFT;
   if (!sel_ide_str_supported)
   {
-      val_print(ACS_PRINT_ERR, "\n       Selective IDE str not supported for BDF: %x", bdf);
+      val_print(ACS_PRINT_ERR, " Selective IDE str not supported for BDF: %x", bdf);
       return 1;
   }
 
@@ -388,7 +389,7 @@ uint32_t val_ide_program_rid_base_limit_valid(uint32_t bdf, uint32_t str_cnt,
   if (val_pcie_find_capability(bdf, PCIE_ECAP, ECID_IDE, &ide_cap_base) != PCIE_SUCCESS)
   {
       val_print(ACS_PRINT_ERR,
-                    "\n       PCIe IDE Capability not present for BDF: 0x%x", bdf);
+                    " PCIe IDE Capability not present for BDF: 0x%x", bdf);
       return 1;
   }
 
@@ -397,7 +398,7 @@ uint32_t val_ide_program_rid_base_limit_valid(uint32_t bdf, uint32_t str_cnt,
   sel_ide_str_supported = (reg_value & SEL_IDE_STR_MASK) >> SEL_IDE_STR_SHIFT;
   if (!sel_ide_str_supported)
   {
-      val_print(ACS_PRINT_ERR, "\n       Selective IDE str not supported for BDF: %x", bdf);
+      val_print(ACS_PRINT_ERR, " Selective IDE str not supported for BDF: %x", bdf);
       return 1;
   }
 
@@ -456,7 +457,7 @@ uint32_t val_ide_get_num_sel_str(uint32_t bdf, uint32_t *num_sel_str)
   if (val_pcie_find_capability(bdf, PCIE_ECAP, ECID_IDE, &ide_cap_base) != PCIE_SUCCESS)
   {
       val_print(ACS_PRINT_ERR,
-                    "\n       PCIe IDE Capability not present for BDF: 0x%x", bdf);
+                    " PCIe IDE Capability not present for BDF: 0x%x", bdf);
       return 1;
   }
 
@@ -465,7 +466,7 @@ uint32_t val_ide_get_num_sel_str(uint32_t bdf, uint32_t *num_sel_str)
   sel_ide_str_supported = (reg_value & SEL_IDE_STR_MASK) >> SEL_IDE_STR_SHIFT;
   if (!sel_ide_str_supported)
   {
-      val_print(ACS_PRINT_ERR, "\n       Selective IDE str not supported for BDF: %x", bdf);
+      val_print(ACS_PRINT_ERR, " Selective IDE str not supported for BDF: %x", bdf);
       return 1;
   }
 
@@ -490,7 +491,7 @@ uint32_t val_get_sel_str_status(uint32_t bdf, uint32_t str_cnt, uint32_t *str_st
   if (val_pcie_find_capability(bdf, PCIE_ECAP, ECID_IDE, &ide_cap_base) != PCIE_SUCCESS)
   {
       val_print(ACS_PRINT_ERR,
-                    "\n       PCIe IDE Capability not present for BDF: 0x%x", bdf);
+                    " PCIe IDE Capability not present for BDF: 0x%x", bdf);
       return 1;
   }
 
@@ -499,7 +500,7 @@ uint32_t val_get_sel_str_status(uint32_t bdf, uint32_t str_cnt, uint32_t *str_st
   sel_ide_str_supported = (reg_value & SEL_IDE_STR_MASK) >> SEL_IDE_STR_SHIFT;
   if (!sel_ide_str_supported)
   {
-      val_print(ACS_PRINT_ERR, "\n       Selective IDE str not supported for BDF: %x", bdf);
+      val_print(ACS_PRINT_ERR, " Selective IDE str not supported for BDF: %x", bdf);
       return 1;
   }
 
@@ -551,34 +552,34 @@ val_ide_establish_stream(uint32_t bdf, uint32_t count, uint32_t stream_id, uint3
              PCIE_CREATE_BDF_PACKED(base_limit), PCIE_CREATE_BDF_PACKED(base_limit), 1);
   if (status)
   {
-      val_print(ACS_PRINT_ERR, "\n       Failed to set RID values for BDF: 0x%x", bdf);
+      val_print(ACS_PRINT_ERR, " Failed to set RID values for BDF: 0x%x", bdf);
       return 1;
   }
 
   status = val_ide_program_stream_id(bdf, count, stream_id);
   if (status)
   {
-      val_print(ACS_PRINT_ERR, "\n       Failed to set Stream ID for BDF: 0x%x", bdf);
+      val_print(ACS_PRINT_ERR, " Failed to set Stream ID for BDF: 0x%x", bdf);
       return 1;
   }
 
   status = val_ide_set_sel_stream(bdf, count, 1);
   if (status)
   {
-      val_print(ACS_PRINT_ERR, "\n       Failed to enable Sel Stream for BDF: 0x%x", bdf);
+      val_print(ACS_PRINT_ERR, " Failed to enable Sel Stream for BDF: 0x%x", bdf);
       return 1;
   }
 
   status = val_get_sel_str_status(bdf, count, &reg_value);
   if (status)
   {
-      val_print(ACS_PRINT_ERR, "\n       Fail to get Sel Stream state for BDF: 0x%x", bdf);
+      val_print(ACS_PRINT_ERR, " Fail to get Sel Stream state for BDF: 0x%x", bdf);
       return 1;
   }
 
   if (reg_value != STREAM_STATE_SECURE)
   {
-      val_print(ACS_PRINT_ERR, "\n       Sel Stream is not in Secure for BDF: 0x%x", bdf);
+      val_print(ACS_PRINT_ERR, " Sel Stream is not in Secure for BDF: 0x%x", bdf);
       return 1;
   }
 
@@ -596,8 +597,8 @@ uint32_t val_intercnt_sec_prpty_check(uint64_t *register_entry_info)
   if (register_entry->type != INTERCONNECT)
       return 0;
 
-  val_print(ACS_PRINT_DEBUG, "\nAddress: 0x%x", register_entry->bdf);
-  val_print(ACS_PRINT_DEBUG, "\nProperty: %d", register_entry->property);
+  val_print(ACS_PRINT_DEBUG, "Address: 0x%x", register_entry->bdf);
+  val_print(ACS_PRINT_ALWAYS, "Property: %d", register_entry->property);
 
   data_rt = TEST_DATA_1;
   data_ns = TEST_DATA_2;
@@ -624,7 +625,7 @@ uint32_t val_intercnt_sec_prpty_check(uint64_t *register_entry_info)
           /* Fail if the NS read is successfull */
           if (rd_data == data_rt)
           {
-              val_print(ACS_PRINT_ERR, "\n      Read success from NS for addr: 0x%lx",
+              val_print(ACS_PRINT_ERR, " Read success from NS for addr: 0x%lx",
                         register_entry->address);
               return 1;
           }
@@ -636,7 +637,7 @@ uint32_t val_intercnt_sec_prpty_check(uint64_t *register_entry_info)
           /* Fail if the NS write is successfull */
           if (rd_data == data_ns)
           {
-              val_print(ACS_PRINT_ERR, "\n      Write from NS is successfull for address: 0x%x",
+              val_print(ACS_PRINT_ERR, " Write from NS is successfull for address: 0x%x",
                         register_entry->address);
               return 1;
           }
@@ -652,7 +653,7 @@ uint32_t val_intercnt_sec_prpty_check(uint64_t *register_entry_info)
           break;
 
     default:
-      val_print(ACS_PRINT_ERR, "\n       Invalid Security Property: %d", register_entry->property);
+      val_print(ACS_PRINT_ERR, " Invalid Security Property: %d", register_entry->property);
       return 1;
   }
 

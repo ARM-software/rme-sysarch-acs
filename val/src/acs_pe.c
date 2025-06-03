@@ -176,7 +176,7 @@ val_pe_reg_read(uint32_t reg_id)
           return AA64ReadMecidrEl2();
           break;
       default:
-           val_report_status(val_pe_get_index_mpid(val_pe_get_mpid()), RESULT_FAIL(0, 0x78), NULL);
+           val_report_status(val_pe_get_index_mpid(val_pe_get_mpid()), "FAIL");
   }
 
   return 0x0;
@@ -248,7 +248,7 @@ val_pe_reg_write(uint32_t reg_id, uint64_t write_data)
           return AA64WriteHcr(write_data);
           break;
       default:
-           val_report_status(val_pe_get_index_mpid(val_pe_get_mpid()), RESULT_FAIL(0, 0x78), NULL);
+           val_report_status(val_pe_get_index_mpid(val_pe_get_mpid()), "FAIL");
   }
 
 }
@@ -357,7 +357,7 @@ uint32_t val_pe_get_vtcr(VTCR_EL2_INFO *vtcr)
     uint64_t hcr;
 
     val = val_pe_reg_read(VTCR);
-    val_print(ACS_PRINT_DEBUG, "\n  VTCR: 0x%llx", val);
+    val_print(ACS_PRINT_DEBUG, " VTCR: 0x%llx", val);
     if (val != VTCR_RESET_VAL) {
             vtcr->ps = (val & MASK(VTCR_PS)) >> VTCR_PS_SHIFT;
             vtcr->tg = (val & MASK(VTCR_TG0)) >> VTCR_TG0_SHIFT;
@@ -393,7 +393,7 @@ uint32_t val_pe_get_vtcr(VTCR_EL2_INFO *vtcr)
 
     /* Now again read back the VTCR reg and store it in the struct */
     val = val_pe_reg_read(VTCR);
-    val_print(ACS_PRINT_DEBUG, "\n  VTCR after write: 0x%llx", val);
+    val_print(ACS_PRINT_DEBUG, " VTCR after write: 0x%llx", val);
     vtcr->ps = (val & MASK(VTCR_PS)) >> VTCR_PS_SHIFT;
     vtcr->tg = (val & MASK(VTCR_TG0)) >> VTCR_TG0_SHIFT;
     vtcr->tg_size_log2 = tg_vtbr[vtcr->tg];

@@ -22,26 +22,15 @@
 #ifndef __RME_ACS_COMMON_H__
 #define __RME_ACS_COMMON_H__
 
-#define ACS_RME_TEST_NUM_BASE        0
-#define ACS_EXERCISER_TEST_NUM_BASE  100
-#define ACS_GIC_TEST_NUM_BASE        200
-#define ACS_PCIE_TEST_NUM_BASE       300
-#define ACS_SMMU_TEST_NUM_BASE       400
-#define ACS_LEGACY_TEST_NUM_BASE     500
-#define ACS_RME_DA_TEST_NUM_BASE     600
-#define ACS_RME_DPT_TEST_NUM_BASE    700
-#define ACS_RME_MEC_TEST_NUM_BASE    800
+#include "rme_acs_memory.h"
 
-#define STATE_BIT   28
-#define STATE_MASK 0xF
-
-/* These are the states a test can be in */
-#define TEST_START_VAL   0x1
-#define TEST_END_VAL     0x2
-#define TEST_PASS_VAL    0x4
-#define TEST_FAIL_VAL    0x8
-#define TEST_SKIP_VAL    0x9
-#define TEST_PENDING_VAL 0xA
+#define DA_MODULE        "da"
+#define DPT_MODULE       "dpt"
+#define GIC_MODULE       "gic"
+#define LEGACY_MODULE    "legacy"
+#define MEC_MODULE       "mec"
+#define RME_MODULE       "rme"
+#define SMMU_MODULE      "smmu"
 
 #define CPU_NUM_BIT  32
 #define CPU_NUM_MASK 0xFFFFFFFF
@@ -49,41 +38,12 @@
 #define LEVEL_BIT    24
 #define LEVEL_MASK  0xF
 
-#define STATUS_MASK 0xFFF
-
-#define TEST_NUM_BIT    12
-#define TEST_NUM_MASK   0xFFF
-
-/* TEST start and Stop defines */
-
-
-
-#define RME_ACS_START(test_num) (((TEST_START_VAL) << STATE_BIT) | ((test_num) << TEST_NUM_BIT))
-#define RME_ACS_END(test_num) (((TEST_END_VAL) << STATE_BIT) | ((test_num) << TEST_NUM_BIT))
-
-
-
-/* TEST Result defines */
-
-#define RESULT_PASS(test_num, status) (((TEST_PASS_VAL) << STATE_BIT) | \
-		                      ((test_num) << TEST_NUM_BIT) | (status))
-
-#define RESULT_FAIL(test_num, status) (((TEST_FAIL_VAL) << STATE_BIT) | \
-		                      ((test_num) << TEST_NUM_BIT) | (status))
-
-#define RESULT_SKIP(test_num, status) (((TEST_SKIP_VAL) << STATE_BIT) | \
-		                      ((test_num) << TEST_NUM_BIT) | (status))
-
-#define RESULT_PENDING(test_num) (((TEST_PENDING_VAL) << STATE_BIT) | \
-                        ((test_num) << TEST_NUM_BIT))
-
-#define IS_TEST_START(value)     (((value >> STATE_BIT) & (STATE_MASK)) == TEST_START_VAL)
-#define IS_TEST_END(value)       (((value >> STATE_BIT) & (STATE_MASK)) == TEST_END_VAL)
-#define IS_RESULT_PENDING(value) (((value >> STATE_BIT) & (STATE_MASK)) == TEST_PENDING_VAL)
-#define IS_TEST_PASS(value)      (((value >> STATE_BIT) & (STATE_MASK)) == TEST_PASS_VAL)
-#define IS_TEST_FAIL(value)      (((value >> STATE_BIT) & (STATE_MASK)) == TEST_FAIL_VAL)
-#define IS_TEST_SKIP(value)      (((value >> STATE_BIT) & (STATE_MASK)) == TEST_SKIP_VAL)
-#define IS_TEST_FAIL_SKIP(value) ((IS_TEST_FAIL(value)) || (IS_TEST_SKIP(value)))
+#define IS_TEST_END(status)        (val_memory_compare("END", status, sizeof("END")) == 0)
+#define IS_RESULT_PENDING(status)  (val_memory_compare("PENDING", status, sizeof("PENDING")) == 0)
+#define IS_TEST_PASS(status)       (val_memory_compare("PASS", status, sizeof("PASS")) == 0)
+#define IS_TEST_FAIL(status)       (val_memory_compare("FAIL", status, sizeof("FAIL")) == 0)
+#define IS_TEST_SKIP(status)       (val_memory_compare("SKIP", status, sizeof("SKIP")) == 0)
+#define IS_TEST_FAIL_SKIP(status)  (IS_TEST_FAIL(status) || IS_TEST_SKIP(status))
 
 uint8_t
 val_mmio_read8(addr_t addr);
@@ -110,14 +70,14 @@ void
 val_mmio_write64(addr_t addr, uint64_t data);
 
 uint32_t
-val_initialize_test(uint32_t test_num, char8_t *desc, uint32_t num_pe, char8_t *ruleid);
+val_initialize_test(char8_t *testname, char8_t *desc, uint32_t num_pe, char8_t *ruleid);
 
 uint32_t
-val_check_for_error(uint32_t test_num, uint32_t num_pe, char8_t *ruleid);
+val_check_for_error(uint32_t num_pe);
 
 void
-val_run_test_payload(uint32_t test_num, uint32_t num_pe,
-		     void (*payload)(void), uint64_t test_input);
+val_run_test_payload(uint32_t num_pe, void (*payload)(void), uint64_t test_input);
+
 
 void
 val_data_cache_ops_by_va(addr_t addr, uint32_t type);
@@ -125,14 +85,13 @@ val_data_cache_ops_by_va(addr_t addr, uint32_t type);
 /* Module specific print APIs */
 
 typedef enum {
-    EXERCISER_MODULE,
-    GIC_MODULE,
-    PCIE_MODULE,
-    RME_MODULE,
-    SMMU_MODULE,
-    DA_MODULE,
-    DPT_MODULE,
-    MEC_MODULE
+    GIC_MODULE_ID,
+    RME_MODULE_ID,
+    SMMU_MODULE_ID,
+    DA_MODULE_ID,
+    DPT_MODULE_ID,
+    MEC_MODULE_ID,
+    LEGACY_MODULE_ID
 } MODULE_ID_e;
 
 #endif

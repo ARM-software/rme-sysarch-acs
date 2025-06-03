@@ -40,29 +40,30 @@ val_rme_mec_execute_tests(uint32_t num_pe)
   uint64_t smmu_base_arr[num_smmus], pgt_attr_el3;
 
   for (i = 0 ; i < MAX_TEST_SKIP_NUM ; i++) {
-      if (g_skip_test_num[i] == ACS_RME_MEC_TEST_NUM_BASE) {
-          val_print(ACS_PRINT_TEST, "\n USER Override - Skipping all RME-MEC tests \n", 0);
+      if (val_memory_compare(g_skip_test_str[i], MEC_MODULE, val_strnlen(g_skip_test_str[i])) == 0)
+      {
+          val_print(ACS_PRINT_ALWAYS, "\n USER Override - Skipping all RME-MEC tests \n", 0);
           return ACS_STATUS_SKIP;
       }
   }
 
-  if (g_single_module != SINGLE_MODULE_SENTINEL && g_single_module != ACS_RME_MEC_TEST_NUM_BASE &&
-       (g_single_test == SINGLE_MODULE_SENTINEL ||
-       (g_single_test - ACS_RME_MEC_TEST_NUM_BASE > 100 ||
-          g_single_test - ACS_RME_MEC_TEST_NUM_BASE <= 0))) {
-    val_print(ACS_PRINT_TEST, " USER Override - Skipping all RME-MEC tests \
-                    (running only a single module)\n", 0);
+  if ((val_memory_compare(g_single_module_str, SINGLE_MODULE_SENTINEL_STR,
+                          val_strnlen(g_single_module_str)) != 0 &&
+      val_memory_compare(g_single_module_str, MEC_MODULE, val_strnlen(g_single_module_str)) != 0) &&
+      (val_memory_compare(g_single_test_str, SINGLE_TEST_SENTINEL_STR,
+                          val_strnlen(g_single_test_str)) == 0 ||
+       val_memory_compare(g_single_test_str, MEC_MODULE, val_strnlen(MEC_MODULE)) != 0)) {
+    val_print(ACS_PRINT_ALWAYS, "\n USER Override - Skipping all RME-MEC tests \n", 0);
+    val_print(ACS_PRINT_ALWAYS, " (Running only a single module)\n", 0);
     return ACS_STATUS_SKIP;
   }
 
   if (!val_is_mec_supported())
   {
-      val_print(ACS_PRINT_TEST, "\n Platform does not support MEC \
+      val_print(ACS_PRINT_ALWAYS, "\n Platform does not support MEC \
                        - Skipping all RME-MEC tests \n", 0);
       return ACS_STATUS_SKIP;
   }
-
-  g_curr_module = 1 << MEC_MODULE;
 
   if (!g_rl_smmu_init)
   {
@@ -90,11 +91,10 @@ val_rme_mec_execute_tests(uint32_t num_pe)
       reset_status != RESET_LS_DISBL_FLAG &&
       reset_status != RESET_LS_TEST3_FLAG)
   {
-    status = mec001_entry(num_pe);
-    status |= mec002_entry();
-    status |= mec003_entry();
-    status |= mec004_entry(num_pe);
-    val_print_test_end(status, "RME-MEC");
+    status = mec_support_mecid_and_mecid_width_entry(num_pe);
+    status |= mec_mecid_assosiation_and_encryption_entry();
+    status |= mec_effect_of_popa_cmo_entry();
+    status = mec_cmo_uses_correct_mecid_entry(2);
   }
 
   return status;

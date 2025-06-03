@@ -40,14 +40,14 @@ pal_pcie_create_info_table(PCIE_INFO_TABLE *PcieTable)
   uint32_t i = 0;
 
   if (PcieTable == NULL) {
-    print(ACS_PRINT_ERR, "Input PCIe Table Pointer is NULL. Cannot create PCIe INFO \n");
+    print(ACS_PRINT_ERR, "Input PCIe Table Pointer is NULL. Cannot create PCIe INFO ");
     return;
   }
 
   PcieTable->num_entries = 0;
 
   if(platform_pcie_cfg.num_entries == 0) {
-    print(ACS_PRINT_ERR, "Number of ECAM is 0. Cannot create PCIe INFO \n");
+    print(ACS_PRINT_ERR, "Number of ECAM is 0. Cannot create PCIe INFO ");
     return;
   }
 
@@ -165,7 +165,7 @@ pal_pcie_io_read_cfg(uint32_t Bdf, uint32_t offset, uint32_t *data)
          }
   }
 
-  print(ACS_PRINT_ERR, "No PCI devices found in the system\n");
+  print(ACS_PRINT_ERR, "No PCI devices found in the system");
   return PCIE_NO_MAPPING;
 }
 
@@ -639,7 +639,7 @@ pal_pcie_get_legacy_irq_map(uint32_t Seg, uint32_t Bus, uint32_t Dev, uint32_t F
         }
   }
 
-  print(ACS_PRINT_ERR, "No PCI devices found in the system\n");
+  print(ACS_PRINT_ERR, "No PCI devices found in the system");
   return PCIE_NO_MAPPING;
 }
 
