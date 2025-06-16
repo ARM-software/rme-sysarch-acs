@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2016-2022, 2024, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2016-2022, 2024-2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -112,6 +112,7 @@
 #define RID_VALID      1
 #define RID_NOT_VALID  0
 #define ATS_TRIGGER    1
+#define ATS_INV        (1 << 5)
 #define ATS_STATUS     (1ul << 7)
 #define TXN_INVALID    0xFFFFFFFF
 #define TXN_START      1
@@ -185,7 +186,8 @@ typedef enum {
     START_TXN_MONITOR    = 0xb,
     STOP_TXN_MONITOR     = 0xc,
     ATS_TXN_REQ          = 0xd,
-    INJECT_ERROR         = 0xe
+    INJECT_ERROR         = 0xe,
+    ATS_INV_CACHE        = 0xf
 } EXERCISER_OPS;
 
 typedef enum {
@@ -267,6 +269,7 @@ typedef enum {
 
 UINT32 pal_mmio_read(UINT64 addr);
 VOID pal_mmio_write(UINT64 addr, UINT32 data);
+VOID pal_mmio_write64(UINT64 addr, UINT64 data);
 UINT64 pal_pcie_get_mcfg_ecam();
 UINT64 pal_exerciser_get_pcie_config_offset(UINT32 Bdf);
 UINT32 pal_exerciser_find_pcie_capability(UINT32 ID, UINT32 Bdf, UINT32 Value, UINT32 *Offset);

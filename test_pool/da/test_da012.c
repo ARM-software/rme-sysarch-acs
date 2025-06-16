@@ -88,6 +88,7 @@ payload(void)
       {
           val_print(ACS_PRINT_ERR,
                           "\n       PCIe DA DVSEC capability not present,bdf 0x%x", bdf);
+          test_fail++;
           continue;
       }
 
@@ -106,7 +107,12 @@ payload(void)
           continue;
       }
 
-      val_pcie_enable_tdisp(bdf);
+      if (val_pcie_enable_tdisp(bdf))
+      {
+          val_print(ACS_PRINT_ERR, "\n        Unable to set tdisp_en for BDF: 0x%x", bdf);
+          test_fail++;
+          continue;
+      }
 
       count = 0;
       while (count++ < num_sel_str)

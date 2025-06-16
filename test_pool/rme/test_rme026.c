@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2023-2024, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2023-2024, 2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -46,7 +46,11 @@ void payload(void)
 
   shared_data->shared_data_access[0].data = INIT_DATA;
   size = val_get_min_tg();
-  PA = RME_RNVS_MAILBOX_MEM;
+  PA = val_get_free_pa(size, size);
+
+  /* Map the PA as ROOT memory in GPT */
+  val_add_gpt_entry_el3(PA, GPT_ROOT);
+  VA = val_get_free_va(NUM_PAS * size);
   VA = val_get_free_va(NUM_PAS * size);
   security_state = ROOT_PAS;
   attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(NON_SHAREABLE) | PGT_ENTRY_AP_RW);

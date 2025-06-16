@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022-2023, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2023, 2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,12 +15,20 @@
  * limitations under the License.
  **/
 
+#define id_aa64mmfr3_el1 S3_0_C0_C7_3
+#define sctlr2_el3       S3_6_C1_C0_3
+#define mecid_rl_a_el3   S3_6_C10_C10_1
+
 #include "val_el3/ack_include.h"
         .globl read_gpccr_el3
         .globl read_gptbr_el3
         .globl read_scr_el3
         .globl read_tcr_el3
         .globl read_ttbr_el3
+        .globl read_vtcr
+        .globl read_vttbr
+        .globl write_vtcr
+        .globl write_vttbr
         .globl read_sctlr_el3
         .globl read_sctlr_el2
         .globl write_scr_el3
@@ -33,6 +41,7 @@
         .globl invalidate_cache
         .globl at_s1e3w
         .globl cmo_cipapa
+        .globl cmo_cipae
         .globl exception_handler_user
         .globl asm_eret
         .globl asm_eret_smc
@@ -44,6 +53,8 @@
         .globl update_spsr_el3
         .globl read_sp_el0
         .globl tlbi_vae3
+        .globl tlbi_alle3is
+        .globl isb
         .globl acs_str
         .globl acs_ldr_pas_filter
         .globl write_mair_el3
@@ -51,6 +62,16 @@
         .globl write_cpsr
         .globl read_cpsr
         .globl set_daif
+        .globl val_mmio_read_el3
+        .globl val_mmio_read64_el3
+        .globl val_mmio_write64_el3
+        .globl val_mmio_write_el3
+        .global mem_barrier
+        .globl read_sctlr2_el3
+        .globl write_sctlr2_el3
+        .globl read_id_aa64mmfr3_el1
+        .globl write_mecid_rl_a_el3
+        .globl read_mecid_rl_a_el3
 
         /* @brief  The function is called to prepare the ack_handler entry installed in
          *         vbar_el3 by saving 10 GPRs and SP_EL3 in SP_EL0 which is programmed
@@ -170,6 +191,19 @@ tlbi_vae3:
        dsb    sy
        isb
        ret
+
+// Invalidate all TLB entries at EL3 (Inner Shareable) and synchronize
+tlbi_alle3is:
+      tlbi alle3is
+      dsb sy
+      isb
+      ret
+
+// Instruction Synchronization Barrier (ISB) wrapper
+isb:
+      isb
+      ret
+
 // Returns the SP_EL0 value
 read_sp_el0:
        msr   spsel, #0
@@ -268,6 +302,29 @@ read_ttbr_el3:
        mrs    x0, ttbr0_el3
        ret
 
+//Returns the VTTBR_EL2 register value
+read_vttbr:
+       mrs    x0, vttbr_el2
+       ret
+
+//Returns the VTCR_EL2 register value
+read_vtcr:
+       mrs    x0, vtcr_el2
+       ret
+
+// Updates the VTCR_EL2 register
+write_vtcr:
+       msr    vtcr_el2, x0
+       dsb    sy
+       isb
+       ret
+
+// Updates the VTTBR_EL2 register
+write_vttbr:
+       msr    vttbr_el2, x0
+       isb
+       ret
+
 //Returns theb SCTLR_EL3 register value
 read_sctlr_el3:
        mrs    x0, sctlr_el3
@@ -287,6 +344,33 @@ write_mair_el3:
 //Returns the MAIR_EL3 register value
 read_mair_el3:
        mrs    x0, mair_el3
+       ret
+
+// Read the ID_AA64MMFR3_EL1 system register
+read_id_aa64mmfr3_el1:
+       mrs    x0,  id_aa64mmfr3_el1
+       ret
+
+// Read the MECID_RL_A_EL3 system register
+read_mecid_rl_a_el3:
+       mrs    x0, mecid_rl_a_el3
+       ret
+
+// Write to the MECID_RL_A_EL3 system register and synchronize
+write_mecid_rl_a_el3:
+       msr    mecid_rl_a_el3, x0
+       isb
+       ret
+
+// Write to the SCTLR2_EL3 system register and synchronize
+write_sctlr2_el3:
+       msr    sctlr2_el3, x0
+       isb
+       ret
+
+// Read the SCTLR2_EL3 system register
+read_sctlr2_el3:
+       mrs    x0, sctlr2_el3
        ret
 
 // Saves the VBAR_EL3 register value in the given address
@@ -333,7 +417,47 @@ invalidate_cache:
 cmo_cipapa:
        sys    #6, c7, c14, #1, x0 /* DC CIPAPA,<Xt> */
        dsb    sy
+       isb
        ret
+
+// Clean and Invalidate data cache by physical address to the Point of Encryption.
+cmo_cipae:
+       sys    #4, c7, c14, #0, x0 /* DC CIPAPA,<Xt> */
+       dsb    sy
+       ret
+
+// MMIO Write (32-bit)
+val_mmio_write_el3:
+    dsb st             // Data Synchronization Barrier
+    str w1, [x0]       // Store 32-bit value (w1) at address (x0)
+    dsb st             // Ensure write is completed
+    ret
+
+// MMIO Read (32-bit)
+val_mmio_read_el3:
+    dsb ld             // Data Synchronization Barrier before read
+    ldr w0, [x0]       // Load 32-bit value from address (x0) into w0
+    dsb ld             // Ensure read is completed
+    ret
+
+// MMIO Write (64-bit)
+val_mmio_write64_el3:
+    dsb st             // Data Synchronization Barrier
+    str x1, [x0]       // Store 64-bit value (x1) at address (x0)
+    dsb st             // Ensure write is completed
+    ret
+
+// MMIO Read (64-bit)
+val_mmio_read64_el3:
+    dsb ld             // Data Synchronization Barrier before read
+    ldr w0, [x0]       // Load 64-bit value from address (x0) into w0
+    dsb ld             // Ensure read is completed
+    ret
+
+// Data Synchronization Barrier Across the system
+mem_barrier:
+    dsb sy
+    ret
 
 /* @brief  This function is called to branch to firmware
  *         handler after recovering the SP_EL3 and SP_EL0.

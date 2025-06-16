@@ -85,18 +85,25 @@ payload(void)
       if (val_pcie_get_rootport(e_bdf, &rp_bdf))
           continue;
 
+      test_skip = 0;
+
       /* Check for DA Capability */
       if (val_pcie_find_da_capability(rp_bdf, &da_cap_base) != PCIE_SUCCESS)
       {
           val_print(ACS_PRINT_ERR,
                         "\n       PCIe DA DVSEC capability not present,bdf 0x%x", e_bdf);
+          test_fail++;
           continue;
       }
 
-      test_skip = 0;
-
       /* Disable RMEDA_CTL1.TDISP_EN*/
-      val_pcie_disable_tdisp(rp_bdf);
+      if (val_pcie_disable_tdisp(rp_bdf))
+      {
+          val_print(ACS_PRINT_ERR, "\n        Unable to unset tdisp_en for BDF: 0x%x", rp_bdf);
+          test_fail++;
+          continue;
+      }
+
       if (val_device_lock(e_bdf))
       {
           val_print(ACS_PRINT_ERR, "\n       Failed to lock the device: 0x%lx", e_bdf);
@@ -130,6 +137,7 @@ payload(void)
       rp_bdf = bdf_tbl_ptr->device[tbl_index++].bdf;
       dp_type = val_pcie_device_port_type(rp_bdf);
 
+      test_skip = 0;
       if (dp_type == RP)
       {
           /* Check for DA Capability */
@@ -146,7 +154,6 @@ payload(void)
           if (!Bar_Base)
               continue;
 
-          test_skip = 0;
           va = val_get_free_va(val_get_min_tg());
           pgt_attr_el3 = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(OUTER_SHAREABLE)
                           | GET_ATTR_INDEX(DEV_MEM_nGnRnE) | PGT_ENTRY_AP_RW | PAS_ATTR(ROOT_PAS));

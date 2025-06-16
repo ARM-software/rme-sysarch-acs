@@ -1,3 +1,19 @@
+vB.a_EAC_26.06
+
+Test Updates:
+* Added new test cases to validate Device Permission Table (DPT) checks for various PCIe access scenarios
+  * DRAM access initiated over PCIe.
+  * Peer-to-peer transfers over the same Root Port and across different Root Ports.
+* Introduced test coverage for Memory Encryption Contexts (MEC)
+  * MECID association validation and encryption behavior checks.
+  * Verification of common MECID width across the platform.
+  * Assessment of Cache Maintenance Operations (CMO) behavior at PoE, PoPA, and PoC.
+Infrastructure Enhancements
+* Extended VAL infrastructure to support
+  * Device Permission Table (DPT) testing.
+  * Memory Encryption Context (MEC) scenarios and behaviors.
+
+
 vB.a_EAC_25.01
 
 Baremetal Boot Framework:

@@ -46,6 +46,7 @@ Most of the tests are executed from UEFI Shell by executing the RME UEFI shell a
 - To generate binary file for EL3 code, follow the build steps in README of val_el3.
 - 2MB memory must be flat mapped in EL3-MMU with Root access PAS and GPI as ROOT/ALL_ACCESS, which is used for MMU tables in EL3.
 - 2MB Free memory which is used as PA in tests.
+- 2MB memory that is flat-mapped as Realm Access PAS which is used for Realm SMMU tables.
 - 4KB/16KB/64KB shared memory that is used, a) as a structure, shared_data_el32 to share data between EL3 and EL2 domains, b) to save/restore registers and sp_el3, and tf-handler entry address.
 - 512MB Unused VA space (within 48bits) that is used in the tests as VA.
 - 4KB of Non-Volatile memory that is used only in reset tests.
@@ -80,7 +81,7 @@ To start the ACS build, perform the following steps:
 
 ### Linux build environment
 If the build environment is Linux, perform the following steps:
-1.  export GCC49_AARCH64_PREFIX= GCC12.3 toolchain path pointing to /bin/aarch64-linux-gnu-
+1.  export GCC49_AARCH64_PREFIX= GCC 13.2 toolchain path pointing to /bin/aarch64-none-linux-gnu-
 2.  export PACKAGES_PATH= path pointing to edk2-libc
 3.  source edksetup.sh
 4.  make -C BaseTools/Source/C
@@ -127,7 +128,7 @@ On an emulation environment with secondary storage, perform the following steps:
 
 1. Create an image file which contains the 'Rme.efi' file. For Example:
   - mkfs.vfat -C -n HD0 hda.img 2097152
-  - sudo mount -o rw,loop=/dev/loop0,uid=`whoami`,gid=`whoami` hda.img /mnt/rme. If loop0 is busy, specify the loop that is free
+  - sudo mount hda.img /mnt/rme
   - cp  "<path to application>/Rme.efi" /mnt/rme/
   - sudo umount /mnt/rme
 2. Load the image file to the secondary storage using a backdoor. The steps followed to load the image file are Emulation environment specific and beyond the scope of this document.

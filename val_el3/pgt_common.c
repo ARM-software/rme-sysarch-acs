@@ -1,5 +1,5 @@
 /** @file
-  * Copyright (c) 2022-2024, Arm Limited or its affiliates. All rights reserved.
+  * Copyright (c) 2022-2025, Arm Limited or its affiliates. All rights reserved.
   * SPDX-License-Identifier : Apache-2.0
 
   * Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,7 +17,148 @@
 
 #include <val_el3/ack_include.h>
 
+#define get_min(a, b) (((a) < (b))?(a):(b))
+
+#define MAX_ENTRIES_4K      512L
+#define MAX_ENTRIES_16K     2048L
+#define MAX_ENTRIES_64K     8192L
+
+#define PGT_LEVEL_0   0
+#define PGT_LEVEL_1   1
+#define PGT_LEVEL_2   2
+#define PGT_LEVEL_3   3
+
 uint64_t free_pa = FREE_MEM_START;
+
+static uint32_t pg_size;
+static uint32_t bits_p_level;
+static uint64_t pgt_addr_mask;
+uint64_t is_values_init = 0;
+uint64_t offset = 0;
+
+typedef struct {
+    uint64_t *tt_base;
+    uint64_t input_base;
+    uint64_t input_top;
+    uint64_t output_base;
+    uint32_t level;
+    uint32_t size_log2;
+    uint32_t nbits;
+} tt_descriptor_t;
+
+typedef struct {
+    uint32_t l0_index;
+    uint32_t l1_index;
+    uint32_t l2_index;
+    uint32_t l3_index;
+    uint64_t size_used;
+} acs_pgt_t;
+
+static acs_pgt_t acs_pgt_info;
+
+void setup_acs_pgt_values(void)
+{
+    acs_pgt_info.l0_index = 0;
+    acs_pgt_info.l1_index = 0;
+    acs_pgt_info.l2_index = 0;
+    acs_pgt_info.l3_index = 0;
+    acs_pgt_info.size_used = 0;
+}
+
+static
+uint32_t get_pgt_index(uint32_t level)
+{
+    switch (level)
+    {
+        case(PGT_LEVEL_0):
+            return acs_pgt_info.l0_index;
+        case(PGT_LEVEL_1):
+            return acs_pgt_info.l1_index;
+        case(PGT_LEVEL_2):
+            return acs_pgt_info.l2_index;
+        case(PGT_LEVEL_3):
+            return acs_pgt_info.l3_index;
+        default:
+            return 0;
+    }
+}
+
+static
+void increment_pgt_index(uint32_t level, uint32_t max_index)
+{
+    switch (level)
+    {
+        case(PGT_LEVEL_1):
+            if (acs_pgt_info.l1_index == (max_index - 1)) {
+                acs_pgt_info.l1_index = 0;
+                acs_pgt_info.l0_index++;
+            }
+            break;
+        case(PGT_LEVEL_2):
+            if (acs_pgt_info.l2_index == (max_index - 1)) {
+                acs_pgt_info.l2_index = 0;
+                acs_pgt_info.l1_index++;
+            }
+            break;
+        case(PGT_LEVEL_3):
+            if (acs_pgt_info.l3_index == (max_index - 1)) {
+                acs_pgt_info.l3_index = 0;
+                acs_pgt_info.l2_index++;
+            } else
+                acs_pgt_info.l3_index++;
+            break;
+        default:
+            break;
+    }
+
+  return;
+}
+
+static
+uint32_t get_entries_per_level(uint32_t page_size)
+{
+    switch (page_size)
+    {
+        case(SIZE_4KB):   //4kb granule
+            return MAX_ENTRIES_4K;
+        case(SIZE_16KB):  //16kb granule
+            return MAX_ENTRIES_16K;
+        case(SIZE_64KB):  //64kb granule
+            return MAX_ENTRIES_64K;
+        default:
+            INFO("       %x granularity not supported.i\n", pg_size);
+            return 0;
+    }
+}
+
+static
+uint64_t get_block_size(uint32_t level)
+{
+    uint32_t entries = get_entries_per_level(pg_size);
+    switch (level)
+    {
+        case(PGT_LEVEL_0):  // For L0 table translation
+            if (pg_size == SIZE_4KB)
+                return (uint64_t)(pg_size * entries * entries * entries);
+            else if (pg_size == SIZE_16KB)
+                return (uint64_t)(pg_size * entries * entries * 2); // only 2 lookup tables in L0
+            else {
+                INFO("       L0 tables not supported for page size %x\n", pg_size);
+                return 0;
+            }
+        case(PGT_LEVEL_1):  // For L1 table translation
+            if (pg_size == SIZE_4KB || pg_size == SIZE_16KB)
+                return (uint64_t)(pg_size * entries * entries);
+            else
+                return (uint64_t)(pg_size * entries * 64); // 64 Lookup tables in L1 (64KB Gran)
+        case(PGT_LEVEL_2):  // For L2 table translation
+            return (uint64_t)(pg_size * entries);
+        case(PGT_LEVEL_3):  // For L3 table translation
+            return (uint64_t)(pg_size);
+        default:
+            return 0;
+    }
+}
 
 /**
   @brief   This function maps a given Physical Address into the GPT table with the specified GPI
@@ -411,4 +552,272 @@ void val_get_tcr_info(TCR_EL3_INFO *tcr_el3)
   tcr_el3->sh = (tcr_val & TCR_EL3_SH0_MASK) >> TCR_EL3_SH0_SHIFT;
   tcr_el3->orgn = (tcr_val & TCR_EL3_IRGN0_MASK) >> TCR_EL3_IRGN0_SHIFT;
   tcr_el3->tsz = (tcr_val & TCR_EL3_T0SZ_MASK) >> TCR_EL3_T0SZ_SHIFT;
+}
+
+/**
+ * @brief Populate a page table level with valid translation entries.
+ *
+ * @param tt_desc     Translation table descriptor for the current level.
+ * @param mem_desc    Memory region descriptor to be mapped.
+ * @return 0 on success, 1 on failure.
+ */
+static uint32_t fill_translation_table(tt_descriptor_t tt_desc,
+                                       memory_region_descriptor_t *mem_desc)
+{
+    uint64_t block_size = 0x1ull << tt_desc.size_log2;
+    uint64_t input_address, output_address, filled_tables, table_index, max_allowed_mem;
+    uint64_t *tt_base_next_level, *table_desc;
+    tt_descriptor_t tt_desc_next_level;
+
+    INFO("      tt_desc.level: %d\n", tt_desc.level);
+    INFO("      tt_desc.input_base: 0x%lx\n", tt_desc.input_base);
+    INFO("      tt_desc.input_top: 0x%lx\n", tt_desc.input_top);
+    INFO("      tt_desc.output_base: 0x%lx\n", tt_desc.output_base);
+    INFO("      tt_desc.size_log2: %d\n", tt_desc.size_log2);
+    INFO("      tt_desc.nbits: %d\n", tt_desc.nbits);
+
+    if (!is_values_init) {
+        setup_acs_pgt_values();
+        is_values_init = 1;
+    }
+
+    for (input_address = tt_desc.input_base, output_address = tt_desc.output_base;
+         input_address < tt_desc.input_top;
+         input_address += (block_size - offset), output_address += (block_size - offset))
+    {
+        table_index = input_address >> tt_desc.size_log2 & ((0x1ull << tt_desc.nbits) - 1);
+        table_desc = &tt_desc.tt_base[table_index];
+
+        INFO("      table_index = %lx\n", table_index);
+
+        if (tt_desc.level == 3)
+        {
+            //Create level 3 page descriptor entry
+            *table_desc = PGT_ENTRY_PAGE_MASK | PGT_ENTRY_VALID_MASK;
+            *table_desc |= (output_address & ~(uint64_t)(pg_size - 1));
+            *table_desc |= mem_desc->attributes;
+            *table_desc |= PGT_ENTRY_ACCESS_SET;
+            INFO("      page_descriptor = 0x%lx\n", *table_desc);
+            /* Keep a count of number of L3 tables filled. If the number exceedes the limit, move
+               to next L2 table and continue.  */
+            increment_pgt_index(tt_desc.level, get_entries_per_level(pg_size));
+            offset = 0;
+            continue;
+        }
+
+        //Are input and output addresses eligible for being described via block descriptor?
+        if ((input_address & (block_size - 1)) == 0 &&
+             (output_address & (block_size - 1)) == 0 &&
+             tt_desc.input_top >= (input_address + block_size - 1)) {
+            //Create a block descriptor entry
+            *table_desc = PGT_ENTRY_BLOCK_MASK | PGT_ENTRY_VALID_MASK;
+            *table_desc |= (output_address & ~(block_size - 1));
+            *table_desc |= mem_desc->attributes;
+            *table_desc |= PGT_ENTRY_ACCESS_SET;
+            INFO("      block_descriptor = 0x%lx\n", *table_desc);
+            increment_pgt_index(tt_desc.level, get_entries_per_level(pg_size));
+            offset = 0;
+            continue;
+        }
+        /*
+        If there's no descriptor populated at current index of this page_table, or
+        If there's a block descriptor, allocate new page, else use the already populated address.
+        Block descriptor info will be overwritten in case its there.
+        */
+        if (*table_desc == 0 || IS_PGT_ENTRY_BLOCK(*table_desc))
+        {
+            tt_base_next_level = val_memory_alloc_el3(SIZE_4KB, SIZE_4KB);
+            if (tt_base_next_level == NULL)
+            {
+                INFO("  fill_translation_table: page allocation failed\n");
+                return 1;
+            }
+            val_memory_set_el3(tt_base_next_level, pg_size, 0);
+        } else
+            tt_base_next_level = val_memory_phys_to_virt(*table_desc & pgt_addr_mask);
+
+        tt_desc_next_level.tt_base    = tt_base_next_level;
+        tt_desc_next_level.input_base = input_address;
+        filled_tables                 = get_pgt_index(tt_desc.level + 1);
+        offset                        = filled_tables * get_block_size(tt_desc.level + 1);
+
+        INFO("       filled_tables in next level = 0x%lx\n", filled_tables);
+        INFO("       offset = 0x%lx\n", offset);
+
+        // Calculate the maximum allowed mem addr that can be mapped for the L0/L1/L2 table.
+        // This prevents overwriting page tables.
+        max_allowed_mem                = input_address + block_size - offset - 1;
+        tt_desc_next_level.input_top   = get_min(tt_desc.input_top, max_allowed_mem);
+        tt_desc_next_level.output_base = output_address;
+        tt_desc_next_level.level       = tt_desc.level + 1;
+        tt_desc_next_level.size_log2   = tt_desc.size_log2 - bits_p_level;
+        tt_desc_next_level.nbits       = bits_p_level;
+        increment_pgt_index(tt_desc.level, get_entries_per_level(pg_size));
+
+        if (fill_translation_table(tt_desc_next_level, mem_desc))
+        {
+            val_memory_free_el3(tt_base_next_level);
+            return 1;
+        }
+
+        *table_desc = PGT_ENTRY_TABLE_MASK | PGT_ENTRY_VALID_MASK;
+        *table_desc |= (uint64_t)val_memory_virt_to_phys(tt_base_next_level)
+                                                         & ~(uint64_t)(pg_size - 1);
+        INFO("      Table descriptor address = 0x%lx\n", (uint64_t) table_desc);
+        INFO("      table_descriptor = 0x%lx\n", *table_desc);
+    }
+    return 0;
+}
+
+/**
+ * @brief Create page tables to map the specified memory regions.
+ *
+ * @param mem_desc    Memory region descriptor list to be mapped.
+ * @param pgt_desc    Page table configuration descriptor (input/output).
+ * @return 0 on success, 1 on failure.
+ */
+uint32_t val_realm_pgt_create(memory_region_descriptor_t *mem_desc, pgt_descriptor_t *pgt_desc)
+{
+    uint64_t *tt_base;
+    tt_descriptor_t tt_desc;
+    uint32_t num_pgt_levels, page_size_log2;
+    memory_region_descriptor_t *mem_desc_iter;
+
+    pg_size = SIZE_4KB;
+    page_size_log2 = log2_page_size(pg_size);
+    bits_p_level = page_size_log2 - 3;
+    num_pgt_levels = (pgt_desc->ias - page_size_log2 + bits_p_level - 1)/bits_p_level;
+    num_pgt_levels = (num_pgt_levels > 4)?4:num_pgt_levels;
+    INFO("      val_pgt_create: nbits_per_level = %d\n", bits_p_level);
+    INFO("      val_pgt_create: page_size_log2 = %d\n", page_size_log2);
+
+    /* check whether input page descriptor has base addr of translation table
+       to use. If the pgt_base member is NULL allocate a page to create a new
+       table, else update existing translation table */
+    if (pgt_desc->pgt_base == (uint64_t) NULL) {
+        tt_base = (uint64_t *) val_memory_alloc_el3(SIZE_4KB, SIZE_4KB);
+        if (tt_base == NULL) {
+            INFO("      val_pgt_create: page allocation failed\n");
+            return 1;
+        }
+        val_memory_set_el3(tt_base, pg_size, 0);
+    }
+    else
+        tt_base = (uint64_t *) pgt_desc->pgt_base;
+
+    tt_desc.tt_base = tt_base;
+    pgt_addr_mask = ((0x1ull << (48 - page_size_log2)) - 1) << page_size_log2;
+
+    for (mem_desc_iter = mem_desc; mem_desc_iter->length != 0; ++mem_desc_iter)
+    {
+        INFO("      val_pgt_create:i/p addr 0x%lx\n", mem_desc->virtual_address);
+        INFO("      val_pgt_create:o/p addr 0x%lx\n", mem_desc->physical_address);
+        INFO("      val_pgt_create:length 0x%lx\n\n ", mem_desc->length);
+        if ((mem_desc->virtual_address & (uint64_t)(pg_size - 1)) != 0 ||
+            (mem_desc->physical_address & (uint64_t)(pg_size - 1)) != 0)
+            {
+                INFO("      val_pgt_create: address alignment error\n");
+                return 1;
+            }
+
+        if (mem_desc->physical_address >= (0x1ull << pgt_desc->oas))
+        {
+            INFO("      val_pgt_create: output address size error\n");
+            return 1;
+        }
+
+        if (mem_desc->virtual_address >= (0x1ull << pgt_desc->ias))
+            {
+            INFO("      val_pgt_create: input address size error \
+                            and truncating to %d-bits\n", pgt_desc->ias);
+            mem_desc->virtual_address &= ((0x1ull << pgt_desc->ias) - 1);
+            }
+
+#ifndef TARGET_BM_BOOT
+        // TCR won't be populated for the initial PGT that are created for MMU init.
+        // Removing this check in case of baremetal boot flow.
+        if ((pgt_desc->vtcr.tg_size_log2) != page_size_log2)
+        {
+            INFO("      val_pgt_create: input page_size 0x%x \
+                            not supported\n", (0x1 << pgt_desc->vtcr.tg_size_log2));
+            return 0;
+        }
+#endif
+        tt_desc.input_base = mem_desc->virtual_address & ((0x1ull << pgt_desc->ias) - 1);
+        tt_desc.input_top = tt_desc.input_base + mem_desc->length - 1;
+        tt_desc.output_base = mem_desc->physical_address & ((0x1ull << pgt_desc->oas) - 1);
+        tt_desc.level = 4 - num_pgt_levels;
+        tt_desc.size_log2 = (num_pgt_levels - 1) * bits_p_level + page_size_log2;
+        tt_desc.nbits = pgt_desc->ias - tt_desc.size_log2;
+
+        if (fill_translation_table(tt_desc, mem_desc))
+        {
+            val_memory_free_el3(tt_base);
+            return 1;
+        }
+    }
+
+    pgt_desc->pgt_base = (uint64_t)val_memory_virt_to_phys(tt_base);
+
+    return 0;
+}
+
+/**
+ * @brief Recursively free page tables starting from the given level.
+ *
+ * @param tt_base             Base virtual address of the page table.
+ * @param bits_at_this_level Number of bits used at this page table level.
+ * @param this_level         Current page table level (0-3).
+ * @return void
+ */
+static void free_translation_table(uint64_t *tt_base, uint32_t bits_at_this_level,
+                                                                 uint32_t this_level)
+{
+    uint32_t index;
+    uint64_t *tt_base_next_virt;
+
+    if (this_level == 3)
+        return;
+    for (index = 0; index < (0x1ul << bits_at_this_level); ++index)
+    {
+        if (tt_base[index] != 0)
+        {
+            if (IS_PGT_ENTRY_BLOCK(tt_base[index]))
+                continue;
+            tt_base_next_virt = val_memory_phys_to_virt((tt_base[index] & pgt_addr_mask));
+            if (tt_base_next_virt == NULL)
+                continue;
+            free_translation_table(tt_base_next_virt, bits_p_level, this_level+1);
+            INFO("      free_translation_table: \
+                        tt_base_next_virt = %lx\n", (uint64_t)tt_base_next_virt);
+            val_memory_free_el3(tt_base_next_virt);
+        }
+    }
+}
+
+/**
+ *  @brief Free all page tables in the page table hierarchy starting from the base page table.
+ *
+ *  @param pgt_desc - page table base and translation attributes.
+ *
+ *  @return void
+**/
+void val_realm_pgt_destroy(pgt_descriptor_t *pgt_desc)
+{
+    uint32_t page_size_log2, num_pgt_levels;
+    uint64_t *pgt_base_virt = val_memory_phys_to_virt(pgt_desc->pgt_base);
+
+    if (!pgt_desc->pgt_base)
+        return;
+
+    INFO("      val_pgt_destroy: pgt_base = %lx\n", pgt_desc->pgt_base);
+    page_size_log2 = log2_page_size(pg_size);
+    bits_p_level =  page_size_log2 - 3;
+    pgt_addr_mask = ((0x1ull << (pgt_desc->ias - page_size_log2)) - 1) << page_size_log2;
+    num_pgt_levels = (pgt_desc->ias - page_size_log2 + bits_p_level - 1)/bits_p_level;
+
+    free_translation_table(pgt_base_virt,
+                           pgt_desc->ias - ((num_pgt_levels - 1) * bits_p_level + page_size_log2),
+                           4 - num_pgt_levels);
+    val_memory_free_el3(pgt_base_virt);
 }

@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022, 2024, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022, 2024-2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -116,6 +116,7 @@
 #define BAR_MDT_MASK    0x3
 #define BAR_MT_MASK     0x1
 #define BAR_BASE_MASK   0xfffffff
+#define BAR_SIZE_PROBE  0xffffffff
 
 /*BAR offset */
 #define BAR0_OFFSET               0x10
@@ -202,6 +203,8 @@
 #define PCIECR_OFFSET  0x2
 #define DCAPR_OFFSET   0x4
 #define ACSCR_OFFSET   0x4
+#define ACSP2PRR_SHIFT 18
+#define ACSUFE_SHIFT   20
 #define DCTLR_OFFSET   0x8
 #define LCAPR_OFFSET   0xC
 #define LCTRLR_OFFSET  0x10

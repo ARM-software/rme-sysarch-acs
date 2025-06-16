@@ -451,6 +451,10 @@ uint32_t pal_exerciser_ops(EXERCISER_OPS Ops, uint64_t Param, uint32_t Bdf)
         pal_mmio_write(Base + ATSCTL, ATS_TRIGGER);
         return !(pal_mmio_read(Base + ATSCTL) & ATS_STATUS);
 
+    case ATS_INV_CACHE:
+        pal_mmio_write(Base + ATSCTL, ATS_INV);
+        return 0;
+
     case INJECT_ERROR:
         pal_exerciser_find_pcie_capability(DVSEC, Bdf, PCIE, &CapabilityOffset);
         data = pal_mmio_read(Ecam + pal_exerciser_get_pcie_config_offset(Bdf) +
@@ -522,11 +526,11 @@ uint32_t pal_exerciser_get_data(EXERCISER_DATA_TYPE Type, exerciser_data_t *Data
               Data->bar_space.type = MMIO_NON_PREFETCHABLE;
           return 0;
       case EXERCISER_DATA_MMIO_SPACE:
-          Index = 0;
+          Index = 1;
           Data->bar_space.base_addr = 0;
           while (Index < TYPE0_MAX_BARS)
           {
-              EcamBAR = pal_exerciser_get_ecsr_base(Bdf, Index * 4);
+              EcamBAR = pal_exerciser_get_ecsr_base(Bdf, Index);
 
               /* Check if the BAR is Memory Mapped IO type */
               if (((EcamBAR >> BAR_MIT_SHIFT) & BAR_MIT_MASK) == MMIO)

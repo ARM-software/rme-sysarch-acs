@@ -41,6 +41,7 @@ payload(void)
   uint32_t tbl_index;
   uint32_t bdf, dp_type;
   uint32_t reg_value;
+  uint32_t da_cap_base;
   uint32_t ide_cap_base;
   uint32_t sel_ide_str_supported;
   uint32_t test_fail = 0;
@@ -67,13 +68,19 @@ payload(void)
       if (dp_type != RP)
           continue;
 
+      /* Get the PCIE DVSEC Capability register */
+      if (val_pcie_find_da_capability(bdf, &da_cap_base) != PCIE_SUCCESS)
+      {
+           val_print(ACS_PRINT_ERR,
+                           "\n       PCIe DA DVSEC capability not present,bdf 0x%x", bdf);
+           continue;
+      }
 
       /* Check IDE Extended Capability register is present */
       if (val_pcie_find_capability(bdf, PCIE_ECAP, ECID_IDE, &ide_cap_base) != PCIE_SUCCESS)
       {
           val_print(ACS_PRINT_ERR,
                         "\n       PCIe IDE Capability not present for RP BDF: 0x%x", bdf);
-          test_fail++;
           continue;
       }
 
@@ -83,7 +90,6 @@ payload(void)
       if (!sel_ide_str_supported)
       {
           val_print(ACS_PRINT_ERR, "\n       Selective IDE str not supported for BDF: %x", bdf);
-          test_fail++;
           continue;
       }
 
@@ -100,6 +106,8 @@ payload(void)
               break;
       }
 
+      test_skip = 0;
+
       /* Check IDE Extended Capability register is present */
       if (val_pcie_find_capability(ep_bdf, PCIE_ECAP, ECID_IDE, &ide_cap_base) != PCIE_SUCCESS)
       {
@@ -109,10 +117,15 @@ payload(void)
           continue;
       }
 
-      test_skip = 0;
       count = 1;
       stream_id = val_generate_stream_id();
-      val_pcie_enable_tdisp(rp_bdf);
+
+      if (val_pcie_enable_tdisp(rp_bdf))
+      {
+          val_print(ACS_PRINT_ERR, "\n        Unable to set tdisp_en for BDF: 0x%x", bdf);
+          test_fail++;
+          continue;
+      }
 
       for (index = 0; index < table_entries; index++)
       {

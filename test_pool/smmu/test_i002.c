@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2023-2024, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2023-2024, 2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -72,6 +72,7 @@ payload(void)
   uint64_t ttbr;
   uint32_t test_data_blk_size = page_size * TEST_DATA_NUM_PAGES;
   uint32_t reg_value = 0;
+  uint64_t size;
 
   /* Enable all SMMUs */
   num_smmus = val_iovirt_get_smmu_info(SMMU_NUM_CTRL, 0);
@@ -83,21 +84,6 @@ payload(void)
   dram_buf_in_phys = 0;
 
   pe_index = val_pe_get_index_mpid(val_pe_get_mpid());
-
-  /* Allocate a buffer to perform DMA tests on */
-  dram_buf_in_virt = val_memory_alloc_pages(TEST_DATA_NUM_PAGES);
-  if (!dram_buf_in_virt) {
-      val_print(ACS_PRINT_ERR, "\n       Cacheable mem alloc failure", 0);
-      val_set_status(pe_index, RESULT_FAIL(TEST_NUM, 03));
-      return;
-  }
-
-  /* Set the virtual and physical addresses for test buffers */
-  dram_buf_in_phys = (uint64_t)val_memory_virt_to_phys(dram_buf_in_virt);
-
-  dram_buf_out_virt = dram_buf_in_virt + (test_data_blk_size / 2);
-  dram_buf_out_phys = dram_buf_in_phys + (test_data_blk_size / 2);
-  dma_len = test_data_blk_size / 2;
 
   /* Get translation attributes via TCR and translation table base via TTBR */
   if (val_pe_reg_read_tcr(0 /*for TTBR0*/,
@@ -112,9 +98,9 @@ payload(void)
     goto test_fail;
   }
 
-  /* Enable all SMMUs */
-  for (instance = 0; instance < num_smmus; ++instance)
-     val_smmu_enable(instance);
+  /* Disable All SMMU's */
+    for (instance = 0; instance < num_smmus; ++instance)
+        val_smmu_disable(instance);
 
   instance = 0;
   /* if init fail moves to next exerciser */
@@ -124,6 +110,31 @@ payload(void)
   /* Get exerciser bdf */
   e_bdf = val_exerciser_get_bdf(instance);
   val_print(ACS_PRINT_DEBUG, "\n       Exerciser BDF - 0x%x", e_bdf);
+
+  /* Get SMMU node index for this exerciser instance */
+  master.smmu_index = val_iovirt_get_rc_smmu_index(PCIE_EXTRACT_BDF_SEG(e_bdf),
+                                                   PCIE_CREATE_BDF_PACKED(e_bdf));
+
+  /* Enable SMMU globally so that the transaction passes
+   * through the SMMU.
+   */
+  if (master.smmu_index != ACS_INVALID_INDEX) {
+      if (val_smmu_enable(master.smmu_index)) {
+            val_print(ACS_PRINT_ERR, "\n       Exerciser %x smmu disable error", instance);
+            val_set_status(pe_index, RESULT_FAIL(TEST_NUM, 02));
+            goto test_fail;
+        }
+  }
+
+  size = val_get_min_tg();
+  dram_buf_in_phys = val_get_free_pa(size, size);
+  dram_buf_in_virt = (void *)val_get_free_va(size);
+  attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(NON_SHAREABLE) | PGT_ENTRY_AP_RW);
+
+  /* Set the virtual and physical addresses for test buffers */
+  dram_buf_out_virt = dram_buf_in_virt + (test_data_blk_size / 2);
+  dram_buf_out_phys = dram_buf_in_phys + (test_data_blk_size / 2);
+  dma_len = test_data_blk_size / 2;
 
   /* If ATS Capability Not Present, Skip. */
   if (val_pcie_find_capability(e_bdf, PCIE_ECAP, ECID_ATS, &cap_base) != PCIE_SUCCESS)
@@ -135,6 +146,19 @@ payload(void)
   pgt_desc.pgt_base = (ttbr & AARCH64_TTBR_ADDR_MASK);
   pgt_desc.mair = val_pe_reg_read(MAIR_ELx);
   pgt_desc.stage = PGT_STAGE1;
+  pgt_desc.ias = 48;
+  pgt_desc.oas = 48;
+  mem_desc->virtual_address = (uint64_t)dram_buf_in_virt;
+  mem_desc->physical_address = dram_buf_in_phys;
+  mem_desc->length = test_data_blk_size;
+  mem_desc->attributes |= (PGT_STAGE1_AP_RW);
+
+  if (val_pgt_create(mem_desc, &pgt_desc)) {
+        val_print(ACS_PRINT_ERR,
+                      "\n       Unable to create page table with given attributes", 0);
+            goto test_fail;
+      }
+
 
   /* Get memory attributes of the test buffer, we'll use the same attibutes to create
    * our own page table later.
@@ -143,11 +167,6 @@ payload(void)
         val_print(ACS_PRINT_ERR, "\n       Unable to get memory attributes of the test buffer", 0);
         goto test_fail;
   }
-
-  /* Get SMMU node index for this exerciser instance */
-  master.smmu_index = val_iovirt_get_rc_smmu_index(PCIE_EXTRACT_BDF_SEG(e_bdf),
-                                                   PCIE_CREATE_BDF_PACKED(e_bdf));
-
 
   dram_buf_in_iova = dram_buf_in_phys;
   dram_buf_out_iova = dram_buf_out_phys;
@@ -160,13 +179,12 @@ payload(void)
             goto test_fail;
 
       /* We create the requisite page tables and configure the SMMU for exerciser*/
-      mem_desc->virtual_address = (uint64_t)dram_buf_in_virt + instance * test_data_blk_size;
+      mem_desc->virtual_address = (uint64_t)dram_buf_in_virt;
       mem_desc->physical_address = dram_buf_in_phys;
       mem_desc->length = test_data_blk_size;
       mem_desc->attributes |= (PGT_STAGE1_AP_RW);
 
       //Map the memory as Non-secure for the instance
-      //shared_data->generic_flag = SET;
       val_add_gpt_entry_el3(mem_desc->physical_address, GPT_NONSECURE);
       attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(OUTER_SHAREABLE) | PGT_ENTRY_AP_RW);
       val_add_mmu_entry_el3(mem_desc->virtual_address, mem_desc->physical_address,
@@ -255,17 +273,14 @@ payload(void)
   val_print(ACS_PRINT_INFO, "\n      Disabling SMMU of index: %d", master.smmu_index);
   val_smmu_disable(master.smmu_index);
 
+  val_exerciser_set_param(DMA_ATTRIBUTES, dram_buf_in_phys, dma_len, instance);
+
   //Change the GPI for the PA
   val_add_gpt_entry_el3(dram_buf_in_phys, GPT_ROOT);
 
   //Enable smmu now
   val_print(ACS_PRINT_INFO, "\n      Enabling SMMU of index: %d", master.smmu_index);
   val_smmu_enable(master.smmu_index);
-
-  if (val_exerciser_set_param(DMA_ATTRIBUTES, dram_buf_in_phys, dma_len, instance)) {
-        val_print(ACS_PRINT_ERR, "\n GPI:      DMA attributes setting failure %4x", instance);
-        goto test_fail;
-  }
 
   // Trigger DMA from input buffer to exerciser memory
   if (!(val_exerciser_ops(START_DMA, EDMA_TO_DEVICE, instance))) {
@@ -288,9 +303,6 @@ test_clean:
   //Clear the memory
   val_memory_set_el3((uint64_t *)dram_buf_in_virt, dma_len/2, 0);
   val_data_cache_ops_by_va_el3((uint64_t)dram_buf_in_virt, CLEAN_AND_INVALIDATE);
-
-  /* Return the pages to the heap manager */
-  val_memory_free_pages(dram_buf_in_virt, TEST_DATA_NUM_PAGES);
 
   /* Remove all address mappings for this exerciser */
   e_bdf = val_exerciser_get_bdf(instance);

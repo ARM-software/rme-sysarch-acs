@@ -52,7 +52,7 @@ val_smmu_read_cfg(uint32_t offset, uint32_t index)
 uint32_t
 val_smmu_execute_tests(uint32_t num_pe)
 {
-  uint32_t status = ACS_STATUS_PASS, i;
+  uint32_t status = ACS_STATUS_SKIP, i;
   uint32_t num_smmu;
 
   for (i = 0; i < MAX_TEST_SKIP_NUM; i++) {

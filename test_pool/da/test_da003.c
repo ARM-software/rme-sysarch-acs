@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2024, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2024-2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -39,6 +39,7 @@ payload(void)
   pcie_device_bdf_table *bdf_tbl_ptr;
   uint32_t tbl_index;
   uint32_t test_fails = 0;
+  uint32_t test_skip = 1;
   uint32_t dp_type;
   uint32_t bdf;
   uint32_t tee_io;
@@ -55,6 +56,8 @@ payload(void)
 
       if (dp_type == RP)
       {
+          test_skip = 0;
+
           if (val_pcie_find_capability(bdf, PCIE_CAP, CID_PCIECS, &cap_base) != PCIE_SUCCESS)
           {
               val_print(ACS_PRINT_ERR, "\n       PCIe Express Capability not present ", 0);
@@ -75,7 +78,9 @@ payload(void)
 
   }
 
-  if (test_fails)
+  if (test_skip)
+      val_set_status(pe_index, RESULT_SKIP(TEST_NUM, 01));
+  else if (test_fails)
       val_set_status(pe_index, RESULT_FAIL(TEST_NUM, test_fails));
   else
       val_set_status(pe_index, RESULT_PASS(TEST_NUM, 01));

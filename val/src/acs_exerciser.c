@@ -66,7 +66,7 @@ void val_exerciser_create_info_table(void)
           val_print(ACS_PRINT_DEBUG, "    exerciser Bdf %x\n", Bdf);
       }
   }
-  val_print(ACS_PRINT_TEST, "      PCIE_INFO: Number of exerciser cards : %4d\n",
+  val_print(ACS_PRINT_TEST, " PCIE_INFO: Number of exerciser cards : %4d\n",
                                                              g_exerciser_info_table.num_exerciser);
   return;
 }

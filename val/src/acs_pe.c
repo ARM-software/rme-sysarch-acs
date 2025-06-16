@@ -19,6 +19,7 @@
 #include "include/rme_acs_pe.h"
 #include "include/rme_acs_common.h"
 #include "include/rme_std_smc.h"
+#include "include/rme_acs_memory.h"
 
 
 /**
@@ -55,6 +56,8 @@ val_pe_reg_read(uint32_t reg_id)
           return AA64ReadMmfr1();
       case ID_AA64MMFR2_EL1:
           return AA64ReadMmfr2();
+      case ID_AA64MMFR3_EL1:
+          return AA64ReadMmfr3();
       case CTR_EL0:
           return AA64ReadCtr();
       case ID_AA64ISAR0_EL1:
@@ -163,6 +166,15 @@ val_pe_reg_read(uint32_t reg_id)
           if (AA64ReadCurrentEL() == AARCH64_EL2)
             return AA64ReadTcr2();
         break;
+      case VTTBR:
+          return AA64ReadVttbr();
+          break;
+      case VTCR:
+          return AA64ReadVtcr();
+          break;
+      case MECIDR_EL2:
+          return AA64ReadMecidrEl2();
+          break;
       default:
            val_report_status(val_pe_get_index_mpid(val_pe_get_mpid()), RESULT_FAIL(0, 0x78), NULL);
   }
@@ -226,6 +238,15 @@ val_pe_reg_write(uint32_t reg_id, uint64_t write_data)
       case SCTLR_EL1:
           AA64WriteSctlr1(write_data);
           break;
+      case VTTBR:
+          return AA64WriteVttbr(write_data);
+          break;
+      case VTCR:
+          return AA64WriteVtcr(write_data);
+          break;
+      case HCR:
+          return AA64WriteHcr(write_data);
+          break;
       default:
            val_report_status(val_pe_get_index_mpid(val_pe_get_mpid()), RESULT_FAIL(0, 0x78), NULL);
   }
@@ -265,60 +286,6 @@ val_is_el2_enabled()
   data = val_pe_reg_read(ID_AA64PFR0_EL1);
   return ((data >> 8) & 0xF);
 
-}
-
-
-/**
-  @brief   This API returns the PMU Overflow Signal Interrupt ID for a given PE index
-           1. Caller       -  Test Suite, VAL
-           2. Prerequisite -  val_create_peinfo_table
-  @param   index - the index of PE whose PMU interrupt ID is returned.
-  @return  PMU interrupt id
-**/
-uint32_t
-val_pe_get_pmu_gsiv(uint32_t index)
-{
-
-  PE_INFO_ENTRY *entry;
-
-  if (index > g_pe_info_table->header.num_of_pe) {
-        val_report_status(index, RESULT_FAIL(0, 0xFF), NULL);
-        return 0xFFFFFF;
-  }
-
-  entry = g_pe_info_table->pe_info;
-
-  return entry[index].pmu_gsiv;
-
-}
-
-/**
-  @brief   This API will call an assembly sequence with interval
-           as argument over which an SPE event is exected to be generated.
-           1. Caller       -  Test Suite
-           2. Prerequisite -  None
-  @param   interval - The interval after completion of which SPE event
-                      would be generated
-  @param   address  - Address on which to trigger the SPE
-  @return  None.
-**/
-void
-val_pe_spe_program_under_profiling(uint64_t interval, addr_t address)
-{
-  SpeProgramUnderProfiling(interval, address);
-}
-
-/**
-  @brief   This API disables the SPE interrupt generation logic.
-           1. Caller       -  Test Suite
-           2. Prerequisite -  None
-  @param   None
-  @return  None
-**/
-void
-val_pe_spe_disable(void)
-{
-  DisableSpe();
 }
 
 uint32_t val_pe_reg_read_tcr(uint32_t ttbr1, PE_TCR_BF *tcr)
@@ -379,5 +346,71 @@ uint32_t val_pe_reg_read_ttbr(uint32_t ttbr1, uint64_t *ttbr_ptr)
         return ACS_STATUS_ERR;
 
     *ttbr_ptr = ReadTtbr[ttbr1][(el >> 2) - 1]();
+    return 0;
+}
+
+uint32_t val_pe_get_vtcr(VTCR_EL2_INFO *vtcr)
+{
+    uint64_t val;
+    PE_TCR_BF tcr;
+    uint8_t tg_vtbr[3] = {12 /*4KB*/, 16 /*64KB*/, 14 /*16KB*/};
+    uint64_t hcr;
+
+    val = val_pe_reg_read(VTCR);
+    val_print(ACS_PRINT_DEBUG, "\n  VTCR: 0x%llx", val);
+    if (val != VTCR_RESET_VAL) {
+            vtcr->ps = (val & MASK(VTCR_PS)) >> VTCR_PS_SHIFT;
+            vtcr->tg = (val & MASK(VTCR_TG0)) >> VTCR_TG0_SHIFT;
+            vtcr->tg_size_log2 = tg_vtbr[vtcr->tg];
+            vtcr->sh = (val & MASK(VTCR_SH0)) >> VTCR_SH0_SHIFT;
+            vtcr->orgn = (val & MASK(VTCR_ORGN0)) >> VTCR_ORGN0_SHIFT;
+            vtcr->irgn = (val & MASK(VTCR_IRGN0)) >> VTCR_IRGN0_SHIFT;
+            vtcr->tsz = (val & MASK(VTCR_T0SZ)) >> VTCR_T0SZ_SHIFT;
+            vtcr->sl = (val & MASK(VTCR_SL0)) >> VTCR_SL0_SHIFT;
+            return 0;
+    }
+
+    /* Disable the Stage 2 MMU to write to vtcr */
+    hcr = ArmReadHcr();
+
+    if (hcr & 0x1)
+        val_pe_reg_write(HCR, hcr & ~0x1);
+
+    val_pe_reg_read_tcr(0, &tcr);
+    val = 0;
+    val = (INPLACE(VTCR_TG0, (tcr.tg))     |
+           INPLACE(VTCR_PS, (tcr.ps))      |
+           VTCR_RES1 | VTCR_NSA            |
+           INPLACE(VTCR_T0SZ, (tcr.tsz))   |
+           INPLACE(VTCR_IRGN0, (tcr.irgn)) |
+           INPLACE(VTCR_ORGN0, (tcr.orgn)) |
+           INPLACE(VTCR_SH0, (tcr.sh))     |
+           VTCR_SL0_4K_L0);
+    val_pe_reg_write(VTCR, val);
+
+    /* Enable the stage 2 MMU now */
+    val_pe_reg_write(HCR, hcr | 0x1);
+
+    /* Now again read back the VTCR reg and store it in the struct */
+    val = val_pe_reg_read(VTCR);
+    val_print(ACS_PRINT_DEBUG, "\n  VTCR after write: 0x%llx", val);
+    vtcr->ps = (val & MASK(VTCR_PS)) >> VTCR_PS_SHIFT;
+    vtcr->tg = (val & MASK(VTCR_TG0)) >> VTCR_TG0_SHIFT;
+    vtcr->tg_size_log2 = tg_vtbr[vtcr->tg];
+    vtcr->sh = (val & MASK(VTCR_SH0)) >> VTCR_SH0_SHIFT;
+    vtcr->orgn = (val & MASK(VTCR_ORGN0)) >> VTCR_ORGN0_SHIFT;
+    vtcr->irgn = (val & MASK(VTCR_IRGN0)) >> VTCR_IRGN0_SHIFT;
+    vtcr->tsz = (val & MASK(VTCR_T0SZ)) >> VTCR_T0SZ_SHIFT;
+    vtcr->sl = (val & MASK(VTCR_SL0)) >> VTCR_SL0_SHIFT;
+    return 0;
+
+}
+
+uint32_t val_pe_get_vtbr(uint64_t *ttbr_ptr)
+{
+    if ((ttbr_ptr == NULL))
+        return ACS_STATUS_ERR;
+
+    *ttbr_ptr = AA64ReadVttbr();
     return 0;
 }

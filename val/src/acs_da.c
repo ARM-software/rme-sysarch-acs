@@ -42,11 +42,11 @@ uint32_t
 val_rme_da_execute_tests(uint32_t num_pe)
 {
   (void) num_pe;
-  uint32_t status, i, reset_status;
+  uint32_t status = ACS_STATUS_SKIP, i, reset_status, num_smmus;
 
   for (i = 0 ; i < MAX_TEST_SKIP_NUM ; i++) {
       if (g_skip_test_num[i] == ACS_RME_DA_TEST_NUM_BASE) {
-          val_print(ACS_PRINT_TEST, "\n USER Override - Skipping all RME tests \n", 0);
+          val_print(ACS_PRINT_TEST, "      USER Override - Skipping all RME tests \n", 0);
           return ACS_STATUS_SKIP;
       }
   }
@@ -55,12 +55,20 @@ val_rme_da_execute_tests(uint32_t num_pe)
        (g_single_test == SINGLE_MODULE_SENTINEL ||
        (g_single_test - ACS_RME_DA_TEST_NUM_BASE > 100 ||
           g_single_test - ACS_RME_DA_TEST_NUM_BASE <= 0))) {
-    val_print(ACS_PRINT_TEST, " USER Override - Skipping all RME tests \
-                    (running only a single module)\n", 0);
+    val_print(ACS_PRINT_TEST, " USER Override - Skipping all RME tests \n", 0);
+    val_print(ACS_PRINT_TEST, " (Running only a single module)\n", 0);
     return ACS_STATUS_SKIP;
   }
 
   g_curr_module = 1 << DA_MODULE;
+
+  if (!g_rl_smmu_init)
+  {
+      num_smmus = val_iovirt_get_smmu_info(SMMU_NUM_CTRL, 0);
+      val_rlm_smmu_init(num_smmus);
+
+      g_rl_smmu_init = 1;
+  }
 
   reset_status = val_read_reset_status();
 

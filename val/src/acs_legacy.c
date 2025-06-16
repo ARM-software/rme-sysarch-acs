@@ -35,20 +35,20 @@
 uint32_t
 val_legacy_execute_tests(uint32_t num_pe)
 {
-  uint32_t status, i, reset_status, attr;
+  uint32_t status = ACS_STATUS_SKIP, i, reset_status, attr;
   uint64_t sp_val;
   (void) num_pe;
 
   for (i = 0 ; i < MAX_TEST_SKIP_NUM ; i++) {
       if (g_skip_test_num[i] == ACS_LEGACY_TEST_NUM_BASE) {
-          val_print(ACS_PRINT_TEST, "\n USER Override - Skipping all Legacy tests \n", 0);
+          val_print(ACS_PRINT_TEST, "      USER Override - Skipping all Legacy tests \n", 0);
           return ACS_STATUS_SKIP;
       }
   }
 
   if (g_single_module != SINGLE_MODULE_SENTINEL && g_single_module != ACS_LEGACY_TEST_NUM_BASE) {
-    val_print(ACS_PRINT_TEST, " USER Override - Skipping all Legacy system related tests \
-                    (running only a single module)\n", 0);
+    val_print(ACS_PRINT_TEST, " USER Override - Skipping all Legacy system related tests \n", 0);
+    val_print(ACS_PRINT_TEST, " (Running only a single module)\n", 0);
     return ACS_STATUS_SKIP;
   }
   if (!IS_LEGACY_TZ_ENABLED) {
@@ -63,7 +63,7 @@ support the feature \n", 0);
           g_single_test - ACS_RME_TEST_NUM_BASE <= 0))) {
     val_print(ACS_PRINT_TEST, " RME module is skipped\n", 0);
     val_print(ACS_PRINT_TEST, " Installing the handler for legacy tests\n", 0);
-    //struct_sh_data *shared_data = (struct_sh_data *)SHARED_ADDRESS;
+
     sp_val = AA64ReadSP_EL0();
     attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(OUTER_SHAREABLE) | PGT_ENTRY_AP_RW);
     val_add_mmu_entry_el3(SHARED_ADDRESS, SHARED_ADDRESS,

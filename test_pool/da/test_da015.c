@@ -32,7 +32,7 @@
 #include "val/include/rme_acs_da.h"
 
 #define TEST_NUM  (ACS_RME_DA_TEST_NUM_BASE  +  15)
-#define TEST_DESC  "RP reject incoming request if IDE is not secure & locked"
+#define TEST_DESC  "RP reject incoming request if IDE is not secure & lock "
 #define TEST_RULE  "RKZBHV, RZJJMZ"
 
 #define TEST_DATA_NUM_PAGES 1
@@ -82,18 +82,24 @@ payload(void)
       if (val_pcie_get_rootport(bdf, &rp_bdf))
           continue;
 
+      test_skip = 0;
+
       /* Check for DA Capability */
       if (val_pcie_find_da_capability(rp_bdf, &da_cap_base) != PCIE_SUCCESS)
       {
           val_print(ACS_PRINT_ERR,
                         "\n       PCIe DA DVSEC capability not present,bdf 0x%x", bdf);
+          test_fail++;
           continue;
       }
 
-      test_skip = 0;
-
       /* Enable RMEDA_CTL1.TDISP_EN*/
-      val_pcie_enable_tdisp(rp_bdf);
+      if (val_pcie_enable_tdisp(rp_bdf))
+      {
+          val_print(ACS_PRINT_ERR, "\n        Unable to set tdisp_en for BDF: 0x%x", rp_bdf);
+          test_fail++;
+          continue;
+      }
 
       /* Transition the device to TDISP RUN state without establishing a stream */
       if (val_device_lock(bdf))

@@ -16,114 +16,6 @@
  **/
 
 #include "val_el3/smmuv3_el3.h"
-#include <stdlib.h>
-
-#define MEMORY_POOL_SIZE (2 * 1024 * 1024)
-#define HARD_CODED_ADDRESS (void *)(FREE_MEM_SMMU) // Replace with a valid hardcoded address
-
-typedef struct BlockHeader {
-    size_t size;                // Size of the block
-    int is_free;                // Block free status
-    struct BlockHeader *next;   // Pointer to the next block
-} BlockHeader;
-
-typedef struct {
-    uint8_t *base;              // Base address of the memory pool
-    size_t size;                // Total size of the pool
-    BlockHeader *free_list;     // Head of the free list
-} MemoryPool;
-
-static MemoryPool mem_pool = {
-    .base = (uint8_t *)HARD_CODED_ADDRESS, // Hardcoded address
-    .size = MEMORY_POOL_SIZE,
-    .free_list = NULL,
-};
-
-// Initialize the memory pool with a single large free block
-void memory_pool_init(void)
-{
-    mem_pool.free_list = (BlockHeader *)mem_pool.base;
-    mem_pool.free_list->size = mem_pool.size - sizeof(BlockHeader);
-    mem_pool.free_list->is_free = 1;
-    mem_pool.free_list->next = NULL;
-}
-
-// Split a large free block into two smaller blocks
-void split_block(BlockHeader *block, size_t size)
-{
-    BlockHeader *new_block = (BlockHeader *)((uint8_t *)block + sizeof(BlockHeader) + size);
-    new_block->size = block->size - size - sizeof(BlockHeader);
-    new_block->is_free = 1;
-    new_block->next = block->next;
-
-    block->size = size;
-    block->next = new_block;
-}
-
-// Aligns a given size to the nearest multiple of `alignment`
-static size_t align_size(size_t size, size_t alignment)
-{
-    return (size + (alignment - 1)) & ~(alignment - 1);
-}
-
-// Allocate memory from the pool
-void *my_malloc(size_t size, size_t alignment)
-{
-    if (!mem_pool.free_list) {
-        memory_pool_init(); // Initialize pool on first call
-    }
-
-    size = align_size(size, alignment); // Align the requested size
-    BlockHeader *current = mem_pool.free_list;
-
-    while (current) {
-        // Align the starting address of the block
-        uintptr_t block_start = (uintptr_t)current + sizeof(BlockHeader);
-        uintptr_t aligned_start = align_size(block_start, alignment);
-        size_t alignment_padding = aligned_start - block_start;
-
-        if (current->is_free && current->size >= size + alignment_padding) {
-            if (current->size > size + alignment_padding + sizeof(BlockHeader)) {
-                split_block(current, size + alignment_padding);
-            }
-            current->is_free = 0;
-            return (void *)aligned_start;
-        }
-        current = current->next;
-    }
-
-    return NULL;
-}
-
-// Free allocated memory
-void my_free(void *ptr)
-{
-    if (!ptr) return;
-
-    BlockHeader *block = (BlockHeader *)((uint8_t *)ptr - sizeof(BlockHeader));
-    block->is_free = 1;
-
-    // Coalesce adjacent free blocks
-    BlockHeader *current = mem_pool.free_list;
-    while (current) {
-        if (current->is_free && current->next && current->next->is_free) {
-            current->size += current->next->size + sizeof(BlockHeader);
-            current->next = current->next->next;
-        }
-        current = current->next;
-    }
-}
-
-// Allocate and zero-initialize memory
-void *my_calloc(size_t num, size_t size, size_t alignment)
-{
-    size_t total_size = num * size;
-    void *ptr = my_malloc(total_size, alignment);
-    if (ptr) {
-        memset(ptr, 0, total_size);
-    }
-    return ptr;
-}
 
 smmu_dev_t *g_smmu;
 uint32_t g_num_smmus;
@@ -135,69 +27,6 @@ struct smmu_master_node {
 };
 
 struct smmu_master_node *g_smmu_master_list_head = NULL;
-
-#define dsb(scope) asm volatile("dsb " #scope : : : "memory")
-
-static inline void val_mmio_write(uintptr_t addr, uint32_t val)
-{
-        (void)addr;
-        (void)val;
-
-        dsb(st);
-        asm volatile("str %w0, [%1]" :  : "r" (val), "r" (addr));
-        dsb(st);
-}
-
-static inline uint32_t val_mmio_read(uintptr_t addr)
-{
-        uint32_t val;
-
-        (void)addr;
-
-        dsb(ld);
-        asm volatile("ldr %w0, [%1]" : "=r" (val) : "r" (addr));
-        dsb(ld);
-        return val;
-}
-
-static inline void val_mmio_write64(uintptr_t addr, uint64_t val)
-{
-        (void)addr;
-        (void)val;
-
-        dsb(st);
-        asm volatile("str %0, [%1]" :  : "r" (val), "r" (addr));
-        dsb(st);
-}
-
-void *val_memory_virt_to_phys(void *va)
-{
-    return va;
-}
-
-void *
-val_memory_alloc(uint32_t size, size_t alignment)
-{
-    return my_malloc(size, alignment);
-}
-
-void *
-val_memory_calloc(uint32_t num, uint32_t size, size_t alignment)
-{
-    return my_calloc(num, size, alignment);
-}
-
-void
-val_memory_set(void *buf, uint32_t size, uint8_t value)
-{
-    memset(buf, value, size);
-}
-
-void
-val_memory_free(void *addr)
-{
-    my_free(addr);
-}
 
 static uint64_t align_to_size(uint64_t addr,  uint64_t size)
 {
@@ -229,12 +58,13 @@ static uint32_t smmu_queue_empty(smmu_queue_t *q)
 
 static int smmu_cmdq_build_cmd(uint64_t *cmd, uint8_t opcode)
 {
-    val_memory_set(cmd, QUEUE_DWORDS_PER_ENT << 3, 0);
+    val_memory_set_el3(cmd, QUEUE_DWORDS_PER_ENT << 3, 0);
     cmd[0] |= BITFIELD_SET(CMDQ_0_OP, opcode);
 
     switch (opcode) {
     case CMDQ_OP_TLBI_EL2_ALL:
     case CMDQ_OP_TLBI_NSNH_ALL:
+    case CMDQ_OP_DPTI_ALL:
     case CMDQ_OP_CMD_SYNC:
         break;
     case CMDQ_OP_CFGI_ALL:
@@ -274,7 +104,7 @@ static int smmu_cmdq_write_cmd(smmu_dev_t *smmu, uint64_t *cmd)
         return -1;
     }
 
-    queue.prod = val_mmio_read((uint64_t)cmdq->prod_reg);
+    queue.prod = val_mmio_read_el3((uint64_t)cmdq->prod_reg);
     cmd_dst = (uint64_t *)(cmdq->base +
               ((queue.prod & ((0x1ull << queue.log2nent) - 1)) *
               (cmdq->entry_size)));
@@ -283,9 +113,9 @@ static int smmu_cmdq_write_cmd(smmu_dev_t *smmu, uint64_t *cmd)
     queue.prod = smmu_cmdq_inc_prod(&queue);
 
 #ifndef TARGET_LINUX
-    dsb(sy);
+    mem_barrier();
 #endif
-    val_mmio_write((uint64_t)cmdq->prod_reg, queue.prod);
+    val_mmio_write_el3((uint64_t)cmdq->prod_reg, queue.prod);
 
     return ret;
 }
@@ -307,22 +137,22 @@ static void smmu_cmdq_poll_until_consumed(smmu_dev_t *smmu)
     smmu_queue_type_t *cmdq = &smmu->cmd_type;
     smmu_queue_t queue = {
                 .log2nent = smmu->cmd_type.queue.log2nent,
-                .prod = val_mmio_read((uint64_t)smmu->cmd_type.prod_reg),
-                .cons = val_mmio_read((uint64_t)smmu->cmd_type.cons_reg)
+                .prod = val_mmio_read_el3((uint64_t)smmu->cmd_type.prod_reg),
+                .cons = val_mmio_read_el3((uint64_t)smmu->cmd_type.cons_reg)
             };
 
     while (timeout > 0) {
         if (smmu_queue_empty(&queue))
             break;
-        queue.cons = val_mmio_read((uint64_t)cmdq->cons_reg);
+        queue.cons = val_mmio_read_el3((uint64_t)cmdq->cons_reg);
         timeout--;
     }
 
     if (!timeout) {
-        ERROR("\n    CMDQ poll timeout at 0x%08x       ", queue.prod);
-        ERROR("\n    prod_reg = 0x%08x       ", val_mmio_read((uint64_t)smmu->cmd_type.prod_reg));
-        ERROR("\n    cons_reg = 0x%08x       ", val_mmio_read((uint64_t)smmu->cmd_type.cons_reg));
-        ERROR("\n    gerror   = 0x%08x       ", val_mmio_read(smmu->base + SMMU_R_GERROR));
+        ERROR("\n    CMDQ poll timeout at 0x%08x     ", queue.prod);
+        ERROR("\n    prod_reg = 0x%08x     ", val_mmio_read_el3((uint64_t)smmu->cmd_type.prod_reg));
+        ERROR("\n    cons_reg = 0x%08x     ", val_mmio_read_el3((uint64_t)smmu->cmd_type.cons_reg));
+        ERROR("\n    gerror   = 0x%08x     ", val_mmio_read_el3(smmu->base + SMMU_R_GERROR));
     }
 }
 
@@ -341,6 +171,11 @@ static void smmu_tlbi_prefetch_cfg(smmu_dev_t *smmu)
     smmu_cmdq_issue_cmd(smmu, CMDQ_OP_CFGI_STE);
 
     smmu_cmdq_poll_until_consumed(smmu);
+}
+
+void smmu_dpti_all(smmu_dev_t *smmu)
+{
+    smmu_cmdq_issue_cmd(smmu, 0x70);
 }
 
 static void smmu_tlbi_cfgi(smmu_dev_t *smmu)
@@ -383,8 +218,9 @@ static void smmu_strtab_write_ste(smmu_master_t *master, uint64_t *ste, smmu_dev
     }
     else
     {
+        val &= ~STRTAB_STE_0_V;
         val |= BITFIELD_SET(STRTAB_STE_0_CONFIG,
-                    STRTAB_STE_0_CONFIG_BYPASS);
+                    STRTAB_STE_0_CONFIG_ABORT);
 
         ste[0] = val;
         ste[1] = BITFIELD_SET(STRTAB_STE_1_SHCFG,
@@ -394,8 +230,8 @@ static void smmu_strtab_write_ste(smmu_master_t *master, uint64_t *ste, smmu_dev
     }
 
     if (stage2_cfg) {
-        ste[1] |= BITFIELD_SET(STRTAB_STE_1_STRW, 0x2) |
-                  BITFIELD_SET(STRTAB_STE_1_EATS, 0x1);
+        ste[1] |= BITFIELD_SET(STRTAB_STE_1_STRW, 0x2) | BITFIELD_SET(STRTAB_STE_1_EATS, 0x3) |
+                  BITFIELD_SET(STRTAB_STE_1_SHCFG, STRTAB_STE_1_SHCFG_INCOMING);
         ste[2] = (BITFIELD_SET(STRTAB_STE_2_S2VMID, stage2_cfg->vmid) |
               BITFIELD_SET(STRTAB_STE_2_VTCR, stage2_cfg->vtcr) |
               STRTAB_STE_2_S2PTW | STRTAB_STE_2_S2AA64 |
@@ -411,7 +247,7 @@ static void smmu_strtab_write_ste(smmu_master_t *master, uint64_t *ste, smmu_dev
              BITFIELD_SET(STRTAB_STE_1_S1CIR, STRTAB_STE_1_S1C_CACHE_WBRA) |
              BITFIELD_SET(STRTAB_STE_1_S1COR, STRTAB_STE_1_S1C_CACHE_WBRA) |
              BITFIELD_SET(STRTAB_STE_1_S1CSH, SMMU_SH_ISH) |
-             BITFIELD_SET(STRTAB_STE_1_EATS, 0x1);
+             BITFIELD_SET(STRTAB_STE_1_EATS, 0x3);
 
         val |= (stage1_cfg->cdcfg.cdtab_phys &
             (STRTAB_STE_0_S1CONTEXTPTR_MASK << STRTAB_STE_0_S1CONTEXTPTR_SHIFT)) |
@@ -435,7 +271,7 @@ static uint32_t smmu_strtab_init_linear(smmu_dev_t *smmu)
     smmu_strtab_config_t *cfg = &smmu->strtab_cfg;
 
     size = (1 << smmu->sid_bits) * (STRTAB_STE_DWORDS << 3);
-    cfg->strtab_ptr = val_memory_calloc(2, size, SIZE_4KB);
+    cfg->strtab_ptr = val_memory_calloc_el3(2, size, SIZE_4KB);
     if (!cfg->strtab_ptr) {
         ERROR("\n      Failed to allocate linear stream table.     ");
         return 0;
@@ -458,7 +294,7 @@ static uint32_t smmu_event_queue_init(smmu_dev_t *smmu)
     uint64_t eventq_size = ((1 << eventq->queue.log2nent) * QUEUE_DWORDS_PER_ENT) << 3;
 
     eventq_size = (eventq_size < 32)?32:eventq_size;
-    eventq->base_ptr = val_memory_calloc(2, eventq_size, SIZE_4KB);
+    eventq->base_ptr = val_memory_calloc_el3(2, eventq_size, SIZE_4KB);
     if (!eventq->base_ptr) {
         ERROR("\n      Failed to allocate queue struct.     ");
         return 0;
@@ -484,7 +320,7 @@ static uint32_t smmu_cmd_queue_init(smmu_dev_t *smmu)
     uint64_t cmdq_size = ((1 << cmdq->queue.log2nent) * QUEUE_DWORDS_PER_ENT) << 3;
 
     cmdq_size = (cmdq_size < 32)?32:cmdq_size;
-    cmdq->base_ptr = val_memory_calloc(2, cmdq_size, SIZE_4KB);
+    cmdq->base_ptr = val_memory_calloc_el3(2, cmdq_size, SIZE_4KB);
     if (!cmdq->base_ptr) {
         ERROR("\n      Failed to allocate queue struct.     ");
         return 0;
@@ -519,11 +355,11 @@ static void smmu_free_strtab(smmu_dev_t *smmu)
         for (i = 0; i < cfg->l1_ent_count; ++i)
         {
             if (cfg->l1_desc[i].l2ptr != NULL)
-                val_memory_free(cfg->l1_desc[i].l2ptr);
+                val_memory_free_el3(cfg->l1_desc[i].l2ptr);
         }
-        val_memory_free(cfg->l1_desc);
+        val_memory_free_el3(cfg->l1_desc);
     }
-    val_memory_free(cfg->strtab_ptr);
+    val_memory_free_el3(cfg->strtab_ptr);
 }
 
 /* Stream table manipulation functions */
@@ -552,7 +388,7 @@ static int smmu_strtab_init_level2(smmu_dev_t *smmu, uint32_t sid)
     strtab = &cfg->strtab64[(sid >> STRTAB_SPLIT) * STRTAB_L1_DESC_DWORDS];
 
     desc->span = STRTAB_SPLIT + 1;
-    desc->l2ptr = val_memory_calloc(2, size, SIZE_16KB);
+    desc->l2ptr = val_memory_calloc_el3(2, size, SIZE_16KB);
     if (!desc->l2ptr) {
         ERROR("\n       failed to allocate l2 stream table for SID %u   ", sid);
         return 0;
@@ -571,7 +407,7 @@ static int smmu_strtab_init_level1(smmu_dev_t *smmu)
 {
     smmu_strtab_config_t *cfg = &smmu->strtab_cfg;
 
-    cfg->l1_desc = val_memory_calloc(cfg->l1_ent_count, sizeof(*cfg->l1_desc), SIZE_4KB);
+    cfg->l1_desc = val_memory_calloc_el3(cfg->l1_ent_count, sizeof(*cfg->l1_desc), SIZE_4KB);
 
     if (!cfg->l1_desc) {
         ERROR("\n      failed to allocate l1 stream table desc     ");
@@ -593,7 +429,7 @@ static int smmu_strtab_init_2level(smmu_dev_t *smmu)
     log2size += STRTAB_SPLIT;
 
     l1_tbl_size = cfg->l1_ent_count * STRTAB_L1_DESC_SIZE;
-    cfg->strtab_ptr = val_memory_alloc(2 * l1_tbl_size, SIZE_4KB);
+    cfg->strtab_ptr = val_memory_calloc_el3(2, l1_tbl_size, SIZE_4KB);
 
     if (!cfg->strtab_ptr) {
         ERROR("\n      failed to allocate l1 stream table     ");
@@ -608,7 +444,7 @@ static int smmu_strtab_init_2level(smmu_dev_t *smmu)
 
     ret = smmu_strtab_init_level1(smmu);
     if (!ret) {
-        val_memory_free(cfg->strtab_ptr);
+        val_memory_free_el3(cfg->strtab_ptr);
         return 0;
     }
     return 1;
@@ -637,16 +473,16 @@ static uint32_t smmu_strtab_init(smmu_dev_t *smmu)
     return 1;
 }
 
-static int smmu_reg_write_sync(smmu_dev_t *smmu, uint32_t val,
-                   unsigned int reg_off, unsigned int ack_off)
+int32_t smmu_reg_write_sync(smmu_dev_t *smmu, uint32_t val,
+                   uint32_t reg_off, uint32_t ack_off)
 {
     uint64_t timeout = 0x1000000;
     uint32_t reg;
 
-    val_mmio_write(smmu->base + reg_off, val);
+    val_mmio_write_el3(smmu->base + reg_off, val);
 
     while (timeout--) {
-        reg = val_mmio_read(smmu->base + ack_off);
+        reg = val_mmio_read_el3(smmu->base + ack_off);
         if (reg == val)
             return 0;
     }
@@ -654,9 +490,9 @@ static int smmu_reg_write_sync(smmu_dev_t *smmu, uint32_t val,
     return 1;
 }
 
-static int smmu_dev_disable(smmu_dev_t *smmu)
+static int32_t smmu_dev_disable(smmu_dev_t *smmu)
 {
-    int ret;
+    int32_t ret;
 
     ret = smmu_reg_write_sync(smmu, 0, SMMU_R_CR0, SMMU_R_CR0ACK);
     if (ret)
@@ -665,12 +501,23 @@ static int smmu_dev_disable(smmu_dev_t *smmu)
     return ret;
 }
 
-static int smmu_reset(smmu_dev_t *smmu)
+/**
+ * @brief Initialize the GMECID register of the given SMMU to 0.
+ *
+ * @param smmu Pointer to the SMMU device structure.
+ * @return void
+ */
+static void smmu_gmecid_init(smmu_dev_t *smmu)
 {
-    int ret;
+    val_mmio_write_el3(smmu->base + SMMU_R_GMECID, 0x0);
+}
+
+static int32_t smmu_reset(smmu_dev_t *smmu)
+{
+    int32_t ret;
     uint32_t r_cr0, r_cr1, r_cr2;
 
-    r_cr0 = val_mmio_read(smmu->base + SMMU_R_CR0);
+    r_cr0 = val_mmio_read_el3(smmu->base + SMMU_R_CR0);
     r_cr0 &= ~CR0_SMMUEN;
     ret = smmu_reg_write_sync(smmu, r_cr0, SMMU_R_CR0, SMMU_R_CR0ACK);
     if (ret) {
@@ -681,25 +528,28 @@ static int smmu_reset(smmu_dev_t *smmu)
     r_cr1 = BITFIELD_SET(CR1_TABLE_SH,  SMMU_SH_ISH) | BITFIELD_SET(CR1_QUEUE_SH, SMMU_SH_ISH) |
            BITFIELD_SET(CR1_TABLE_IC, CR1_CACHE_WB) | BITFIELD_SET(CR1_QUEUE_IC, CR1_CACHE_WB) |
            BITFIELD_SET(CR1_TABLE_OC, CR1_CACHE_WB) | BITFIELD_SET(CR1_QUEUE_OC, CR1_CACHE_WB);
-    val_mmio_write(smmu->base + SMMU_R_CR1, r_cr1);
+    val_mmio_write_el3(smmu->base + SMMU_R_CR1, r_cr1);
 
-    r_cr2 = val_mmio_read(smmu->base + SMMU_R_CR2);
+    r_cr2 = val_mmio_read_el3(smmu->base + SMMU_R_CR2);
     r_cr2 |= ENABLE_E2H;
-    val_mmio_write(smmu->base + SMMU_R_CR2, r_cr2); //Enable E2H
+    val_mmio_write_el3(smmu->base + SMMU_R_CR2, r_cr2); //Enable E2H
 
-    val_mmio_write64(smmu->base + SMMU_R_STRTAB_BASE, smmu->strtab_cfg.strtab_base);
-    val_mmio_write(smmu->base + SMMU_R_STRTAB_BASE_CFG,
+    val_mmio_write64_el3(smmu->base + SMMU_R_STRTAB_BASE, smmu->strtab_cfg.strtab_base);
+    val_mmio_write_el3(smmu->base + SMMU_R_STRTAB_BASE_CFG,
             smmu->strtab_cfg.strtab_base_cfg);
 
-    val_mmio_write64(smmu->base + SMMU_R_CMDQ_BASE, smmu->cmd_type.queue_base);
-    val_mmio_write(smmu->base + SMMU_R_CMDQ_PROD, smmu->cmd_type.queue.prod);
-    val_mmio_write(smmu->base + SMMU_R_CMDQ_CONS, smmu->cmd_type.queue.cons);
+    val_mmio_write64_el3(smmu->base + SMMU_R_CMDQ_BASE, smmu->cmd_type.queue_base);
+    val_mmio_write_el3(smmu->base + SMMU_R_CMDQ_PROD, smmu->cmd_type.queue.prod);
+    val_mmio_write_el3(smmu->base + SMMU_R_CMDQ_CONS, smmu->cmd_type.queue.cons);
 
-    val_mmio_write64(smmu->base + SMMU_R_EVTQ_BASE, smmu->evnt_type.queue_base);
-    val_mmio_write(smmu->base + SMMU_R_EVTQ_PROD, smmu->evnt_type.queue.prod);
-    val_mmio_write(smmu->base + SMMU_R_EVTQ_CONS, smmu->evnt_type.queue.cons);
+    val_mmio_write64_el3(smmu->base + SMMU_R_EVTQ_BASE, smmu->evnt_type.queue_base);
+    val_mmio_write_el3(smmu->base + SMMU_R_EVTQ_PROD, smmu->evnt_type.queue.prod);
+    val_mmio_write_el3(smmu->base + SMMU_R_EVTQ_CONS, smmu->evnt_type.queue.cons);
 
-    r_cr0 = val_mmio_read(smmu->base + SMMU_R_CR0);
+    if (val_smmu_supports_mec(smmu->base))
+        smmu_gmecid_init(smmu);
+
+    r_cr0 = val_mmio_read_el3(smmu->base + SMMU_R_CR0);
     r_cr0 |= CR0_CMDQEN;
     ret = smmu_reg_write_sync(smmu, r_cr0, SMMU_R_CR0,
                       SMMU_R_CR0ACK);
@@ -747,7 +597,7 @@ uint32_t smmu_set_state(uint32_t smmu_index, uint32_t en)
         return 1;
     }
 
-    cr0_val = val_mmio_read(smmu->base + SMMU_CR0_OFFSET);
+    cr0_val = val_mmio_read_el3(smmu->base + SMMU_CR0_OFFSET);
 
     if (en)
         cr0_val |= (uint32_t)CR0_SMMUEN;
@@ -790,7 +640,7 @@ static uint32_t smmu_probe(smmu_dev_t *smmu)
 {
     uint32_t idr0, idr1, idr5;
 
-    idr0 = val_mmio_read(smmu->base + SMMU_IDR0_OFFSET);
+    idr0 = val_mmio_read_el3(smmu->base + SMMU_IDR0_OFFSET);
 
     if (BITFIELD_GET(IDR0_ST_LEVEL, idr0) == IDR0_ST_LEVEL_2LVL)
         smmu->supported.st_level_2lvl = 1;
@@ -823,7 +673,7 @@ static uint32_t smmu_probe(smmu_dev_t *smmu)
         return 0;
     }
 
-    idr1 = val_mmio_read(smmu->base + SMMU_IDR1_OFFSET);
+    idr1 = val_mmio_read_el3(smmu->base + SMMU_IDR1_OFFSET);
     if (idr1 & (IDR1_TABLES_PRESET | IDR1_QUEUES_PRESET)) {
         ERROR("\n      fixed table base address not supported     ");
         return 0;
@@ -842,7 +692,7 @@ static uint32_t smmu_probe(smmu_dev_t *smmu)
         smmu->supported.st_level_2lvl = 0;
 
     /* IDR5 */
-    idr5 = val_mmio_read(smmu->base + SMMU_IDR5_OFFSET);
+    idr5 = val_mmio_read_el3(smmu->base + SMMU_IDR5_OFFSET);
 
     if (BITFIELD_GET(IDR5_OAS, idr5) >= SMMU_OAS_MAX_IDX) {
         ERROR("\n      Unknown output address size     ");
@@ -901,7 +751,7 @@ static int smmu_cdtab_alloc_leaf_table(smmu_cdtab_l1_ctx_desc_t *l1_desc)
 {
     uint64_t size = CDTAB_L2_ENTRY_COUNT * (CDTAB_CD_DWORDS << 3);
 
-    l1_desc->l2ptr = val_memory_alloc(size*2, BYTES_PER_DWORD);
+    l1_desc->l2ptr = val_memory_alloc_el3(size*2, BYTES_PER_DWORD);
     if (!l1_desc->l2ptr) {
         ERROR("\n      failed to allocate context descriptor table     ");
         return 1;
@@ -986,12 +836,12 @@ static void smmu_cdtab_free(smmu_master_t *master)
         for (i = 0; i < num_l1_ents; i++)
         {
             if (cdcfg->l1_desc[i].l2ptr != NULL)
-                val_memory_free(cdcfg->l1_desc[i].l2ptr);
+                val_memory_free_el3(cdcfg->l1_desc[i].l2ptr);
 
         }
-        val_memory_free(cdcfg->l1_desc);
+        val_memory_free_el3(cdcfg->l1_desc);
     }
-    val_memory_free(cdcfg->cdtab_ptr);
+    val_memory_free_el3(cdcfg->cdtab_ptr);
     cdcfg->cdtab_ptr = NULL;
 }
 
@@ -1010,7 +860,7 @@ static int smmu_cdtab_alloc(smmu_master_t *master)
         cdcfg->l1_ent_count = (cdmax + CDTAB_L2_ENTRY_COUNT - 1)/CDTAB_L2_ENTRY_COUNT;
 
         cdcfg->l1_desc =
-                val_memory_calloc(cdcfg->l1_ent_count, sizeof(*cdcfg->l1_desc), BYTES_PER_DWORD);
+               val_memory_calloc_el3(cdcfg->l1_ent_count, sizeof(*cdcfg->l1_desc), BYTES_PER_DWORD);
 
         if (!cdcfg->l1_desc)
             return 0;
@@ -1022,7 +872,7 @@ static int smmu_cdtab_alloc(smmu_master_t *master)
         l1_tbl_size = cdmax * (CDTAB_CD_DWORDS << 3);
     }
 
-    cdcfg->cdtab_ptr = val_memory_calloc(2, l1_tbl_size, BYTES_PER_DWORD);
+    cdcfg->cdtab_ptr = val_memory_calloc_el3(2, l1_tbl_size, BYTES_PER_DWORD);
     if (!cdcfg->cdtab_ptr) {
         ERROR("\n      smmu_cdtab_alloc: alloc failed     ");
         return 0;
@@ -1045,14 +895,14 @@ smmu_master_t *smmu_master_at(uint32_t sid)
             return node->master;
         node = node->next;
     }
-    node = val_memory_alloc(sizeof(struct smmu_master_node), BYTES_PER_DWORD);
+    node = val_memory_alloc_el3(sizeof(struct smmu_master_node), BYTES_PER_DWORD);
     if (node == NULL)
         return NULL;
 
-    node->master = val_memory_calloc(1, sizeof(smmu_master_t), BYTES_PER_DWORD);
+    node->master = val_memory_calloc_el3(1, sizeof(smmu_master_t), BYTES_PER_DWORD);
     if (node->master == NULL)
     {
-        val_memory_free(node);
+        val_memory_free_el3(node);
         return NULL;
     }
 
@@ -1148,13 +998,13 @@ uint32_t val_smmu_rlm_map(smmu_master_attributes_t master_attr, pgt_descriptor_t
 
         cfg->vmid = 0;
         cfg->vttbr = pgt_desc.pgt_base;
-        cfg->vtcr = BITFIELD_SET(STRTAB_STE_2_VTCR_S2T0SZ, pgt_desc.tcr.tsz) |
-                    BITFIELD_SET(STRTAB_STE_2_VTCR_S2SL0, pgt_desc.tcr.sh) |
-                    BITFIELD_SET(STRTAB_STE_2_VTCR_S2IR0, pgt_desc.tcr.irgn) |
-                    BITFIELD_SET(STRTAB_STE_2_VTCR_S2OR0, pgt_desc.tcr.orgn) |
-                    BITFIELD_SET(STRTAB_STE_2_VTCR_S2SH0, pgt_desc.tcr.sh) |
-                    BITFIELD_SET(STRTAB_STE_2_VTCR_S2TG, pgt_desc.tcr.tg) |
-                    BITFIELD_SET(STRTAB_STE_2_VTCR_S2PS, pgt_desc.tcr.ps);
+        cfg->vtcr = BITFIELD_SET(STRTAB_STE_2_VTCR_S2T0SZ, pgt_desc.vtcr.tsz) |
+                    BITFIELD_SET(STRTAB_STE_2_VTCR_S2SL0, pgt_desc.vtcr.sl) |
+                    BITFIELD_SET(STRTAB_STE_2_VTCR_S2IR0, pgt_desc.vtcr.irgn) |
+                    BITFIELD_SET(STRTAB_STE_2_VTCR_S2OR0, pgt_desc.vtcr.orgn) |
+                    BITFIELD_SET(STRTAB_STE_2_VTCR_S2SH0, pgt_desc.vtcr.sh) |
+                    BITFIELD_SET(STRTAB_STE_2_VTCR_S2TG, pgt_desc.vtcr.tg) |
+                    BITFIELD_SET(STRTAB_STE_2_VTCR_S2PS, pgt_desc.vtcr.ps);
     }
 
     if (master->stage == SMMU_STAGE_S1)
@@ -1186,6 +1036,13 @@ uint32_t val_smmu_rlm_map(smmu_master_attributes_t master_attr, pgt_descriptor_t
     ste = smmu_strtab_get_ste_for_sid(smmu, master->sid);
     smmu_strtab_write_ste(master, ste, smmu);
     dump_strtab(ste);
+    /* Disable the GPC before the Invalidation to avoid GPF
+     * Note: Remove once making all the allocated memory GPI_ANY
+     */
+    uint32_t root_cr0;
+    root_cr0 = val_mmio_read_el3(smmu->base + SMMU_ROOT_CR0);
+    root_cr0 &= ~0x2ul;
+    smmu_reg_write_sync(smmu, root_cr0, SMMU_ROOT_CR0, SMMU_ROOT_CR0_ACK);
 
     smmu_tlbi_cfgi(smmu);
 
@@ -1226,7 +1083,7 @@ void val_smmu_unmap(smmu_master_attributes_t master_attr)
 
     smmu_cdtab_free(master);
     smmu_tlbi_cfgi(master->smmu);
-    val_memory_set(master, sizeof(smmu_master_t), 0);
+    val_memory_set_el3(master, sizeof(smmu_master_t), 0);
 }
 
 uint32_t smmu_init(smmu_dev_t *smmu)
@@ -1268,10 +1125,228 @@ void val_smmu_stop(void)
             continue;
         smmu_dev_disable(smmu);
         if (smmu->cmd_type.base_ptr)
-            val_memory_free(smmu->cmd_type.base_ptr);
+            val_memory_free_el3(smmu->cmd_type.base_ptr);
         smmu_free_strtab(smmu);
     }
-    val_memory_free(g_smmu);
+    val_memory_free_el3(g_smmu);
+}
+
+uint32_t
+val_smmu_program_dpt_base(smmu_dev_t *smmu, uint64_t dpt_base)
+{
+  uint32_t lower;
+  uint32_t upper;
+  uint32_t ret;
+
+  lower = (uint32_t)((dpt_base) & SMMU_R_DPT_BASE_LOW_MASK);
+  upper = (uint32_t)((dpt_base >> SMMU_R_DPT_BASE_HIGH_SHIFT) & SMMU_R_DPT_BASE_HIGH_MASK);
+
+  ret = smmu_reg_write_sync(smmu, lower << SMMU_R_DPT_BASE_LOW_SHIFT,
+                                SMMU_R_DPT_BASE_LOW, SMMU_R_DPT_BASE_LOW);
+  if (ret)
+  {
+      ERROR(" SMMU Base: %lx Write error for DPT Base Low", smmu->base);
+      return ret;
+  }
+
+  ret = smmu_reg_write_sync(smmu, upper, SMMU_R_DPT_BASE_HIGH, SMMU_R_DPT_BASE_HIGH);
+  if (ret)
+  {
+      ERROR("\n SMMU Base: %lx Write error for DPT Base High", smmu->base);
+      return ret;
+  }
+
+  smmu_dpti_all(smmu);
+
+  return 0;
+}
+
+uint32_t val_enable_dpt_walk(smmu_dev_t *smmu)
+{
+  uint32_t cr0;
+  uint32_t ret;
+
+  cr0 = val_mmio_read_el3(smmu->base + SMMU_R_CR0);
+  cr0 |= 1 << SMMU_R_DPT_WALK_EN_SHIFT;
+  cr0 |= 1 << SMMU_R_ATSCHK_EN_SHIFT;
+  cr0 |= CR0_SMMUEN;
+
+  ret = smmu_reg_write_sync(smmu, cr0,  SMMU_R_CR0, SMMU_R_CR0ACK);
+  if (ret)
+  {
+      ERROR("cr0 not updated for SMMU base: 0x%lx", smmu->base);
+      return ret;
+  }
+
+  return 0;
+}
+
+uint32_t val_disable_dpt_walk(smmu_dev_t *smmu)
+{
+  uint32_t cr0;
+  uint32_t ret;
+
+  cr0 = val_mmio_read_el3(smmu->base + SMMU_R_CR0);
+  cr0 &= ~(1 << SMMU_R_DPT_WALK_EN_SHIFT);
+
+  ret = smmu_reg_write_sync(smmu, cr0,  SMMU_R_CR0, SMMU_R_CR0ACK);
+  if (ret)
+  {
+      ERROR("cr0 not updated for SMMU base: 0x%lx", smmu->base);
+      return ret;
+  }
+
+  return 0;
+}
+
+uint32_t
+val_dpt_get_cfg_values(uint64_t *oas, uint64_t *dptps, uint64_t *l0dptsz,
+		       uint64_t *dptgs, smmu_dev_t *smmu)
+{
+
+  *oas = VAL_EXTRACT_BITS(val_mmio_read_el3(smmu->base + SMMU_IDR5_OFFSET), 0, 2);
+  if (*oas < SMMU_OAS_MAX_IDX)
+      *oas = smmu_oas[*oas];
+  else
+      *oas = 0;
+
+  *dptps = VAL_EXTRACT_BITS(val_mmio_read_el3(smmu->base + SMMU_R_DPT_BASE_CFG), 0, 2);
+  if (*dptps < DPT_PS_MAX_IDX)
+      *dptps = dpt_dptps[*dptps];
+  else
+      *dptps = 0;
+
+  *l0dptsz = VAL_EXTRACT_BITS(val_mmio_read_el3(smmu->base + SMMU_R_DPT_BASE_CFG), 20, 23);
+  if (*l0dptsz < DPT_L0SZ_MAX_IDX)
+      *l0dptsz = dpt_l0dptsz[*l0dptsz];
+  else
+      *l0dptsz = 0;
+
+  *dptgs = VAL_EXTRACT_BITS(val_mmio_read_el3(smmu->base + SMMU_R_DPT_BASE_CFG), 14, 15);
+
+  if (*dptgs < DPT_PS_MAX_IDX)
+      *dptgs = dpt_dptgs[*dptgs];
+  else
+      *dptgs = 0;
+
+  return 0;
+}
+
+uint32_t
+val_dpt_decode_dpt_cfg(uint32_t *dptps_decode, uint32_t *l0dptsz_decode,
+                       uint32_t *dptgs_decode, smmu_dev_t *smmu)
+{
+  *dptps_decode = dptps_value[VAL_EXTRACT_BITS(
+                  val_mmio_read_el3(smmu->base + SMMU_R_DPT_BASE_CFG), 0, 2)];
+  *l0dptsz_decode = l0dptsz_value[VAL_EXTRACT_BITS(
+                    val_mmio_read_el3(smmu->base + SMMU_R_DPT_BASE_CFG), 20, 23)];
+  *dptgs_decode = dptgs_value[VAL_EXTRACT_BITS(
+                  val_mmio_read_el3(smmu->base + SMMU_R_DPT_BASE_CFG), 14, 15)];
+
+  return 0;
+}
+
+uint64_t
+val_smmu_get_dpt_base(smmu_dev_t *smmu)
+{
+  uint32_t lower;
+  uint32_t upper;
+  uint64_t dpt_base = 0;
+
+  lower = val_mmio_read_el3(smmu->base + SMMU_R_DPT_BASE_LOW);
+  upper = val_mmio_read_el3(smmu->base + SMMU_R_DPT_BASE_HIGH);
+  dpt_base = (((uint32_t)(lower >> 12) & 0xFFFFF) | ((uint64_t)(upper & 0xFFFFF) << 20));
+  return dpt_base << 12;
+}
+
+void
+val_dpt_invalidate_all(uint64_t smmu_index)
+{
+  smmu_dev_t *smmu;
+
+  smmu = &g_smmu[smmu_index];
+  smmu_dpti_all(smmu);
+}
+
+uint32_t
+val_dpt_add_entry(uint64_t translated_addr, uint64_t smmu_info)
+{
+  uint32_t access;
+  uint32_t smmu_index;
+  uint32_t l0_index;
+  uint64_t oas, dptgs, l0dptsz, dptps;
+  uint64_t l0_entry, l1_entry, l1_base;
+  uint32_t num_entry, offset, lower, upper, l1_index;
+  uint32_t dptps_decode, l0dptsz_decode, dptgs_decode;
+  uint64_t entry;
+  uint32_t desc;
+  smmu_dev_t *smmu;
+
+  access = VAL_EXTRACT_BITS(smmu_info, 0, 31);
+  smmu_index = VAL_EXTRACT_BITS(smmu_info, 32, 63);
+  smmu = &g_smmu[smmu_index];
+  val_dpt_get_cfg_values(&oas, &dptps, &l0dptsz, &dptgs, smmu);
+
+  INFO("OAS: %lx\n", oas);
+  INFO("dptps: %lx\n", dptps);
+  INFO("l0dptsz: %lx\n", l0dptsz);
+  INFO("dptgs: %lx\n", dptgs);
+
+  l0_index = VAL_EXTRACT_BITS(translated_addr, l0dptsz, (dptps - 1));
+  offset = l0_index * 8;
+  val_dpt_decode_dpt_cfg(&dptps_decode, &l0dptsz_decode, &dptgs_decode, smmu);
+  num_entry = dptps_decode/l0dptsz_decode;
+
+  if (l0_index > num_entry)
+  {
+      ERROR("\n     L0 Index is greater than num of entries");
+      return 1;
+  }
+
+  entry = val_smmu_get_dpt_base(smmu);
+  entry += offset;
+  l0_entry = val_mmio_read64_el3(entry);
+
+  val_mmio_write64_el3(entry, access);
+
+  desc = VAL_EXTRACT_BITS(l0_entry, 0, 1);
+  if (desc == 0 || desc == 1)
+      return 0;
+
+  lower = VAL_EXTRACT_BITS(l0_entry, 12, 31);
+  upper = VAL_EXTRACT_BITS(l0_entry, 32, 51);
+  l1_base = ((uint32_t)(lower)) | ((uint32_t)(upper << 20));
+
+  l1_index = VAL_EXTRACT_BITS(translated_addr, (dptgs + 1), (l0dptsz - 1));
+  offset = l1_index * 8;
+  num_entry = (l0dptsz / dptgs) / 2;
+
+  if (l1_index > num_entry)
+  {
+      ERROR("\n     L1 Index is greater than num of entries");
+      return 1;
+  }
+
+  entry = (l1_base + offset);
+  l1_entry = val_mmio_read64_el3(entry);
+
+  val_mmio_write64_el3(l1_entry, access);
+
+  return 0;
+}
+
+uint32_t
+val_smmu_dpt_init(smmu_dev_t *smmu)
+{
+  uint64_t dpt_base;
+
+  dpt_base = (uint64_t)val_memory_calloc_el3(1, SIZE_4KB, SIZE_4KB);
+  val_disable_dpt_walk(smmu);
+  val_mmio_write_el3(smmu->base + SMMU_R_DPT_BASE_CFG, 0);
+  val_smmu_program_dpt_base(smmu, dpt_base >> 12);
+  val_enable_dpt_walk(smmu);
+
+  return 0;
 }
 
 /**
@@ -1282,11 +1357,15 @@ uint32_t val_smmu_init(uint32_t num_smmu)
 {
     int i;
 
+    /* If MEC is enabled, use the VAL_GMECID for SMMU initialzation */
+    if (val_is_mec_enabled())
+        val_write_mecid(VAL_GMECID);
+
     g_num_smmus = num_smmu;
     if (g_num_smmus == 0)
         return 1;
 
-    g_smmu = val_memory_calloc(g_num_smmus, sizeof(smmu_dev_t), BYTES_PER_DWORD);
+    g_smmu = val_memory_calloc_el3(g_num_smmus, sizeof(smmu_dev_t), BYTES_PER_DWORD);
     if (!g_smmu)
     {
         ERROR("\n      val_smmu_init: memory allocation failure     ");
@@ -1294,7 +1373,7 @@ uint32_t val_smmu_init(uint32_t num_smmu)
     }
 
     for (i = 0; i < g_num_smmus; ++i) {
-        if (EXTRACT(ARCH_REV, val_mmio_read(ROOT_IOVIRT_SMMUV3_BASE + SMMU_AIDR_OFFSET)) != 3)
+        if (EXTRACT(ARCH_REV, val_mmio_read_el3(ROOT_IOVIRT_SMMUV3_BASE + SMMU_AIDR_OFFSET)) != 3)
         {
             ERROR("\n val_smmu_init: SMMUv3.x supported, \
                                 skipping smmu %d", i);
@@ -1307,6 +1386,120 @@ uint32_t val_smmu_init(uint32_t num_smmu)
             g_smmu[i].base = 0;
             return 1;
         }
+
+        val_smmu_dpt_init(&g_smmu[i]);
     }
+
     return 0;
 }
+
+/**
+ * @brief Get the MECID width supported by the SMMU at the given base address.
+ *
+ * @param smmu_base Base address of the SMMU registers.
+ * @return MECID width (in bits) as indicated by bits [3:0] of MECIDR register.
+ */
+uint32_t val_smmu_get_mecidw(uint64_t smmu_base)
+{
+  return VAL_EXTRACT_BITS(val_mmio_read64_el3(smmu_base + SMMU_R_MECIDR), 0, 3);
+}
+
+/**
+ * @brief Check if the SMMU at the given base address supports MEC.
+ *
+ * @param smmu_base Base address of the SMMU registers.
+ * @return true if MEC is supported, false otherwise.
+ */
+bool val_smmu_supports_mec(uint64_t smmu_base)
+{
+  return VAL_EXTRACT_BITS(val_mmio_read64_el3(smmu_base + SMMU_R_IDR3), 16, 16);
+}
+
+/**
+ * @brief Program the MECID value into the STE (Stream Table Entry) for a given SMMU stream ID.
+ *
+ * @param master_attr Attributes of the SMMU master including stream ID and SMMU index.
+ * @param mecid       MECID value to be programmed into the STE.
+ * @return 0 on success, 1 on failure.
+ */
+uint32_t val_smmu_set_rlm_ste_mecid(smmu_master_attributes_t master_attr, uint32_t mecid)
+{
+  smmu_master_t *master;
+  smmu_dev_t *smmu;
+  uint64_t *ste;
+
+  g_sid = master_attr.streamid;
+  if (g_smmu == NULL)
+      return 1;
+
+  if (master_attr.smmu_index >= g_num_smmus)
+  {
+      ERROR("\n      val_smmu_map: invalid smmu index     ");
+      return 1;
+  }
+
+  smmu = &g_smmu[master_attr.smmu_index];
+  if (smmu->base == 0)
+  {
+      ERROR("\n      val_smmu_map: smmu unsupported     ");
+      return 1;
+  }
+
+  master = smmu_master_at(master_attr.streamid);
+  if (master == NULL)
+      return 1;
+
+  if (master->smmu == NULL)
+  {
+      master->smmu = smmu;
+      master->sid = master_attr.streamid;
+      master->ssid_bits = master_attr.ssid_bits;
+  }
+
+
+  if (master_attr.streamid >= (0x1ul << smmu->sid_bits))
+  {
+      ERROR("\n    val_smmu_map: sid %d out of range       ", master_attr.streamid);
+      return 1;
+  }
+
+  if (smmu->supported.st_level_2lvl) {
+      if (!smmu_strtab_init_level2(smmu, g_sid))
+      {
+          ERROR("\n      val_smmu_map: l2 stream table init failed     ");
+          return 1;
+      }
+  }
+
+  ste = smmu_strtab_get_ste_for_sid(smmu, master->sid);
+
+  /* MECID is at byte offset 32 (5th Qword), bits [319:304]*/
+  uint64_t *ste_qword5 = (uint64_t *)(ste + STE_MECID_QWORD_OFF);
+
+  /*Clear existing MECID bits */
+  *ste_qword5 &= ~STE_MECID_MASK;
+
+  /* Set new MECID */
+  *ste_qword5 |= ((uint64_t)mecid << STE_MECID_SHIFT);
+
+  smmu_tlbi_cached_ste(smmu);
+
+  /* Issue a PREFETCH command so that new config for SID is fetched by SMMU */
+  smmu_tlbi_prefetch_cfg(smmu);
+
+  dump_strtab(ste);
+  /* Disable the GPC before the Invalidation to avoid GPF
+   * Note: Remove once making all the allocated memory GPI_ANY
+   */
+  uint32_t root_cr0;
+  root_cr0 = val_mmio_read_el3(smmu->base + SMMU_ROOT_CR0);
+  root_cr0 &= ~0x2ul;
+
+  smmu_reg_write_sync(smmu, root_cr0, SMMU_ROOT_CR0, SMMU_ROOT_CR0_ACK);
+
+  smmu_tlbi_cfgi(smmu);
+
+  return 0;
+}
+
+

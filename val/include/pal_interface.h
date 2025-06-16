@@ -170,6 +170,17 @@ typedef struct {
   uint32_t tg_size_log2:5;
 } PE_TCR_BF;
 
+typedef struct {
+  uint32_t ps:3;
+  uint32_t tg:2;
+  uint32_t sh:2;
+  uint32_t orgn:2;
+  uint32_t irgn:2;
+  uint32_t tsz:6;
+  uint32_t sl:2;
+  uint32_t tg_size_log2:5;
+} VTCR_EL2_INFO;
+
 void pal_pe_create_info_table(PE_INFO_TABLE *pe_info_table);
 
 /**
@@ -470,6 +481,7 @@ typedef struct {
     uint64_t mair;
     uint32_t stage;
     PE_TCR_BF tcr;
+    VTCR_EL2_INFO vtcr;
 } pgt_descriptor_t;
 
 typedef struct {
@@ -628,6 +640,7 @@ void     pal_mem_set(void *Buf, uint32_t Size, uint8_t Value);
 
 void     pal_pe_update_elr(void *context, uint64_t offset);
 uint64_t pal_pe_get_esr(void *context);
+uint64_t pal_pe_get_elr(void *context);
 uint64_t pal_pe_get_far(void *context);
 void     pal_pe_data_cache_ops_by_va(uint64_t addr, uint32_t type);
 
@@ -720,7 +733,8 @@ typedef enum {
     START_TXN_MONITOR    = 0xb,
     STOP_TXN_MONITOR     = 0xc,
     ATS_TXN_REQ          = 0xd,
-    INJECT_ERROR         = 0xe
+    INJECT_ERROR         = 0xe,
+    ATS_INV_CACHE        = 0xf
 } EXERCISER_OPS;
 
 typedef enum {

@@ -335,6 +335,23 @@ pal_pe_get_far(void *context)
   return 0;
 }
 
+/**
+  @brief Get the ELR from Baremetal exception handler
+
+  @param  context - exception context structure
+
+  @return  ELR
+**/
+uint64_t
+pal_pe_get_elr(void *context)
+{
+  /*
+   * Place holder to return FAR from context saving structure
+   */
+  (void) context;
+  return 0;
+}
+
 void
 DataCacheCleanInvalidateVA(uint64_t addr);
 

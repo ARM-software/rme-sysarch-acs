@@ -32,6 +32,7 @@ uint32_t  g_rme_tests_fail;
 uint64_t  g_stack_pointer;
 uint64_t  g_exception_ret_addr;
 uint64_t  g_ret_addr;
+uint32_t  g_rl_smmu_init;
 
 extern uint32_t g_skip_test_num[];
 extern uint32_t g_single_test;
@@ -242,7 +243,13 @@ ShellAppMainrme(
   Status |= val_smmu_execute_tests(val_pe_get_num());
 
   val_print(ACS_PRINT_TEST, "\n      *** Starting RME DA tests ***  \n", 0);
-  Status = val_rme_da_execute_tests(val_pe_get_num());
+  Status |= val_rme_da_execute_tests(val_pe_get_num());
+
+  val_print(ACS_PRINT_TEST, "\n      *** Starting RME DPT tests ***  \n", 0);
+  Status |= val_rme_dpt_execute_tests(val_pe_get_num());
+
+  val_print(ACS_PRINT_TEST, "\n      *** Starting RME MEC tests ***  \n", 0);
+  Status |= val_rme_mec_execute_tests(val_pe_get_num());
 
 print_test_status:
   val_print(ACS_PRINT_TEST, "\n     ------------------------------------------------------- \n", 0);

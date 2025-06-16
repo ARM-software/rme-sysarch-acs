@@ -90,6 +90,17 @@
   ../test_pool/da/test_da018.c
   ../test_pool/da/test_da019.c
   ../test_pool/da/test_da020.c
+  ../test_pool/dpt/test_dpt001.c
+  ../test_pool/dpt/test_dpt002.c
+  ../test_pool/dpt/test_dpt003.c
+  ../test_pool/dpt/test_dpt004.c
+  ../test_pool/dpt/test_dpt005.c
+  ../test_pool/dpt/test_dpt006.c
+  ../test_pool/dpt/test_dpt007.c
+  ../test_pool/mec/test_mec001.c
+  ../test_pool/mec/test_mec002.c
+  ../test_pool/mec/test_mec003.c
+  ../test_pool/mec/test_mec004.c
 
 [Packages]
   StdLib/StdLib.dec

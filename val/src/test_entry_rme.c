@@ -39,11 +39,11 @@
 uint32_t
 val_rme_execute_tests(uint32_t num_pe)
 {
-  uint32_t status, i, reset_status;
+  uint32_t status = ACS_STATUS_SKIP, i, reset_status;
 
   for (i = 0 ; i < MAX_TEST_SKIP_NUM ; i++) {
       if (g_skip_test_num[i] == ACS_RME_TEST_NUM_BASE) {
-          val_print(ACS_PRINT_TEST, "\n USER Override - Skipping all RME tests \n", 0);
+          val_print(ACS_PRINT_TEST, "      USER Override - Skipping all RME tests \n", 0);
           return ACS_STATUS_SKIP;
       }
   }
@@ -52,8 +52,8 @@ val_rme_execute_tests(uint32_t num_pe)
        (g_single_test == SINGLE_MODULE_SENTINEL ||
        (g_single_test - ACS_RME_TEST_NUM_BASE > 100 ||
           g_single_test - ACS_RME_TEST_NUM_BASE <= 0))) {
-    val_print(ACS_PRINT_TEST, " USER Override - Skipping all RME tests \
-                    (running only a single module)\n", 0);
+    val_print(ACS_PRINT_TEST, " USER Override - Skipping all RME tests \n", 0);
+    val_print(ACS_PRINT_TEST, " (Running only a single module)\n", 0);
     return ACS_STATUS_SKIP;
   }
 

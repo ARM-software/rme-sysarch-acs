@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022,2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -36,5 +36,6 @@ extern uint64_t g_ret_addr;
 extern uint32_t g_curr_module;
 extern uint32_t g_single_test;
 extern uint32_t g_single_module;
+extern uint32_t g_rl_smmu_init;
 
 #endif

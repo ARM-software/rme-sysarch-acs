@@ -103,6 +103,7 @@ payload()
     {
         val_print(ACS_PRINT_ERR,
                       "\n       PCIe DA DVSEC capability not present,bdf 0x%x", e_bdf);
+        test_fails++;
         continue;
     }
 
@@ -111,6 +112,7 @@ payload()
     {
         val_print(ACS_PRINT_ERR,
                       "\n       PCIe IDE Capability not present for BDF: 0x%x", e_bdf);
+        test_fails++;
         continue;
     }
 
@@ -124,7 +126,12 @@ payload()
     }
 
     /* Bring the RP to TDISP Locked state */
-    val_pcie_enable_tdisp(erp_bdf);
+    if (val_pcie_enable_tdisp(erp_bdf))
+    {
+          val_print(ACS_PRINT_ERR, "\n        Unable to set tdisp_en for BDF: 0x%x", erp_bdf);
+          test_fails++;
+          continue;
+    }
 
     count = 0;
     while (count++ < num_sel_ide_stream_supp)

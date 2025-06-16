@@ -32,7 +32,7 @@
 #include "val/include/rme_acs_da.h"
 
 #define TEST_NUM  (ACS_RME_DA_TEST_NUM_BASE  +  16)
-#define TEST_DESC  "Checking IDE-Tbit ==1 for outgoing Realm request        "
+#define TEST_DESC  "Checking IDE-Tbit ==1 for outgoing Realm request       "
 #define TEST_RULE  "RCFQBW, RGBVTS"
 
 #define TEST_DATA  0xABCD
@@ -45,6 +45,7 @@ payload(void)
   pcie_device_bdf_table *bdf_tbl_ptr;
   static uint32_t tbl_index;
   uint32_t bdf, rp_bdf;
+  uint32_t da_cap_base;
   uint32_t bar_base;
   uint32_t pgt_attr_el3;
   uint32_t data;
@@ -53,7 +54,6 @@ payload(void)
   uint32_t test_skip = 1;
   uint32_t stream_id;
   uint32_t count, dp_type, status;
-
 
   tbl_index = 0;
   pe_index = val_pe_get_index_mpid(val_pe_get_mpid());
@@ -77,11 +77,24 @@ payload(void)
           if (val_pcie_get_rootport(bdf, &rp_bdf))
              continue;
 
+          test_skip = 0;
+
+          /* Get the PCIE DVSEC Capability register */
+          if (val_pcie_find_da_capability(rp_bdf, &da_cap_base) != PCIE_SUCCESS)
+          {
+              val_print(ACS_PRINT_ERR,
+                              "\n       PCIe DA DVSEC capability not present,bdf 0x%x", rp_bdf);
+              test_fail++;
+              continue;
+          }
+
           /* Enable the TDISP_EN bit in the RME-DA DVSEC register */
           if (val_pcie_enable_tdisp(rp_bdf))
-             continue;
-
-          test_skip = 0;
+          {
+              val_print(ACS_PRINT_ERR, "\n        Unable to set tdisp_en for BDF: 0x%x", bdf);
+              test_fail++;
+              continue;
+          }
 
           /* Map the Bar address to realm PAS */
           va = val_get_free_va(val_get_min_tg());

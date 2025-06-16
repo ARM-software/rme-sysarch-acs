@@ -32,6 +32,10 @@
 #define SMMU_ROOT_SERVICE 0xE
 #define SEC_STATE_CHANGE 0xF
 #define SMMU_CONFIG_SERVICE 0x10
+#define RME_PGT_CREATE 0x11
+#define RME_PGT_DESTROY 0x12
+#define MEC_SERVICE 0x13
+#define RME_CMO_POE 0x14
 
 /* General Defines used by tests */
 #define INIT_DATA   0x11
@@ -51,6 +55,16 @@
 #define SMMU_ROOT_RME_IMPL_CHK 0x1
 #define SMMU_RLM_PGT_INIT      0x2
 #define SMMU_RLM_SMMU_MAP      0x3
+#define SMMU_RLM_ADD_DPT_ENTRY 0x5
+#define SMMU_RLM_DPTI          0x6
+#define SMMU_CHECK_MEC_IMPL    0x7
+#define SMMU_GET_MECIDW        0x8
+#define SMMU_CONFIG_MECID      0x9
+
+/* MEC services */
+#define ENABLE_MEC   0x1
+#define CONFIG_MECID 0x2
+#define DISABLE_MEC   0x3
 
 /* Defines related to PGT attrinutes of an address */
 #define MAIR_REG_VAL_EL3  0x00000000004404ff
@@ -101,6 +115,9 @@
 #define PAS_ATTR(x) ((NSE_SET(x) << NSE_SHIFT) | (NS_SET(x) << NS_SHIFT))
 
 #define LOWER_ATTRS(x)			(((x) & (0xFFF)) << 2)
+
+/* MECID stores */
+#define VAL_GMECID  0x0
 
 /* Shared data structure instances */
 typedef struct shared_data_access {

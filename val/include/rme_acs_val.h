@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022-2023, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2023, 2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -80,6 +80,12 @@ val_restore_global_test_data(void);
 
 void
 val_save_global_test_data(void);
+
+uint32_t
+val_pe_get_vtcr(VTCR_EL2_INFO *vtcr);
+
+uint32_t
+val_pe_get_vtbr(uint64_t *ttbr_ptr);
 
 #endif
 

@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2023-2024, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2023-2024, 2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -59,7 +59,10 @@ reset_done:
 
   shared_data->shared_data_access[0].data = INIT_DATA;
   size = val_get_min_tg();
-  PA = ROOT_SMEM_BASE;
+  PA = val_get_free_pa(size, size);//ROOT_SMEM_BASE;
+
+  /* Map this PA as Root in the GPT */
+  val_add_gpt_entry_el3(PA, GPT_ROOT);
   VA = val_get_free_va(NUM_PAS * NUM_SMEM_REGN * size);
   VA_Top = VA + size - 8;
   security_state = ROOT_PAS;

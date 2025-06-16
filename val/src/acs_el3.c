@@ -245,3 +245,129 @@ void val_rlm_smmu_map(uint32_t smmu_info)
 {
   UserCallSMC(ARM_ACS_SMC_FID, SMMU_CONFIG_SERVICE, SMMU_RLM_SMMU_MAP, smmu_info, 0);
 }
+
+/**
+ *  @brief  This API is used to map the REALM page table for SMMU in el3.
+ *          1. Caller       -  Test suite
+ *  @return None
+ */
+void val_smmu_rlm_map_el3(smmu_master_attributes_t *smmu_attr, pgt_descriptor_t *pgt_attr)
+{
+  UserCallSMC(ARM_ACS_SMC_FID, SMMU_CONFIG_SERVICE, SMMU_RLM_SMMU_MAP,
+              (uint64_t)smmu_attr, (uint64_t)pgt_attr);
+}
+
+/**
+ *  @brief  This API is used to Add a DPT entry to the DPT table at el3.
+ *          1. Caller       -  Test suite
+ *  @return None
+ */
+void val_dpt_add_entry(uint64_t translated_addr, uint32_t smmu_index)
+{
+  UserCallSMC(ARM_ACS_SMC_FID, SMMU_CONFIG_SERVICE, SMMU_RLM_ADD_DPT_ENTRY,
+             translated_addr, smmu_index);
+}
+
+/**
+ *  @brief  This API is used invalidate all cached DPT entries.
+ *          1. Caller       -  Test suite
+ *  @return None
+ */
+void val_dpt_invalidate_all(uint64_t smmu_index)
+{
+  UserCallSMC(ARM_ACS_SMC_FID, SMMU_CONFIG_SERVICE, SMMU_RLM_DPTI, smmu_index, 0);
+}
+
+/**
+ *  @brief  This API is used to create Page tables at EL3.
+ *          1. Caller       -  Test suite
+ *  @return None
+ */
+void
+val_rlm_pgt_create(memory_region_descriptor_t *mem_desc, pgt_descriptor_t *pgt_desc)
+{
+  UserCallSMC(ARM_ACS_SMC_FID, RME_PGT_CREATE, (uint64_t)mem_desc, (uint64_t)pgt_desc, 0);
+}
+
+/**
+ *  @brief  This API is used to destroy page tables at EL3.
+ *          1. Caller       -  Test suite
+ *  @return None
+ */
+void
+val_rlm_pgt_destroy(pgt_descriptor_t *pgt_desc)
+{
+  UserCallSMC(ARM_ACS_SMC_FID, RME_PGT_DESTROY, (uint64_t)pgt_desc, 0, 0);
+}
+
+/**
+ *  @brief  This API is used to Enable MEC at EL3.
+ *          1. Caller       -  Test suite
+ *  @return None
+ */
+void val_rlm_enable_mec(void)
+{
+  UserCallSMC(ARM_ACS_SMC_FID, MEC_SERVICE, ENABLE_MEC, 0, 0);
+}
+
+/**
+ *  @brief  This API is used to Disable MEC at EL3.
+ *          1. Caller       -  Test suite
+ *  @return None
+ */
+void val_rlm_disable_mec(void)
+{
+  UserCallSMC(ARM_ACS_SMC_FID, MEC_SERVICE, DISABLE_MEC, 0, 0);
+}
+
+/**
+ *  @brief  This API is used to check if SMMU implements MEC.
+ *          1. Caller       -  Test suite
+ *  @return None
+ */
+void val_smmu_rlm_check_mec_impl(uint64_t smmu_base)
+{
+  UserCallSMC(ARM_ACS_SMC_FID, SMMU_CONFIG_SERVICE, SMMU_CHECK_MEC_IMPL, smmu_base, 0);
+}
+
+/**
+ *  @brief  This API is used to get MECID width of SMMU.
+ *          1. Caller       -  Test suite
+ *  @return None
+ */
+void val_smmu_rlm_get_mecidw(uint64_t smmu_base)
+{
+  UserCallSMC(ARM_ACS_SMC_FID, SMMU_CONFIG_SERVICE, SMMU_GET_MECIDW, smmu_base, 0);
+}
+
+/**
+ *  @brief  This API is used to issue CMO to Point of Encryption.
+ *          1. Caller       -  Test suite
+ *  @return None
+ */
+void
+val_cmo_to_poe(uint64_t PA)
+{
+  UserCallSMC(ARM_ACS_SMC_FID, RME_CMO_POE, PA, 0, 0);
+}
+
+/**
+ *  @brief  This API is used to configure MECID for PE access.
+ *          1. Caller       -  Test suite
+ *  @return None
+ */
+void val_rlm_configure_mecid(uint32_t mecid)
+{
+  UserCallSMC(ARM_ACS_SMC_FID, MEC_SERVICE, CONFIG_MECID, mecid, 0);
+}
+
+/**
+ *  @brief  This API is used to configure MECID for SMMU access.
+ *          1. Caller       -  Test suite
+ *  @return None
+ */
+void val_smmu_rlm_configure_mecid(smmu_master_attributes_t *smmu_attr, uint32_t mecid)
+{
+  UserCallSMC(ARM_ACS_SMC_FID, SMMU_CONFIG_SERVICE, SMMU_CONFIG_MECID, (uint64_t) smmu_attr, mecid);
+}
+

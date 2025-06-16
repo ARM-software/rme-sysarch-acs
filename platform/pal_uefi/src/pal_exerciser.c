@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022, 2024, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022, 2024-2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -236,8 +236,8 @@ UINT32 pal_exerciser_set_param (
           return 0;
 
       case DMA_ATTRIBUTES:
-          pal_mmio_write(Base + DMA_BUS_ADDR,Value1);// wrting into the DMA Control Register 2
-          pal_mmio_write(Base + DMA_LEN,Value2);// writing into the DMA Control Register 3
+          pal_mmio_write64(Base + DMA_BUS_ADDR,Value1);// wrting into the DMA Control Register 2
+          pal_mmio_write64(Base + DMA_LEN,Value2);// writing into the DMA Control Register 3
           return 0;
 
       case P2P_ATTRIBUTES:
@@ -535,6 +535,10 @@ pal_exerciser_ops (
         pal_mmio_write(Base + ATSCTL, ATS_TRIGGER);
         return !(pal_mmio_read(Base + ATSCTL) & ATS_STATUS);
 
+    case ATS_INV_CACHE:
+        pal_mmio_write(Base + ATSCTL, ATS_INV);
+        return 0;
+
     case START_TXN_MONITOR:
         pal_mmio_write(Base + TXN_CTRL_BASE, TXN_START);
         return 0;
@@ -600,11 +604,11 @@ pal_exerciser_get_data (
               Data->bar_space.type = MMIO_NON_PREFETCHABLE;
           return 0;
       case EXERCISER_DATA_MMIO_SPACE:
-          Index = 0;
+          Index = 1;
           Data->bar_space.base_addr = 0;
           while (Index < TYPE0_MAX_BARS)
           {
-              EcamBAR = pal_exerciser_get_ecsr_base(Bdf, Index * 4);
+              EcamBAR = pal_exerciser_get_ecsr_base(Bdf, Index);
 
               /* Check if the BAR is Memory Mapped IO type */
               if (((EcamBAR >> BAR_MIT_SHIFT) & BAR_MIT_MASK) == MMIO)

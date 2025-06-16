@@ -26,8 +26,8 @@
 #define BITFIELD_GET(name, val) ((val >> name##_SHIFT) & name##_MASK)
 #define BITFIELD_SET(name, val) ((val & name##_MASK) << name##_SHIFT)
 
-BITFIELD_DECL(uint32_t, IDR5_OAS, 2, 0)
-uint32_t smmu_oas[SMMU_OAS_MAX_IDX] = {32, 36, 40, 42, 44, 48, 52};
+#define INPLACE(regfield, val) \
+        (((val) + UL(0)) << (regfield##_SHIFT))
 
 #define CMDQ_OP_PREFETCH_CFG 0x1
 #define CMDQ_OP_CFGI_STE 0x3
@@ -35,6 +35,7 @@ uint32_t smmu_oas[SMMU_OAS_MAX_IDX] = {32, 36, 40, 42, 44, 48, 52};
 #define CMDQ_OP_TLBI_EL2_ALL 0x20
 #define CMDQ_OP_TLBI_NSNH_ALL 0x30
 #define CMDQ_OP_CMD_SYNC 0x46
+#define CMDQ_OP_DPTI_ALL 0x70
 
 #define BYTES_PER_DWORD 8
 
@@ -58,6 +59,14 @@ BITFIELD_DECL(uint32_t, IDR0_TTF, 3, 2)
 BITFIELD_DECL(uint32_t, IDR1_CMDQS, 25, 21)
 BITFIELD_DECL(uint32_t, IDR1_SSIDSIZE, 10, 6)
 BITFIELD_DECL(uint32_t, IDR1_SIDSIZE, 5, 0)
+
+#define SMMU_OAS_MAX_IDX   7
+#define DPT_L0SZ_MAX_IDX   10
+#define DPT_GS_MAX_IDX     4
+#define DPT_PS_MAX_IDX     8
+
+#define SMMU_IDR5_OFFSET 0x14
+BITFIELD_DECL(uint32_t, IDR5_OAS, 2, 0)
 
 #define SMMU_CR0_OFFSET 0x20
 #define CR0_EVENTQEN (1 << 2)
@@ -113,10 +122,19 @@ BITFIELD_DECL(uint32_t, IDR1_SIDSIZE, 5, 0)
 
 #define SMMU_R_IDR6		(SMMU_R_PAGE_0_OFFSET + 0x0190)
 #define SMMU_R_DPT_BASE		(SMMU_R_PAGE_0_OFFSET + 0x0200)
+#define SMMU_R_DPT_BASE_LOW	(SMMU_R_PAGE_0_OFFSET + 0x0200)
+#define SMMU_R_DPT_BASE_HIGH	(SMMU_R_PAGE_0_OFFSET + 0x0204)
 #define SMMU_R_DPT_BASE_CFG	(SMMU_R_PAGE_0_OFFSET + 0x0208)
 #define SMMU_R_DPT_CFG_FAR	(SMMU_R_PAGE_0_OFFSET + 0x0210)
 #define SMMU_R_MECIDR		(SMMU_R_PAGE_0_OFFSET + 0x0220)
 #define SMMU_R_GMECID		(SMMU_R_PAGE_0_OFFSET + 0x0228)
+
+#define SMMU_R_DPT_BASE_LOW_MASK      0xFFFFF
+#define SMMU_R_DPT_BASE_LOW_SHIFT     12
+#define SMMU_R_DPT_BASE_HIGH_MASK     0xFFFFF
+#define SMMU_R_DPT_BASE_HIGH_SHIFT    20
+#define SMMU_R_DPT_WALK_EN_SHIFT      10
+#define SMMU_R_ATSCHK_EN_SHIFT        4
 
 /*Registers in Realm Page 1*/
 #define SMMU_R_EVTQ_PROD  	(SMMU_R_PAGE_1_OFFSET + 0x00A8)
@@ -235,6 +253,50 @@ BITFIELD_DECL(uint64_t, STRTAB_STE_2_VTCR_S2PS, 18, 16)
 #define STRTAB_STE_2_S2PTW (1UL << 54)
 #define STRTAB_STE_2_S2R (1UL << 58)
 
+/* VTCR values
+ * Note: This would change based on IDR5.OAS, LPA2, etc
+ */
+#define VTCR_IRGN0_SHIFT        8
+#define VTCR_IRGN0_WIDTH        U(2)
+#define VTCR_IRGN0_WBRAWA       INPLACE(VTCR_IRGN0, UL(1))
+
+#define VTCR_ORGN0_SHIFT        10
+#define VTCR_ORGN0_WIDTH        U(2)
+#define VTCR_ORGN0_WBRAWA       INPLACE(VTCR_ORGN0, UL(1))
+
+#define VTCR_SH0_SHIFT          12
+#define VTCR_SH0_WIDTH          U(2)
+#define VTCR_SH0_IS             INPLACE(VTCR_SH0, UL(3))
+
+#define VTCR_TG0_SHIFT          14
+#define VTCR_TG0_WIDTH          U(2)
+#define VTCR_TG0_4K             INPLACE(VTCR_TG0, UL(0))
+
+#define VTCR_PS_SHIFT           16
+#define VTCR_PS_WIDTH           U(3)
+#define VTCR_PS_48              INPLACE(VTCR_PS, UL(5))
+
+#define VTCR_DS_SHIFT           32
+#define VTCR_DS_WIDTH           U(1)
+#define VTCR_DS_52BIT           INPLACE(VTCR_DS, UL(1))
+
+#define VTCR_VS                 (UL(1) << 19)
+#define VTCR_NSA                (UL(1) << 30)
+#define VTCR_RES1               (UL(1) << 31)
+
+#define VTCR_T0SZ_SHIFT         0
+#define VTCR_T0SZ_WIDTH         U(6)
+#define VTCR_T0SZ_16            INPLACE(VTCR_T0SZ, UL(16))
+
+#define VTCR_SL0_SHIFT          6
+#define VTCR_SL0_WIDTH          U(2)
+
+#define VTCR_SL0_4K_L2          INPLACE(VTCR_SL0, UL(0))
+#define VTCR_SL0_4K_L1          INPLACE(VTCR_SL0, UL(1))
+#define VTCR_SL0_4K_L0          INPLACE(VTCR_SL0, UL(2))
+#define VTCR_SL0_4K_L3          INPLACE(VTCR_SL0, UL(3))
+#define VTCR_SL0_4K_LM1         VTCR_SL0_4K_L2
+
 BITFIELD_DECL(uint64_t, STRTAB_STE_3_S2TTB, 51, 4)
 
 #define QUEUE_DWORDS_PER_ENT 2
@@ -272,7 +334,23 @@ BITFIELD_DECL(uint64_t, CDTAB_CD_0_TCR_IPS, 34, 32)
 #define CDTAB_CD_0_ASET		(1UL << 47)
 BITFIELD_DECL(uint64_t, CDTAB_CD_0_ASID, 63, 48)
 
+
+#define SMMU_STE_SIZE         64
+#define STE_MECID_BIT         304
+#define STE_MECID_WIDTH       16
+#define STE_MECID_QWORD_OFF   4
+#define STE_MECID_SHIFT       (STE_MECID_BIT % 64)
+#define STE_MECID_MASK        (0xFFFFULL << STE_MECID_SHIFT)
+
 BITFIELD_DECL(uint64_t, CDTAB_CD_1_TTB0, 51, 4)
+
+uint32_t smmu_oas[SMMU_OAS_MAX_IDX] = {32, 36, 40, 42, 44, 48, 52};
+uint32_t dpt_l0dptsz[DPT_L0SZ_MAX_IDX] = {30, 0, 0, 0, 34, 0, 36, 0, 0, 39};
+uint32_t l0dptsz_value[DPT_L0SZ_MAX_IDX] = {1, 0, 0, 0, 16, 0, 64, 0, 0, 512};
+uint32_t dpt_dptgs[DPT_GS_MAX_IDX] = {0x1000, 0x10000, 0x4000, 0};
+uint32_t dptgs_value[DPT_GS_MAX_IDX] = {4/1000000, 64/1000000, 16/1000000, 0};
+uint32_t dpt_dptps[DPT_PS_MAX_IDX] = {32, 36, 40, 42, 44, 58, 52, 0};
+uint32_t dptps_value[DPT_PS_MAX_IDX] = {4, 64, 1000, 4000, 16000, 256000, 4000000};
 
 typedef struct {
     uint32_t prod;
@@ -380,4 +458,7 @@ typedef struct {
     uint32_t ssid_bits;
 } smmu_master_t;
 
+uint32_t val_smmu_dpt_init(smmu_dev_t *smmu);
+int32_t smmu_reg_write_sync(smmu_dev_t *smmu, uint32_t val, uint32_t reg_off, uint32_t ack_off);
+void smmu_dpti_all(smmu_dev_t *smmu);
 #endif /*__SMMU_V3_H__ */
