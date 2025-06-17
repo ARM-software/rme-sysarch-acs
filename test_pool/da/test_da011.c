@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2024, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2024-2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -42,6 +42,7 @@ payload(void)
   uint32_t tbl_index;
   uint32_t dp_type;
   uint32_t bdf;
+  uint32_t da_cap_base;
   uint32_t reg_value;
   uint32_t test_fail = 0;
   uint32_t test_skip = 1;
@@ -63,6 +64,15 @@ payload(void)
 
       test_skip = 0;
 
+      /* Get the PCIE DVSEC Capability register */
+      if (val_pcie_find_da_capability(bdf, &da_cap_base) != PCIE_SUCCESS)
+      {
+          val_print(ACS_PRINT_ERR,
+                          "\n       PCIe DA DVSEC capability not present,bdf 0x%x", bdf);
+          test_fail++;
+          continue;
+      }
+
       status = val_ide_get_num_sel_str(bdf, &num_sel_str);
       if (status)
       {
@@ -71,7 +81,14 @@ payload(void)
           continue;
       }
 
-      val_pcie_enable_tdisp(bdf);
+      /* Find the DA DVSEC_CTL register and enable TDISP */
+      if (val_pcie_enable_tdisp(bdf))
+      {
+          val_print(ACS_PRINT_ERR, "\n        Unable to set tdisp_en for BDF: 0x%x", bdf);
+          test_fail++;
+          continue;
+      }
+
       count = 0;
       while (count++ < num_sel_str)
       {

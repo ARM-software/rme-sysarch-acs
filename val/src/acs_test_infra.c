@@ -542,6 +542,15 @@ val_pe_get_esr(void *context)
 }
 
 /**
+  @brief  Get ELR from exception context
+**/
+uint64_t
+val_pe_get_elr(void *context)
+{
+    return pal_pe_get_elr(context);
+}
+
+/**
   @brief  Get FAR from exception context
 **/
 uint64_t

@@ -110,6 +110,8 @@ payload()
       bdf = bdf_tbl_ptr->device[tbl_index++].bdf;
       dp_type = val_pcie_device_port_type(bdf);
 
+      test_skip = 0;
+
       if (dp_type == RP)
       {
           /* Get the PCIE DVSEC Capability register */
@@ -117,6 +119,7 @@ payload()
           {
               val_print(ACS_PRINT_ERR,
                               "\n       PCIe DA DVSEC capability not present,bdf 0x%x", bdf);
+              test_fails++;
               continue;
           }
 
@@ -125,10 +128,9 @@ payload()
           {
               val_print(ACS_PRINT_ERR,
                               "\n       PCIe IDE Capability not present for BDF: 0x%x", bdf);
+              test_fails++;
               continue;
           }
-
-          test_skip = 0;
 
           /* Read the RMEDA_CTL registers */
           val_pcie_read_cfg(bdf, da_cap_base + RMEDA_CTL1, &reg_ctl1);

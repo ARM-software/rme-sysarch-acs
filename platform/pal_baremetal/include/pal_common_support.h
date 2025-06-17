@@ -57,15 +57,10 @@ extern uint32_t g_enable_module;
 #define PCIE_MAX_DEV   32
 #define PCIE_MAX_FUNC  8
 
-#ifdef TARGET_BM_BOOT
 void pal_uart_print(int log, const char *fmt, ...);
 void *mem_alloc(size_t alignment, size_t size);
 #define print(verbose, string, ...)  if(verbose >= g_print_level) \
                                                    pal_uart_print(verbose, string, ##__VA_ARGS__)
-#else
-#define print(verbose, string, ...)  if(verbose >= g_print_level) \
-                                                   printf(string, ##__VA_ARGS__)
-#endif
 
 #define PCIE_CREATE_BDF(Seg, Bus, Dev, Func) ((Seg << 24) | (Bus << 16) | (Dev << 8) | Func)
 #define PCIE_CREATE_BDF_PACKED(bdf)  PCIE_EXTRACT_BDF_FUNC(bdf) | \
@@ -646,7 +641,8 @@ typedef enum {
     START_TXN_MONITOR    = 0xb,
     STOP_TXN_MONITOR     = 0xc,
     ATS_TXN_REQ          = 0xd,
-    INJECT_ERROR         = 0xe
+    INJECT_ERROR         = 0xe,
+    ATS_INV_CACHE        = 0xf
 } EXERCISER_OPS;
 
 /* LibC functions declaration */

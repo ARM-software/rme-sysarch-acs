@@ -159,20 +159,6 @@ pcie_cfgreg_bitfield_entry bf_info_table18[] = {
        "WARNING",                   // Warning message
        "ERROR Write-detect failed for Prefetchable Memory Base/Limit" // Error message
     },
-    // Link Control Register - Link Disable bit
-    {
-       PCIE_CAP,                    // Part of PCIe capability register
-       CID_PCIECS,                           // Capability ID for Link Control
-       0,                            // Extended Capability ID (not applicable for Link Control)
-       0x10,                         // 4-byte aligned offset for Link Control Register
-       RP,                           // Root Port (RP)
-       4,                            // Start bit position (Link Disable)
-       4,                            // End bit position (Link Disable)
-       0,                            // Bit value
-       WRITE_DETECT,                // Access type: WRITE_DETECT
-       "WARNING",                   // Warning message
-       "ERROR Write-detect failed for Link Disable" // Error message
-    },
     // Device Control Register - Extended Tag Field Enable bit
     {
        PCIE_CAP,                     // Part of PCIe capability register

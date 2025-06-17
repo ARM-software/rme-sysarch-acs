@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022-2024, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2024, 2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -45,6 +45,7 @@ void payload(void)
   uint64_t pas_list[4] = {REALM_PAS, NONSECURE_PAS, SECURE_PAS, ROOT_PAS}, VA, size;
   uint8_t status_fail_cnt;
 
+  status_fail_cnt = 0;
   size = val_get_min_tg();
   VA = val_get_free_va(NUM_MTE_RGN * NUM_PAS * size);
   attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(NON_SHAREABLE) | PGT_ENTRY_AP_RW);

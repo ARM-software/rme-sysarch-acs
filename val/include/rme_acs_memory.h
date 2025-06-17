@@ -41,7 +41,7 @@ void *val_memory_alloc_pages(uint32_t num_pages);
 void val_memory_free_pages(void *page_base, uint32_t num_pages);
 void *val_aligned_alloc(uint32_t alignment, uint32_t size);
 void val_memory_free_aligned(void *addr);
-
+uint32_t val_memory_compare_src_el3(uint32_t *src, uint32_t *dest, uint32_t size);
 // NSEL2 MMU mem map APIs
 void val_mmu_add_mmap(void);
 void *val_mmu_get_mmap_list(void);
@@ -55,4 +55,4 @@ extern uint64_t val_sctlr_read(uint64_t el_num);
 extern uint64_t val_ttbr0_read(uint64_t el_num);
 extern uint64_t val_read_current_el(void);
 
-#endif // __RME_ACS_PERIPHERAL_H__
+#endif // __RME_ACS_MEMORY_H__

@@ -17,6 +17,12 @@
 
 #include "val_el3/ack_include.h"
 
+static MemoryPool mem_pool = {
+    .base = (uint8_t *)FREE_MEM_SMMU, // Hardcoded address
+    .size = MEMORY_POOL_SIZE,
+    .free_list = NULL,
+};
+
 /**
  *  @brief  Clean and Invalidate the Data cache line containing
  *          the input physical address to the point of physical
@@ -177,11 +183,7 @@ val_pe_reg_read(uint32_t reg_id)
 **/
 void val_memory_set_el3(void *address, uint32_t size, uint8_t value)
 {
-  uint32_t index;
-
-  for (index = 0; index < size; index++)
-    *((char *)address + index) = value;
-
+  memset(address, value, size);
 }
 
 /**
@@ -309,41 +311,394 @@ void val_security_state_change(uint64_t attr_nse_ns)
 
 }
 
-void val_smmu_root_config_service(uint64_t reg_config, uint32_t smmu_info)
+/**
+ * @brief Initialize the memory pool with a single large free block
+ *
+ * @return None
+ */
+void memory_pool_init(void)
+{
+    mem_pool.free_list = (BlockHeader *)mem_pool.base;
+    mem_pool.free_list->size = mem_pool.size - sizeof(BlockHeader);
+    mem_pool.free_list->is_free = 1;
+    mem_pool.free_list->next = NULL;
+}
+
+
+/**
+ * @brief  Split a large free block into two smaller blocks
+ *
+ * @return None
+ */
+void split_block(BlockHeader *block, size_t size)
+{
+    BlockHeader *new_block = (BlockHeader *)((uint8_t *)block + sizeof(BlockHeader) + size);
+    new_block->size = block->size - size - sizeof(BlockHeader);
+    new_block->is_free = 1;
+    new_block->next = block->next;
+
+    block->size = size;
+    block->next = new_block;
+}
+
+/**
+ * @brief  Returns the sligned address with the given size
+ *
+ * @param  size        Size in bytes to align
+ * @param  alignment   alignment required
+ * @return address aligned to the specified alignment till the 'size'
+ */
+static size_t align_size(size_t size, size_t alignment)
+{
+    return (size + (alignment - 1)) & ~(alignment - 1);
+}
+
+/**
+ * @brief  Allocates requested buffer size in bytes in a contiguous memory
+ *         and returns the base address of the range.
+ *
+ * @param  Size         allocation size in bytes
+ * @param  alignment    Required alignment for the buffer
+ * @retval if SUCCESS   pointer to allocated memory
+ * @retval if FAILURE   NULL
+ */
+void *val_memory_alloc_el3(size_t size, size_t alignment)
+{
+    uint32_t mecid = 0;
+
+    if (!mem_pool.free_list)
+    {
+        memory_pool_init(); // Initialize pool on first call
+    }
+
+    /* If MEC is enabled, the memory pool structures need to be accessed with
+       VAL_GMECID */
+    if (val_is_mec_enabled())
+    {
+        mecid = read_mecid_rl_a_el3();
+        val_write_mecid(VAL_GMECID);
+    }
+
+    size = align_size(size, alignment); // Align the requested size
+    BlockHeader *current = mem_pool.free_list;
+
+    while (current) {
+        // Align the starting address of the block
+        uintptr_t block_start = (uintptr_t)current + sizeof(BlockHeader);
+        uintptr_t aligned_start = align_size(block_start, alignment);
+        size_t alignment_padding = aligned_start - block_start;
+
+        if (current->is_free && current->size >= size + alignment_padding) {
+            if (current->size > size + alignment_padding + sizeof(BlockHeader)) {
+                split_block(current, size + alignment_padding);
+            }
+            current->is_free = 0;
+            /* Restore MECID */
+            if (val_is_mec_enabled())
+                val_write_mecid(mecid);
+            return (void *)aligned_start;
+        }
+        current = current->next;
+    }
+
+    /* Restore MECID */
+    if (val_is_mec_enabled())
+        val_write_mecid(mecid);
+
+    return NULL;
+}
+
+/**
+  @brief  Free the memory allocated by UEFI Framework APIs
+  @param  ptr the base address of the memory range to be freed
+
+  @return None
+**/
+void val_memory_free_el3(void *ptr)
+{
+    uint32_t mecid = 0;
+
+    if (!ptr) return;
+
+   /* If MEC is enabled, the memory pool structures need to be accessed with
+       VAL_GMECID */
+    if (val_is_mec_enabled())
+    {
+        mecid = read_mecid_rl_a_el3();
+        val_write_mecid(VAL_GMECID);
+    }
+
+
+    BlockHeader *block = (BlockHeader *)((uint8_t *)ptr - sizeof(BlockHeader));
+    block->is_free = 1;
+
+    // Coalesce adjacent free blocks
+    BlockHeader *current = mem_pool.free_list;
+    while (current) {
+        if (current->is_free && current->next && current->next->is_free) {
+            current->size += current->next->size + sizeof(BlockHeader);
+            current->next = current->next->next;
+        }
+        current = current->next;
+    }
+
+    /* Restore MECID */
+    if (val_is_mec_enabled())
+        val_write_mecid(mecid);
+}
+
+/**
+ * @brief  Allocates requested buffer size in bytes with zeros in a contiguous memory
+ *         and returns the base address of the range.
+ *
+ * @param  size         allocation size in bytes
+ * @param  num          Requested number of (buffer * size)
+ * @retval ptr          pointer to allocated memory
+ */
+void *val_memory_calloc_el3(size_t num, size_t size, size_t alignment)
+{
+    size_t total_size = num * size;
+    void *ptr = val_memory_alloc_el3(total_size, alignment);
+    if (ptr) {
+        memset(ptr, 0, total_size);
+    }
+    return ptr;
+}
+
+/**
+ * @brief  Returns the physical address of the requested Virtual address
+ *
+ * @param  Va  Virtual address
+ * @return Va  Returns the VA because of the 1:1 memory mapping
+ */
+void *val_memory_virt_to_phys(void *va)
+{
+  return va;
+}
+
+/**
+ * @brief  Returns the virtual address of the requested physical address
+ *
+ * @param  pa  Physical address
+ * @return pa  Returns the PA because of the 1:1 memory mapping
+ */
+void *val_memory_phys_to_virt(uint64_t pa)
+{
+  return (void *)pa;
+}
+
+/**
+ * @brief  Conducts the SMMUv3 Root/Realm configuration/initialization in el3
+ *
+ * @return None
+ */
+void val_smmu_root_config_service(uint64_t arg0, uint64_t arg1, uint64_t arg2)
 {
   uint64_t data;
-  uint32_t idr5;
   smmu_master_attributes_t smmu_attr;
   pgt_descriptor_t pgt_attr;
-  uint32_t smmu_oas[SMMU_OAS_MAX_IDX] = {32, 36, 40, 42, 44, 48, 52};
 
-  switch (reg_config)
+  switch (arg0)
   {
-       case SMMU_ROOT_RME_IMPL_CHK:
-         INFO("SMMU base address & offset: 0x%lx \n",
-                         (uint64_t)ROOT_IOVIRT_SMMUV3_BASE + SMMU_ROOT_IDRO);
-         data = *(uint32_t *)(ROOT_IOVIRT_SMMUV3_BASE + SMMU_ROOT_IDRO);
-         INFO("SMMU ROOT IDRO: 0x%lx", data);
-         shared_data->shared_data_access[0].data = data;
-         break;
-       case SMMU_RLM_PGT_INIT:
-         INFO("SMMU Realm Initialisation\n");
-         val_smmu_init(smmu_info);
-         break;
-       case SMMU_RLM_SMMU_MAP:
-         INFO("SMMU realm page table map\n");
-         idr5 = *(uint32_t *)(ROOT_IOVIRT_SMMUV3_BASE + SMMU_IDR5_OFFSET);
-         val_get_tcr_info(&pgt_attr.tcr);
-         pgt_attr.pgt_base = read_ttbr_el3() & AARCH64_TTBR_ADDR_MASK;
-         pgt_attr.ias = smmu_oas[VAL_EXTRACT_BITS(idr5, 0, 2)];
-         pgt_attr.oas = get_max(40, pgt_attr.oas);
-         pgt_attr.mair = read_mair_el3();
-         smmu_attr.streamid = smmu_info;
-         smmu_attr.bypass = 1;
-         val_smmu_rlm_map(smmu_attr, pgt_attr);
-         break;
-       default:
-         INFO(" Invalid SMMU ROOT register config\n");
-         break;
+      case SMMU_ROOT_RME_IMPL_CHK:
+          INFO("SMMU base address & offset: 0x%lx \n",
+                      (uint64_t)ROOT_IOVIRT_SMMUV3_BASE + SMMU_ROOT_IDRO);
+          data = *(uint32_t *)(ROOT_IOVIRT_SMMUV3_BASE + SMMU_ROOT_IDRO);
+          INFO("SMMU ROOT IDRO: 0x%lx", data);
+          shared_data->shared_data_access[0].data = data;
+          break;
+      case SMMU_RLM_PGT_INIT:
+          INFO("SMMU Realm Initialisation\n");
+          val_smmu_init(arg1);
+          break;
+      case SMMU_RLM_SMMU_MAP:
+          INFO("SMMU realm page table map\n");
+          memcpy((void *)&smmu_attr, (void *)arg1, sizeof(smmu_master_attributes_t));
+          memcpy((void *)&pgt_attr, (void *)arg2, sizeof(pgt_descriptor_t));
+          val_smmu_rlm_map((smmu_master_attributes_t)smmu_attr, (pgt_descriptor_t)pgt_attr);
+          break;
+      case SMMU_RLM_ADD_DPT_ENTRY:
+          INFO("SMMU add DPT entry\n");
+          val_dpt_add_entry(arg1, arg2);
+          break;
+      case SMMU_RLM_DPTI:
+          INFO("SMMU DPT Invalidate\n");
+          val_dpt_invalidate_all(arg1);
+          break;
+      case SMMU_CHECK_MEC_IMPL:
+          shared_data->shared_data_access[0].data = val_smmu_supports_mec(arg1);
+          break;
+      case SMMU_GET_MECIDW:
+          shared_data->shared_data_access[0].data = val_smmu_get_mecidw(arg1);
+          break;
+      case SMMU_CONFIG_MECID:
+          memcpy((void *)&smmu_attr, (void *)arg1, sizeof(smmu_master_attributes_t));
+          val_smmu_set_rlm_ste_mecid((smmu_master_attributes_t)smmu_attr, arg2);
+          break;
+      default:
+          INFO(" Invalid SMMU ROOT register config\n");
+          break;
+  }
+}
+
+/**
+ * @brief Check if the Processing Element (PE) supports MEC (Memory Encryption Context).
+ *
+ * This function reads the ID_AA64MMFR3_EL1 system register to determine whether
+ * the Memory Encryption Context (MEC) feature is implemented by the PE (Processor Element).
+ *
+ *
+ * @return 1 if MEC is supported, 0 otherwise.
+ *
+ */
+unsigned int val_is_mec_supported(void)
+{
+    return (unsigned int)(read_id_aa64mmfr3_el1() >>
+        ID_AA64MMFR3_EL1_MEC_SHIFT) & ID_AA64MMFR3_EL1_MEC_MASK;
+}
+
+/**
+ * @brief Checks if SCTLR Extension is supported.
+ *
+ * @return 4-bit field indicating SCTLR Extension support level.
+ */
+static unsigned int val_is_sctlrx_supported(void)
+{
+    return (unsigned int)((read_id_aa64mmfr3_el1() >>
+        ID_AA64MMFR3_EL1_SCTLRX_SHIFT) & ID_AA64MMFR3_EL1_SCTLRX_MASK);
+}
+
+/**
+ * @brief Enable MEC (Memory Encryption Context) support if available.
+ *
+ * This function checks if the current Processing Element (PE) supports MEC.
+ * If supported, it enables the necessary bits SCTLR2_EL3 system register
+ * to activate the Memory Encryption Context feature.
+ *
+ * @param none
+ * @return none
+ */
+void val_enable_mec(void)
+{
+    uint64_t sctlr2_el3;
+
+    sctlr2_el3 = read_sctlr2_el3();
+
+    /* Check if MEC is supported on this Processing Element */
+    if (val_is_mec_supported() && val_is_sctlrx_supported()) {
+        /* Enable EMEC (Enable MEC bit) in SCTLR2_EL3 */
+        sctlr2_el3 |= SCTLR2_EMEC_MASK;
+        write_sctlr2_el3(sctlr2_el3);
+    } else {
+        /* Log an error if FEAT_MEC or FEAT_SCTLR2 is not supported */
+        ERROR("PE doesn't support FEAT_MEC or FEAT_SCTLR2\n");
+    }
+}
+
+/**
+ * @brief Disable MEC (Memory Encryption Context)
+ *
+ * @param none
+ * @return none
+ */
+void val_disable_mec(void)
+{
+    uint64_t sctlr2_el3;
+
+    sctlr2_el3 = read_sctlr2_el3();
+
+    /* Check if MEC is supported on this Processing Element */
+    if (val_is_mec_supported() && val_is_sctlrx_supported()) {
+        /* Disable EMEC (clear MEC enable bit) in SCTLR2_EL3 */
+        sctlr2_el3 &= ~SCTLR2_EMEC_MASK;
+        write_sctlr2_el3(sctlr2_el3);
+    } else {
+        /* Log an error if FEAT_MEC or FEAT_SCTLR2 is not supported */
+        ERROR("PE doesn't support FEAT_MEC or FEAT_SCTLR2\n");
+    }
+}
+
+/**
+ * @brief Check if MEC (Memory Encryption Context) is enabled.
+ *
+ * This function verifies whether the Memory Encryption Context feature
+ * is currently enabled by checking the corresponding bits in the
+ * SCTLR2_EL3 system register.
+ *
+ * @param none
+ * @return 1 if MEC is enabled, 0 otherwise.
+ */
+uint32_t val_is_mec_enabled(void)
+{
+  uint64_t sctlr2_el3 = 0;
+
+  /* Read current SCTLR2_EL3 value */
+  if (val_is_sctlrx_supported())
+      sctlr2_el3 = read_sctlr2_el3();
+
+  /* Check if SCTLR2_EL3.EMEC bit is set */
+  if (sctlr2_el3 & SCTLR2_EMEC_MASK) {
+      /* MEC is enabled */
+      return 1U;
+  } else {
+      /* MEC is not enabled */
+      return 0U;
+  }
+}
+
+/**
+ * @brief Write the specified MECID (Memory Encryption Context ID) to MECID_RL_A_EL3 register.
+ *
+ * This function programs the MECID_RL_A_EL3 system register with the given MECID value.
+ * After writing the register, it performs an Instruction Synchronization Barrier (ISB)
+ * to ensure the write is globally visible and completes execution ordering,
+ * followed by a TLB invalidation at EL3 for all entries (TLBI ALLE3IS).
+ *
+ * @param mecid The MECID value to be written (32-bit).
+ *
+ * @return none.
+ */
+void val_write_mecid(uint32_t mecid)
+{
+    /* Write the given MECID to MECID_RL_A_EL3 system register */
+    write_mecid_rl_a_el3(mecid);
+
+    /* Ensure instruction execution order and completion of register write */
+    isb();
+
+    /* Invalidate all TLB entries at EL3 (Inner Shareable domain) */
+    tlbi_alle3is();
+}
+
+/**
+ * @brief Handle MEC (Memory Encryption Context) related service requests.
+ *
+ * @param arg0 Command ID indicating the MEC service to perform. Supported values:
+ * @param arg1 Argument associated with the command (used for CONFIG_MECID).
+ * @param arg2 Reserved for future use or command-specific extensions.
+ * @return none.
+ */
+void val_mec_service(uint64_t arg0, uint64_t arg1, uint64_t arg2)
+{
+  switch (arg0)
+  {
+    case ENABLE_MEC:
+      INFO("Enabling MEC\n");
+      val_enable_mec();
+      break;
+
+    case CONFIG_MECID:
+      INFO("Config mecid\n");
+      val_write_mecid(arg1);
+      break;
+
+    case DISABLE_MEC:
+      INFO("Disabling MEC\n");
+      val_disable_mec();
+      break;
+
+    default:
+      INFO("Invalid MEC service\n");
+      break;
   }
 }

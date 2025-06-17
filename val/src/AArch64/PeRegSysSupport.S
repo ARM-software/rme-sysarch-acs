@@ -1,5 +1,5 @@
 #/** @file
-# Copyright (c) 2023, Arm Limited or its affiliates. All rights reserved.
+# Copyright (c) 2023, 2025, Arm Limited or its affiliates. All rights reserved.
 # SPDX-License-Identifier : Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -33,6 +33,9 @@
 #define GCC_ASM_IMPORT(func__)  \
        .extern  _CONCATENATE (__USER_LABEL_PREFIX__, func__)
 
+#define id_aa64mmfr3_el1 S3_0_C0_C7_3
+#define mecidr_el2 S3_4_C10_C8_7
+
 .text
 .align 3
 
@@ -43,6 +46,7 @@ GCC_ASM_EXPORT (ArmReadIdPfr1)
 GCC_ASM_EXPORT (AA64ReadMmfr0)
 GCC_ASM_EXPORT (AA64ReadMmfr1)
 GCC_ASM_EXPORT (AA64ReadMmfr2)
+GCC_ASM_EXPORT (AA64ReadMmfr3)
 GCC_ASM_EXPORT (AA64ReadCtr)
 GCC_ASM_EXPORT (ArmReadMmfr0)
 GCC_ASM_EXPORT (AA64ReadIsar0)
@@ -120,6 +124,37 @@ GCC_ASM_EXPORT (AA64ReadTtbr0El2)
 GCC_ASM_EXPORT (AA64ReadTtbr1El1)
 GCC_ASM_EXPORT (AA64ReadTtbr1El2)
 GCC_ASM_EXPORT (AA64WriteSctlr1)
+GCC_ASM_EXPORT (AA64ReadVttbr)
+GCC_ASM_EXPORT (AA64ReadVtcr)
+GCC_ASM_EXPORT (AA64WriteVtcr)
+GCC_ASM_EXPORT (AA64WriteVttbr)
+GCC_ASM_EXPORT (AA64WriteHcr)
+GCC_ASM_EXPORT (AA64ReadMecidrEl2)
+
+ASM_PFX(AA64WriteVtcr):
+  msr   vtcr_el2, x0
+  tlbi  alle2
+  dsb   sy
+  isb
+  ret
+
+ASM_PFX(AA64WriteVttbr):
+  msr   vttbr_el2, x0
+  isb
+  ret
+
+ASM_PFX(AA64WriteHcr):
+  msr   hcr_el2, x0
+  isb
+  ret
+
+ASM_PFX(AA64ReadVttbr):
+  mrs   x0, vttbr_el2           // Read VTTBR_EL2
+  ret
+
+ASM_PFX(AA64ReadVtcr):
+  mrs   x0, vtcr_el2           // Read VTCR_EL2
+  ret
 
 ASM_PFX(AA64WriteSctlr1):
   msr   sctlr_el1, x0          //write sctlr_el1
@@ -148,6 +183,10 @@ ASM_PFX(AA64ReadMmfr1):
 
 ASM_PFX(AA64ReadMmfr2):
   mrs   x0, id_aa64mmfr2_el1
+  ret
+
+ASM_PFX(AA64ReadMmfr3):
+  mrs   x0, id_aa64mmfr3_el1
   ret
 
 ASM_PFX(AA64ReadCtr):
@@ -457,6 +496,11 @@ ASM_PFX(AA64ReadTtbr0El1):
 ASM_PFX(AA64ReadTtbr1El1):
   mrs   x0, ttbr1_el1           // read EL1 TTBR1
   ret
+
+ASM_PFX(AA64ReadMecidrEl2):
+  mrs   x0, mecidr_el2           // read EL2 MECIDR
+  ret
+
 
 ASM_PFX(ArmRdvl):
   //RDVL   x0, #8   // once instruction supports Read Vector Length

@@ -38,7 +38,7 @@ static
 void payload2(void)
 {
   uint32_t index = val_pe_get_index_mpid(val_pe_get_mpid());
-  uint64_t VA2, rd_data, attr;
+  uint64_t VA2, pe2_data, attr;
 
   VA2 = val_get_free_va(size);
   attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(INNER_SHAREABLE)
@@ -51,11 +51,11 @@ void payload2(void)
   shared_data->shared_data_access[0].access_type = READ_DATA;
 
   val_pe_access_mut_el3();
-  rd_data = shared_data->shared_data_access[0].data;
+  pe2_data = shared_data->shared_data_access[0].data;
 
-  if (rd_data == Data2)
+  if (pe2_data == Data2)
   {
-    val_set_test_data(index, rd_data, 0);
+    val_set_test_data(index, pe2_data, 0);
     val_set_status(index, RESULT_FAIL(TEST_NUM, 01));
   }
   else

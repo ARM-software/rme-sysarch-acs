@@ -42,6 +42,16 @@
 #define SCR_NS_MASK        (0x1ull << SCR_NS_SHIFT)
 #define SCR_NSE_SHIFT      62
 #define SCR_NSE_MASK       (0x1ull << SCR_NSE_SHIFT)
+#define SCR_MEC_EN_SHIFT   49
+#define SCR_MEC_EN_MASK    (0x1ull << SCR_MEC_EN_SHIFT)
+#define SCR_SCTLR2EN_SHIFT 44
+#define SCR_SCTLR2EN_MASK  (0x1ull << SCR_SCTLR2EN_SHIFT)
+#define SCTLR2_EMEC_SHIFT  1
+#define SCTLR2_EMEC_MASK   (0x1ull << SCTLR2_EMEC_SHIFT)
+#define ID_AA64MMFR3_EL1_MEC_SHIFT          U(28)
+#define ID_AA64MMFR3_EL1_MEC_MASK           ULL(0xf)
+#define ID_AA64MMFR3_EL1_SCTLRX_SHIFT       U(4)
+#define ID_AA64MMFR3_EL1_SCTLRX_MASK        ULL(0xf)
 
 #define ALLEXCPTNS_MASK 0x7ULL
 #define ALLEXCPTNS_MASK_BIT 6
@@ -51,6 +61,9 @@
 #define get_max(a, b)   (((a) > (b))?(a):(b))
 #define CIPOPA_NS_BIT           63
 #define CIPOPA_NSE_BIT          62
+#define CIPAE_NS_BIT           63
+#define CIPAE_NSE_BIT          62
+
 
 /* Page table defines */
 #define DESC_NSE_BIT    11
@@ -140,7 +153,20 @@ typedef struct {
   uint32_t orgn:2;
   uint32_t irgn:2;
   uint32_t tsz:6;
+  uint32_t sl:2;
+  uint32_t tg_size_log2:5;
 } TCR_EL3_INFO;
+
+typedef struct {
+  uint32_t ps:3;
+  uint32_t tg:2;
+  uint32_t sh:2;
+  uint32_t orgn:2;
+  uint32_t irgn:2;
+  uint32_t tsz:6;
+  uint32_t sl:2;
+  uint32_t tg_size_log2:5;
+} VTCR_EL2_INFO;
 
 typedef struct {
   uint64_t pgt_base;
@@ -149,12 +175,15 @@ typedef struct {
   uint64_t mair;
   uint32_t stage;
   TCR_EL3_INFO tcr;
+  VTCR_EL2_INFO vtcr;
 } pgt_descriptor_t;
 
-/* SMMU Realm Defines */
-#define SMMU_IDR5_OFFSET 0x14
-#define SMMU_IAS_MAX     40
-#define SMMU_OAS_MAX_IDX 7
+typedef struct {
+  uint64_t physical_address;
+  uint64_t virtual_address;
+  uint64_t length;
+  uint64_t attributes;
+} memory_region_descriptor_t;
 
 typedef struct {
     uint32_t smmu_index;
@@ -164,6 +193,18 @@ typedef struct {
     uint32_t stage2;
     uint32_t bypass;
 } smmu_master_attributes_t;
+
+typedef struct BlockHeader {
+    size_t size;                // Size of the block
+    int is_free;                // Block free status
+    struct BlockHeader *next;   // Pointer to the next block
+} BlockHeader;
+
+typedef struct {
+    uint8_t *base;              // Base address of the memory pool
+    size_t size;                // Total size of the pool
+    BlockHeader *free_list;     // Head of the free list
+} MemoryPool;
 
 uint32_t val_smmu_init(uint32_t num_smmu);
 uint32_t val_smmu_rlm_map(smmu_master_attributes_t master_attr, pgt_descriptor_t pgt_desc);
@@ -194,9 +235,13 @@ void update_elr_el3(uint64_t reg_value);
 void update_spsr_el3(uint64_t reg_value);
 void exception_handler_user(void);
 void tlbi_vae3(uint64_t VA);
+void tlbi_alle3is(void);
+void isb(void);
 void rme_install_handler(void);
 void add_gpt_entry(uint64_t PA, uint64_t GPI);
 void add_mmu_entry(uint64_t VA, uint64_t PA, uint64_t acc_pas);
+uint32_t val_realm_pgt_create(memory_region_descriptor_t *mem_desc, pgt_descriptor_t *pgt_desc);
+void val_realm_pgt_destroy(pgt_descriptor_t *pgt_desc);
 void map_shared_mem(void);
 void ack_handler_el3(void);
 void save_vbar_el3(uint64_t *el3_handler);
@@ -210,7 +255,13 @@ uint64_t read_sctlr_el3(void);
 uint64_t read_sctlr_el2(void);
 uint64_t write_scr_el3(uint64_t value);
 uint64_t read_tcr_el3(void);
+uint64_t read_tcr_el2(void);
 uint64_t read_ttbr_el3(void);
+uint64_t read_ttbr_el2(void);
+uint64_t read_vtcr(void);
+uint64_t read_vttbr(void);
+void write_vttbr(uint64_t write_value);
+void write_vtcr(uint64_t write_data);
 uint64_t at_s1e3w(uint64_t VA);
 uint64_t get_gpt_index(uint64_t PA, uint8_t level, uint8_t l0gptsz, uint8_t pps, uint8_t p);
 bool is_gpi_valid(uint64_t GPI);
@@ -229,8 +280,34 @@ uint32_t log2_page_size(uint64_t size);
 void acs_str(uint64_t *address, uint64_t data);
 void acs_ldr_pas_filter(uint64_t *address, uint64_t data);
 uint32_t val_get_pgt_attr_indx(uint64_t table_desc);
-void val_smmu_root_config_service(uint64_t reg_config, uint32_t smmu_info);
+void *val_memory_virt_to_phys(void *va);
+void *val_memory_phys_to_virt(uint64_t pa);
+void *val_memory_alloc_el3(size_t size, size_t alignment);
+void val_memory_free_el3(void *ptr);
+void *val_memory_calloc_el3(size_t num, size_t size, size_t alignment);
+void val_smmu_root_config_service(uint64_t arg0, uint64_t arg1, uint64_t arg2);
 void val_get_tcr_info(TCR_EL3_INFO *tcr_el3);
+void val_mmio_write_el3(uintptr_t addr, uint32_t val);
+uint32_t val_mmio_read_el3(uintptr_t addr);
+uint32_t val_mmio_read64_el3(uintptr_t addr);
+void val_mmio_write64_el3(uintptr_t addr, uint64_t val);
+void mem_barrier(void);
+uint32_t val_dpt_add_entry(uint64_t translated_addr, uint64_t smmu_info);
+void val_dpt_invalidate_all(uint64_t smmu_index);
+uint64_t read_sctlr2_el3(void);
+uint64_t write_sctlr2_el3(uint64_t value);
+void write_mecid_rl_a_el3(uint64_t mecid);
+uint64_t read_mecid_rl_a_el3(void);
+void val_write_mecid(uint32_t mecid);
+uint64_t read_id_aa64mmfr3_el1(void);
+unsigned int val_is_mec_supported(void);
+void val_mec_service(uint64_t arg0, uint64_t arg1, uint64_t arg2);
+void val_enable_mec(void);
+void val_disable_mec(void);
+uint32_t val_is_mec_enabled(void);
+void cmo_cipae(uint64_t PA);
+uint32_t val_smmu_set_rlm_ste_mecid(smmu_master_attributes_t master_attr, uint32_t mecid);
+bool val_smmu_supports_mec(uint64_t smmu_base);
+uint32_t val_smmu_get_mecidw(uint64_t smmu_base);
 
 #endif //__ASSEMBLER__
-

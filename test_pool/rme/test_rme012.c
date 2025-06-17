@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2023-2024, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2023-2024, 2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -41,9 +41,14 @@ void payload(void)
 
   struct_sh_data *shared_data = (struct_sh_data *) SHARED_ADDRESS;
   uint32_t index = val_pe_get_index_mpid(val_pe_get_mpid()), attr;
-  uint64_t wt_data, rd_data, PA_RLM = REALM_SMEM_BASE;
+  uint64_t wt_data, rd_data, PA_RLM, size;
 
   wt_data = RANDOM_DATA_1;
+  size = val_get_min_tg();
+  PA_RLM = val_get_free_pa(size, size);
+  /* Map the PA as REALM in GPT table */
+  val_add_gpt_entry_el3(PA_RLM, GPT_REALM);
+
   if (val_read_reset_status() == RESET_TST12_FLAG)
           goto reset_done;
 

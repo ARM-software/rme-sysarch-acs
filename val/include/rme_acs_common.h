@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022-2024, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -29,6 +29,8 @@
 #define ACS_SMMU_TEST_NUM_BASE       400
 #define ACS_LEGACY_TEST_NUM_BASE     500
 #define ACS_RME_DA_TEST_NUM_BASE     600
+#define ACS_RME_DPT_TEST_NUM_BASE    700
+#define ACS_RME_MEC_TEST_NUM_BASE    800
 
 #define STATE_BIT   28
 #define STATE_MASK 0xF
@@ -128,7 +130,9 @@ typedef enum {
     PCIE_MODULE,
     RME_MODULE,
     SMMU_MODULE,
-    DA_MODULE
+    DA_MODULE,
+    DPT_MODULE,
+    MEC_MODULE
 } MODULE_ID_e;
 
 #endif

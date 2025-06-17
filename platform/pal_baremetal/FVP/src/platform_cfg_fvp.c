@@ -19,10 +19,9 @@
 #include "include/platform_override_struct.h"
 
 /* Populate the skip array with the module or test numbers to be excluded from the run */
-uint32_t  g_skip_test_num[MAX_TEST_SKIP_NUM] = { 1000, 10000, 10000, 10000, 10000,
-                                                 10000, 10000, 10000, 10000, 10000};
+uint32_t  g_skip_test_num[MAX_TEST_SKIP_NUM] = { 0,100,200,300,400,500,614 };
 uint32_t  g_single_test = SINGLE_TEST_SENTINEL;
-uint32_t  g_single_module = 600; //SINGLE_MODULE_SENTINEL;
+uint32_t  g_single_module = SINGLE_MODULE_SENTINEL;
 
 PE_INFO_TABLE platform_pe_cfg = {
 
@@ -218,6 +217,20 @@ PCIE_READ_TABLE platform_pcie_device_hierarchy = {
     .device[6].dma_64bit     = PLATFORM_PCIE_DEV6_DMA_64BIT,
     .device[6].behind_smmu   = PLATFORM_PCIE_DEV6_BEHIND_SMMU,
     .device[6].atc_present   = PLATFORM_PCIE_DEV6_ATC_SUPPORT,
+
+    .device[7].class_code    = PLATFORM_PCIE_DEV7_CLASSCODE,
+    .device[7].vendor_id     = PLATFORM_PCIE_DEV7_VENDOR_ID,
+    .device[7].device_id     = PLATFORM_PCIE_DEV7_DEV_ID,
+    .device[7].bus           = PLATFORM_PCIE_DEV7_BUS_NUM,
+    .device[7].dev           = PLATFORM_PCIE_DEV7_DEV_NUM,
+    .device[7].func          = PLATFORM_PCIE_DEV7_FUNC_NUM,
+    .device[7].seg           = PLATFORM_PCIE_DEV7_SEG_NUM,
+    .device[7].dma_support   = PLATFORM_PCIE_DEV7_DMA_SUPPORT,
+    .device[7].dma_coherent  = PLATFORM_PCIE_DEV7_DMA_COHERENT,
+    .device[7].p2p_support   = PLATFORM_PCIE_DEV7_P2P_SUPPORT,
+    .device[7].dma_64bit     = PLATFORM_PCIE_DEV7_DMA_64BIT,
+    .device[7].behind_smmu   = PLATFORM_PCIE_DEV7_BEHIND_SMMU,
+    .device[7].atc_present   = PLATFORM_PCIE_DEV7_ATC_SUPPORT,
 /** Configure more PCIe info details as per specification for more than 1 ECAM
     Refer to platform_override_fvp.h file for an example
 **/
@@ -225,6 +238,8 @@ PCIE_READ_TABLE platform_pcie_device_hierarchy = {
 
 PCIE_ROOT_INFO_TABLE platform_root_pcie_cfg = {
     .block[0].hb_enteries         = PLATFORM_OVERRIDE_PCIE_ECAM0_HB_COUNT,
+    .block[0].hb_bar32_value[0]   = PLATFORM_OVERRIDE_PCIE_ECAM0_HB_BAR32,
+    .block[0].hb_bar64_value[0]   = PLATFORM_OVERRIDE_PCIE_ECAM0_HB_BAR64,
     .block[0].segment_num[0]      = PLATFORM_OVERRIDE_PCIE_ECAM0_SEG_NUM,
     .block[0].start_bus_num[0]    = PLATFORM_OVERRIDE_PCIE_ECAM0_START_BUS_NUM,
     .block[0].end_bus_num[0]      = PLATFORM_OVERRIDE_PCIE_ECAM0_END_BUS_NUM,

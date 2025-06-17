@@ -21,6 +21,7 @@
 #include "include/rme_acs_memory.h"
 #include "include/rme_acs_pgt.h"
 #include "include/val_interface.h"
+#include "include/rme_acs_el32.h"
 
 void *
 val_memory_alloc(uint32_t size)
@@ -254,3 +255,41 @@ uint32_t val_enable_mmu(void)
     return ACS_STATUS_PASS;
 }
 #endif  // TARGET_BM_BOOT
+
+/**
+ * @brief Compare two memory regions word-by-word with source bffer read from EL3.
+ *
+ * This function reads 32-bit words from a secure source buffer at EL3 and
+ * compares them against words in a non-secure (NS) destination buffer.
+ * The EL3 read is performed via platform-specific routines, while the destination
+ * buffer is accessed normally from the Non-Secure world.
+ *
+ * @param[in] src   Pointer to the source buffer;
+ * @param[in] dest  Pointer to the destination buffer.
+ * @param[in] size  Size of memory comparision;
+ *
+ * @retval 0 All words matched successfully.
+ * @retval 1 A mismatch was detected between EL3-read data and NS buffer data.
+ */
+uint32_t val_memory_compare_src_el3(uint32_t *src, uint32_t *dest, uint32_t size)
+{
+  /* Configure Read Access */
+  shared_data->num_access = 1;
+  shared_data->shared_data_access[0].access_type = READ_DATA;
+
+  while (size > 0)
+  {
+      /* Read source buffer from EL3*/
+      shared_data->shared_data_access[0].addr = (uint64_t)src;
+      val_pe_access_mut_el3();
+
+      if (shared_data->shared_data_access[0].data != *dest)
+          return 1;
+
+      src++;
+      dest++;
+      size -= sizeof(uint32_t);
+  }
+
+  return 0;
+}

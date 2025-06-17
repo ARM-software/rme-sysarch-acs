@@ -48,6 +48,7 @@ UINT64  g_stack_pointer;
 UINT64  g_exception_ret_addr;
 UINT64  g_ret_addr;
 UINT32  g_wakeup_timeout;
+UINT32  g_rl_smmu_init;
 SHELL_FILE_HANDLE g_rme_log_file_handle;
 
 STATIC VOID FlushImage (VOID)
@@ -462,7 +463,14 @@ ShellAppMainrme (
   Status |= val_smmu_execute_tests(val_pe_get_num());
 
   Print(L"\n      *** Starting RME DA tests ***  \n");
-  Status = val_rme_da_execute_tests(val_pe_get_num());
+  Status |= val_rme_da_execute_tests(val_pe_get_num());
+
+  Print(L"\n      *** Starting RME DPT tests ***  \n");
+  Status |= val_rme_dpt_execute_tests(val_pe_get_num());
+
+  Print(L"\n      *** Starting RME MEC tests ***  \n");
+  Status |= val_rme_mec_execute_tests(val_pe_get_num());
+
 
 print_test_status:
   val_print(ACS_PRINT_TEST, "\n     ------------------------------------------------------- \n", 0);

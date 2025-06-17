@@ -131,18 +131,11 @@ payload(void)
   uint32_t instance;
   uint32_t test_skip;
   uint64_t bar_base;
+  uint32_t test_fails;
 
   test_skip = 1;
   index = val_pe_get_index_mpid(val_pe_get_mpid());
   instance = val_exerciser_get_info(EXERCISER_NUM_CARDS);
-
-  /* Check If PCIe Hierarchy supports P2P. */
-  if (!val_pcie_p2p_support())
-  {
-    val_print(ACS_PRINT_DEBUG, "\n       P2P is supported, Skipping Test", 0);
-    val_set_status(index, RESULT_SKIP(TEST_NUM, 1));
-    return;
-  }
 
   while (instance-- != 0)
   {
@@ -163,10 +156,23 @@ payload(void)
       if (get_target_exer_bdf(req_rp_bdf, &tgt_e_bdf, &tgt_rp_bdf, &bar_base))
           continue;
 
-      val_pcie_enable_tdisp(req_rp_bdf);
-      val_pcie_enable_tdisp(tgt_rp_bdf);
-      val_print(ACS_PRINT_DEBUG, "\n       Target exerciser BDF - 0x%x", tgt_e_bdf);
       test_skip = 0;
+
+      if (val_pcie_enable_tdisp(req_rp_bdf))
+      {
+          val_print(ACS_PRINT_ERR, "\n        Unable to set tdisp_en for BDF: 0x%x", req_rp_bdf);
+          test_fails++;
+          continue;
+      }
+
+      if (val_pcie_enable_tdisp(tgt_rp_bdf))
+      {
+          val_print(ACS_PRINT_ERR, "\n        Unable to set tdisp_en for BDF: 0x%x", tgt_rp_bdf);
+          test_fails++;
+          continue;
+      }
+
+      val_print(ACS_PRINT_DEBUG, "\n       Target exerciser BDF - 0x%x", tgt_e_bdf);
 
       if (val_device_lock(req_e_bdf))
       {
@@ -202,12 +208,14 @@ test_clean:
       /* Clear Error Status Bits */
       val_pcie_clear_device_status_error(req_rp_bdf);
       val_pcie_clear_sig_target_abort(req_rp_bdf);
-    }
+  }
 
-    if (test_skip) {
-        val_set_status(index, RESULT_SKIP(TEST_NUM, 2));
-        return;
-    }
+  if (test_skip)
+    val_set_status(index, RESULT_SKIP(TEST_NUM, 02));
+  else if (test_fails)
+      val_set_status(index, RESULT_FAIL(TEST_NUM, test_fails));
+  else
+      val_set_status(index, RESULT_PASS(TEST_NUM, 01));
 
   /* Pass Test */
   val_set_status(index, RESULT_PASS(TEST_NUM, 1));

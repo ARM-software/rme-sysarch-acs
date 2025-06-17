@@ -171,6 +171,7 @@ void plat_arm_acs_smc_handler(uint64_t services, uint64_t arg0, uint64_t arg1, u
       rme_install_handler();
       break;
     case RME_ADD_GPT_ENTRY:
+      INFO("RME GPT mapping service \n");
       add_gpt_entry(arg0, arg1);
       tlbi_paallos();
       break;
@@ -184,8 +185,8 @@ void plat_arm_acs_smc_handler(uint64_t services, uint64_t arg0, uint64_t arg1, u
       break;
     case RME_CMO_POPA:
       INFO("RME CMO to PoPA service \n");
-      modify_desc(arg0, CIPOPA_NS_BIT, NSE_SET(arg1), 1);
-      modify_desc(arg0, CIPOPA_NSE_BIT, NS_SET(arg1), 1);
+      arg0 = modify_desc(arg0, CIPOPA_NS_BIT, NS_SET(arg1), 1);
+      arg0 = modify_desc(arg0, CIPOPA_NSE_BIT, NSE_SET(arg1), 1);
       cmo_cipapa(arg0);
       break;
     case RME_ACCESS_MUT:
@@ -245,7 +246,25 @@ void plat_arm_acs_smc_handler(uint64_t services, uint64_t arg0, uint64_t arg1, u
       break;
     case SMMU_CONFIG_SERVICE:
       INFO("SMMU ROOT Register Configuration validate \n");
-      val_smmu_root_config_service(arg0, arg1);
+      val_smmu_root_config_service(arg0, arg1, arg2);
+      break;
+    case RME_PGT_CREATE:
+      INFO("RME pgt_create service \n");
+      val_realm_pgt_create((memory_region_descriptor_t *)arg0, (pgt_descriptor_t *) arg1);
+      break;
+    case RME_PGT_DESTROY:
+      INFO("RME pgt_destroy service \n");
+      val_realm_pgt_destroy((pgt_descriptor_t *) arg0);
+      break;
+    case MEC_SERVICE:
+      INFO("MEC Service");
+      val_mec_service(arg0, arg1, arg2);
+      break;
+    case RME_CMO_POE:
+      INFO("RME CMO to PoE service \n");
+      arg0 = modify_desc(arg0, CIPAE_NS_BIT, 1, 1);
+      arg0 = modify_desc(arg0, CIPAE_NSE_BIT, 1, 1);
+      cmo_cipae(arg0);
       break;
     default:
       INFO(" Service not present\n");

@@ -26,6 +26,8 @@
  "${VAL_DIR}/src/acs_status.c"
  "${VAL_DIR}/src/acs_pe.c"
  "${VAL_DIR}/src/acs_da.c"
+ "${VAL_DIR}/src/acs_dpt.c"
+ "${VAL_DIR}/src/acs_mec.c"
  "${VAL_DIR}/src/test_entry_rme.c"
  "${VAL_DIR}/src/acs_pe_infra.c"
  "${VAL_DIR}/src/acs_gic.c"

@@ -20,9 +20,18 @@
 
 #include "pal_interface.h"
 
+#define ul(x) ((unsigned long)(x))
+
 #define MAX_NUM_PE               (2 << 27)
 
 #define MPIDR_AFF_MASK           (0xFF00FFFFFF)
+
+#define INPLACE(regfield, val) \
+        (((val) + ul(0)) << (regfield##_SHIFT))
+
+#define MASK(regfield) \
+        ((~0ul >> (64ul - (regfield##_WIDTH))) << (regfield##_SHIFT))
+
 
 /* MPIDR macros */
 #define PAL_MPIDR_AFFLVL_MASK    0xffull
@@ -56,6 +65,7 @@
 #define AARCH64_EL_MASK (0x3ull << 2)
 
 #define AARCH64_HCR_E2H_MASK (0x1ull << 34)
+#define AARCH64_HCR_VM_MASK  (0x1ull << 0)
 #define AARCH64_TTBR_ADDR_MASK (((0x1ull << 47) - 1) << 1)
 #define RME_TCR_TG1_SHIFT   30
 #define RME_TCR_SH1_SHIFT   28
@@ -92,6 +102,49 @@
 #define RME_MIN_TG4_MASK   (0xfull << RME_MIN_TG4_SHIFT)
 #define RME_MIN_TG16_MASK  (0xfull << RME_MIN_TG16_SHIFT)
 
+#define VTCR_IRGN0_SHIFT        8
+#define VTCR_IRGN0_WIDTH        2
+#define VTCR_IRGN0_WBRAWA       INPLACE(VTCR_IRGN0, ul(1))
+
+#define VTCR_ORGN0_SHIFT        10
+#define VTCR_ORGN0_WIDTH        2
+#define VTCR_ORGN0_WBRAWA       INPLACE(VTCR_ORGN0, ul(1))
+
+#define VTCR_SH0_SHIFT          12
+#define VTCR_SH0_WIDTH          2
+#define VTCR_SH0_IS             INPLACE(VTCR_SH0, ul(3))
+
+#define VTCR_TG0_SHIFT          14
+#define VTCR_TG0_WIDTH          2
+#define VTCR_TG0_4K             INPLACE(VTCR_TG0, ul(0))
+
+#define VTCR_PS_SHIFT           16
+#define VTCR_PS_WIDTH           3
+#define VTCR_PS_40              INPLACE(VTCR_PS, ul(2))
+
+#define VTCR_DS_SHIFT           32
+#define VTCR_DS_WIDTH           1
+#define VTCR_DS_52BIT           INPLACE(VTCR_DS, ul(1))
+
+#define VTCR_VS                 (ul(1) << 19)
+#define VTCR_NSA                (ul(1) << 30)
+#define VTCR_RES1               (ul(1) << 31)
+
+#define VTCR_T0SZ_SHIFT         0
+#define VTCR_T0SZ_WIDTH         6
+#define VTCR_T0SZ_24            INPLACE(VTCR_T0SZ, ul(24))
+
+#define VTCR_SL0_SHIFT          6
+#define VTCR_SL0_WIDTH          2
+
+#define VTCR_SL0_4K_L2          INPLACE(VTCR_SL0, ul(0))
+#define VTCR_SL0_4K_L1          INPLACE(VTCR_SL0, ul(1))
+#define VTCR_SL0_4K_L0          INPLACE(VTCR_SL0, ul(2))
+#define VTCR_SL0_4K_L3          INPLACE(VTCR_SL0, ul(3))
+#define VTCR_SL0_4K_LM1         VTCR_SL0_4K_L2
+
+#define VTCR_RESET_VAL     (0x1ull << 31)
+
 typedef enum {
   MPIDR_EL1 = 1,
   ID_AA64PFR0_EL1,
@@ -99,6 +152,7 @@ typedef enum {
   ID_AA64MMFR0_EL1,
   ID_AA64MMFR1_EL1,
   ID_AA64MMFR2_EL1,
+  ID_AA64MMFR3_EL1,
   ID_AA64DFR0_EL1,
   ID_AA64DFR1_EL1,
   CTR_EL0,
@@ -158,7 +212,11 @@ typedef enum {
   RDVL,
   MAIR_ELx,
   TCR_ELx,
-  TTBR_ELx
+  TTBR_ELx,
+  VTTBR,
+  VTCR,
+  HCR,
+  MECIDR_EL2
 } RME_ACS_PE_REGS;
 
 uint64_t ArmReadMpidr(void);
@@ -174,6 +232,8 @@ uint64_t AA64ReadMmfr0(void);
 uint64_t AA64ReadMmfr1(void);
 
 uint64_t AA64ReadMmfr2(void);
+
+uint64_t AA64ReadMmfr3(void);
 
 uint64_t AA64ReadCtr(void);
 
@@ -289,6 +349,10 @@ uint64_t AA64ReadTcr1(void);
 
 uint64_t AA64ReadTcr2(void);
 
+uint64_t AA64ReadVttbr(void);
+
+uint64_t AA64ReadVtcr(void);
+
 uint64_t AA64ReadTtbr0El1(void);
 
 uint64_t AA64ReadTtbr0El2(void);
@@ -296,6 +360,8 @@ uint64_t AA64ReadTtbr0El2(void);
 uint64_t AA64ReadTtbr1El1(void);
 
 uint64_t AA64ReadTtbr1El2(void);
+
+uint64_t AA64ReadMecidrEl2(void);
 
 void AA64WritePmsirr(uint64_t write_data);
 
@@ -332,6 +398,7 @@ void DisableSpe(void);
 void val_pe_update_elr(void *context, uint64_t offset);
 
 uint64_t val_pe_get_esr(void *context);
+uint64_t val_pe_get_elr(void *context);
 
 uint64_t val_pe_get_far(void *context);
 
@@ -344,45 +411,13 @@ void val_pe_initialize_default_exception_handler(void (*esr)(uint64_t, void *));
 void val_pe_context_restore(uint64_t sp);
 void val_pe_default_esr(uint64_t interrupt_type, void *context);
 void val_pe_cache_clean_range(uint64_t start_addr, uint64_t length);
+void val_pe_cache_clean_invalidate_range(uint64_t start_addr, uint64_t length);
+void val_pe_cache_invalidate_range(uint64_t start_addr, uint64_t length);
 void set_daif(void);
 void AA64WriteSctlr1(uint64_t write_data);
-
-uint32_t c001_entry(void);
-uint32_t c002_entry(uint32_t num_pe);
-uint32_t c003_entry(uint32_t num_pe);
-uint32_t c004_entry(uint32_t num_pe);
-uint32_t c005_entry(uint32_t num_pe);
-uint32_t c006_entry(uint32_t num_pe);
-uint32_t c007_entry(uint32_t num_pe);
-uint32_t c008_entry(uint32_t num_pe);
-uint32_t c009_entry(uint32_t num_pe);
-uint32_t c010_entry(uint32_t num_pe);
-uint32_t c011_entry(uint32_t num_pe);
-uint32_t c012_entry(uint32_t num_pe);
-uint32_t c013_entry(uint32_t num_pe);
-uint32_t c014_entry(uint32_t num_pe);
-uint32_t c015_entry(uint32_t num_pe);
-uint32_t c016_entry(uint32_t num_pe);
-uint32_t c017_entry(uint32_t num_pe);
-uint32_t c018_entry(uint32_t num_pe);
-uint32_t c019_entry(uint32_t num_pe);
-uint32_t c020_entry(uint32_t num_pe);
-uint32_t c021_entry(uint32_t num_pe);
-uint32_t c022_entry(uint32_t num_pe);
-uint32_t c023_entry(uint32_t num_pe);
-uint32_t c024_entry(uint32_t num_pe);
-uint32_t c025_entry(uint32_t num_pe);
-uint32_t c026_entry(uint32_t num_pe);
-uint32_t c027_entry(uint32_t num_pe);
-uint32_t c028_entry(uint32_t num_pe);
-uint32_t c029_entry(uint32_t num_pe);
-uint32_t c030_entry(uint32_t num_pe);
-uint32_t c031_entry(uint32_t num_pe);
-uint32_t c032_entry(uint32_t num_pe);
-uint32_t c033_entry(uint32_t num_pe);
-uint32_t c034_entry(uint32_t num_pe);
-uint32_t c035_entry(uint32_t num_pe);
-uint32_t c036_entry(uint32_t num_pe);
+void AA64WriteHcr(uint64_t write_data);
+void AA64WriteVttbr(uint64_t write_data);
+void AA64WriteVtcr(uint64_t write_data);
 
 #endif
 

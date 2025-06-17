@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2024, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2024-2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -51,6 +51,7 @@ payload()
   uint32_t pgt_attr_el3;
   uint32_t pe_index = val_pe_get_index_mpid(val_pe_get_mpid());
   uint32_t test_fails = 0;
+  uint32_t test_skip = 1;
   uint32_t tbl_index;
   uint32_t bdf;
   uint32_t dp_type;
@@ -68,11 +69,14 @@ payload()
 
       if (dp_type == RP)
       {
+          test_skip = 0;
+
           /* Get the PCIE DVSEC Capability register */
           if (val_pcie_find_da_capability(bdf, &da_cap_base) != PCIE_SUCCESS)
           {
               val_print(ACS_PRINT_ERR,
                               "\n       PCIe DA DVSEC capability not present,bdf 0x%x", bdf);
+              test_fails++;
               continue;
           }
 
@@ -81,6 +85,7 @@ payload()
           {
               val_print(ACS_PRINT_ERR,
                               "\n       PCIe IDE Capability not present for BDF: 0x%x", bdf);
+              test_fails++;
               continue;
           }
 
@@ -162,7 +167,10 @@ payload()
           }
       }
   }
-  if (test_fails)
+
+  if (test_skip)
+      val_set_status(pe_index, RESULT_SKIP(TEST_NUM, 01));
+  else if (test_fails)
       val_set_status(pe_index, RESULT_FAIL(TEST_NUM, test_fails));
   else
       val_set_status(pe_index, RESULT_PASS(TEST_NUM, 01));

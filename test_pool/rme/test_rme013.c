@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2023-2024, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2023-2024, 2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -139,6 +139,7 @@ payload (void)
     uint32_t device_id, its_id;
     uint32_t page_size = val_memory_page_size();
     uint64_t ttbr;
+    uint32_t size;
     smmu_master_attributes_t master;
     memory_region_descriptor_t mem_desc_array[2], *mem_desc;
     pgt_descriptor_t pgt_desc;
@@ -198,13 +199,11 @@ payload (void)
     }
 
     /* Get a WB, outer shareable DDR Buffer of size test_data_blk_size */
-    dram_buf1_virt = val_memory_alloc_cacheable(e_bdf,
-                    test_data_blk_size * NUM_PAS, &dram_buf1_phys);
-    if (!dram_buf1_virt) {
-      val_print(ACS_PRINT_ERR, "\n       WB and OSH mem alloc failure %x", 02);
-      val_set_status(pe_index, RESULT_FAIL(TEST_NUM, 02));
-      goto test_fail;
-    }
+    size = val_get_min_tg();
+    dram_buf1_phys = (void *)val_get_free_pa(test_data_blk_size * NUM_PAS, size);
+    dram_buf1_virt = (void *)val_get_free_va(test_data_blk_size * NUM_PAS);
+    attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(NON_SHAREABLE) | PGT_ENTRY_AP_RW);
+
 
     /* If ATS Capability Not Present, Skip. */
     if (val_pcie_find_capability(e_bdf, PCIE_ECAP, ECID_ATS, &cap_base) != PCIE_SUCCESS)
@@ -217,6 +216,19 @@ payload (void)
     pgt_desc.pgt_base = (ttbr & AARCH64_TTBR_ADDR_MASK);
     pgt_desc.mair = val_pe_reg_read(MAIR_ELx);
     pgt_desc.stage = PGT_STAGE1;
+
+    pgt_desc.ias = 48;
+    pgt_desc.oas = 48;
+    mem_desc->virtual_address = (uint64_t)dram_buf1_virt;
+    mem_desc->physical_address = (uint64_t)dram_buf1_phys;
+    mem_desc->length = test_data_blk_size * NUM_PAS;
+    mem_desc->attributes |= (PGT_STAGE1_AP_RW);
+
+    if (val_pgt_create(mem_desc, &pgt_desc)) {
+        val_print(ACS_PRINT_ERR,
+                      "\n       Unable to create page table with given attributes", 0);
+            goto test_fail;
+    }
 
     /* Get memory attributes of the test buffer, we'll use the same attibutes to create
      * our own page table later.
@@ -294,9 +306,6 @@ test_fail:
     val_set_status(pe_index, RESULT_FAIL(TEST_NUM, 02));
 
 test_clean:
-  /* Return this exerciser dma memory back to the heap manager */
-  val_memory_free_cacheable(e_bdf, test_data_blk_size * NUM_PAS, dram_buf1_virt, dram_buf1_phys);
-
   val_smmu_unmap(master);
 
   if (pgt_desc.pgt_base != (uint64_t) NULL) {

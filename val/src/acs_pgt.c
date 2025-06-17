@@ -191,7 +191,7 @@ uint32_t fill_translation_table(tt_descriptor_t tt_desc, memory_region_descripto
             *table_desc = PGT_ENTRY_PAGE_MASK | PGT_ENTRY_VALID_MASK;
             *table_desc |= (output_address & ~(uint64_t)(page_size - 1));
             *table_desc |= mem_desc->attributes;
-	    *table_desc |= PGT_ENTRY_ACCESS_SET;
+            *table_desc |= PGT_ENTRY_ACCESS_SET;
             val_print(PGT_DEBUG_LEVEL, "\n      page_descriptor = 0x%llx     ", *table_desc);
             /* Keep a count of number of L3 tables filled. If the number exceedes the limit, move
                to next L2 table and continue.  */
@@ -208,7 +208,7 @@ uint32_t fill_translation_table(tt_descriptor_t tt_desc, memory_region_descripto
             *table_desc = PGT_ENTRY_BLOCK_MASK | PGT_ENTRY_VALID_MASK;
             *table_desc |= (output_address & ~(block_size - 1));
             *table_desc |= mem_desc->attributes;
-	    *table_desc |= PGT_ENTRY_ACCESS_SET;
+            *table_desc |= PGT_ENTRY_ACCESS_SET;
             val_print(PGT_DEBUG_LEVEL, "\n      block_descriptor = 0x%llx     ", *table_desc);
             increment_pgt_index(tt_desc.level, get_entries_per_level(page_size));
             offset = 0;
@@ -280,7 +280,7 @@ uint32_t log2_page_size(uint64_t size)
 }
 
 /**
-  @brief Create stage 1 or stage 2 page table, with given memory addresses and attributes
+  @brief Create stage 1 page table, with given memory addresses and attributes
   @param mem_desc - Array of memory addresses and attributes needed for page table creation.
   @param pgt_desc - Data structure for output page table base and input translation attributes.
   @return status
@@ -297,8 +297,8 @@ uint32_t val_pgt_create(memory_region_descriptor_t *mem_desc, pgt_descriptor_t *
     bits_per_level = page_size_log2 - 3;
     num_pgt_levels = (pgt_desc->ias - page_size_log2 + bits_per_level - 1)/bits_per_level;
     num_pgt_levels = (num_pgt_levels > 4)?4:num_pgt_levels;
-    val_print(PGT_DEBUG_LEVEL, "\n      val_pgt_create: nbits_per_level = %d    ", bits_per_level);
-    val_print(PGT_DEBUG_LEVEL, "\n      val_pgt_create: page_size_log2 = %d     ", page_size_log2);
+    val_print(PGT_DEBUG_LEVEL, "\n      val_pgt_create: nbits_per_level = %d  ", bits_per_level);
+    val_print(PGT_DEBUG_LEVEL, "\n      val_pgt_create: page_size_log2 = %d   ", page_size_log2);
 
     /* check whether input page descriptor has base addr of translation table
        to use. If the pgt_base member is NULL allocate a page to create a new
@@ -319,28 +319,28 @@ uint32_t val_pgt_create(memory_region_descriptor_t *mem_desc, pgt_descriptor_t *
 
     for (mem_desc_iter = mem_desc; mem_desc_iter->length != 0; ++mem_desc_iter)
     {
-        val_print(PGT_DEBUG_LEVEL, "val_pgt_create: i/p addr 0x%llx", mem_desc->virtual_address);
-        val_print(PGT_DEBUG_LEVEL, "val_pgt_create: o/p addr 0x%llx", mem_desc->physical_address);
-        val_print(PGT_DEBUG_LEVEL, "val_pgt_create: length 0x%llx\n ", mem_desc->length);
+        val_print(PGT_DEBUG_LEVEL, "val_pgt_create:i/p addr 0x%llx", mem_desc->virtual_address);
+        val_print(PGT_DEBUG_LEVEL, "val_pgt_create:o/p addr 0x%llx", mem_desc->physical_address);
+        val_print(PGT_DEBUG_LEVEL, "val_pgt_create:length 0x%llx\n ", mem_desc->length);
         if ((mem_desc->virtual_address & (uint64_t)(page_size - 1)) != 0 ||
             (mem_desc->physical_address & (uint64_t)(page_size - 1)) != 0)
             {
-                val_print(ACS_PRINT_ERR, "\n      val_pgt_create: address alignment error     ", 0);
+                val_print(ACS_PRINT_ERR, "\n      val_pgt_create: address alignment error ", 0);
                 return ACS_STATUS_ERR;
             }
 
         if (mem_desc->physical_address >= (0x1ull << pgt_desc->oas))
         {
-            val_print(ACS_PRINT_ERR, "\n      val_pgt_create: output address size error     ", 0);
+            val_print(ACS_PRINT_ERR, "\n      val_pgt_create: output address size error   ", 0);
             return ACS_STATUS_ERR;
         }
 
         if (mem_desc->virtual_address >= (0x1ull << pgt_desc->ias))
-	{
+        {
             val_print(ACS_PRINT_WARN, "\n      val_pgt_create: input address size error \
-			    and truncating to %d-bits   ", pgt_desc->ias);
+                            and truncating to %d-bits   ", pgt_desc->ias);
             mem_desc->virtual_address &= ((0x1ull << pgt_desc->ias) - 1);
-	}
+        }
 
 #ifndef TARGET_BM_BOOT
         // TCR won't be populated for the initial PGT that are created for MMU init.
@@ -348,7 +348,7 @@ uint32_t val_pgt_create(memory_region_descriptor_t *mem_desc, pgt_descriptor_t *
         if ((pgt_desc->tcr.tg_size_log2) != page_size_log2)
         {
             val_print(ACS_PRINT_ERR, "\n      val_pgt_create: input page_size 0x%x \
-			    not supported ", (0x1 << pgt_desc->tcr.tg_size_log2));
+                            not supported ", (0x1 << pgt_desc->tcr.tg_size_log2));
             return ACS_STATUS_ERR;
         }
 #endif
@@ -372,30 +372,95 @@ uint32_t val_pgt_create(memory_region_descriptor_t *mem_desc, pgt_descriptor_t *
 }
 
 /**
- * @brief Map the given region into page table
- * @param mem_desc - memory addrs and attributes needed for page table mapping.
- * @return status
+  @brief Create stage 2 page table, with given memory addresses and attributes
+  @param mem_desc - Array of memory addresses and attributes needed for page table creation.
+  @param pgt_desc - Data structure for output page table base and input translation attributes.
+  @return status
 **/
-uint32_t val_pe_mmu_map_add(memory_region_descriptor_t *mem_desc)
+uint32_t val_realm_pgt_create(memory_region_descriptor_t *mem_desc, pgt_descriptor_t *pgt_desc)
 {
-    pgt_descriptor_t pgt_desc;
-    uint64_t ttbr;
+    uint64_t *tt_base;
+    tt_descriptor_t tt_desc;
+    uint32_t num_pgt_levels, page_size_log2;
+    memory_region_descriptor_t *mem_desc_iter;
 
-    /* Get translation attributes via TCR and translation table base via TTBR */
-    if (val_pe_reg_read_tcr(0 /*for TTBR0*/, &pgt_desc.tcr))
-    	return ACS_STATUS_FAIL;
+    page_size = val_memory_page_size();
+    page_size_log2 = log2_page_size(page_size);
+    bits_per_level = page_size_log2 - 3;
+    num_pgt_levels = (pgt_desc->ias - page_size_log2 + bits_per_level - 1)/bits_per_level;
+    num_pgt_levels = (num_pgt_levels > 4)?4:num_pgt_levels;
+    val_print(PGT_DEBUG_LEVEL, "\n      val_pgt_create: nbits_per_level = %d  ", bits_per_level);
+    val_print(PGT_DEBUG_LEVEL, "\n      val_pgt_create: page_size_log2 = %d   ", page_size_log2);
 
-    if (val_pe_reg_read_ttbr(0 /*TTBR0*/, &ttbr))
-        return ACS_STATUS_FAIL;
+    /* check whether input page descriptor has base addr of translation table
+       to use. If the pgt_base member is NULL allocate a page to create a new
+       table, else update existing translation table */
+    if (pgt_desc->pgt_base == (uint64_t) NULL) {
+        tt_base = (uint64_t *) val_memory_alloc_pages(1);
+        if (tt_base == NULL) {
+            val_print(ACS_PRINT_ERR, "\n      val_pgt_create: page allocation failed     ", 0);
+            return ACS_STATUS_ERR;
+        }
+        val_memory_set(tt_base, page_size, 0);
+    }
+    else
+        tt_base = (uint64_t *) pgt_desc->pgt_base;
 
-    val_print(PGT_DEBUG_LEVEL, "\n	TTBR0_EL2 = 0x%llx", ttbr);
+    tt_desc.tt_base = tt_base;
+    pgt_addr_mask = ((0x1ull << (48 - page_size_log2)) - 1) << page_size_log2;
 
-    pgt_desc.pgt_base = (ttbr & AARCH64_TTBR_ADDR_MASK);
-    pgt_desc.stage = PGT_STAGE1;
-    pgt_desc.ias = PGT_IAS;
-    pgt_desc.oas = PAGT_OAS;
-    pgt_desc.mair = val_pe_reg_read(MAIR_ELx);
-    return val_pgt_create(mem_desc, &pgt_desc);
+    for (mem_desc_iter = mem_desc; mem_desc_iter->length != 0; ++mem_desc_iter)
+    {
+        val_print(PGT_DEBUG_LEVEL, "val_pgt_create:i/p addr 0x%llx", mem_desc->virtual_address);
+        val_print(PGT_DEBUG_LEVEL, "val_pgt_create:o/p addr 0x%llx", mem_desc->physical_address);
+        val_print(PGT_DEBUG_LEVEL, "val_pgt_create:length 0x%llx\n ", mem_desc->length);
+        if ((mem_desc->virtual_address & (uint64_t)(page_size - 1)) != 0 ||
+            (mem_desc->physical_address & (uint64_t)(page_size - 1)) != 0)
+            {
+                val_print(ACS_PRINT_ERR, "\n      val_pgt_create: address alignment error ", 0);
+                return ACS_STATUS_ERR;
+            }
+
+        if (mem_desc->physical_address >= (0x1ull << pgt_desc->oas))
+        {
+            val_print(ACS_PRINT_ERR, "\n      val_pgt_create: output address size error   ", 0);
+            return ACS_STATUS_ERR;
+        }
+
+        if (mem_desc->virtual_address >= (0x1ull << pgt_desc->ias))
+            {
+            val_print(ACS_PRINT_WARN, "\n      val_pgt_create: input address size error \
+                            and truncating to %d-bits   ", pgt_desc->ias);
+            mem_desc->virtual_address &= ((0x1ull << pgt_desc->ias) - 1);
+            }
+
+#ifndef TARGET_BM_BOOT
+        // TCR won't be populated for the initial PGT that are created for MMU init.
+        // Removing this check in case of baremetal boot flow.
+        if ((pgt_desc->vtcr.tg_size_log2) != page_size_log2)
+        {
+            val_print(ACS_PRINT_ERR, "\n      val_pgt_create: input page_size 0x%x \
+                            not supported ", (0x1 << pgt_desc->vtcr.tg_size_log2));
+            return ACS_STATUS_ERR;
+        }
+#endif
+        tt_desc.input_base = mem_desc->virtual_address & ((0x1ull << pgt_desc->ias) - 1);
+        tt_desc.input_top = tt_desc.input_base + mem_desc->length - 1;
+        tt_desc.output_base = mem_desc->physical_address & ((0x1ull << pgt_desc->oas) - 1);
+        tt_desc.level = 4 - num_pgt_levels;
+        tt_desc.size_log2 = (num_pgt_levels - 1) * bits_per_level + page_size_log2;
+        tt_desc.nbits = pgt_desc->ias - tt_desc.size_log2;
+
+        if (fill_translation_table(tt_desc, mem_desc))
+        {
+            val_memory_free_pages(tt_base, 1);
+            return ACS_STATUS_ERR;
+        }
+    }
+
+    pgt_desc->pgt_base = (uint64_t)val_memory_virt_to_phys(tt_base);
+
+    return 0;
 }
 
 
@@ -414,12 +479,12 @@ uint32_t val_pe_mmu_map_rmv(memory_region_descriptor_t *mem_desc)
     uint32_t this_level, bits_remaining, bits_at_this_level;
     /* Get translation attributes via TCR and translation table base via TTBR */
     if (val_pe_reg_read_tcr(0 /*for TTBR0*/, &pgt_desc.tcr))
-    	return ACS_STATUS_FAIL;
+        return ACS_STATUS_FAIL;
 
     if (val_pe_reg_read_ttbr(0 /*TTBR0*/, &ttbr))
         return ACS_STATUS_FAIL;
 
-    val_print(PGT_DEBUG_LEVEL, "\n	TTBR0_EL2 = 0x%llx", ttbr);
+    val_print(PGT_DEBUG_LEVEL, "\n      TTBR0_EL2 = 0x%llx", ttbr);
 
     pgt_desc.pgt_base = (ttbr & AARCH64_TTBR_ADDR_MASK);
     pgt_desc.stage = PGT_STAGE1;
@@ -443,33 +508,33 @@ uint32_t val_pe_mmu_map_rmv(memory_region_descriptor_t *mem_desc)
         val_print(PGT_DEBUG_LEVEL, "\nval_pe_mmu_map_rmv: this_level = %d     ", this_level);
         val_print(PGT_DEBUG_LEVEL, "\nval_pe_mmu_map_rmv: index = %d     ", index);
         val_print(PGT_DEBUG_LEVEL, "\nval_pe_mmu_map_rmv: bits_remaining = %d     ",
-			bits_remaining);
+                        bits_remaining);
         val_print(PGT_DEBUG_LEVEL, "\nval_pe_mmu_map_rmv: tt_base_virt %llx",
-			(uint64_t)tt_base_virt);
+                        (uint64_t)tt_base_virt);
         val_print(PGT_DEBUG_LEVEL, "\nval_pe_mmu_map_rmv: table_desc = %llx     ", table_desc);
         if (this_level == 3)
         {
             if (!IS_PGT_ENTRY_PAGE(table_desc))
                 return ACS_STATUS_ERR;
-	    /* To make the table descriptor entry as INVALID */
+            /* To make the table descriptor entry as INVALID */
             table_desc = modify_desc(table_desc, bit_0, 0);
             table_desc = modify_desc(table_desc, bit_0, 0);
             break;
         }
         if (IS_PGT_ENTRY_BLOCK(table_desc))
         {
-	    /* To make the table descriptor entry as INVALID */
+            /* To make the table descriptor entry as INVALID */
             table_desc = modify_desc(table_desc, bit_0, 0);
             break;
         }
         tt_base_phys = table_desc & (((0x1ull <<
-				      (pgt_desc.ias - page_size_log2)) - 1) << page_size_log2);
+                                      (pgt_desc.ias - page_size_log2)) - 1) << page_size_log2);
         ++this_level;
         bits_remaining -= bits_per_level;
         bits_at_this_level = bits_per_level;
     }
     val_print(PGT_DEBUG_LEVEL, "\n      val_pe_mmu_map_rmv: table_desc after \
-		    modification = %llx      ", table_desc);
+                    modification = %llx      ", table_desc);
     return 0;
 }
 
@@ -491,7 +556,7 @@ uint64_t modify_desc(uint64_t table_desc, uint8_t bit_to_set, uint64_t value_to_
   @return status
 **/
 uint64_t val_pgt_get_attributes(pgt_descriptor_t pgt_desc,
-		uint64_t virtual_address, uint64_t *attributes)
+                uint64_t virtual_address, uint64_t *attributes)
 {
     uint32_t ias, index, num_pgt_levels, this_level;
     uint32_t bits_at_this_level, bits_remaining;

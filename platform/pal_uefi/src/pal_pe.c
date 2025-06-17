@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022,2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -349,6 +349,19 @@ UINT64
 pal_pe_get_far(VOID *context)
 {
   return ((EFI_SYSTEM_CONTEXT_AARCH64*)context)->FAR;
+}
+
+/**
+  @brief Get the ELR from UEFI exception handler
+
+  @param  context - exception context structure
+
+  @return  ELR
+**/
+UINT64
+pal_pe_get_elr(VOID *context)
+{
+  return ((EFI_SYSTEM_CONTEXT_AARCH64*)context)->ELR;
 }
 
 VOID

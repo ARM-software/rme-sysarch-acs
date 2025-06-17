@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2023-2024, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2023-2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,7 +18,8 @@
 #include "val/include/rme_acs_val.h"
 #include "val/include/rme_acs_pe.h"
 #include "val/include/rme_acs_common.h"
-
+#include "val/include/rme_acs_memory.h"
+#include "val/include/rme_acs_pgt.h"
 #include "val/include/rme_test_entry.h"
 #include "val/include/val_interface.h"
 #include "val/include/rme_acs_el32.h"
@@ -44,6 +45,9 @@ void payload(void)
   uint32_t index = val_pe_get_index_mpid(val_pe_get_mpid());
   uint64_t rd_data_s, rd_data_ns, wt_data_s, ns_data_popa, PA;
   uint64_t VA_S, VA_NS, size, attr_ns, attr_sec;
+  memory_region_descriptor_t mem_desc_array[2], *mem_desc;
+  pgt_descriptor_t pgt_desc;
+  uint64_t ttbr;
 
   size = val_get_min_tg();
   PA = val_get_free_pa(size, size);
@@ -51,6 +55,43 @@ void payload(void)
   VA_NS = val_get_free_va(size);
 
   val_add_gpt_entry_el3(PA, GPT_ANY);
+
+  /* Get translation attributes via TCR and translation table base via TTBR */
+    if (val_pe_reg_read_tcr(0 /*for TTBR0*/,
+                            &pgt_desc.tcr)) {
+      val_print(ACS_PRINT_ERR, "\n       TCR read failure", 0);
+      val_set_status(index, RESULT_FAIL(TEST_NUM, 01));
+      return;
+    }
+
+  if (val_pe_reg_read_ttbr(0 /*for TTBR0*/,
+                             &ttbr)) {
+      val_print(ACS_PRINT_ERR, "\n       TTBR0 read failure", 0);
+      val_set_status(index, RESULT_FAIL(TEST_NUM, 01));
+      return;
+    }
+
+  val_memory_set(mem_desc_array, sizeof(mem_desc_array), 0);
+  mem_desc = &mem_desc_array[0];
+
+  pgt_desc.pgt_base = (ttbr & AARCH64_TTBR_ADDR_MASK);
+  pgt_desc.mair = val_pe_reg_read(MAIR_ELx);
+  pgt_desc.stage = PGT_STAGE1;
+
+  pgt_desc.ias = 48;
+  pgt_desc.oas = 48;
+  mem_desc->virtual_address = PA;
+  mem_desc->physical_address = PA;
+  mem_desc->length = size;
+  mem_desc->attributes |= (PGT_STAGE1_AP_RW);
+
+  if (val_pgt_create(mem_desc, &pgt_desc)) {
+        val_print(ACS_PRINT_ERR,
+                      "\n       Unable to create page table with given attributes", 0);
+      val_set_status(index, RESULT_FAIL(TEST_NUM, 01));
+      return;
+      }
+
 
   /*PA is initialized with the initial DATA*/
   *(uint64_t *)PA = (uint64_t) INIT_DATA;

@@ -127,8 +127,20 @@ void write_gpr_and_reset(void);
 uint32_t check_gpr_after_reset(void);
 void val_smmu_check_rmeda_el3(void);
 void val_rlm_smmu_init(uint32_t num_smmu);
-void val_rlm_smmu_map(uint32_t smmu_sid);
+void val_smmu_rlm_map_el3(smmu_master_attributes_t *smmu_attr, pgt_descriptor_t *pgt_attr);
 void val_register_create_info_table(uint64_t *register_info_table);
+void val_dpt_add_entry(uint64_t translated_addr, uint32_t smmu_index);
+void val_dpt_invalidate_all(uint64_t smmu_index);
+void val_rlm_pgt_create(memory_region_descriptor_t *mem_desc, pgt_descriptor_t *pgt_desc);
+void val_rlm_pgt_destroy(pgt_descriptor_t *pgt_desc);
+void val_rlm_enable_mec(void);
+void val_rlm_disable_mec(void);
+void val_smmu_rlm_check_mec_impl(uint64_t smmu_base);
+void val_smmu_rlm_get_mecidw(uint64_t smmu_base);
+void val_cmo_to_poe(uint64_t PA);
+void val_rlm_configure_mecid(uint32_t mecid);
+void val_smmu_rlm_configure_mecid(smmu_master_attributes_t *smmu_attr, uint32_t mecid);
+
 //Legacy system VAL APIs
 uint32_t val_legacy_execute_tests(uint32_t num_pe);
 
@@ -255,6 +267,7 @@ uint32_t val_pcie_is_device_status_error(uint32_t bdf);
 uint32_t val_pcie_is_sig_target_abort(uint32_t bdf);
 void val_pcie_clear_sig_target_abort(uint32_t bdf);
 uint32_t val_pcie_mem_get_offset(uint32_t type);
+uint32_t val_pcie_get_bar_index(uint32_t bdf, uint64_t bar_address, uint32_t *bar_index);
 
 /* RME-DA APIs */
 uint32_t val_rme_da_execute_tests(uint32_t num_pe);
@@ -390,4 +403,12 @@ void     val_system_reset(void);
 
 /* PCIe Exerciser tests */
 uint32_t val_exerciser_execute_tests(uint32_t level);
+
+
+/* RME-DPT APIs */
+uint32_t val_rme_dpt_execute_tests(uint32_t num_pe);
+
+/* RME-MEC APIs */
+uint32_t val_rme_mec_execute_tests(uint32_t num_pe);
+
 #endif

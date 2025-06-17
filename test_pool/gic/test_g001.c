@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2023-2024, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2023-2024, 2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -203,6 +203,13 @@ payload(void)
     /* Clear Interrupt and Mappings */
     val_gic_free_msi(e_bdf, device_id, its_id, lpi_int_id + instance, msi_index);
 
+    status = val_gic_request_msi(e_bdf, device_id, its_id, lpi_int_id + instance, msi_index);
+    if (status) {
+        val_print(ACS_PRINT_ERR, "\n       MSI Assignment failed for bdf : 0x%x", e_bdf);
+        val_set_status(index, RESULT_FAIL(TEST_NUM, 2));
+        return;
+    }
+
     /**
      * Program one of the ITT bases with secure, Root or Realm PA
      * and expect a fault when GIC tries to access it
@@ -210,13 +217,6 @@ payload(void)
     itt_base = g_gic_its_info->GicIts[its_id].ITTBase;
     val_add_gpt_entry_el3(itt_base, GPT_ROOT);
     val_print(ACS_PRINT_INFO, "\n       ITT base is mapped as Root PAS in GPT ", 0);
-
-    status = val_gic_request_msi(e_bdf, device_id, its_id, lpi_int_id + instance, msi_index);
-    if (status) {
-        val_print(ACS_PRINT_ERR, "\n       MSI Assignment failed for bdf : 0x%x", e_bdf);
-        val_set_status(index, RESULT_FAIL(TEST_NUM, 2));
-        return;
-    }
 
     status = val_gic_install_isr(lpi_int_id + instance, intr_handler);
 
@@ -244,6 +244,7 @@ payload(void)
         val_print(ACS_PRINT_ERR,
             "\n       Interrupt triggered from PE for bdf : 0x%x, ", e_bdf);
         val_set_status(index, RESULT_FAIL(TEST_NUM, 5));
+        val_add_gpt_entry_el3(itt_base, GPT_NONSECURE);
         val_gic_free_msi(e_bdf, device_id, its_id, lpi_int_id + instance, msi_index);
         return;
     }
@@ -261,11 +262,13 @@ payload(void)
         val_print(ACS_PRINT_ERR, "\n       Interrupt triggered for Root ITS access", 0);
         val_print(ACS_PRINT_ERR, "BDF : 0x%x   ", e_bdf);
         val_set_status(index, RESULT_FAIL(TEST_NUM, 03));
+        val_add_gpt_entry_el3(itt_base, GPT_NONSECURE);
         val_gic_free_msi(e_bdf, device_id, its_id, lpi_int_id + instance, msi_index);
         return;
     }
 
-    /* Clear Interrupt and Mappings */
+    /* Clear Interrupt and Mappings and revert back the ITT_BASE to it's original PA space */
+    val_add_gpt_entry_el3(itt_base, GPT_NONSECURE);
     val_gic_free_msi(e_bdf, device_id, its_id, lpi_int_id + instance, msi_index);
 
     if (test_skip) {

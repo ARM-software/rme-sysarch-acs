@@ -25,20 +25,24 @@ uint32_t pcie_index = 0, enumerate = 1;
 /*64-bit address initialisation*/
 uint64_t g_bar64_p_start;
 uint64_t g_rp_bar64_value;
+uint64_t g_hb_bar64_value;
 uint64_t g_bar64_p_max;
 uint32_t g_64_bus = 0;
 uint32_t g_bar64_size = 0;
 uint32_t g_rp_bar64_size = 0;
+uint32_t g_hb_bar64_size = 0;
 
 /*32-bit address initialisation*/
 uint32_t g_bar32_np_start;
 uint32_t g_bar32_p_start;
 uint32_t g_rp_bar32_value;
+uint32_t g_hb_bar32_value;
 uint32_t g_bar32_np_max;
 uint32_t g_bar32_p_max;
 uint32_t g_np_bar_size = 0, g_p_bar_size = 0;
 uint32_t g_np_bus = 0, g_p_bus = 0;
 uint32_t g_rp_bar32_size = 0;
+uint32_t g_hb_bar32_size = 0;
 
 /**
   @brief   This API reads 32-bit data from PCIe config space pointed by Bus,
@@ -167,6 +171,77 @@ get_resource_base_64(uint32_t seg, uint32_t bus, uint32_t dev, uint32_t func,
       pal_pci_cfg_write(seg, bus, dev, func, PRE_FET_OFFSET, mem_bar_p);
       pal_pci_cfg_write(seg, bus, dev, func, PRE_FET_OFFSET + 4, bar64_p_upper32_base);
       pal_pci_cfg_write(seg, bus, dev, func, PRE_FET_OFFSET + 8, bar64_p_upper32_limit);
+  }
+}
+
+void
+pal_pcie_hb_program_bar(uint32_t seg, uint32_t bus, uint32_t dev, uint32_t func)
+{
+
+  uint64_t bar_size, bar_upper_bits;
+  uint32_t bar_reg_value, bar_lower_bits;
+  uint32_t offset = BAR0_OFFSET;
+
+  while(offset <= TYPE1_BAR_MAX_OFF)
+  {
+      pal_pci_cfg_read(seg, bus, dev, func, offset, &bar_reg_value);
+      if (BAR_REG(bar_reg_value) == BAR_64_BIT)
+      {
+          print(ACS_PRINT_INFO, "The HostBridge supports P_MEM 64-bit addr decoding capability\n", 0);
+          /** BAR supports 64-bit address therefore, write all 1's
+           *  to BARn and BARn+1 and identify the size requested
+          **/
+          pal_pci_cfg_write(seg, bus, dev, func, offset, 0xFFFFFFF0);
+          pal_pci_cfg_write(seg, bus, dev, func, offset + 4, 0xFFFFFFFF);
+          pal_pci_cfg_read(seg, bus, dev, func, offset, &bar_lower_bits);
+          bar_size = bar_lower_bits & BAR_MASK;
+
+          pal_pci_cfg_read(seg, bus, dev, func, offset + 4, &bar_reg_value);
+          bar_upper_bits = bar_reg_value;
+          bar_size = bar_size | (bar_upper_bits << 32 );
+
+          bar_size = ~bar_size + 1;
+
+          /**If BAR size is 0, then BAR not implemented, move to next BAR**/
+          if (bar_size == 0)
+          {
+            offset = offset + 8;
+            continue;
+          }
+
+          pal_pci_cfg_write(seg, bus, dev, func, offset, g_hb_bar64_value);
+          pal_pci_cfg_write(seg, bus, dev, func, offset + 4, g_hb_bar64_value >> 32);
+          offset = offset + 8;
+          g_hb_bar64_size = bar_size;
+          g_hb_bar64_value = g_hb_bar64_value + g_hb_bar64_size;
+      }
+
+      else
+      {
+          print(ACS_PRINT_INFO, "The RP BAR supports P_MEM 32-bit addr decoding capability\n", 0);
+
+          /**BAR supports 32-bit address. Write all 1's
+            * to BARn and identify the size requested
+          **/
+          pal_pci_cfg_write(seg, bus, dev, func, offset, 0xFFFFFFF0);
+          pal_pci_cfg_read(seg, bus, dev, func, offset, &bar_lower_bits);
+          bar_reg_value = bar_lower_bits & BAR_MASK;
+          bar_size = ~bar_reg_value + 1;
+
+          /**If BAR size is 0, then BAR not implemented, move to next BAR**/
+          if (bar_size == 0)
+          {
+              offset = offset + 4;
+              continue;
+          }
+
+          pal_pci_cfg_write(seg, bus, dev, func, offset, g_hb_bar32_value);
+          print(ACS_PRINT_INFO, "Value written to BAR register is %x\n", g_hb_bar32_value);
+          g_hb_bar32_value = g_hb_bar32_value + bar_size;
+          offset = offset + 4;
+          g_hb_bar32_size = bar_size;
+          g_hb_bar32_value = g_hb_bar32_value + g_hb_bar32_size;
+      }
   }
 }
 
@@ -461,15 +536,23 @@ uint32_t pal_pcie_enumerate_device(uint32_t bus, uint32_t sec_bus)
 
         pal_pci_cfg_read(seg, bus, dev, func, 0, &vendor_id);
 
-
         if ((vendor_id == 0x0) || (vendor_id == 0xFFFFFFFF))
                 continue;
 
-        /*Skip Hostbridge configuration*/
+        /* Enumerate Hostbridge configuration */
         pal_pci_cfg_read(seg, bus, dev, func, TYPE01_RIDR, &class_code);
         if ((((class_code >> CC_BASE_SHIFT) & CC_BASE_MASK) == HB_BASE_CLASS) &&
-             (((class_code >> CC_SUB_SHIFT) & CC_SUB_MASK)) == HB_SUB_CLASS)
-                continue;
+             (((class_code >> CC_SUB_SHIFT) & CC_SUB_MASK)) == HB_SUB_CLASS) {
+            /* Enable memory access, Bus master enable and I/O access*/
+            pal_pci_cfg_read(seg, bus, dev, func, COMMAND_REG_OFFSET, &com_reg_value);
+            pal_pci_cfg_write(seg, bus, dev, func, COMMAND_REG_OFFSET,
+                              (com_reg_value | REG_ACC_DATA));
+
+            pal_pci_cfg_write(seg, bus, dev, func, BUS_NUM_REG_OFFSET,
+                              BUS_NUM_REG_CFG(0xFF, sec_bus, bus));
+            pal_pcie_hb_program_bar(seg, bus, dev, func);
+            continue;
+        }
 
         print(ACS_PRINT_INFO, "The Vendor id read is %x\n", vendor_id);
         print(ACS_PRINT_INFO, "Valid PCIe device found at %x %x %x\n ", bus, dev, func);
@@ -587,6 +670,8 @@ void pal_pcie_enumerate(void)
        while (count < hb_count)
        {
            /* Initiliase the P and NP BAR addresses for the hierarchies*/
+           g_hb_bar64_value = platform_root_pcie_cfg.block[pcie_index].hb_bar64_value[count];
+           g_hb_bar32_value = platform_root_pcie_cfg.block[pcie_index].hb_bar32_value[count];
            g_bar64_p_start =  platform_root_pcie_cfg.block[pcie_index].ep_bar64_value[count];
            g_rp_bar64_value = platform_root_pcie_cfg.block[pcie_index].rp_bar64_value[count];
            g_bar32_np_start = platform_root_pcie_cfg.block[pcie_index].ep_npbar32_value[count];

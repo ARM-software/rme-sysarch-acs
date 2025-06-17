@@ -31,6 +31,8 @@
   src/acs_status.c
   src/acs_pe.c
   src/acs_da.c
+  src/acs_dpt.c
+  src/acs_mec.c
   src/test_entry_rme.c
   src/acs_pe_infra.c
   src/acs_gic.c
