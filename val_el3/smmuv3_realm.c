@@ -1350,9 +1350,9 @@ val_smmu_dpt_init(smmu_dev_t *smmu)
 
 /**
   @brief  Scan all available SMMUs in the system and initialize all v3.x SMMUs
-  @return Initialzation status
+  @return None
 **/
-uint32_t val_smmu_init_el3(uint32_t num_smmu, uint64_t *smmu_base_arr)
+void val_smmu_init_el3(uint32_t num_smmu, uint64_t *smmu_base_arr)
 {
     int i;
 
@@ -1362,13 +1362,19 @@ uint32_t val_smmu_init_el3(uint32_t num_smmu, uint64_t *smmu_base_arr)
 
     g_num_smmus = num_smmu;
     if (g_num_smmus == 0)
-        return 1;
+        return;
 
     g_smmu = val_memory_calloc_el3(g_num_smmus, sizeof(smmu_dev_t), BYTES_PER_DWORD);
     if (!g_smmu)
     {
-        ERROR("\n      val_smmu_init: memory allocation failure     ");
-        return 1;
+        shared_data->status_code = 1;
+        const char *msg = "EL3: SMMU_INIT: Memory allocation failed";
+        ERROR("\n  %s", msg);
+        int j = 0; while (msg[j] && j < sizeof(shared_data->error_msg) - 1) {
+            shared_data->error_msg[j] = msg[j]; j++;
+        }
+        shared_data->error_msg[j] = '\0';
+        return;
     }
 
     for (i = 0; i < g_num_smmus; ++i) {
@@ -1381,15 +1387,36 @@ uint32_t val_smmu_init_el3(uint32_t num_smmu, uint64_t *smmu_base_arr)
         g_smmu[i].base = smmu_base_arr[i];
         if (smmu_init(&g_smmu[i]))
         {
-            ERROR("\n      val_smmu_init: smmu %d init failed     ", i);
+            shared_data->status_code = 1;
+            shared_data->error_code = i;
+            const char *msg = "EL3: SMMU_INIT:  initialisation failed for smmu :";
+            ERROR("\n  %s", msg);
+            ERROR(" %lx", shared_data->error_code);
+            int j = 0; while (msg[j] && j < sizeof(shared_data->error_msg) - 1) {
+                shared_data->error_msg[j] = msg[j]; j++;
+            }
+            shared_data->error_msg[j] = '\0';
             g_smmu[i].base = 0;
-            return 1;
+            return;
         }
 
-        val_smmu_dpt_init(&g_smmu[i]);
+        if (val_smmu_dpt_init(&g_smmu[i]))
+        {
+            shared_data->status_code = 1;
+            shared_data->error_code = i;
+            const char *msg = "EL3: SMMU_INIT:  DPT initialisation failed for smmu :";
+            ERROR("\n %s", msg);
+            ERROR(" %lx", shared_data->error_code);
+            int j = 0; while (msg[j] && j < sizeof(shared_data->error_msg) - 1) {
+                shared_data->error_msg[j] = msg[j]; j++;
+            }
+            shared_data->error_msg[j] = '\0';
+            g_smmu[i].base = 0;
+            return;
+        }
     }
 
-    return 0;
+    return;
 }
 
 /**

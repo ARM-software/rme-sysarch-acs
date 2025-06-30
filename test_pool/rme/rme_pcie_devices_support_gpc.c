@@ -49,8 +49,18 @@ uint32_t test_sequence1(void *dram_buf1_virt, void *dram_buf1_phys, uint32_t ins
   dma_len = test_data_blk_size / 2;
 
   /* Write dram_buf1 with known data and flush the buffer to main memory */
-  val_memory_set_el3((uint64_t *)dram_buf1_virt, dma_len, KNOWN_DATA);
-  val_data_cache_ops_by_va_el3((uint64_t)dram_buf1_virt, CLEAN_AND_INVALIDATE);
+  if (val_memory_set_el3((uint64_t *)dram_buf1_virt, dma_len, KNOWN_DATA))
+  {
+      val_print(ACS_PRINT_ERR, "\n        Failed to set memory to 0 for instance %4x", instance);
+      return 1;
+  }
+
+  if (val_data_cache_ops_by_va_el3((uint64_t)dram_buf1_virt, CLEAN_AND_INVALIDATE))
+  {
+      val_print(ACS_PRINT_ERR,
+        "\n        Failed to clean and invalidate dram_buf1 for instance %4x", instance);
+      return 1;
+  }
 
   /* Perform DMA OUT to copy contents of dram_buf1 to exerciser memory */
   val_exerciser_set_param(DMA_ATTRIBUTES, (uint64_t)dram_buf1_phys, dma_len, instance);
@@ -88,7 +98,11 @@ uint32_t test_sequence1(void *dram_buf1_virt, void *dram_buf1_phys, uint32_t ins
     if (res_pas[mem_cnt] == GPT_NONSECURE)
       continue;
 
-    val_add_gpt_entry_el3(PA, res_pas[mem_cnt]);
+    if (val_add_gpt_entry_el3(PA, res_pas[mem_cnt]))
+    {
+      val_print(ACS_PRINT_ERR, "\n  Failed to add GPT entry for PA 0x%llx", PA);
+      return 1;
+    }
 
     /* Perform DMA OUT to copy contents of PA to exerciser memory and
      * observe that DMA transaction is not successful
@@ -105,11 +119,31 @@ uint32_t test_sequence1(void *dram_buf1_virt, void *dram_buf1_phys, uint32_t ins
       return 1;
     }
     //Clear the memory and it's protection by making it NS
-    val_add_gpt_entry_el3(PA, GPT_ANY);
-    val_add_mmu_entry_el3((uint64_t)dram_buf1_virt, PA,
-                      (attr | LOWER_ATTRS(PAS_ATTR(NONSECURE_PAS))));
-    val_memory_set_el3((uint64_t *)dram_buf1_virt, dma_len/2, 0);
-    val_data_cache_ops_by_va_el3((uint64_t)dram_buf1_virt, CLEAN_AND_INVALIDATE);
+    if (val_add_gpt_entry_el3(PA, GPT_ANY))
+    {
+      val_print(ACS_PRINT_ERR, "\n  Failed to clear GPT entry for PA 0x%llx", PA);
+      return 1;
+    }
+
+    if (val_add_mmu_entry_el3((uint64_t)dram_buf1_virt, PA,
+                      (attr | LOWER_ATTRS(PAS_ATTR(NONSECURE_PAS)))))
+    {
+      val_print(ACS_PRINT_ERR, "\n  Failed to add MMU entry for PA 0x%llx", PA);
+      return 1;
+    }
+
+    if (val_memory_set_el3((uint64_t *)dram_buf1_virt, dma_len/2, 0))
+    {
+      val_print(ACS_PRINT_ERR, "\n  Failed to set memory to 0 for instance %4x", instance);
+      return 1;
+    }
+
+    if (val_data_cache_ops_by_va_el3((uint64_t)dram_buf1_virt, CLEAN_AND_INVALIDATE))
+    {
+      val_print(ACS_PRINT_ERR,
+        "\n  Failed to clean and invalidate dram_buf1 for instance %4x", instance);
+      return 1;
+    }
 
   }
   /* Return success */
@@ -251,13 +285,35 @@ payload (void)
       mem_desc->length = test_data_blk_size;
       mem_desc->attributes |= (PGT_STAGE1_AP_RW);
 
-      val_add_gpt_entry_el3(mem_desc->physical_address, GPT_NONSECURE);
-      val_add_mmu_entry_el3(mem_desc->virtual_address, mem_desc->physical_address,
-                      (attr | LOWER_ATTRS(PAS_ATTR(NONSECURE_PAS))));
+      if (val_add_gpt_entry_el3(mem_desc->physical_address, GPT_NONSECURE))
+      {
+          val_print(ACS_PRINT_ERR,
+            "\n       Failed to add GPT entry for PA 0x%llx", mem_desc->physical_address);
+          goto test_fail;
+      }
+
+      if (val_add_mmu_entry_el3(mem_desc->virtual_address, mem_desc->physical_address,
+                      (attr | LOWER_ATTRS(PAS_ATTR(NONSECURE_PAS)))))
+      {
+          val_print(ACS_PRINT_ERR,
+            "\n       Failed to add MMU entry for PA 0x%llx", mem_desc->physical_address);
+          goto test_fail;
+      }
 
       //Clear the memory
-      val_memory_set_el3((uint64_t *)dram_buf1_virt, dma_len/2, 0);
-      val_data_cache_ops_by_va_el3((uint64_t)dram_buf1_virt, CLEAN_AND_INVALIDATE);
+      if (val_memory_set_el3((uint64_t *)dram_buf1_virt, dma_len/2, 0))
+      {
+          val_print(ACS_PRINT_ERR,
+            "\n       Failed to set memory to 0 for instance %4x", instance);
+          goto test_fail;
+      }
+
+      if (val_data_cache_ops_by_va_el3((uint64_t)dram_buf1_virt, CLEAN_AND_INVALIDATE))
+      {
+          val_print(ACS_PRINT_ERR,
+            "\n       Failed to clean and invalidate dram_buf1 for instance %4x", instance);
+          goto test_fail;
+      }
 
       /* Need to know input and output address sizes before creating page table */
       pgt_desc.ias = val_smmu_get_info(SMMU_IN_ADDR_SIZE, master.smmu_index);

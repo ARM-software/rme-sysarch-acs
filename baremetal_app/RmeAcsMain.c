@@ -260,8 +260,6 @@ ShellAppMainrme(
   if (Status)
     return Status;
 
-  val_print(ACS_PRINT_ALWAYS, "\n******************************************************* \n", 0);
-
   Status |= val_rme_execute_tests(val_pe_get_num());
 
   Status |= val_legacy_execute_tests(val_pe_get_num());

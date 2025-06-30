@@ -119,6 +119,7 @@ payload(void)
       if (val_pcie_find_capability(erp_bdf, PCIE_ECAP, ECID_AER, &rp_aer_offset) != PCIE_SUCCESS) {
           val_print(ACS_PRINT_ERR, " AER Capability not supported for RP : 0x%x", erp_bdf);
           val_set_status(pe_index, "FAIL", 02);
+          val_set_status(pe_index, "FAIL", 02);
           return;
       }
 
@@ -140,14 +141,19 @@ payload(void)
 
       // Program the ITT base as ROOT in GPT
       itt_base = g_gic_its_info->GicIts[its_id].ITTBase;
-      val_add_gpt_entry_el3(itt_base, GPT_ROOT);
-      val_print(ACS_PRINT_TEST, " ITT base is mapped as Root in GPT ", 0);
+      if (val_add_gpt_entry_el3(itt_base, GPT_ROOT))
+      {
+            val_print(ACS_PRINT_ERR, " DPT Entry adding failed for the Address: 0x%llx", itt_base);
+            val_set_status(pe_index, "FAIL", 04);
+            return;
+      }
+      val_print(ACS_PRINT_INFO, " ITT base is mapped as Root in GPT ", 0);
 
       /* MSI assignment */
       status = val_gic_request_msi(erp_bdf, device_id, its_id, lpi_int_id + instance, msi_index);
       if (status) {
           val_print(ACS_PRINT_ERR, " MSI Assignment failed for bdf : 0x%x", erp_bdf);
-          val_set_status(pe_index, "FAIL", 04);
+          val_set_status(pe_index, "FAIL", 05);
           return;
       }
 
@@ -155,7 +161,7 @@ payload(void)
 
       if (status) {
           val_print(ACS_PRINT_ERR, " Intr handler registration failed: 0x%x", lpi_int_id);
-          val_set_status(pe_index, "FAIL", 05);
+          val_set_status(pe_index, "FAIL", 06);
           return;
       }
 
@@ -170,7 +176,7 @@ payload(void)
       if (irq_pending == 0) {
           val_print(ACS_PRINT_ERR,
               " Interrupt triggered PE for bdf : 0x%x, ", e_bdf);
-          val_set_status(pe_index, "FAIL", 6);
+          val_set_status(pe_index, "FAIL", 7);
           val_gic_free_msi(e_bdf, device_id, its_id, lpi_int_id + instance, msi_index);
           return;
       }
@@ -179,14 +185,19 @@ payload(void)
       val_gic_free_msi(erp_bdf, device_id, its_id, lpi_int_id + instance, msi_index);
 
       itt_base = g_gic_its_info->GicIts[its_id].ITTBase;
-      val_add_gpt_entry_el3(itt_base, GPT_NONSECURE);
-      val_print(ACS_PRINT_TEST, " ITT base is mapped as Non-Secure in GPT ", 0);
+      if (val_add_gpt_entry_el3(itt_base, GPT_NONSECURE))
+      {
+            val_print(ACS_PRINT_ERR, " DPT Entry adding failed for the Address: 0x%llx", itt_base);
+            val_set_status(pe_index, "FAIL", 8);
+            return;
+      }
+      val_print(ACS_PRINT_INFO, " ITT base is mapped as Non-Secure in GPT ", 0);
 
       /* MSI assignment */
       status = val_gic_request_msi(erp_bdf, device_id, its_id, lpi_int_id + instance, msi_index);
       if (status) {
           val_print(ACS_PRINT_ERR, " MSI Assignment failed for bdf : 0x%x", erp_bdf);
-          val_set_status(pe_index, "FAIL", 07);
+          val_set_status(pe_index, "FAIL", 9);
           return;
       }
 
@@ -194,7 +205,7 @@ payload(void)
 
       if (status) {
           val_print(ACS_PRINT_ERR, " Intr handler registration failed: 0x%x", lpi_int_id);
-          val_set_status(pe_index, "FAIL", 8);
+          val_set_status(pe_index, "FAIL", 10);
           return;
       }
 
@@ -207,8 +218,8 @@ payload(void)
 
       if (timeout == 0) {
           val_print(ACS_PRINT_ERR, " Interrupt trigger failed for : 0x%x, ", lpi_int_id);
-          val_print(ACS_PRINT_ERR, "BDF : 0x%x   ", e_bdf);
-          val_set_status(pe_index, "FAIL", 9);
+          val_print(ACS_PRINT_ERR, " BDF : 0x%x   ", e_bdf);
+          val_set_status(pe_index, "FAIL", 11);
           val_gic_free_msi(e_bdf, device_id, its_id, lpi_int_id + instance, msi_index);
           return;
       }

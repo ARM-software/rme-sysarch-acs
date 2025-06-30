@@ -132,15 +132,19 @@ payload(void)
     }
 
     itt_base = g_gic_its_info->GicIts[its_id].ITTBase;
-    val_print(ACS_PRINT_TEST, " itt_base: 0x%lx", itt_base);
-    val_add_gpt_entry_el3(itt_base, GPT_NONSECURE);
-    val_print(ACS_PRINT_TEST, " ITT base is mapped as Non-secure in GPT ", 0);
+    val_print(ACS_PRINT_INFO, " itt_base: 0x%lx", itt_base);
+    if (val_add_gpt_entry_el3(itt_base, GPT_NONSECURE))
+    {
+        val_print(ACS_PRINT_ERR, " Failed to add GPT entry for PA 0x%llx", itt_base);
+        val_set_status(index, "FAIL", 2);
+        return;
+    }
 
-    val_print(ACS_PRINT_DEBUG, " Max LPI: 0x%lx", val_its_get_max_lpi());
+    val_print(ACS_PRINT_INFO, " ITT base is mapped as Non-secure in GPT ", 0);
     status = val_gic_request_msi(e_bdf, device_id, its_id, lpi_int_id + instance, msi_index);
     if (status) {
         val_print(ACS_PRINT_ERR, " MSI Assignment failed for bdf : 0x%x", e_bdf);
-        val_set_status(index, "FAIL", 2);
+        val_set_status(index, "FAIL", 3);
         return;
     }
 
@@ -149,7 +153,7 @@ payload(void)
     if (status) {
         val_print(ACS_PRINT_ERR, " Intr handler registration failed for Interrupt : 0x%x",
                   lpi_int_id);
-        val_set_status(index, "FAIL", 02);
+        val_set_status(index, "FAIL", 4);
         return;
     }
 
@@ -159,7 +163,7 @@ payload(void)
     /* Get ITS Base for current ITS */
     if (val_gic_its_get_base(its_id, &its_base)) {
         val_print(ACS_PRINT_ERR, " Could not find ITS Base for its_id : 0x%x", its_id);
-        val_set_status(index, "FAIL", 4);
+        val_set_status(index, "FAIL", 5);
         return;
     }
 
@@ -174,9 +178,8 @@ payload(void)
 
     /* Interrupt should not be generated */
     if (irq_pending == 0) {
-        val_print(ACS_PRINT_ERR,
-            " Interrupt triggered from PE for bdf : 0x%x, ", e_bdf);
-        val_set_status(index, "FAIL", 5);
+        val_print(ACS_PRINT_ERR, " Interrupt triggered from PE for bdf : 0x%x, ", e_bdf);
+        val_set_status(index, "FAIL", 6);
         val_gic_free_msi(e_bdf, device_id, its_id, lpi_int_id + instance, msi_index);
         return;
     }
@@ -195,7 +198,7 @@ payload(void)
     if (timeout == 0) {
         val_print(ACS_PRINT_ERR, " Interrupt trigger failed for : 0x%x, ", lpi_int_id);
         val_print(ACS_PRINT_ERR, " BDF : 0x%x   ", e_bdf);
-        val_set_status(index, "FAIL", 03);
+        val_set_status(index, "FAIL", 07);
         val_gic_free_msi(e_bdf, device_id, its_id, lpi_int_id + instance, msi_index);
         return;
     }
@@ -206,7 +209,7 @@ payload(void)
     status = val_gic_request_msi(e_bdf, device_id, its_id, lpi_int_id + instance, msi_index);
     if (status) {
         val_print(ACS_PRINT_ERR, " MSI Assignment failed for bdf : 0x%x", e_bdf);
-        val_set_status(index, "FAIL", 2);
+        val_set_status(index, "FAIL", 8);
         return;
     }
 
@@ -215,15 +218,20 @@ payload(void)
      * and expect a fault when GIC tries to access it
     **/
     itt_base = g_gic_its_info->GicIts[its_id].ITTBase;
-    val_add_gpt_entry_el3(itt_base, GPT_ROOT);
-    val_print(ACS_PRINT_TEST, " ITT base is mapped as Root PAS in GPT ", 0);
+    if (val_add_gpt_entry_el3(itt_base, GPT_ROOT))
+    {
+        val_print(ACS_PRINT_ERR, " Failed to add GPT entry for PA 0x%llx", itt_base);
+        val_set_status(index, "FAIL", 9);
+        return;
+    }
+    val_print(ACS_PRINT_INFO, " ITT base is mapped as Root PAS in GPT ", 0);
 
     status = val_gic_install_isr(lpi_int_id + instance, intr_handler);
 
     if (status) {
         val_print(ACS_PRINT_ERR, " Intr handler registration failed for Interrupt : 0x%x",
                   lpi_int_id);
-        val_set_status(index, "FAIL", 02);
+        val_set_status(index, "FAIL", 10);
         return;
     }
 
@@ -241,9 +249,8 @@ payload(void)
 
     /* Interrupt should not be generated */
     if (irq_pending == 0) {
-        val_print(ACS_PRINT_ERR,
-            " Interrupt triggered from PE for bdf : 0x%x, ", e_bdf);
-        val_set_status(index, "FAIL", 5);
+        val_print(ACS_PRINT_ERR, " Interrupt triggered from PE for bdf : 0x%x, ", e_bdf);
+        val_set_status(index, "FAIL", 11);
         val_add_gpt_entry_el3(itt_base, GPT_NONSECURE);
         val_gic_free_msi(e_bdf, device_id, its_id, lpi_int_id + instance, msi_index);
         return;
@@ -261,8 +268,8 @@ payload(void)
 
     if (irq_pending == 0) {
         val_print(ACS_PRINT_ERR, " Interrupt triggered for Root ITS access", 0);
-        val_print(ACS_PRINT_ERR, "BDF : 0x%x   ", e_bdf);
-        val_set_status(index, "FAIL", 03);
+        val_print(ACS_PRINT_ERR, " BDF : 0x%x ", e_bdf);
+        val_set_status(index, "FAIL", 12);
         val_add_gpt_entry_el3(itt_base, GPT_NONSECURE);
         val_gic_free_msi(e_bdf, device_id, its_id, lpi_int_id + instance, msi_index);
         return;

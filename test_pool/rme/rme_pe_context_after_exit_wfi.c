@@ -70,7 +70,12 @@ payload()
     val_reg_update_shared_struct_msd(reg_list_chck[reg_num], reg_num);
   }
   /* Save all the registers before going to low power mode */
-  val_read_pe_regs_bfr_low_pwr_el3();
+  if (val_read_pe_regs_bfr_low_pwr_el3())
+  {
+    val_print(ACS_PRINT_ERR, "\n    Saving the PE Regsiter failed before low power state", 0);
+    val_set_status(index, "FAIL", 1);
+    return;
+  }
 
    /* Start EL1 PHY timer and initiate low power state entry for PE(WFI) */
   val_timer_set_phy_el1(pe_timer_ticks);
@@ -81,14 +86,19 @@ payload()
    * if they've retained their original value after an exit from low power state
    */
   shared_data->generic_flag = CLEAR;
-  val_cmpr_pe_regs_aftr_low_pwr_el3();
+  if (val_cmpr_pe_regs_aftr_low_pwr_el3())
+  {
+    val_print(ACS_PRINT_ERR, "\n    Comparision failed for PE Regsiters after low power state", 0);
+    val_set_status(index, "FAIL", 2);
+    return;
+  }
 
   /* Check whether pe timer interrupt is recieved or not */
   if (irq_received == 0) {
       val_print(ACS_PRINT_ERR, " PE timer interrupt not generated", 0);
       val_timer_set_phy_el1(0);
       val_gic_clear_interrupt(intid);
-      val_set_status(index, "FAIL", 1);
+      val_set_status(index, "FAIL", 3);
       return;
   }
 

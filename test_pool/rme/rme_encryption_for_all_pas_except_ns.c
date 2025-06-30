@@ -57,13 +57,33 @@ void payload(void)
 
   /* PA is mapped as VA1_S, VA2_RL, VA3_RT, VA4_NS */
 
-  val_add_mmu_entry_el3(VA_NS /* VA1 */, PA, (attr | LOWER_ATTRS(PAS_ATTR(NONSECURE_PAS))));
+  if (val_add_mmu_entry_el3(VA_NS /* VA1 */, PA, (attr | LOWER_ATTRS(PAS_ATTR(NONSECURE_PAS)))))
+  {
+      val_print(ACS_PRINT_ERR, " Failed to add MMU entry for VA_NS = 0x%llx", VA_NS);
+      val_set_status(index, "FAIL", 01);
+      return;
+  }
 
-  val_add_mmu_entry_el3(VA_RT /* VA2 */, PA, (attr | LOWER_ATTRS(PAS_ATTR(ROOT_PAS))));
+  if (val_add_mmu_entry_el3(VA_RT /* VA2 */, PA, (attr | LOWER_ATTRS(PAS_ATTR(ROOT_PAS)))))
+  {
+      val_print(ACS_PRINT_ERR, " Failed to add MMU entry for VA_RT = 0x%llx", VA_RT);
+      val_set_status(index, "FAIL", 02);
+      return;
+  }
 
-  val_add_mmu_entry_el3(VA_RL /* VA3 */, PA, (attr | LOWER_ATTRS(PAS_ATTR(REALM_PAS))));
+  if (val_add_mmu_entry_el3(VA_RL /* VA3 */, PA, (attr | LOWER_ATTRS(PAS_ATTR(REALM_PAS)))))
+  {
+      val_print(ACS_PRINT_ERR, " Failed to add MMU entry for VA_RL = 0x%llx", VA_RL);
+      val_set_status(index, "FAIL", 03);
+      return;
+  }
 
-  val_add_mmu_entry_el3(VA_S /* VA4 */, PA, (attr | LOWER_ATTRS(PAS_ATTR(SECURE_PAS))));
+  if (val_add_mmu_entry_el3(VA_S /* VA4 */, PA, (attr | LOWER_ATTRS(PAS_ATTR(SECURE_PAS)))))
+  {
+      val_print(ACS_PRINT_ERR, " Failed to add MMU entry for VA_S = 0x%llx", VA_S);
+      val_set_status(index, "FAIL", 04);
+      return;
+  }
 
   /* Store Random data in VA_NS and access the rest of the VAs */
   wt_data_ns = RANDOM_DATA_1;
@@ -72,9 +92,19 @@ void payload(void)
   shared_data->shared_data_access[0].data = wt_data_ns;
   shared_data->shared_data_access[0].access_type = WRITE_DATA;
 
-  val_pe_access_mut_el3();
+  if (val_pe_access_mut_el3())
+  {
+      val_print(ACS_PRINT_ERR, " Failed to access VA_NS = 0x%llx", VA_NS);
+      val_set_status(index, "FAIL", 05);
+      return;
+  }
 
-  val_data_cache_ops_by_va_el3(VA_NS, CLEAN_AND_INVALIDATE);
+  if (val_data_cache_ops_by_va_el3(VA_NS, CLEAN_AND_INVALIDATE))
+  {
+      val_print(ACS_PRINT_ERR, " Failed to clean and invalidate VA_NS = 0x%llx", VA_NS);
+      val_set_status(index, "FAIL", 06);
+      return;
+  }
 
   shared_data->num_access = 3;
   shared_data->shared_data_access[0].addr = VA_RT;
@@ -86,7 +116,13 @@ void payload(void)
   shared_data->shared_data_access[2].addr = VA_S;
   shared_data->shared_data_access[2].access_type = READ_DATA;
 
-  val_pe_access_mut_el3();
+  if (val_pe_access_mut_el3())
+  {
+      val_print(ACS_PRINT_ERR, " Failed to access VA_RT, VA_RL and VA_S", 0);
+      val_set_status(index, "FAIL", 07);
+      return;
+  }
+
   data_rt = shared_data->shared_data_access[0].data;
   data_rl = shared_data->shared_data_access[1].data;
   data_s = shared_data->shared_data_access[2].data;
@@ -103,7 +139,7 @@ void payload(void)
       val_set_status(index, "PASS", 01);
 
   else
-      val_set_status(index, "FAIL", 01);
+      val_set_status(index, "FAIL", 8);
   return;
 
 }

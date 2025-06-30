@@ -185,10 +185,21 @@ payload(void)
       mem_desc->attributes |= (PGT_STAGE1_AP_RW);
 
       //Map the memory as Non-secure for the instance
-      val_add_gpt_entry_el3(mem_desc->physical_address, GPT_NONSECURE);
+      if (val_add_gpt_entry_el3(mem_desc->physical_address, GPT_NONSECURE))
+      {
+          val_print(ACS_PRINT_ERR, " GPT mapping failed for the address: 0x%llx",
+            mem_desc->physical_address);
+          goto test_fail;
+
+      }
       attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(OUTER_SHAREABLE) | PGT_ENTRY_AP_RW);
-      val_add_mmu_entry_el3(mem_desc->virtual_address, mem_desc->physical_address,
-                      (attr | LOWER_ATTRS(PAS_ATTR(NONSECURE_PAS))));
+      if (val_add_mmu_entry_el3(mem_desc->virtual_address, mem_desc->physical_address,
+                      (attr | LOWER_ATTRS(PAS_ATTR(NONSECURE_PAS)))))
+      {
+          val_print(ACS_PRINT_ERR, " Failed to add MMU entry for dram_buf_in_virt: 0x%llx",
+                    (uint64_t)dram_buf_in_virt);
+          goto test_fail;
+      }
 
       //Clear the memory
       val_memory_set((uint64_t *)dram_buf_in_virt, dma_len, 0);
@@ -276,7 +287,11 @@ payload(void)
   val_exerciser_set_param(DMA_ATTRIBUTES, dram_buf_in_phys, dma_len, instance);
 
   //Change the GPI for the PA
-  val_add_gpt_entry_el3(dram_buf_in_phys, GPT_ROOT);
+  if (val_add_gpt_entry_el3(dram_buf_in_phys, GPT_ROOT))
+  {
+      val_print(ACS_PRINT_ERR, " GPT mapping failed for 0x%llx", dram_buf_in_phys);
+      goto test_fail;
+  }
 
   //Enable smmu now
   val_print(ACS_PRINT_TEST, " Enabling SMMU of index: %d", master.smmu_index);
@@ -295,13 +310,33 @@ test_fail:
   val_set_status(pe_index, "FAIL", 01);
 
 test_clean:
-  val_add_gpt_entry_el3(dram_buf_in_phys, GPT_ANY);
-  val_add_mmu_entry_el3((uint64_t)dram_buf_in_virt, dram_buf_in_phys,
-                  (attr | LOWER_ATTRS(PAS_ATTR(NONSECURE_PAS))));
+  if (val_add_gpt_entry_el3(dram_buf_in_phys, GPT_ANY))
+  {
+      val_print(ACS_PRINT_ERR,
+                  " test_clean: Failed to clear GPT entry for PA 0x%llx", dram_buf_in_phys);
+      val_set_status(pe_index, "FAIL", 02);
+  }
+
+  if (val_add_mmu_entry_el3((uint64_t)dram_buf_in_virt, dram_buf_in_phys,
+                  (attr | LOWER_ATTRS(PAS_ATTR(NONSECURE_PAS)))))
+  {
+      val_print(ACS_PRINT_ERR,
+                  " test_clean: Failed to add MMU entry for PA 0x%llx", dram_buf_in_phys);
+      val_set_status(pe_index, "FAIL", 03);
+  }
 
   //Clear the memory
-  val_memory_set_el3((uint64_t *)dram_buf_in_virt, dma_len/2, 0);
-  val_data_cache_ops_by_va_el3((uint64_t)dram_buf_in_virt, CLEAN_AND_INVALIDATE);
+  if (val_memory_set_el3((uint64_t *)dram_buf_in_virt, dma_len/2, 0))
+  {
+      val_print(ACS_PRINT_ERR, " test_clean: Failed to set memory to 0 ", 0);
+      val_set_status(pe_index, "FAIL", 04);
+  }
+  //Clean and invalidate the memory
+  if (val_data_cache_ops_by_va_el3((uint64_t)dram_buf_in_virt, CLEAN_AND_INVALIDATE))
+  {
+      val_print(ACS_PRINT_ERR, " test_clean: Failed to clean and invalidate dram_buf_in", 0);
+      val_set_status(pe_index, "FAIL", 05);
+  }
 
   /* Remove all address mappings for this exerciser */
   e_bdf = val_exerciser_get_bdf(instance);

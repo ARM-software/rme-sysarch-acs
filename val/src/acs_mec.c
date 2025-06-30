@@ -77,8 +77,16 @@ val_rme_mec_execute_tests(uint32_t num_pe)
       /* Map the Pointer in EL3 as NS Access PAS so that EL3 can access this struct pointers */
       pgt_attr_el3 = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(OUTER_SHAREABLE) |
                                  PGT_ENTRY_AP_RW | PAS_ATTR(NONSECURE_PAS));
-      val_add_mmu_entry_el3((uint64_t)(smmu_base_arr), (uint64_t)(smmu_base_arr), pgt_attr_el3);
-      val_rlm_smmu_init(num_smmus, smmu_base_arr);
+      if (val_add_mmu_entry_el3((uint64_t)(smmu_base_arr), (uint64_t)(smmu_base_arr), pgt_attr_el3))
+      {
+        val_print(ACS_PRINT_ERR, " MMU mapping failed for smmu_base_arr", 0);
+        return ACS_STATUS_ERR;
+      }
+      if (val_rlm_smmu_init(num_smmus, smmu_base_arr))
+      {
+        val_print(ACS_PRINT_ERR, " SMMU REALM INIT failed", 0);
+        return ACS_STATUS_ERR;
+      }
 
       g_rl_smmu_init = 1;
   }
@@ -91,10 +99,11 @@ val_rme_mec_execute_tests(uint32_t num_pe)
       reset_status != RESET_LS_DISBL_FLAG &&
       reset_status != RESET_LS_TEST3_FLAG)
   {
+    val_print(ACS_PRINT_ALWAYS, "\n*******************************************************\n", 0);
     status = mec_support_mecid_and_mecid_width_entry(num_pe);
     status |= mec_mecid_assosiation_and_encryption_entry();
     status |= mec_effect_of_popa_cmo_entry();
-    status = mec_cmo_uses_correct_mecid_entry(2);
+    status |= mec_cmo_uses_correct_mecid_entry(2);
   }
 
   return status;
@@ -139,10 +148,22 @@ uint32_t val_mec_validate_mecid(uint32_t mecid1, uint32_t mecid2, uint8_t PoX)
 
   attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(NON_SHAREABLE) | PGT_ENTRY_AP_RW);
 
-  val_add_gpt_entry_el3(PA, GPT_ANY);
-  val_add_mmu_entry_el3(VA_RL, PA, (attr | LOWER_ATTRS(PAS_ATTR(REALM_PAS))));
+  if (val_add_gpt_entry_el3(PA, GPT_ANY))
+  {
+    val_print(ACS_PRINT_ERR, " GPT mapping failed for PA: 0x%llx", PA);
+    return ACS_STATUS_ERR;
+  }
+  if (val_add_mmu_entry_el3(VA_RL, PA, (attr | LOWER_ATTRS(PAS_ATTR(REALM_PAS)))))
+  {
+    val_print(ACS_PRINT_ERR, " MMU mapping failed for VA: 0x%llx", VA_RL);
+    return ACS_STATUS_ERR;
+  }
 
-  val_rlm_configure_mecid(mecid1);
+  if (val_rlm_configure_mecid(mecid1))
+  {
+    val_print(ACS_PRINT_ERR, " MEC configure failure for mecid: 0x%lx", mecid1);
+    return ACS_STATUS_ERR;
+  }
 
   /* Store RANDOM_DATA_1 in PA_RT*/
   data_wt_rl = RANDOM_DATA_4;
@@ -151,19 +172,40 @@ uint32_t val_mec_validate_mecid(uint32_t mecid1, uint32_t mecid2, uint8_t PoX)
   shared_data->shared_data_access[0].data = data_wt_rl;
   shared_data->shared_data_access[0].access_type = WRITE_DATA;
 
-  val_pe_access_mut_el3();
+  if (val_pe_access_mut_el3())
+  {
+    val_print(ACS_PRINT_ERR, " Access MUT failure for VA: 0x%llx", VA_RL);
+    return ACS_STATUS_ERR;
+  }
 
-  if (PoX == PoPA)
-    val_data_cache_ops_by_pa_el3(PA, REALM_PAS);
-  else if (PoX == PoE)
-    val_cmo_to_poe(PA);
+  if (PoX == PoPA) {
+    if (val_data_cache_ops_by_pa_el3(PA, REALM_PAS))
+    {
+      val_print(ACS_STATUS_ERR, " CMO till PoPA failed for PA: 0x%llx", PA);
+      return ACS_STATUS_ERR;
+    }
+  }
+  else if (PoX == PoE) {
+    if (val_cmo_to_poe(PA))
+    {
+      val_print(ACS_PRINT_ERR, " CMO till POE failed for PA: 0x%llx", PA);
+    }
+  }
 
-  val_rlm_configure_mecid(mecid2);
+  if (val_rlm_configure_mecid(mecid2))
+  {
+    val_print(ACS_PRINT_ERR, " MECID Configuration failed for mecid: 0x%lx", mecid2);
+    return ACS_STATUS_ERR;
+  }
 
   shared_data->num_access = 1;
   shared_data->shared_data_access[0].addr = VA_RL;
   shared_data->shared_data_access[0].access_type = READ_DATA;
-  val_pe_access_mut_el3();
+  if (val_pe_access_mut_el3())
+  {
+    val_print(ACS_PRINT_ERR, " MUT Access failed for VA: 0x%llx after CMO", VA_RL);
+    return ACS_STATUS_ERR;
+  }
 
   data_rd_rl = shared_data->shared_data_access[0].data;
 

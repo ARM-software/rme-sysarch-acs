@@ -302,7 +302,11 @@ uint32_t val_memory_compare_src_el3(uint32_t *src, uint32_t *dest, uint32_t size
   {
       /* Read source buffer from EL3*/
       shared_data->shared_data_access[0].addr = (uint64_t)src;
-      val_pe_access_mut_el3();
+      if (val_pe_access_mut_el3())
+      {
+        val_print(ACS_PRINT_ERR, " Access MUT failure for VA: 0x%llx", (uint64_t)src);
+        return ACS_STATUS_ERR;
+      }
 
       if (shared_data->shared_data_access[0].data != *dest)
           return 1;

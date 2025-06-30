@@ -42,12 +42,33 @@ payload(void)
 
   /* Map VA to PA at EL3 */
   attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(NON_SHAREABLE) | PGT_ENTRY_AP_RW);
-  val_add_gpt_entry_el3(PA, GPT_ANY);
-  val_add_mmu_entry_el3(VA_RL, PA, (attr | LOWER_ATTRS(PAS_ATTR(REALM_PAS))));
+  if (val_add_gpt_entry_el3(PA, GPT_ANY))
+  {
+      val_print(ACS_PRINT_ERR, " Failed to add GPT entry for PA 0x%llx", PA);
+      val_set_status(pe_index, "FAIL", 01);
+      return;
+  }
 
-  val_rlm_enable_mec();
+  if (val_add_mmu_entry_el3(VA_RL, PA, (attr | LOWER_ATTRS(PAS_ATTR(REALM_PAS)))))
+  {
+      val_print(ACS_PRINT_ERR, " Failed to add MMU entry for VA 0x%llx", VA_RL);
+      val_set_status(pe_index, "FAIL", 02);
+      return;
+  }
 
-  val_rlm_configure_mecid(MECID1);
+  if (val_rlm_enable_mec())
+  {
+      val_print(ACS_PRINT_ERR, " Failed to enable MEC", 0);
+      val_set_status(pe_index, "FAIL", 03);
+      return;
+  }
+
+  if (val_rlm_configure_mecid(MECID1))
+  {
+      val_print(ACS_PRINT_ERR, " Failed to configure MECID %d", MECID1);
+      val_set_status(pe_index, "FAIL", 04);
+      return;
+  }
 
   /* Store RANDOM_DATA_1 in VA_RL*/
   data_wt_rl = RANDOM_DATA_1;
@@ -56,24 +77,55 @@ payload(void)
   shared_data->shared_data_access[0].data = data_wt_rl;
   shared_data->shared_data_access[0].access_type = WRITE_DATA;
 
-  val_pe_access_mut_el3();
+  if (val_pe_access_mut_el3())
+  {
+      val_print(ACS_PRINT_ERR, " Failed to access VA_RL = 0x%llx", VA_RL);
+      val_set_status(pe_index, "FAIL", 05);
+      return;
+  }
 
   /* Issue CMO with MECID = MECID2 */
-  val_rlm_configure_mecid(MECID2);
-  val_data_cache_ops_by_pa_el3(PA, REALM_PAS);
+  if (val_rlm_configure_mecid(MECID2))
+  {
+      val_print(ACS_PRINT_ERR, " Failed to configure MECID %d", MECID2);
+      val_set_status(pe_index, "FAIL", 06);
+      return;
+  }
+
+  if (val_data_cache_ops_by_pa_el3(PA, REALM_PAS))
+  {
+      val_print(ACS_PRINT_ERR, " Failed to issue CMO for PA 0x%llx", PA);
+      val_set_status(pe_index, "FAIL", 07);
+      return;
+  }
 
   /* Mark memory as Non cacheable to be able read directly from main memory */
   attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(NON_SHAREABLE)
                                | PGT_ENTRY_AP_RW | GET_ATTR_INDEX(NON_CACHEABLE));
-  val_add_mmu_entry_el3(VA_RL, PA, (attr | LOWER_ATTRS(PAS_ATTR(REALM_PAS))));
+  if (val_add_mmu_entry_el3(VA_RL, PA, (attr | LOWER_ATTRS(PAS_ATTR(REALM_PAS)))))
+  {
+      val_print(ACS_PRINT_ERR, " Failed to add MMU entry for VA_RL 0x%llx", VA_RL);
+      val_set_status(pe_index, "FAIL", 8);
+      return;
+  }
 
   /* Restore MECID to MECID1 when reading directly from main memory */
-  val_rlm_configure_mecid(MECID1);
+  if (val_rlm_configure_mecid(MECID1))
+  {
+      val_print(ACS_PRINT_ERR, " Failed to configure MECID %d", MECID1);
+      val_set_status(pe_index, "FAIL", 9);
+      return;
+  }
 
   shared_data->num_access = 1;
   shared_data->shared_data_access[0].addr = VA_RL;
   shared_data->shared_data_access[0].access_type = READ_DATA;
-  val_pe_access_mut_el3();
+  if (val_pe_access_mut_el3())
+  {
+      val_print(ACS_PRINT_ERR, " Failed to access VA_RL = 0x%llx", VA_RL);
+      val_set_status(pe_index, "FAIL", 10);
+      return;
+  }
 
   data_rd_rl = shared_data->shared_data_access[0].data;
 
@@ -81,7 +133,7 @@ payload(void)
   if (data_rd_rl != data_wt_rl)
   {
       val_print(ACS_PRINT_ERR, " Incorrect MECID used while cleaning cache", 0);
-      val_set_status(pe_index, "FAIL", 01);
+      val_set_status(pe_index, "FAIL", 11);
       return;
   }
 
@@ -92,29 +144,54 @@ payload(void)
   shared_data->shared_data_access[0].data = data_wt_rl;
   shared_data->shared_data_access[0].access_type = WRITE_DATA;
 
-  val_pe_access_mut_el3();
+  if (val_pe_access_mut_el3())
+  {
+      val_print(ACS_PRINT_ERR, " Failed to access VA_RL = 0x%llx", VA_RL);
+      val_set_status(pe_index, "FAIL", 12);
+      return;
+  }
 
   /* Restore the memory as cacheable */
   attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(NON_SHAREABLE) | PGT_ENTRY_AP_RW);
-  val_add_mmu_entry_el3(VA_RL, PA, (attr | LOWER_ATTRS(PAS_ATTR(REALM_PAS))));
+  if (val_add_mmu_entry_el3(VA_RL, PA, (attr | LOWER_ATTRS(PAS_ATTR(REALM_PAS)))))
+  {
+      val_print(ACS_PRINT_ERR, " free_mem: Failed to add MMU entry for VA_RL 0x%llx", VA_RL);
+      val_set_status(pe_index, "FAIL", 13);
+      return;
+  }
 
   shared_data->num_access = 1;
   shared_data->shared_data_access[0].addr = VA_RL;
   shared_data->shared_data_access[0].access_type = READ_DATA;
-  val_pe_access_mut_el3();
+  if (val_pe_access_mut_el3())
+  {
+      val_print(ACS_PRINT_ERR, " free_mem: Failed to access VA_RL = 0x%llx", VA_RL);
+      val_set_status(pe_index, "FAIL", 14);
+      return;
+  }
 
   /* Reading VA_RL should return RANDOM_DATA_2, indicating cache was invalidated*/
   data_rd_rl = shared_data->shared_data_access[0].data;
   if (data_rd_rl != data_wt_rl)
   {
-      val_print(ACS_PRINT_ERR, "CMO did not clean the cache", 0);
-      val_set_status(pe_index, "FAIL", 02);
+      val_print(ACS_PRINT_ERR, " CMO did not clean the cache", 0);
+      val_set_status(pe_index, "FAIL", 15);
       return;
   }
 
   /* Restore MECID to GMECID */
-  val_rlm_configure_mecid(VAL_GMECID);
-  val_rlm_disable_mec();
+  if (val_rlm_configure_mecid(VAL_GMECID))
+  {
+      val_print(ACS_PRINT_ERR, " Failed to configure GMECID", 0);
+      val_set_status(pe_index, "FAIL", 16);
+      return;
+  }
+  if (val_rlm_disable_mec())
+  {
+      val_print(ACS_PRINT_ERR, " Failed to disable MEC", 0);
+      val_set_status(pe_index, "FAIL", 17);
+      return;
+  }
 
   val_set_status(pe_index, "PASS", 01);
   return;

@@ -81,6 +81,7 @@ val_rme_execute_tests(uint32_t num_pe)
   g_curr_module = 1 << RME_MODULE_ID;
 
   /* RME-ACS tests */
+  val_print(ACS_PRINT_ALWAYS, "\n******************************************************* \n", 0);
   status = rme_support_in_pe_entry(num_pe);
   status |= rme_gprs_scrubbed_after_reset_entry();
 reset_done_2:

@@ -274,7 +274,7 @@ val_pe_install_esr(uint32_t exception_type, void (*esr)(uint64_t, void *))
 {
 
   if (exception_type > 3) {
-      val_print(ACS_PRINT_ERR, "Invalid Exception type %x ", exception_type);
+      val_print(ACS_PRINT_ERR, " Invalid Exception type %x ", exception_type);
       return ACS_STATUS_ERR;
   }
 

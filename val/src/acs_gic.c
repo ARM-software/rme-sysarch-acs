@@ -56,6 +56,7 @@ val_gic_execute_tests(uint32_t num_pe)
 
   g_curr_module = 1 << GIC_MODULE_ID;
 
+  val_print(ACS_PRINT_ALWAYS, "\n******************************************************* \n", 0);
   status = gic_its_subjected_to_gpc_check_entry(num_pe);
 
   return status;

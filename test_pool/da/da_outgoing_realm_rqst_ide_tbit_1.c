@@ -30,7 +30,7 @@
 #include "val/include/mem_interface.h"
 #include "val/include/rme_acs_da.h"
 
-#define TEST_NAME "da_outgoing_realm_rqst_ide_tbit_1"
+#define TEST_NAME  "da_outgoing_realm_rqst_ide_tbit_1"
 #define TEST_DESC  "Checking IDE-Tbit ==1 for outgoing Realm request       "
 #define TEST_RULE  "RCFQBW, RGBVTS"
 
@@ -140,7 +140,11 @@ payload(void)
           shared_data->shared_data_access[0].data = TEST_DATA;
           shared_data->shared_data_access[1].addr = va;
           shared_data->shared_data_access[1].access_type = READ_DATA;
-          val_pe_access_mut_el3();
+          if (val_pe_access_mut_el3())
+          {
+            val_print(ACS_PRINT_ERR, " MUT Access failed for va: 0x%lx", va);
+            test_fail++;
+          }
           data = shared_data->shared_data_access[0].data;
 
           /* The Request should be accepted by the RP */

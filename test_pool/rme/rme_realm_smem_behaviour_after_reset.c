@@ -51,7 +51,12 @@ void payload(void)
   else {
     /* Map the PA as REALM in GPT table */
     PA_RLM = val_get_free_pa(size, size);
-    val_add_gpt_entry_el3(PA_RLM, GPT_REALM);
+    if (val_add_gpt_entry_el3(PA_RLM, GPT_REALM))
+    {
+      val_print(ACS_PRINT_ERR, " Failed to add GPT entry for PA 0x%llx", PA_RLM);
+      val_set_status(index, "FAIL", 01);
+      return;
+    }
   }
 
   if (val_read_reset_status() == RESET_TST12_FLAG)
@@ -59,12 +64,22 @@ void payload(void)
 
   /* Store DATA1 to PA of Realm SMEM and read the PA from realm SMEM after reset.*/
   attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(NON_SHAREABLE) | PGT_ENTRY_AP_RW);
-  val_add_mmu_entry_el3(PA_RLM, PA_RLM, (attr | LOWER_ATTRS(PAS_ATTR(REALM_PAS))));//Flat-mapping
+  if (val_add_mmu_entry_el3(PA_RLM, PA_RLM, (attr | LOWER_ATTRS(PAS_ATTR(REALM_PAS)))))
+  {
+    val_print(ACS_PRINT_ERR, " Failed to add MMU entry for PA 0x%llx", PA_RLM);
+    val_set_status(index, "FAIL", 02);
+    return;
+  }
   shared_data->num_access = 1;
   shared_data->shared_data_access[0].addr = PA_RLM;
   shared_data->shared_data_access[0].data = wt_data;
   shared_data->shared_data_access[0].access_type = WRITE_DATA;
-  val_pe_access_mut_el3();
+  if (val_pe_access_mut_el3())
+  {
+    val_print(ACS_PRINT_ERR, " Failed to access PA = 0x%lx", PA_RLM);
+    val_set_status(index, "FAIL", 03);
+    return;
+  }
 
   val_write_reset_status(RESET_TST12_FLAG);
   val_save_global_test_data();
@@ -74,19 +89,29 @@ reset_done:
   val_print(ACS_PRINT_TEST, " After system reset", 0);
   val_restore_global_test_data();
   attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(NON_SHAREABLE) | PGT_ENTRY_AP_RW);
-  val_add_mmu_entry_el3(PA_RLM, PA_RLM, (attr | LOWER_ATTRS(PAS_ATTR(REALM_PAS))));
+  if (val_add_mmu_entry_el3(PA_RLM, PA_RLM, (attr | LOWER_ATTRS(PAS_ATTR(REALM_PAS)))))
+  {
+    val_print(ACS_PRINT_ERR, " Failed to add MMU entry for PA 0x%llx", PA_RLM);
+    val_set_status(index, "FAIL", 04);
+    return;
+  }
   /* Read the PA from realm SMEM after reset */
   shared_data->num_access = 1;
   shared_data->shared_data_access[0].addr = PA_RLM;
   shared_data->shared_data_access[0].access_type = READ_DATA;
-  val_pe_access_mut_el3();
+  if (val_pe_access_mut_el3())
+  {
+    val_print(ACS_PRINT_ERR, " Failed to access PA = 0x%lx", PA_RLM);
+    val_set_status(index, "FAIL", 05);
+    return;
+  }
   rd_data = shared_data->shared_data_access[0].data;
 
   val_print(ACS_PRINT_TEST, " The data stored is 0x%lx", wt_data);
   val_print(ACS_PRINT_TEST, " and the data read after the reset is 0x%lx", rd_data);
   val_print(ACS_PRINT_TEST, " The test expects the data to be not same", 0);
   if (wt_data == rd_data)
-    val_set_status(index, "FAIL", 01);
+    val_set_status(index, "FAIL", 06);
 
   else
     val_set_status(index, "PASS", 01);

@@ -126,7 +126,7 @@ uint32_t get_entries_per_level(uint32_t page_size)
         case(SIZE_64KB):  //64kb granule
             return MAX_ENTRIES_64K;
         default:
-            INFO("       %x granularity not supported.i\n", pg_size);
+            ERROR("       %x granularity not supported.i\n", pg_size);
             return 0;
     }
 }
@@ -143,7 +143,7 @@ uint64_t get_block_size(uint32_t level)
             else if (pg_size == SIZE_16KB)
                 return (uint64_t)(pg_size * entries * entries * 2); // only 2 lookup tables in L0
             else {
-                INFO("       L0 tables not supported for page size %x\n", pg_size);
+                ERROR("       L0 tables not supported for page size %x\n", pg_size);
                 return 0;
             }
         case(PGT_LEVEL_1):  // For L1 table translation
@@ -312,7 +312,7 @@ uint64_t get_gpt_index(uint64_t pa, uint8_t level, uint8_t l0gptsz, uint8_t pps,
             idx = (pa >> (p + 4)) & ((0x1ul << (l0gptsz - (p + 4))) - 1);
             break;
         default:
-            INFO("Not a valid Level entry");
+            ERROR("Not a valid Level entry");
             break;
     }
     return idx;
@@ -411,9 +411,9 @@ uint64_t modify_gpt_gpi(uint64_t entry, uint64_t pa, uint8_t level, uint8_t p, u
   @param   arg0 - Virtual Address needed for the MMU mapping
   @param   arg1 - Physical Address needed to be mapped to the Virtual Address
   @param   arg2 - Access PAS for the corresponding mapping if specified or NON_SECURE by default
-  @return  None
+  @return  0 on Success and 1 on Failure
 **/
-void add_mmu_entry(uint64_t arg0, uint64_t arg1, uint64_t arg2)
+uint32_t add_mmu_entry(uint64_t arg0, uint64_t arg1, uint64_t arg2)
 {
     uint64_t input_address = arg0, page_size;
     uint64_t output_address, attr;
@@ -448,6 +448,19 @@ void add_mmu_entry(uint64_t arg0, uint64_t arg1, uint64_t arg2)
     bits_remaining = (num_pgt_levels - 1) * bits_per_level + page_size_log2;
     bits_at_this_level = pgt_desc.ias - bits_remaining;
     tt_base_virt = (uint64_t *)tt_base_phys;
+
+    if (output_address >= (0x1ull << pgt_desc.oas))
+    {
+        ERROR("val_pe_mmu_map_add: output address size error\n");
+        return 1;
+    }
+
+    if (input_address >= (0x1ull << pgt_desc.ias))
+    {
+        ERROR("val_pe_mmu_map_add: input address size error \
+                        and truncating to %d-bits\n", pgt_desc.ias);
+        input_address &= ((0x1ull << pgt_desc.ias) - 1);
+    }
 
     while (1) {
         index = (input_address >> bits_remaining) & ((0x1ul << bits_at_this_level) - 1);
@@ -499,7 +512,7 @@ void add_mmu_entry(uint64_t arg0, uint64_t arg1, uint64_t arg2)
     }
     cln_and_invldt_cache(table_desc);
     INFO("val_pe_mmu_map_add: table_desc = %lx     \n", *table_desc);
-    return;
+    return 0;
 }
 
 uint64_t
@@ -629,7 +642,7 @@ static uint32_t fill_translation_table(tt_descriptor_t tt_desc,
             tt_base_next_level = val_memory_alloc_el3(SIZE_4KB, SIZE_4KB);
             if (tt_base_next_level == NULL)
             {
-                INFO("  fill_translation_table: page allocation failed\n");
+                ERROR("  fill_translation_table: page allocation failed\n");
                 return 1;
             }
             val_memory_set_el3(tt_base_next_level, pg_size, 0);
@@ -697,7 +710,7 @@ uint32_t val_realm_pgt_create(memory_region_descriptor_t *mem_desc, pgt_descript
     if (pgt_desc->pgt_base == (uint64_t) NULL) {
         tt_base = (uint64_t *) val_memory_alloc_el3(SIZE_4KB, SIZE_4KB);
         if (tt_base == NULL) {
-            INFO("      val_pgt_create: page allocation failed\n");
+            ERROR("      val_pgt_create: page allocation failed\n");
             return 1;
         }
         val_memory_set_el3(tt_base, pg_size, 0);
@@ -716,31 +729,31 @@ uint32_t val_realm_pgt_create(memory_region_descriptor_t *mem_desc, pgt_descript
         if ((mem_desc->virtual_address & (uint64_t)(pg_size - 1)) != 0 ||
             (mem_desc->physical_address & (uint64_t)(pg_size - 1)) != 0)
             {
-                INFO("      val_pgt_create: address alignment error\n");
+                ERROR("      val_pgt_create: address alignment error\n");
                 return 1;
             }
 
         if (mem_desc->physical_address >= (0x1ull << pgt_desc->oas))
         {
-            INFO("      val_pgt_create: output address size error\n");
+            ERROR("      val_pgt_create: output address size error\n");
             return 1;
         }
 
         if (mem_desc->virtual_address >= (0x1ull << pgt_desc->ias))
-            {
-            INFO("      val_pgt_create: input address size error \
+        {
+            ERROR("      val_pgt_create: input address size error \
                             and truncating to %d-bits\n", pgt_desc->ias);
             mem_desc->virtual_address &= ((0x1ull << pgt_desc->ias) - 1);
-            }
+        }
 
 #ifndef TARGET_BM_BOOT
         // TCR won't be populated for the initial PGT that are created for MMU init.
         // Removing this check in case of baremetal boot flow.
         if ((pgt_desc->vtcr.tg_size_log2) != page_size_log2)
         {
-            INFO("      val_pgt_create: input page_size 0x%x \
+            ERROR("      val_pgt_create: input page_size 0x%x \
                             not supported\n", (0x1 << pgt_desc->vtcr.tg_size_log2));
-            return 0;
+            return 1;
         }
 #endif
         tt_desc.input_base = mem_desc->virtual_address & ((0x1ull << pgt_desc->ias) - 1);

@@ -48,29 +48,54 @@ void payload(void)
   VA = val_get_free_va(size);
   attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(NON_SHAREABLE) | PGT_ENTRY_AP_RW);
   /* Map VA to PA as secure access PAS in MMU and PA to secure resource PAS in GPT */
-  val_add_gpt_entry_el3(PA, GPT_SECURE);
-  val_add_mmu_entry_el3(VA, PA, (attr | LOWER_ATTRS(PAS_ATTR(SECURE_PAS))));
+  if (val_add_gpt_entry_el3(PA, GPT_SECURE))
+  {
+    val_print(ACS_PRINT_ERR, " Failed to add GPT entry for PA 0x%llx", PA);
+    val_set_status(index, "FAIL", 01);
+    return;
+  }
+  if (val_add_mmu_entry_el3(VA, PA, (attr | LOWER_ATTRS(PAS_ATTR(SECURE_PAS)))))
+  {
+    val_print(ACS_PRINT_ERR, " Failed to add MMU entry for VA 0x%llx", VA);
+    val_set_status(index, "FAIL", 02);
+    return;
+  }
 
   //Access VA
   shared_data->num_access = 1;
   shared_data->shared_data_access[0].addr = VA;
   shared_data->shared_data_access[0].access_type = READ_DATA;
 
-  val_pe_access_mut_el3();
+  if (val_pe_access_mut_el3())
+  {
+    val_print(ACS_PRINT_ERR, " Failed to access VA = 0x%llx", VA);
+    val_set_status(index, "FAIL", 03);
+    return;
+  }
 
   //Change the Resource PAS from Secure to Non-secure
-  val_add_gpt_entry_el3(PA, GPT_NONSECURE);
+  if (val_add_gpt_entry_el3(PA, GPT_NONSECURE))
+  {
+    val_print(ACS_PRINT_ERR, " Failed to change GPT entry for PA 0x%llx", PA);
+    val_set_status(index, "FAIL", 04);
+    return;
+  }
   //Access VA after the GPT change
   shared_data->exception_expected = SET;
   shared_data->access_mut = SET;
   shared_data->arg1 = VA;
-  val_pe_access_mut_el3();    //Accessing MUT
+  if (val_pe_access_mut_el3())
+  {
+    val_print(ACS_PRINT_ERR, " Failed to access VA = 0x%llx", VA);
+    val_set_status(index, "FAIL", 05);
+    return;
+  }
 
   if (shared_data->exception_generated == CLEAR)
   {
     val_print(ACS_PRINT_ERR, "  Unexpected successful access when resource pas \
                             is not same as access pas", 0);
-    val_set_status(index, "FAIL", 01);
+    val_set_status(index, "FAIL", 06);
   }
   else {
     val_set_status(index, "PASS", 01);

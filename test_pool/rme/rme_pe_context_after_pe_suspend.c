@@ -93,7 +93,12 @@ payload()
     val_reg_update_shared_struct_msd(reg_list_chck[reg_num], reg_num);
   }
   /* Save all the registers before going to low power mode */
-  val_read_pe_regs_bfr_low_pwr_el3();
+  if (val_read_pe_regs_bfr_low_pwr_el3())
+  {
+    val_print(ACS_PRINT_ERR, "\n    Saving the PE Regsiter failed before low power state", 0);
+    val_set_status(index, "FAIL", 1);
+    return;
+  }
 
   /* Start Sys timer*/
   cnt_base_n = val_timer_get_info(TIMER_INFO_SYS_CNT_BASE_N, timer_num);
@@ -114,14 +119,19 @@ payload()
    * if they've retained their original value after an exit from low power state
    */
   shared_data->generic_flag = CLEAR;
-  val_cmpr_pe_regs_aftr_low_pwr_el3();
+  if (val_cmpr_pe_regs_aftr_low_pwr_el3())
+  {
+    val_print(ACS_PRINT_ERR, "\n    Comparision failed for PE Regsiters after low power state", 0);
+    val_set_status(index, "FAIL", 2);
+    return;
+  }
 
   if (irq_received == 0) {
       val_print(ACS_PRINT_ERR, " System timer interrupt not generated", 0);
       val_timer_disable_system_timer((addr_t)cnt_base_n);
       val_gic_clear_interrupt(intid);
       val_timer_set_phy_el1(0);
-      val_set_status(index, "FAIL", 1);
+      val_set_status(index, "FAIL", 3);
       return;
   }
 
@@ -129,7 +139,7 @@ payload()
   will be CLEARed in val_cmpr_pe_regs_aftr_low_pwr_el3 operation,
   making the test PASS otherwise FAIL */
   if (shared_data->generic_flag)
-    val_set_status(index, "FAIL", 2);
+    val_set_status(index, "FAIL", 4);
 
   else
     val_set_status(index, "PASS", 2);

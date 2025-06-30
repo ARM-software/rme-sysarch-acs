@@ -79,8 +79,16 @@ val_rme_da_execute_tests(uint32_t num_pe)
       /* Map the Pointer in EL3 as NS Access PAS so that EL3 can access this struct pointers */
       pgt_attr_el3 = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(OUTER_SHAREABLE) |
                                  PGT_ENTRY_AP_RW | PAS_ATTR(NONSECURE_PAS));
-      val_add_mmu_entry_el3((uint64_t)(smmu_base_arr), (uint64_t)(smmu_base_arr), pgt_attr_el3);
-      val_rlm_smmu_init(num_smmus, smmu_base_arr);
+      if (val_add_mmu_entry_el3((uint64_t)(smmu_base_arr), (uint64_t)(smmu_base_arr), pgt_attr_el3))
+      {
+        val_print(ACS_PRINT_ERR, " MMU mapping failed for smmu_base_arr", 0);
+        return ACS_STATUS_ERR;
+      }
+      if (val_rlm_smmu_init(num_smmus, smmu_base_arr))
+      {
+        val_print(ACS_PRINT_ERR, " SMMU REALM INIT failed", 0);
+        return ACS_STATUS_ERR;
+      }
 
       g_rl_smmu_init = 1;
   }
@@ -94,6 +102,7 @@ val_rme_da_execute_tests(uint32_t num_pe)
       reset_status != RESET_LS_TEST3_FLAG)
   {
       /* DA-ACS tests */
+      val_print(ACS_PRINT_ALWAYS, "\n*******************************************************\n", 0);
       status = da_dvsec_register_config_entry();
       status |= da_smmu_implementation_entry();
       status |= da_tee_io_capability_entry();
@@ -597,8 +606,8 @@ uint32_t val_intercnt_sec_prpty_check(uint64_t *register_entry_info)
   if (register_entry->type != INTERCONNECT)
       return 0;
 
-  val_print(ACS_PRINT_DEBUG, "Address: 0x%x", register_entry->bdf);
-  val_print(ACS_PRINT_ALWAYS, "Property: %d", register_entry->property);
+  val_print(ACS_PRINT_DEBUG, " Address: 0x%x", register_entry->bdf);
+  val_print(ACS_PRINT_ALWAYS, " Property: %d", register_entry->property);
 
   data_rt = TEST_DATA_1;
   data_ns = TEST_DATA_2;
@@ -610,7 +619,11 @@ uint32_t val_intercnt_sec_prpty_check(uint64_t *register_entry_info)
           shared_data->num_access = 1;
           shared_data->shared_data_access[0].addr = register_entry->address;
           shared_data->shared_data_access[0].access_type = READ_DATA;
-          val_pe_access_mut_el3();
+          if (val_pe_access_mut_el3())
+          {
+            val_print(ACS_PRINT_ERR, " MUT access failed for 0x%llx", register_entry->address);
+            return 1;
+          }
           org_data = shared_data->shared_data_access[0].data;
 
           /* Write the data_rt from ROOT */
@@ -647,7 +660,11 @@ uint32_t val_intercnt_sec_prpty_check(uint64_t *register_entry_info)
           shared_data->shared_data_access[0].addr = register_entry->address;
           shared_data->shared_data_access[0].access_type = WRITE_DATA;
           shared_data->shared_data_access[0].data = org_data;
-          val_pe_access_mut_el3();
+          if (val_pe_access_mut_el3())
+          {
+            val_print(ACS_PRINT_ERR, " MUT access failed for 0x%llx", register_entry->address);
+            return 1;
+          }
 
           rd_data = 0;
           break;

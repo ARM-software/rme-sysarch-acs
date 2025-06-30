@@ -118,7 +118,13 @@ payload(void)
      * SMMU_ROOT_CR0.ACCESSEN thereby setting the SMMU in reset state.
      */
     if (smmu_index != ACS_INVALID_INDEX) {
-        val_smmu_access_disable(smmu_base);
+        if (val_smmu_access_disable(smmu_base))
+        {
+            val_print(ACS_PRINT_ERR, " Exerciser %x smmu root access disable error", instance);
+            val_smmu_access_enable(smmu_base);
+            val_set_status(pe_index, "FAIL", 01);
+            return;
+        }
         if (val_smmu_disable(smmu_index)) {
             val_print(ACS_PRINT_ERR, " Exerciser %x smmu disable error", instance);
             val_smmu_access_enable(smmu_base);
@@ -132,7 +138,7 @@ payload(void)
     if (!dram_buf1_virt) {
       val_print(ACS_PRINT_ERR, " WB and OSH mem alloc failure %x", 02);
       val_smmu_access_enable(smmu_base);
-      val_set_status(pe_index, "FAIL", 02);
+      val_set_status(pe_index, "FAIL", 05);
       return;
     }
 
@@ -149,7 +155,7 @@ payload(void)
 
 test_fail:
   val_smmu_access_enable(smmu_base);
-  val_set_status(pe_index, "FAIL", 02);
+  val_set_status(pe_index, "FAIL", 06);
   val_memory_free_cacheable(e_bdf, TEST_DATA_BLK_SIZE, dram_buf1_virt, dram_buf1_phys);
   return;
 }

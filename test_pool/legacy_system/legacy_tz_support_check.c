@@ -81,6 +81,7 @@ payload()
     val_set_status(index, "FAIL", 01);
     return;
   }
+
   val_set_status(index, "PASS", 01);
 
 }

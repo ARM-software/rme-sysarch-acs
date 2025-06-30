@@ -61,7 +61,12 @@ void payload(void)
   attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(NON_SHAREABLE) | PGT_ENTRY_AP_RW);
 
   //Map VA to PA as NS access pas in MMU
-  val_add_mmu_entry_el3(VA_NS, PA, (attr | LOWER_ATTRS(PAS_ATTR(NONSECURE_PAS))));
+  if (val_add_mmu_entry_el3(VA_NS, PA, (attr | LOWER_ATTRS(PAS_ATTR(NONSECURE_PAS)))))
+  {
+      val_print(ACS_PRINT_ERR, " Failed to add MMU entry for VA_NS = 0x%llx", VA_NS);
+      val_set_status(index, "FAIL", 01);
+      return;
+  }
 
   //Store the data in PA_NS
   wt_ns_data = RANDOM_DATA_1;
@@ -73,37 +78,71 @@ void payload(void)
   shared_data->shared_data_access[1].addr = VA_NS;
   shared_data->shared_data_access[1].access_type = READ_DATA;
 
-  val_pe_access_mut_el3();
+  if (val_pe_access_mut_el3()) {
+    val_print(ACS_PRINT_ERR, " Failed to access VA_NS = 0x%llx", VA_NS);
+    val_set_status(index, "FAIL", 02);
+    return;
+  }
 
   //CMO to PoPA for PA
-  val_data_cache_ops_by_pa_el3(PA, NONSECURE_PAS);
+  if (val_data_cache_ops_by_pa_el3(PA, NONSECURE_PAS)) {
+    val_print(ACS_PRINT_ERR, " Failed to issue CMO for PA = 0x%llx", PA);
+    val_set_status(index, "FAIL", 03);
+    return;
+  }
 
   //Enable NS Encryption
-  val_enable_ns_encryption();
+  if (val_enable_ns_encryption()) {
+    val_print(ACS_PRINT_ERR, " Failed to enable NS_Encryption", 0);
+    val_set_status(index, "FAIL", 04);
+    return;
+  }
 
   //CMO to PoPA for PA
-  val_data_cache_ops_by_pa_el3(PA, NONSECURE_PAS);
+  if (val_data_cache_ops_by_pa_el3(PA, NONSECURE_PAS)) {
+    val_print(ACS_PRINT_ERR, " Failed to issue CMO for PA = 0x%llx", PA);
+    val_set_status(index, "FAIL", 05);
+    return;
+  }
 
   //Read VA_NS
   shared_data->num_access = 1;
   shared_data->shared_data_access[0].addr = VA_NS;
   shared_data->shared_data_access[0].access_type = READ_DATA;
 
-  val_pe_access_mut_el3();
+  if (val_pe_access_mut_el3())
+  {
+    val_print(ACS_PRINT_ERR, " Failed to access VA_NS = 0x%llx", VA_NS);
+    val_set_status(index, "FAIL", 06);
+    return;
+  }
   rd_data_encrpt_enbl = shared_data->shared_data_access[0].data;
 
   //Disable NS Enryption
-  val_disable_ns_encryption();
+  if (val_disable_ns_encryption()) {
+    val_print(ACS_PRINT_ERR, " Failed to disable NS_Encryption", 0);
+    val_set_status(index, "FAIL", 07);
+    return;
+  }
 
   //CMO to PoPA for PA
-  val_data_cache_ops_by_pa_el3(PA, NONSECURE_PAS);
+  if (val_data_cache_ops_by_pa_el3(PA, NONSECURE_PAS)) {
+    val_print(ACS_PRINT_ERR, " Failed to issue CMO for PA = 0x%llx", PA);
+    val_set_status(index, "FAIL", 8);
+    return;
+  }
 
   //Read VA_NS
   shared_data->num_access = 1;
   shared_data->shared_data_access[0].addr = VA_NS;
   shared_data->shared_data_access[0].access_type = READ_DATA;
 
-  val_pe_access_mut_el3();
+  if (val_pe_access_mut_el3())
+  {
+    val_print(ACS_PRINT_ERR, " Failed to access VA_NS = 0x%llx", VA_NS);
+    val_set_status(index, "FAIL", 9);
+    return;
+  }
   rd_data_encrpt_disbl = shared_data->shared_data_access[0].data;
 
   //If data read after enabling NSEncryption is expected to be
@@ -116,13 +155,13 @@ void payload(void)
   val_print(ACS_PRINT_DEBUG, " The test expectes both the read data to be the same", 0);
   if (wt_ns_data == rd_data_encrpt_enbl) {
     val_print(ACS_PRINT_ERR, " The Encryption is not enabled", 0);
-    val_set_status(index, "FAIL", 01);
+    val_set_status(index, "FAIL", 10);
   }
 
   if (rd_data_encrpt_enbl != rd_data_encrpt_disbl) {
     val_print(ACS_PRINT_ERR, " Both the data read after enabling and \
                     disabling NS_Encryption are different", 0);
-    val_set_status(index, "FAIL", 01);
+    val_set_status(index, "FAIL", 11);
   }
   else
     val_set_status(index, "PASS", 01);

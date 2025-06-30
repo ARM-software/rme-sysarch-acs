@@ -44,19 +44,38 @@ check_rmsd_protect(uint32_t pa_offset, uint32_t data, uint32_t orgn_val, uint32_
   for (uint64_t pas_cnt = 0; pas_cnt < sizeof(acc_pas)/sizeof(acc_pas[0]); ++pas_cnt)
   {
     VA = val_get_free_va(val_get_min_tg());
-    val_add_mmu_entry_el3(VA, cfg_addr, (attr | LOWER_ATTRS(PAS_ATTR(acc_pas[pas_cnt]))));
+    if (val_add_mmu_entry_el3(VA, cfg_addr, (attr | LOWER_ATTRS(PAS_ATTR(acc_pas[pas_cnt])))))
+    {
+      val_print(ACS_PRINT_ERR,
+                " Failed to add MMU entry for cfg_addr 0x%llx ", cfg_addr);
+      val_print(ACS_PRINT_ERR, " with pas 0x%llx", acc_pas[pas_cnt]);
+      check_fails++;
+      continue;
+    }
 
     shared_data->num_access = 1;
     shared_data->shared_data_access[0].addr = VA + pa_offset;
     shared_data->shared_data_access[0].access_type = WRITE_DATA;
     shared_data->shared_data_access[0].data = data;
-    val_pe_access_mut_el3();
+    if (val_pe_access_mut_el3())
+    {
+      val_print(ACS_PRINT_ERR,
+                " Failed to write to RMEDA_CTL register with pas 0x%llx", acc_pas[pas_cnt]);
+      check_fails++;
+      continue;
+    }
 
     /* Now read the value back to see if it's updated or not */
     shared_data->num_access = 1;
     shared_data->shared_data_access[0].addr = VA + pa_offset;
     shared_data->shared_data_access[0].access_type = READ_DATA;
-    val_pe_access_mut_el3();
+    if (val_pe_access_mut_el3())
+    {
+      val_print(ACS_PRINT_ERR,
+                " Failed to read RMEDA_CTL register with pas 0x%llx", acc_pas[pas_cnt]);
+      check_fails++;
+      continue;
+    }
     data = shared_data->shared_data_access[0].data;
 
     if (acc_pas[pas_cnt] == REALM_PAS || acc_pas[pas_cnt] == ROOT_PAS)
@@ -81,7 +100,13 @@ check_rmsd_protect(uint32_t pa_offset, uint32_t data, uint32_t orgn_val, uint32_
     shared_data->shared_data_access[0].addr = VA + pa_offset;
     shared_data->shared_data_access[0].access_type = WRITE_DATA;
     shared_data->shared_data_access[0].data = orgn_val;
-    val_pe_access_mut_el3();
+    if (val_pe_access_mut_el3())
+    {
+      val_print(ACS_PRINT_ERR,
+                " Failed to restore RMEDA_CTL register with pas 0x%llx", acc_pas[pas_cnt]);
+      check_fails++;
+      continue;
+    }
 
   }
   return check_fails;

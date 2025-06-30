@@ -205,7 +205,7 @@ typedef struct {
     BlockHeader *free_list;     // Head of the free list
 } MemoryPool;
 
-uint32_t val_smmu_init_el3(uint32_t num_smmu, uint64_t smmu_base_arr[]);
+void val_smmu_init_el3(uint32_t num_smmu, uint64_t smmu_base_arr[]);
 uint32_t val_smmu_rlm_map(smmu_master_attributes_t master_attr, pgt_descriptor_t pgt_desc);
 void val_security_state_change(uint64_t attr_nse_ns);
 void set_daif(void);
@@ -239,7 +239,7 @@ void tlbi_alle3is(void);
 void isb(void);
 void rme_install_handler(void);
 void add_gpt_entry(uint64_t PA, uint64_t GPI);
-void add_mmu_entry(uint64_t VA, uint64_t PA, uint64_t acc_pas);
+uint32_t add_mmu_entry(uint64_t VA, uint64_t PA, uint64_t acc_pas);
 uint32_t val_realm_pgt_create(memory_region_descriptor_t *mem_desc, pgt_descriptor_t *pgt_desc);
 void val_realm_pgt_destroy(pgt_descriptor_t *pgt_desc);
 void map_shared_mem(void);

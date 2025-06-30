@@ -169,6 +169,9 @@ typedef struct shared_data_el32 {
   uint64_t pas_filter_flag;
   uint64_t generic_flag;
   reg_info_msd reg_info;
+  uint64_t status_code;
+  uint64_t error_code;
+  char error_msg[128];
   SHARED_DATA_ACCESS shared_data_access[];
 } struct_sh_data;
 

@@ -52,7 +52,12 @@ void payload(void)
   else {
     PA = val_get_free_pa(size, size);
     /* Map the PA as ROOT memory in GPT */
-    val_add_gpt_entry_el3(PA, GPT_ROOT);
+    if (val_add_gpt_entry_el3(PA, GPT_ROOT))
+    {
+      val_print(ACS_PRINT_ERR, " GPT mapping failed for PA: 0x%llx", PA);
+      val_set_status(index, "FAIL", 01);
+      return;
+    }
   }
 
   VA = val_get_free_va(NUM_PAS * size);
@@ -62,14 +67,23 @@ void payload(void)
 
   for (int pas_cnt = 0; pas_cnt < 4; ++pas_cnt)
   {
-      val_add_mmu_entry_el3(VA, PA, (attr | LOWER_ATTRS(PAS_ATTR(pas_list[pas_cnt]))));
+      if (val_add_mmu_entry_el3(VA, PA, (attr | LOWER_ATTRS(PAS_ATTR(pas_list[pas_cnt])))))
+      {
+        val_print(ACS_PRINT_ERR, " Failed to add MMU entry for VA 0x%llx", VA);
+        status_fail_cnt++;
+        continue;
+      }
 
       if (security_state == pas_list[pas_cnt]) {
 
         shared_data->exception_expected = CLEAR;
         shared_data->access_mut = SET;
         shared_data->arg1 = VA;
-        val_pe_access_mut_el3();    //Accessing MUT
+        if (val_pe_access_mut_el3())
+        {
+          val_print(ACS_PRINT_ERR, " Failed to access VA = 0x%lx", VA);
+          status_fail_cnt++;
+        }
 
         if (shared_data->exception_generated == SET)
         {
@@ -83,7 +97,11 @@ void payload(void)
         shared_data->access_mut = SET;
         shared_data->pas_filter_flag = SET;
         shared_data->arg1 = VA;
-        val_pe_access_mut_el3();    //Accessing MUT
+        if (val_pe_access_mut_el3())
+        {
+          val_print(ACS_PRINT_ERR, " Failed to access VA = 0x%lx", VA);
+          status_fail_cnt++;
+        }
         rd_data = shared_data->shared_data_access[0].data;
         shared_data->pas_filter_flag = CLEAR;
 
@@ -107,7 +125,7 @@ void payload(void)
   val_print(ACS_PRINT_DEBUG, " The test expects zero status_fail_cnt", 0);
   if (status_fail_cnt >= 1)
   {
-    val_set_status(index, "FAIL", 01);
+    val_set_status(index, "FAIL", 02);
   }
   else
     val_set_status(index, "PASS", 01);

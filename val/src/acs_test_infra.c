@@ -80,7 +80,10 @@ val_log_context(uint32_t level, char8_t *string, uint64_t data, const char *file
         return;
     }
     else {
-      pal_print("\n  Check %d : ", ++g_print_test_check_id);
+      if (g_print_test_check_id == 0)
+        pal_print("  Check %d : ", ++g_print_test_check_id);
+      else
+        pal_print("\n  Check %d : ", ++g_print_test_check_id);
     }
     pal_print(string, data);
     /* Print file name and line number for ERR and WARN */
@@ -781,9 +784,17 @@ uint32_t val_configure_acs(void)
 
   /* Map the SHARED_ADDRESS and the sp_el0 as NS in EL3 */
   attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(OUTER_SHAREABLE) | PGT_ENTRY_AP_RW);
-  val_add_mmu_entry_el3(shared_address, shared_address,
-                  (attr | LOWER_ATTRS(PAS_ATTR(NONSECURE_PAS))));
-  val_add_mmu_entry_el3(sp_val, sp_val, (attr | LOWER_ATTRS(PAS_ATTR(NONSECURE_PAS))));
+  if (val_add_mmu_entry_el3(shared_address, shared_address,
+                  (attr | LOWER_ATTRS(PAS_ATTR(NONSECURE_PAS)))))
+  {
+    val_print(ACS_PRINT_ERR, " MMU mapping failed for Shared address: 0x%llx", shared_address);
+    return 1;
+  }
+  if (val_add_mmu_entry_el3(sp_val, sp_val, (attr | LOWER_ATTRS(PAS_ATTR(NONSECURE_PAS)))))
+  {
+    val_print(ACS_PRINT_ERR, " MMU mapping failed for SP address: 0x%llx", sp_val);
+    return 1;
+  }
 
   /* Map the SMMU root, NS and realm pages as ROOT PAS */
   smmu_base = val_iovirt_get_smmu_info(SMMU_CTRL_BASE, 0);
@@ -791,11 +802,34 @@ uint32_t val_configure_acs(void)
   smmu_rlm_page0 = smmu_base + SMMU_R_PAGE_0_OFFSET;
   smmu_rlm_page1 = smmu_base + SMMU_R_PAGE_1_OFFSET;
   attr |= LOWER_ATTRS(GET_ATTR_INDEX(DEV_MEM_nGnRnE));
-  val_add_mmu_entry_el3(smmu_base, smmu_base, attr | LOWER_ATTRS(PAS_ATTR(ROOT_PAS)));
-  val_add_mmu_entry_el3(smmu_root_page, smmu_root_page, attr | LOWER_ATTRS(PAS_ATTR(ROOT_PAS)));
-  val_add_mmu_entry_el3(smmu_rlm_page0, smmu_rlm_page0, attr | LOWER_ATTRS(PAS_ATTR(ROOT_PAS)));
-  val_add_mmu_entry_el3(smmu_rlm_page1, smmu_rlm_page1, attr | LOWER_ATTRS(PAS_ATTR(ROOT_PAS)));
-  val_rme_install_handler_el3();
+  if (val_add_mmu_entry_el3(smmu_base, smmu_base, attr | LOWER_ATTRS(PAS_ATTR(ROOT_PAS))))
+  {
+    val_print(ACS_PRINT_ERR, " MMU mapping failed for SMMU_BASE address: 0x%llx", smmu_base);
+    return 1;
+  }
+  if (val_add_mmu_entry_el3(smmu_root_page, smmu_root_page, attr | LOWER_ATTRS(PAS_ATTR(ROOT_PAS))))
+  {
+    val_print(ACS_PRINT_ERR,
+      " MMU mapping failed for SMMU_ROOT_BASE address: 0x%llx", smmu_root_page);
+    return 1;
+  }
+  if (val_add_mmu_entry_el3(smmu_rlm_page0, smmu_rlm_page0, attr | LOWER_ATTRS(PAS_ATTR(ROOT_PAS))))
+  {
+    val_print(ACS_PRINT_ERR,
+      " MMU mapping failed for SMMU_REALM0_BASE address: 0x%llx", smmu_rlm_page0);
+    return 1;
+  }
+  if (val_add_mmu_entry_el3(smmu_rlm_page1, smmu_rlm_page1, attr | LOWER_ATTRS(PAS_ATTR(ROOT_PAS))))
+  {
+    val_print(ACS_PRINT_ERR,
+      " MMU mapping failed for SMMU_REALM1_BASE address: 0x%llx", smmu_rlm_page1);
+    return 1;
+  }
+  if (val_rme_install_handler_el3())
+  {
+    val_print(ACS_PRINT_ERR, " Failed to install the RME handler in EL3", 0);
+    return 1;
+  }
 
   /* Create the list of valid Pcie Device Functions, Exerciser table
    * and initialise smmu for the tests that require exerciser and smmu required

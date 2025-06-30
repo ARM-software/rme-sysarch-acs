@@ -52,29 +52,83 @@ void payload(void)
   attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(NON_SHAREABLE) | PGT_ENTRY_AP_RW);
 
   PA_NXT_BLK = PA + 16;
-  val_add_mmu_entry_el3(VA_S, PA, (attr | LOWER_ATTRS(PAS_ATTR(SECURE_PAS))));
-  val_add_mmu_entry_el3(VA_S_NXT_BLK, PA_NXT_BLK, (attr | LOWER_ATTRS(PAS_ATTR(SECURE_PAS))));
-  val_add_mmu_entry_el3(VA_NS, PA, (attr | LOWER_ATTRS(PAS_ATTR(NONSECURE_PAS))));
-  val_add_mmu_entry_el3(VA_NS_NXT_BLK, PA_NXT_BLK, (attr | LOWER_ATTRS(PAS_ATTR(NONSECURE_PAS))));
+  if (val_add_mmu_entry_el3(VA_S, PA, (attr | LOWER_ATTRS(PAS_ATTR(SECURE_PAS)))))
+  {
+      val_print(ACS_PRINT_ERR, "\n  Failed to add MMU entry for VA_S 0x%llx", VA_S);
+      val_set_status(index, "FAIL", 01);
+      return;
+  }
+  if (val_add_mmu_entry_el3(VA_S_NXT_BLK, PA_NXT_BLK,
+                           (attr | LOWER_ATTRS(PAS_ATTR(SECURE_PAS)))))
+  {
+      val_print(ACS_PRINT_ERR,
+        "\n  Failed to add MMU entry for VA_S_NXT_BLK 0x%llx", VA_S_NXT_BLK);
+      val_set_status(index, "FAIL", 02);
+      return;
+  }
+  if (val_add_mmu_entry_el3(VA_NS, PA, (attr | LOWER_ATTRS(PAS_ATTR(NONSECURE_PAS)))))
+  {
+      val_print(ACS_PRINT_ERR, "\n  Failed to add MMU entry for VA_NS 0x%llx", VA_NS);
+      val_set_status(index, "FAIL", 03);
+      return;
+  }
+  if (val_add_mmu_entry_el3(VA_NS_NXT_BLK, PA_NXT_BLK,
+                            (attr | LOWER_ATTRS(PAS_ATTR(NONSECURE_PAS)))))
+  {
+      val_print(ACS_PRINT_ERR,
+        "\n  Failed to add MMU entry for VA_NS_NXT_BLK 0x%llx", VA_NS_NXT_BLK);
+      val_set_status(index, "FAIL", 04);
+      return;
+  }
 
   /* Store RANDOM_DATA_1 in PA_S and (PA_S + 16)*/
   shared_data->num_access = 1;
   shared_data->shared_data_access[0].addr = VA_S;
   shared_data->shared_data_access[0].data = RANDOM_DATA_1;
   shared_data->shared_data_access[0].access_type = WRITE_DATA;
-  val_pe_access_mut_el3();
+  if (val_pe_access_mut_el3())
+  {
+      val_print(ACS_PRINT_ERR, " Failed to access VA_S = 0x%llx", VA_S);
+      val_set_status(index, "FAIL", 05);
+      return;
+  }
 
   shared_data->num_access = 1;
   shared_data->shared_data_access[0].addr = VA_S_NXT_BLK;
   shared_data->shared_data_access[0].data = RANDOM_DATA_1;
   shared_data->shared_data_access[0].access_type = WRITE_DATA;
-  val_pe_access_mut_el3();
+  if (val_pe_access_mut_el3())
+  {
+      val_print(ACS_PRINT_ERR, " Failed to access VA_S_NXT_BLK = 0x%llx", VA_S_NXT_BLK);
+      val_set_status(index, "FAIL", 06);
+      return;
+  }
 
   /* CMO to PoPA for all PA of all pas */
-  val_data_cache_ops_by_pa_el3(PA, SECURE_PAS);
-  val_data_cache_ops_by_pa_el3(PA_NXT_BLK, SECURE_PAS);
-  val_data_cache_ops_by_pa_el3(PA, NONSECURE_PAS);
-  val_data_cache_ops_by_pa_el3(PA_NXT_BLK, NONSECURE_PAS);
+  if (val_data_cache_ops_by_pa_el3(PA, SECURE_PAS))
+  {
+      val_print(ACS_PRINT_ERR, " Failed to issue CMO for PA 0x%llx", PA);
+      val_set_status(index, "FAIL", 07);
+      return;
+  }
+  if (val_data_cache_ops_by_pa_el3(PA_NXT_BLK, SECURE_PAS))
+  {
+      val_print(ACS_PRINT_ERR, " Failed to issue CMO for PA_NXT_BLK 0x%llx", PA_NXT_BLK);
+      val_set_status(index, "FAIL", 8);
+      return;
+  }
+  if (val_data_cache_ops_by_pa_el3(PA, NONSECURE_PAS))
+  {
+      val_print(ACS_PRINT_ERR, " Failed to issue CMO for PA 0x%llx", PA);
+      val_set_status(index, "FAIL", 9);
+      return;
+  }
+  if (val_data_cache_ops_by_pa_el3(PA_NXT_BLK, NONSECURE_PAS))
+  {
+      val_print(ACS_PRINT_ERR, " Failed to issue CMO for PA_NXT_BLK 0x%llx", PA_NXT_BLK);
+      val_set_status(index, "FAIL", 10);
+      return;
+  }
 
   /* Read the data from PA_NS and (PA_NS + 16) */
   shared_data->num_access = 2;
@@ -84,7 +138,12 @@ void payload(void)
   shared_data->shared_data_access[1].addr = VA_NS_NXT_BLK;
   shared_data->shared_data_access[1].access_type = READ_DATA;
 
-  val_pe_access_mut_el3();
+  if (val_pe_access_mut_el3())
+  {
+      val_print(ACS_PRINT_ERR, " Failed to access VA_NS and VA_NS_NXT_BLK", 0);
+      val_set_status(index, "FAIL", 11);
+      return;
+  }
 
   data_rd_ns = shared_data->shared_data_access[0].data;
   data_rd_ns_nxt_blk = shared_data->shared_data_access[1].data;
@@ -97,7 +156,7 @@ void payload(void)
   if (data_rd_ns_nxt_blk != data_rd_ns)
       val_set_status(index, "PASS", 01);
   else
-      val_set_status(index, "FAIL", 01);
+      val_set_status(index, "FAIL", 12);
   return;
 
 }

@@ -26,7 +26,8 @@
 #define TEST_NAME "da_attribute_rmeda_ctl_registers"
 #define TEST_RULE "RDVJRV"
 
-void
+static
+int
 write_from_root(uint64_t addr, uint32_t data)
 {
 
@@ -35,7 +36,12 @@ write_from_root(uint64_t addr, uint32_t data)
   shared_data->shared_data_access[0].data = data;
   shared_data->shared_data_access[0].access_type = WRITE_DATA;
 
-  val_pe_access_mut_el3();
+  if (val_pe_access_mut_el3())
+  {
+    val_print(ACS_PRINT_ERR, "\n    MUT Access failed for VA: 0x%llx", addr);
+    return 1;
+  }
+  return 0;
 }
 
 static
@@ -93,14 +99,24 @@ payload()
           cfg_addr = val_pcie_get_bdf_config_addr(bdf);
           pgt_attr_el3 = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(OUTER_SHAREABLE)
                           | GET_ATTR_INDEX(DEV_MEM_nGnRnE) | PGT_ENTRY_AP_RW | PAS_ATTR(ROOT_PAS));
-          val_add_mmu_entry_el3(va, cfg_addr, pgt_attr_el3);
+          if (val_add_mmu_entry_el3(va, cfg_addr, pgt_attr_el3))
+          {
+              val_print(ACS_PRINT_ERR,
+                "\n       Failed to add MMU entry for cfg_addr: 0x%lx", cfg_addr);
+              test_fails++;
+              continue;
+          }
 
           /* Write to RMEDA_CTL1 register in Root to check it's RW attr */
           val_pcie_read_cfg(bdf, da_cap_base + RMEDA_CTL1, &original_reg_val);
           reg_value = original_reg_val;
 
           write_val = (reg_value == 0x1) ? 0x0 : 0x1;
-          write_from_root(va + da_cap_base + RMEDA_CTL1, write_val);
+          if (write_from_root(va + da_cap_base + RMEDA_CTL1, write_val))
+          {
+            test_fails++;
+            continue;
+          }
           val_pcie_read_cfg(bdf, da_cap_base + RMEDA_CTL1, &reg_value);
 
           if (reg_value != write_val)
@@ -110,7 +126,11 @@ payload()
           }
 
           /* Restore the register */
-          write_from_root(va + da_cap_base + RMEDA_CTL1, original_reg_val);
+          if (write_from_root(va + da_cap_base + RMEDA_CTL1, original_reg_val))
+          {
+            test_fails++;
+            continue;
+          }
 
           /* Write to RMEDA_CTL2 register in ROOT to check if it's attr */
           val_pcie_read_cfg(bdf, da_cap_base + RMEDA_CTL2, &original_reg_val);
@@ -126,7 +146,11 @@ payload()
           {
               /* Check for Res0/RsvdP */
               write_val = reg_value;
-              write_from_root(va + da_cap_base + RMEDA_CTL2, write_val);
+              if (write_from_root(va + da_cap_base + RMEDA_CTL2, write_val))
+              {
+                  test_fails++;
+                  continue;
+              }
               reg_value = (reg_value >> num_sel_ide_stream_supp);
 
               if (reg_value != 0)
@@ -138,7 +162,11 @@ payload()
 
               /* Now for SEL_STR_LOCK[NUM_SEL_STR - 1: 0] which should be RW */
               write_val = reg_value ^ (REG_MASK(num_sel_ide_stream_supp - 1, 0) << 0);
-              write_from_root(va + da_cap_base + RMEDA_CTL2, write_val);
+              if (write_from_root(va + da_cap_base + RMEDA_CTL2, write_val))
+              {
+                  test_fails++;
+                  continue;
+              }
               val_pcie_read_cfg(bdf, da_cap_base + RMEDA_CTL2, &reg_value);
 
               if (reg_value != write_val)
@@ -149,10 +177,17 @@ payload()
               }
 
               /* Restore the resgister */
-              write_from_root(va + da_cap_base + RMEDA_CTL2, original_reg_val);
+              if (write_from_root(va + da_cap_base + RMEDA_CTL2, original_reg_val))
+              {
+                    test_fails++;
+                    continue;
+              }
           } else {
               write_val = ~reg_value;
-              write_from_root(va + da_cap_base + RMEDA_CTL2, write_val);
+              if (write_from_root(va + da_cap_base + RMEDA_CTL2, write_val))
+              {
+                  test_fails++;
+              }
 
               if (reg_value != write_val)
               {
@@ -162,7 +197,10 @@ payload()
               }
 
               /* Restore the resgister */
-              write_from_root(va + da_cap_base + RMEDA_CTL2, original_reg_val);
+              if (write_from_root(va + da_cap_base + RMEDA_CTL2, original_reg_val))
+              {
+                test_fails++;
+              }
           }
       }
   }

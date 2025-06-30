@@ -39,9 +39,14 @@ isr()
 {
     uint32_t index = val_pe_get_index_mpid(val_pe_get_mpid());
     //Disable the root watchdog timer
-    val_wd_set_ws0_el3(VA_RT_WDOG, CLEAR, counter_freq);
-    val_print(ACS_PRINT_TEST, " Received WS0 interrupt ", 0);
-    val_set_status(index, "FAIL", 2);
+    if (val_wd_set_ws0_el3(VA_RT_WDOG, CLEAR, counter_freq))
+    {
+        val_print(ACS_PRINT_ERR, " Failed to program the WDOG", 0);
+        val_set_status(index, "FAIL", 4);
+        return;
+    }
+    val_print(ACS_PRINT_DEBUG, " Received WS0 interrupt", 0);
+    val_set_status(index, "FAIL", 5);
     val_gic_end_of_interrupt(int_id);
 }
 
@@ -95,10 +100,21 @@ payload()
     VA_RT_WDOG = val_get_free_va(size);
     rt_wdog_ctl = PLAT_RT_WDOG_CTRL;
     attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(NON_SHAREABLE) | PGT_ENTRY_AP_RW);
-    val_add_mmu_entry_el3(VA_RT_WDOG, rt_wdog_ctl, (attr | LOWER_ATTRS(PAS_ATTR(NONSECURE_PAS))));
+    if (val_add_mmu_entry_el3(VA_RT_WDOG, rt_wdog_ctl,
+                                (attr | LOWER_ATTRS(PAS_ATTR(NONSECURE_PAS)))))
+    {
+        val_print(ACS_PRINT_ERR, " Failed to map RT_WDOG_CTRL register in MMU", 0);
+        val_set_status(index, "FAIL", 3);
+        return;
+    }
     //Generic flag will be set to ensure the disabling of I.A.F bit in PSTATE in el3
     shared_data->generic_flag = SET;
-    val_wd_set_ws0_el3(VA_RT_WDOG, timer_expire_ticks, counter_freq);
+    if (val_wd_set_ws0_el3(VA_RT_WDOG, timer_expire_ticks, counter_freq))
+    {
+        val_print(ACS_PRINT_ERR, "\n    Failed to program  the WDOG", 0);
+        val_set_status(index, "FAIL", 3);
+        return;
+    }
 
     while ((--timeout > 0) && (IS_RESULT_PENDING(val_get_status(index))));
 

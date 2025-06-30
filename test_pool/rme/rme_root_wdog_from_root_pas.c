@@ -38,8 +38,13 @@ isr()
     uint32_t index = val_pe_get_index_mpid(val_pe_get_mpid());
 
     /* Clear the interrupt */
-    val_wd_set_ws0_el3(VA_RT_WDOG, CLEAR, counter_freq);
-    val_print(ACS_PRINT_TEST, " Received WS0 interrupt", 0);
+    if (val_wd_set_ws0_el3(VA_RT_WDOG, CLEAR, counter_freq))
+    {
+        val_print(ACS_PRINT_ERR, " Failed to program the WDOG", 0);
+        val_set_status(index, "FAIL", 1);
+        return;
+    }
+    val_print(ACS_PRINT_DEBUG, "  Received WS0 interrupt", 0);
     val_set_status(index, "PASS", 1);
     val_gic_end_of_interrupt(int_id);
 }
@@ -85,7 +90,7 @@ payload()
 
     if (val_gic_install_isr(int_id, isr)) {
         val_print(ACS_PRINT_ERR, " GIC Install Handler Failed...", 0);
-        val_set_status(index, "FAIL", 02);
+        val_set_status(index, "FAIL", 2);
         return;
     }
 
@@ -94,14 +99,25 @@ payload()
 
     shared_data->generic_flag = CLEAR;
     attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(NON_SHAREABLE) | PGT_ENTRY_AP_RW);
-    val_add_mmu_entry_el3(VA_RT_WDOG, rt_wdog_ctl_reg,  (attr | LOWER_ATTRS(PAS_ATTR(ROOT_PAS))));
-    val_wd_set_ws0_el3(VA_RT_WDOG, timer_expire_ticks, counter_freq);
+    if (val_add_mmu_entry_el3(VA_RT_WDOG, rt_wdog_ctl_reg,
+                                (attr | LOWER_ATTRS(PAS_ATTR(ROOT_PAS)))))
+    {
+        val_print(ACS_PRINT_ERR, " Failed to map RT_WDOG_CTRL register in MMU", 0);
+        val_set_status(index, "FAIL", 3);
+        return;
+    }
+    if (val_wd_set_ws0_el3(VA_RT_WDOG, timer_expire_ticks, counter_freq))
+    {
+        val_print(ACS_PRINT_ERR, " Failed to program  the WDOG", 0);
+        val_set_status(index, "FAIL", 4);
+        return;
+    }
 
     while ((--timeout > 0) && (IS_RESULT_PENDING(val_get_status(index))));
 
     if (timeout == 0) {
             val_print(ACS_PRINT_ERR, " WS0 Interrupt not received on %d", int_id);
-            val_set_status(index, "FAIL", 03);
+            val_set_status(index, "FAIL", 05);
             return;
     }
 }

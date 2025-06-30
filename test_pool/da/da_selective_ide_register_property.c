@@ -33,7 +33,7 @@
 #define TEST_RULE "RYHQQL"
 
 static
-void
+int
 write_from_root(uint64_t addr, uint32_t data)
 {
 
@@ -42,7 +42,12 @@ write_from_root(uint64_t addr, uint32_t data)
   shared_data->shared_data_access[0].data = data;
   shared_data->shared_data_access[0].access_type = WRITE_DATA;
 
-  val_pe_access_mut_el3();
+  if (val_pe_access_mut_el3())
+  {
+    val_print(ACS_PRINT_ERR, " MUT Access failed for VA: 0x%llx", addr);
+    return 1;
+  }
+  return 0;
 }
 
 static
@@ -131,7 +136,11 @@ payload(void)
           /* Lock the corresponding Selective IDE register block in RMEDA_CTL2 register */
           str_index = count - 1;
           sel_str_lock_bit = 1 << (str_index % 32);
-          write_from_root(va + da_cap_base + RMEDA_CTL2, sel_str_lock_bit);
+          if (write_from_root(va + da_cap_base + RMEDA_CTL2, sel_str_lock_bit))
+          {
+            test_fail++;
+            continue;
+          }
           val_pcie_read_cfg(bdf, da_cap_base + RMEDA_CTL2, &reg_value);
 
           /* Reprogramming the Selective IDE registers should transition the Stream to Insecure */

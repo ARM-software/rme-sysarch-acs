@@ -160,7 +160,12 @@ payload(void)
           shared_data->num_access = 1;
           shared_data->shared_data_access[0].addr = va;
           shared_data->shared_data_access[0].access_type = READ_DATA;
-          val_pe_access_mut_el3();
+          if (val_pe_access_mut_el3())
+          {
+            val_print(ACS_PRINT_ERR, " MUT Access failed for VA: 0x%llx", va);
+            test_fail++;
+            continue;
+          }
           rp_data = shared_data->shared_data_access[0].data;
           if (rp_data != PCIE_UNKNOWN_RESPONSE)
           {

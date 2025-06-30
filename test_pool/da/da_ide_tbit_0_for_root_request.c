@@ -97,7 +97,13 @@ payload(void)
           va = val_get_free_va(val_get_min_tg());
           pgt_attr_el3 = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(OUTER_SHAREABLE)
                     | GET_ATTR_INDEX(DEV_MEM_nGnRnE) | PGT_ENTRY_AP_RW | PAS_ATTR(NONSECURE_PAS));
-          val_add_mmu_entry_el3(va, bar_base, pgt_attr_el3);
+          if (val_add_mmu_entry_el3(va, bar_base, pgt_attr_el3))
+          {
+              val_print(ACS_PRINT_ERR,
+                " Failed to add MMU entry for Bar address: 0x%lx", bar_base);
+              test_fail++;
+              continue;
+          }
 
           data = 0;
 
@@ -108,7 +114,12 @@ payload(void)
           shared_data->shared_data_access[0].data = TEST_DATA;
           shared_data->shared_data_access[1].addr = va;
           shared_data->shared_data_access[1].access_type = READ_DATA;
-          val_pe_access_mut_el3();
+          if (val_pe_access_mut_el3())
+          {
+              val_print(ACS_PRINT_ERR, " Failed to access Bar address: 0x%lx", bar_base);
+              test_fail++;
+              continue;
+          }
           data = shared_data->shared_data_access[0].data;
 
           /* The Request should be allowed by the RP */

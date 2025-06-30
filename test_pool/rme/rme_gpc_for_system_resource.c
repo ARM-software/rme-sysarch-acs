@@ -60,14 +60,24 @@ void payload(void)
     for (int pas_cnt = 0; pas_cnt < 4; ++pas_cnt)
     {
       shared_data->arg1 = pas_list[pas_cnt];/* GPI */
-      val_add_mmu_entry_el3(VA, shared_data->arg0, attr | LOWER_ATTRS(PAS_ATTR(shared_data->arg1)));
+      if (val_add_mmu_entry_el3(VA, shared_data->arg0,
+                                attr | LOWER_ATTRS(PAS_ATTR(shared_data->arg1))))
+      {
+        val_print(ACS_PRINT_ERR, " Failed to add MMU entry for VA 0x%llx", VA);
+        status_fail_cnt++;
+        continue;
+      }
 
       if (security_state == pas_list[pas_cnt]) {
 
         shared_data->exception_expected = CLEAR;
         shared_data->access_mut = SET;
         shared_data->arg1 = VA;
-        val_pe_access_mut_el3();    //Accessing MUT
+        if (val_pe_access_mut_el3())
+        {
+          val_print(ACS_PRINT_ERR, " Failed to access VA = 0x%llx", VA);
+          status_fail_cnt++;
+        }
 
         if (shared_data->exception_generated == SET)
         {
@@ -79,11 +89,15 @@ void payload(void)
         shared_data->exception_expected = SET;
         shared_data->access_mut = SET;
         shared_data->arg1 = VA;
-        val_pe_access_mut_el3();    //Accessing MUT
+        if (val_pe_access_mut_el3())
+        {
+          val_print(ACS_PRINT_ERR, " Failed to access VA = 0x%llx", VA);
+          status_fail_cnt++;
+        }
 
         if (shared_data->exception_generated == CLEAR)
         {
-          val_print(ACS_PRINT_ERR, "  The exception is not generated when Resource PAS \
+          val_print(ACS_PRINT_ERR, " The exception is not generated when Resource PAS \
                           and Access PAS are different", 0);
           status_fail_cnt++;
         }

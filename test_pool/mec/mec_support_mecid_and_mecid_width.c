@@ -62,7 +62,12 @@ payload2(void)
   uint32_t i, common_mecidw = INVALID_MECIDW, max_mecid;
   uint32_t test_fail = 0;
 
-  val_rlm_enable_mec();
+  if (val_rlm_enable_mec())
+  {
+    val_print(ACS_PRINT_ERR, "\n    Failed to enable MEC", 0);
+    val_set_status(pe_index, "FAIL", 01);
+    return;
+  }
 
   num_smmu = val_smmu_get_info(SMMU_NUM_CTRL, 0);
 
@@ -77,7 +82,12 @@ payload2(void)
     smmu_base = val_smmu_get_info(SMMU_CTRL_BASE, i);
 
     /* Check if SMMU supports MEC */
-    val_smmu_rlm_check_mec_impl(smmu_base);
+    if (val_smmu_rlm_check_mec_impl(smmu_base))
+    {
+      val_print(ACS_PRINT_ERR, "\n    SMMU REALM MEC Implementation check failed", 0);
+      test_fail++;
+      continue;
+    }
     if (shared_data->shared_data_access[0].data == 0)
     {
       val_print(ACS_PRINT_ERR, "SMMU %d does not support MEC ", i);
@@ -86,7 +96,12 @@ payload2(void)
     }
 
     /* Get MECID width supported by each SMMU */
-    val_smmu_rlm_get_mecidw(smmu_base);
+    if (val_smmu_rlm_get_mecidw(smmu_base))
+    {
+        val_print(ACS_PRINT_ERR, "\n    Could not get SMMU REALM MECID Width", 0);
+        test_fail++;
+        continue;
+    }
     smmu_mecidw[i] = shared_data->shared_data_access[0].data + 1;
 
     if (smmu_mecidw[i] < common_mecidw)
@@ -130,7 +145,12 @@ payload2(void)
   }
 
   /* Restore MECID to GMECID */
-  val_rlm_configure_mecid(VAL_GMECID);
+  if (val_rlm_configure_mecid(VAL_GMECID))
+  {
+        val_print(ACS_PRINT_ERR, "\n    MECID configuration failed", 0);
+        val_set_status(pe_index, "FAIL", 07);
+        return;
+  }
 
   val_set_status(pe_index, "PASS", 01);
   return;
@@ -171,7 +191,12 @@ mec_support_mecid_and_mecid_width_entry(uint32_t num_pe)
       }
   }
 
-  val_rlm_disable_mec();
+  if (val_rlm_disable_mec())
+  {
+    val_print(ACS_PRINT_ERR, "\n       Failed to disable MEC", 0);
+    val_report_status(0, "END");
+    return  status;
+  }
 
   /*get the result from all PE and check for failure */
   status = val_check_for_error(num_pe);

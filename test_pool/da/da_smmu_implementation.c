@@ -23,7 +23,7 @@
 #include "val/include/rme_acs_pcie.h"
 #include "val/include/rme_acs_el32.h"
 
-#define TEST_NAME "da_smmu_implementation"
+#define TEST_NAME  "da_smmu_implementation"
 #define TEST_DESC  "Check if SMMU implements DA                            "
 #define TEST_RULE  "RNJRPC"
 
@@ -52,24 +52,30 @@ payload()
           return;
       }
 
+      /* Check the SMMU_ROOT_IDR0 register for the feature implementations */
       smmu_base = val_smmu_get_info(SMMU_CTRL_BASE, num_smmu);
-      val_smmu_check_rmeda_el3(smmu_base);
+      if (val_smmu_check_rmeda_el3(smmu_base))
+      {
+        val_print(ACS_PRINT_ERR, " SMMU DA implmnt check failure", 0);
+        val_set_status(index, "FAIL", 01);
+        return;
+      }
       root_impl_smmu = VAL_EXTRACT_BITS(shared_data->shared_data_access[0].data, 0, 0);
 
       /* Check If SMMU__ROOT_IDR0.RME_IMPL[3] && SMMU_ROOT_IDR0.ROOT_IMPL[0] == 0b1 */
 
       if (!root_impl_smmu) {
-          val_print(ACS_PRINT_ERR, " The SMMU 0x%x doesn't indicate the support "
-                          "for the presence of ROOT registers", num_smmu);
-          val_set_status(index, "FAIL", 01);
+          val_print(ACS_PRINT_ERR,
+            " The SMMU 0x%x doesn't indicate the support for ROOT registers", num_smmu);
+          val_set_status(index, "FAIL", 02);
           return;
       }
 
       rme_impl_smmu = VAL_EXTRACT_BITS(shared_data->shared_data_access[0].data, 3, 3);
       if (!rme_impl_smmu) {
-          val_print(ACS_PRINT_ERR, "  The RME_IMPL bit of SMMUv3_IDR0 is not set \
-                          for 0x%d smmu controller", num_smmu);
-          val_set_status(index, "FAIL", 01);
+          val_print(ACS_PRINT_ERR,
+            " The RME_IMPL bit of SMMUv3_IDR0 is not set for %d smmu controller", num_smmu);
+          val_set_status(index, "FAIL", 03);
           return;
       }
   }

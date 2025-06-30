@@ -52,7 +52,12 @@ payload()
           goto reset_done;
 
   //Enable the Legacy_TZ_EN tie-off in the system
-  val_prog_legacy_tz(SET);
+  if (val_prog_legacy_tz(SET))
+  {
+    val_print(ACS_PRINT_ERR, "\n  Programming LEGACY_TZ_EN failed", 0);
+    val_set_status(index, "FAIL", 01);
+    return;
+  }
 
   val_write_reset_status(RESET_LS_TEST3_FLAG);
   val_system_reset();

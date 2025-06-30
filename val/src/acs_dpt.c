@@ -78,8 +78,16 @@ val_rme_dpt_execute_tests(uint32_t num_pe)
       /* Map the Pointer in EL3 as NS Access PAS so that EL3 can access this struct pointers */
       pgt_attr_el3 = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(OUTER_SHAREABLE) |
                                  PGT_ENTRY_AP_RW | PAS_ATTR(NONSECURE_PAS));
-      val_add_mmu_entry_el3((uint64_t)(smmu_base_arr), (uint64_t)(smmu_base_arr), pgt_attr_el3);
-      val_rlm_smmu_init(num_smmus, smmu_base_arr);
+      if (val_add_mmu_entry_el3((uint64_t)(smmu_base_arr), (uint64_t)(smmu_base_arr), pgt_attr_el3))
+      {
+        val_print(ACS_PRINT_ERR, " MMU mapping failed for smmu_base_arr", 0);
+        return ACS_STATUS_ERR;
+      }
+      if (val_rlm_smmu_init(num_smmus, smmu_base_arr))
+      {
+        val_print(ACS_PRINT_ERR, " SMMU REALM INIT failed", 0);
+        return ACS_STATUS_ERR;
+      }
 
       g_rl_smmu_init = 1;
   }
@@ -92,6 +100,7 @@ val_rme_dpt_execute_tests(uint32_t num_pe)
       reset_status != RESET_LS_DISBL_FLAG &&
       reset_status != RESET_LS_TEST3_FLAG)
   {
+    val_print(ACS_PRINT_ALWAYS, "\n*******************************************************\n", 0);
     status = dpt_system_resource_valid_without_dpti_entry();
     status |= dpt_system_resource_valid_with_dpti_entry();
     status |= dpt_system_resource_invalid_entry();

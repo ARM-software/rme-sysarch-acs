@@ -435,7 +435,7 @@ val_pcie_create_info_table(uint64_t *pcie_info_table)
   pal_pcie_create_info_table(g_pcie_info_table);
 
   val_print(ACS_PRINT_ALWAYS,
-        "\n PCIE_INFO: Number of ECAM regions    :    %lx",
+        " PCIE_INFO: Number of ECAM regions    :    %lx",
         val_pcie_get_info(PCIE_INFO_NUM_ECAM, 0));
 
   val_pcie_enumerate();
@@ -2261,12 +2261,20 @@ uint32_t val_pcie_enable_tdisp(uint32_t bdf)
   attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(OUTER_SHAREABLE)
                   | GET_ATTR_INDEX(DEV_MEM_nGnRnE) | PGT_ENTRY_AP_RW);
 
-  val_add_mmu_entry_el3(va, cfg_addr, (attr | LOWER_ATTRS(PAS_ATTR(ROOT_PAS))));
+  if (val_add_mmu_entry_el3(va, cfg_addr, (attr | LOWER_ATTRS(PAS_ATTR(ROOT_PAS)))))
+  {
+    val_print(ACS_PRINT_ERR, " MMU mapping failed for cfg_addr: 0x%llx", cfg_addr);
+    return 1;
+  }
   shared_data->num_access = 1;
   shared_data->shared_data_access[0].addr = va + cap_base + 0xC;
   shared_data->shared_data_access[0].access_type = WRITE_DATA;
   shared_data->shared_data_access[0].data = 1;
-  val_pe_access_mut_el3();
+  if (val_pe_access_mut_el3())
+  {
+    val_print(ACS_PRINT_ERR, " MUT Access failed", 0);
+    return 1;
+  }
   val_pcie_read_cfg(bdf, cap_base + RMEDA_CTL1, &reg_value);
 
   return 0;
@@ -2289,12 +2297,20 @@ uint32_t val_pcie_disable_tdisp(uint32_t bdf)
   attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(OUTER_SHAREABLE)
                   | GET_ATTR_INDEX(DEV_MEM_nGnRnE) | PGT_ENTRY_AP_RW);
 
-  val_add_mmu_entry_el3(va, cfg_addr, (attr | LOWER_ATTRS(PAS_ATTR(ROOT_PAS))));
+  if (val_add_mmu_entry_el3(va, cfg_addr, (attr | LOWER_ATTRS(PAS_ATTR(ROOT_PAS)))))
+  {
+    val_print(ACS_PRINT_ERR, " MMU mapping failed for cfg_addr: 0x%llx", cfg_addr);
+    return 1;
+  }
   shared_data->num_access = 1;
   shared_data->shared_data_access[0].addr = va + cap_base + 0xC;
   shared_data->shared_data_access[0].access_type = WRITE_DATA;
   shared_data->shared_data_access[0].data = 0;
-  val_pe_access_mut_el3();
+  if (val_pe_access_mut_el3())
+  {
+    val_print(ACS_PRINT_ERR, " MUT Access failed for 0x%llx", (va + cap_base + 0xC));
+    return 1;
+  }
 
   return 0;
 }
@@ -2441,7 +2457,11 @@ uint32_t val_pcie_rp_sec_prpty_check(uint64_t *register_entry_info)
           shared_data->shared_data_access[0].addr = register_entry->address;
           shared_data->shared_data_access[0].access_type = WRITE_DATA;
           shared_data->shared_data_access[0].data = data_rt;
-          val_pe_access_mut_el3();
+          if (val_pe_access_mut_el3())
+          {
+            val_print(ACS_PRINT_ERR, " MUT access failed for 0x%llx", register_entry->address);
+            return 1;
+          }
 
           /* Read the address from the NS */
           rd_data = val_mmio_read(register_entry->address);
@@ -2469,7 +2489,11 @@ uint32_t val_pcie_rp_sec_prpty_check(uint64_t *register_entry_info)
           shared_data->shared_data_access[0].addr = register_entry->address;
           shared_data->shared_data_access[0].access_type = WRITE_DATA;
           shared_data->shared_data_access[0].data = org_data;
-          val_pe_access_mut_el3();
+          if (val_pe_access_mut_el3())
+          {
+            val_print(ACS_PRINT_ERR, " MUT access failed for 0x%llx", register_entry->address);
+            return 1;
+          }
 
           rd_data = 0;
           break;
@@ -2478,7 +2502,11 @@ uint32_t val_pcie_rp_sec_prpty_check(uint64_t *register_entry_info)
           shared_data->num_access = 1;
           shared_data->shared_data_access[0].addr = register_entry->address;
           shared_data->shared_data_access[0].access_type = READ_DATA;
-          val_pe_access_mut_el3();
+          if (val_pe_access_mut_el3())
+          {
+            val_print(ACS_PRINT_ERR, " MUT access failed for 0x%llx", register_entry->address);
+            return 1;
+          }
           org_data = shared_data->shared_data_access[0].data;
 
           /* Write the data_rt from ROOT */
@@ -2513,7 +2541,11 @@ uint32_t val_pcie_rp_sec_prpty_check(uint64_t *register_entry_info)
           shared_data->shared_data_access[0].addr = register_entry->address;
           shared_data->shared_data_access[0].access_type = WRITE_DATA;
           shared_data->shared_data_access[0].data = org_data;
-          val_pe_access_mut_el3();
+          if (val_pe_access_mut_el3())
+          {
+            val_print(ACS_PRINT_ERR, " MUT access failed for 0x%llx", register_entry->address);
+            return 1;
+          }
 
           rd_data = 0;
           break;

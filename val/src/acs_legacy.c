@@ -57,8 +57,10 @@ val_legacy_execute_tests(uint32_t num_pe)
     return ACS_STATUS_SKIP;
   }
   if (!pal_is_legacy_tz_enabled()) {
+    val_print(ACS_PRINT_ALWAYS, "\n******************************************************* \n", 0);
     val_print(ACS_PRINT_ALWAYS, "\n Skipping Legacy system tests since the system doesn't \
 support the feature \n", 0);
+    val_print(ACS_PRINT_ALWAYS, "\n******************************************************* \n", 0);
     return ACS_STATUS_SKIP;
   }
 
@@ -71,6 +73,7 @@ support the feature \n", 0);
   else if (reset_status == RESET_LS_DISBL_FLAG)
           goto reset_done_ls_dis;
 
+  val_print(ACS_PRINT_ALWAYS, "\n******************************************************* \n", 0);
   status = legacy_tz_support_check_entry();
   status |= legacy_tz_en_drives_root_to_secure_entry();
 
@@ -79,7 +82,11 @@ reset_done_ls3:
   status = legacy_tz_enable_before_resetv_entry();
 
   //Disablie the legacy tie-off before moving on to the next tests
-  val_prog_legacy_tz(CLEAR);
+  if (val_prog_legacy_tz(CLEAR))
+  {
+    val_print(ACS_PRINT_ERR, "\n  Programming LEGACY_TZ_EN failed", 0);
+    return ACS_STATUS_ERR;
+  }
   val_write_reset_status(RESET_LS_DISBL_FLAG);
   val_system_reset();
 

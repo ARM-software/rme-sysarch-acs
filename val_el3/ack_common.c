@@ -48,7 +48,14 @@ void val_data_cache_ops_by_va_el3(uint64_t VA, uint32_t type)
       invalidate_cache((uint64_t *)VA);
       break;
     default:
-      ERROR("Invalid cache operation\n");
+      shared_data->status_code = 1;
+      shared_data->error_code = 0;
+      const char *msg = "EL3: Invalid cache operation";
+      ERROR("\n %s", msg);
+      int i = 0; while (msg[i] && i < sizeof(shared_data->error_msg) - 1) {
+          shared_data->error_msg[i] = msg[i]; i++;
+      }
+      shared_data->error_msg[i] = '\0';
       break;
   }
 }
@@ -135,7 +142,17 @@ void val_pe_reg_list_cmp_msd(void)
   }
   //If the comparision is failed at any time, SET the shared generic flag
   if (cmp_fail > 0)
-      shared_data->generic_flag = SET;
+  {
+    shared_data->generic_flag = SET;
+    shared_data->status_code = 1;
+    const char *msg = "EL3: Register comparision failed";
+    int i = 0; while (msg[i] && i < sizeof(shared_data->error_msg) - 1) {
+        shared_data->error_msg[i] = msg[i]; i++;
+    }
+    shared_data->error_msg[i] = '\0';
+  } else {
+    INFO("Register comparision passed\n");
+  }
 
 }
 
@@ -528,11 +545,29 @@ void val_smmu_root_config_service(uint64_t arg0, uint64_t arg1, uint64_t arg2)
          INFO("SMMU realm page table map\n");
          memcpy((void *)&smmu_attr, (void *)arg1, sizeof(smmu_master_attributes_t));
          memcpy((void *)&pgt_attr, (void *)arg2, sizeof(pgt_descriptor_t));
-         val_smmu_rlm_map((smmu_master_attributes_t)smmu_attr, (pgt_descriptor_t)pgt_attr);
+         if (val_smmu_rlm_map((smmu_master_attributes_t)smmu_attr, (pgt_descriptor_t)pgt_attr))
+         {
+              shared_data->status_code = 1;
+              shared_data->error_code = smmu_attr.smmu_index;
+              const char *msg = "EL3: SMMU Realm map failed";
+              int i = 0; while (msg[i] && i < sizeof(shared_data->error_msg) - 1) {
+                  shared_data->error_msg[i] = msg[i]; i++;
+              }
+              shared_data->error_msg[i] = '\0';
+         }
          break;
        case SMMU_RLM_ADD_DPT_ENTRY:
           INFO("SMMU add DPT entry\n");
-          val_dpt_add_entry(arg1, arg2);
+          if (val_dpt_add_entry(arg1, arg2))
+          {
+              shared_data->status_code = 1;
+              shared_data->error_code = VAL_EXTRACT_BITS(arg2, 32, 63);
+              const char *msg = "EL3: SMMU DPT Add entry failed";
+              int i = 0; while (msg[i] && i < sizeof(shared_data->error_msg) - 1) {
+                  shared_data->error_msg[i] = msg[i]; i++;
+              }
+              shared_data->error_msg[i] = '\0';
+          }
           break;
       case SMMU_RLM_DPTI:
           INFO("SMMU DPT Invalidate\n");
@@ -546,7 +581,16 @@ void val_smmu_root_config_service(uint64_t arg0, uint64_t arg1, uint64_t arg2)
           break;
       case SMMU_CONFIG_MECID:
           memcpy((void *)&smmu_attr, (void *)arg1, sizeof(smmu_master_attributes_t));
-          val_smmu_set_rlm_ste_mecid((smmu_master_attributes_t)smmu_attr, arg2);
+          if (val_smmu_set_rlm_ste_mecid((smmu_master_attributes_t)smmu_attr, arg2))
+          {
+              shared_data->status_code = 1;
+              shared_data->error_code = smmu_attr.smmu_index;
+              const char *msg = "EL3: SMMU Realm set MECID failed";
+              int i = 0; while (msg[i] && i < sizeof(shared_data->error_msg) - 1) {
+                  shared_data->error_msg[i] = msg[i]; i++;
+              }
+              shared_data->error_msg[i] = '\0';
+          }
           break;
       default:
           INFO(" Invalid SMMU ROOT register config\n");
@@ -605,6 +649,12 @@ void val_enable_mec(void)
     } else {
         /* Log an error if FEAT_MEC or FEAT_SCTLR2 is not supported */
         ERROR("PE doesn't support FEAT_MEC or FEAT_SCTLR2\n");
+        shared_data->status_code = 1;
+        const char *msg = "EL3: FEAT_MEC OR FEAT_SCTLR2 absent";
+        int i = 0; while (msg[i] && i < sizeof(shared_data->error_msg) - 1) {
+            shared_data->error_msg[i] = msg[i]; i++;
+        }
+        shared_data->error_msg[i] = '\0';
     }
 }
 
@@ -627,7 +677,13 @@ void val_disable_mec(void)
         write_sctlr2_el3(sctlr2_el3);
     } else {
         /* Log an error if FEAT_MEC or FEAT_SCTLR2 is not supported */
-        ERROR("PE doesn't support FEAT_MEC or FEAT_SCTLR2\n");
+        shared_data->status_code = 1;
+        const char *msg = "EL3: FEAT_MEC OR FEAT_SCTLR2 absent";
+        ERROR("\n %s", msg);
+        int i = 0; while (msg[i] && i < sizeof(shared_data->error_msg) - 1) {
+            shared_data->error_msg[i] = msg[i]; i++;
+        }
+        shared_data->error_msg[i] = '\0';
     }
 }
 

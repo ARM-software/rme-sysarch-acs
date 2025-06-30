@@ -55,7 +55,12 @@ void payload(void)
     return;
   }
   //Change the Active mode of the PAS filter
-  val_pas_filter_active_mode_el3(CLEAR);
+  if (val_pas_filter_active_mode_el3(CLEAR))
+  {
+    val_print(ACS_PRINT_ERR, " Active mode of the PAS filter couldn't be programmed", 0);
+    val_set_status(index, "FAIL", 01);
+    return;
+  }
   shared_data->shared_data_access[0].data = INIT_DATA;
   size = val_get_min_tg();
   VA = val_get_free_va(num_regn * size);
@@ -66,13 +71,23 @@ void payload(void)
 
     shared_data->arg0 = mem_region_pas_filter_cfg->regn_info[regn_cnt].base_addr;
     security_state = mem_region_pas_filter_cfg->regn_info[regn_cnt].resourse_pas;
-    val_add_mmu_entry_el3(VA, shared_data->arg0, (attr | LOWER_ATTRS(PAS_ATTR(security_state))));
+    if (val_add_mmu_entry_el3(VA, shared_data->arg0,
+        (attr | LOWER_ATTRS(PAS_ATTR(security_state)))))
+    {
+      val_print(ACS_PRINT_ERR, " Failed to add MMU entry for VA 0x%llx", VA);
+      status_fail_cnt++;
+      continue;
+    }
 
     shared_data->exception_expected = CLEAR;
     shared_data->access_mut = SET;
     shared_data->pas_filter_flag = SET;
     shared_data->arg1 = VA;
-    val_pe_access_mut_el3();    //Accessing MUT
+    if (val_pe_access_mut_el3())
+    {
+      val_print(ACS_PRINT_ERR, " Failed to access VA = 0x%lx", VA);
+      status_fail_cnt++;
+    }
     rd_data = shared_data->shared_data_access[0].data;
     shared_data->pas_filter_flag = CLEAR;
 

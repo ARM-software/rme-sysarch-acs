@@ -65,16 +65,41 @@ void payload(void)
                        | GET_ATTR_INDEX(WRITE_BACK_NT) | PGT_ENTRY_AP_RW | PAS_ATTR(SECURE_PAS));
 
   /* Map PA as all access permitted */
-  val_add_gpt_entry_el3(PA /* PA */, GPT_ANY /* GPI */);
+  if (val_add_gpt_entry_el3(PA /* PA */, GPT_ANY /* GPI */))
+  {
+      val_print(ACS_PRINT_ERR, " Failed to add GPT entry for PA 0x%lx", PA);
+      val_set_status(index, "FAIL", 01);
+      return;
+  }
 
   /* PA is mapped as VA1_S, VA2_RL, VA3_RT, VA4_NS with Cacheable attribute */
-  val_add_mmu_entry_el3(VA_NS /* VA1 */, PA, attr_ns);
+  if (val_add_mmu_entry_el3(VA_NS /* VA1 */, PA, attr_ns))
+  {
+      val_print(ACS_PRINT_ERR, " Failed to add MMU entry for VA1 0x%lx", VA_NS);
+      val_set_status(index, "FAIL", 02);
+      return;
+  }
 
-  val_add_mmu_entry_el3(VA_RT /* VA2 */, PA, attr_rt);
+  if (val_add_mmu_entry_el3(VA_RT /* VA2 */, PA, attr_rt))
+  {
+      val_print(ACS_PRINT_ERR, " Failed to add MMU entry for VA2 0x%lx", VA_RT);
+      val_set_status(index, "FAIL", 03);
+      return;
+  }
 
-  val_add_mmu_entry_el3(VA_RL /* VA3 */, PA, attr_rl);
+  if (val_add_mmu_entry_el3(VA_RL /* VA3 */, PA, attr_rl))
+  {
+      val_print(ACS_PRINT_ERR, " Failed to add MMU entry for VA3 0x%lx", VA_RL);
+      val_set_status(index, "FAIL", 04);
+      return;
+  }
 
-  val_add_mmu_entry_el3(VA_S /* VA4 */, PA, attr_s);
+  if (val_add_mmu_entry_el3(VA_S /* VA4 */, PA, attr_s))
+  {
+      val_print(ACS_PRINT_ERR, " Failed to add MMU entry for VA4 0x%lx", VA_S);
+      val_set_status(index, "FAIL", 05);
+      return;
+  }
 
   /* Load VA_NS first to ensure the data is brought to cache level and then,
    * Store Random data in VA_NS and access from the rest of the PASs */
@@ -82,15 +107,30 @@ void payload(void)
   shared_data->shared_data_access[0].addr = VA_NS;
   shared_data->shared_data_access[0].data = INIT_DATA;
   shared_data->shared_data_access[0].access_type = WRITE_DATA;
-  val_pe_access_mut_el3();
+  if (val_pe_access_mut_el3())
+  {
+      val_print(ACS_PRINT_ERR, " Failed to access VA_NS = 0x%lx", VA_NS);
+      val_set_status(index, "FAIL", 06);
+      return;
+  }
 
   //CMO to PoPA for PA_NS
-  val_data_cache_ops_by_pa_el3(PA, NONSECURE_PAS);
+  if (val_data_cache_ops_by_pa_el3(PA, NONSECURE_PAS))
+  {
+      val_print(ACS_PRINT_ERR, " Failed to issue CMO for PA 0x%lx", PA);
+      val_set_status(index, "FAIL", 07);
+      return;
+  }
 
   shared_data->num_access = 1;
   shared_data->shared_data_access[0].addr = VA_NS;
   shared_data->shared_data_access[0].access_type = READ_DATA;
-  val_pe_access_mut_el3();
+  if (val_pe_access_mut_el3())
+  {
+      val_print(ACS_PRINT_ERR, " Failed to access VA_NS = 0x%lx", VA_NS);
+      val_set_status(index, "FAIL", 8);
+      return;
+  }
 
   wt_data_ns = RANDOM_DATA_1;
   shared_data->num_access = 4;
@@ -107,7 +147,12 @@ void payload(void)
   shared_data->shared_data_access[3].addr = VA_S;
   shared_data->shared_data_access[3].access_type = READ_DATA;
 
-  val_pe_access_mut_el3();
+  if (val_pe_access_mut_el3())
+  {
+      val_print(ACS_PRINT_ERR, " Failed to access VA_NS, VA_RT, VA_RL and VA_S", 0);
+      val_set_status(index, "FAIL", 9);
+      return;
+  }
   data_rt = shared_data->shared_data_access[1].data;
   data_rl = shared_data->shared_data_access[2].data;
   data_s = shared_data->shared_data_access[3].data;
@@ -123,7 +168,7 @@ void payload(void)
       val_set_status(index, "PASS", 01);
 
   else
-      val_set_status(index, "FAIL", 01);
+      val_set_status(index, "FAIL", 10);
   return;
 
 }

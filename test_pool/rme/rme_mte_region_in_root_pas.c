@@ -65,13 +65,22 @@ void payload(void)
   for (int pas_cnt = 0; pas_cnt < 4; ++pas_cnt)
   {
     /* MTE carve-out region: Base Address */
-    val_add_mmu_entry_el3(VA, mte_base, (attr | LOWER_ATTRS(PAS_ATTR(pas_list[pas_cnt]))));
+    if (val_add_mmu_entry_el3(VA, mte_base, (attr | LOWER_ATTRS(PAS_ATTR(pas_list[pas_cnt])))))
+    {
+      val_print(ACS_PRINT_ERR, " Failed to add MMU entry for VA 0x%llx", VA);
+      status_fail_cnt++;
+      continue;
+    }
 
     if (pas_list[pas_cnt] == ROOT_PAS) {
         shared_data->exception_expected = CLEAR;
         shared_data->access_mut = SET;
         shared_data->arg1 = VA;
-        val_pe_access_mut_el3();    //Accessing MUT
+        if (val_pe_access_mut_el3())
+        {
+          val_print(ACS_PRINT_ERR, " Failed to access VA = 0x%lx", VA);
+          status_fail_cnt++;
+        }
 
         if (shared_data->exception_generated == SET)
         {
@@ -83,7 +92,11 @@ void payload(void)
         shared_data->exception_expected = SET;
         shared_data->access_mut = SET;
         shared_data->arg1 = VA;
-        val_pe_access_mut_el3();    //Accessing MUT
+        if (val_pe_access_mut_el3())
+        {
+          val_print(ACS_PRINT_ERR, " Failed to access VA = 0x%lx", VA);
+          status_fail_cnt++;
+        }
 
         if (shared_data->exception_generated == CLEAR)
         {
@@ -96,13 +109,22 @@ void payload(void)
     VA += size;
 
     /* MTE carve-out region: Middle Address */
-    val_add_mmu_entry_el3(VA, mte_mid, (attr | LOWER_ATTRS(PAS_ATTR(pas_list[pas_cnt]))));
+    if (val_add_mmu_entry_el3(VA, mte_mid, (attr | LOWER_ATTRS(PAS_ATTR(pas_list[pas_cnt])))))
+    {
+      val_print(ACS_PRINT_ERR, " Failed to add MMU entry for VA 0x%llx", VA);
+      status_fail_cnt++;
+      continue;
+    }
 
     if (pas_list[pas_cnt] == ROOT_PAS) {
         shared_data->exception_expected = CLEAR;
         shared_data->access_mut = SET;
         shared_data->arg1 = VA;
-        val_pe_access_mut_el3();    //Accessing MUT
+        if (val_pe_access_mut_el3())
+        {
+          val_print(ACS_PRINT_ERR, " Failed to access VA = 0x%lx", VA);
+          status_fail_cnt++;
+        }
 
         if (shared_data->exception_generated == SET)
         {
@@ -114,7 +136,11 @@ void payload(void)
         shared_data->exception_expected = SET;
         shared_data->access_mut = SET;
         shared_data->arg1 = VA;
-        val_pe_access_mut_el3();    //Accessing MUT
+        if (val_pe_access_mut_el3())
+        {
+          val_print(ACS_PRINT_ERR, " Failed to access VA = 0x%lx", VA);
+          status_fail_cnt++;
+        }
 
         if (shared_data->exception_generated == CLEAR)
         {
@@ -127,13 +153,22 @@ void payload(void)
     VA += size;
 
     /* MTE carve-out region: End Address */
-    val_add_mmu_entry_el3(VA, mte_end, (attr | LOWER_ATTRS(PAS_ATTR(pas_list[pas_cnt]))));
+    if (val_add_mmu_entry_el3(VA, mte_end, (attr | LOWER_ATTRS(PAS_ATTR(pas_list[pas_cnt])))))
+    {
+      val_print(ACS_PRINT_ERR, " Failed to add MMU entry for VA 0x%llx", VA);
+      status_fail_cnt++;
+      continue;
+    }
 
     if (pas_list[pas_cnt] == ROOT_PAS) {
         shared_data->exception_expected = CLEAR;
         shared_data->access_mut = SET;
         shared_data->arg1 = VA;
-        val_pe_access_mut_el3();    //Accessing MUT
+        if (val_pe_access_mut_el3())
+        {
+          val_print(ACS_PRINT_ERR, " Failed to access VA = 0x%lx", VA);
+          status_fail_cnt++;
+        }
 
         if (shared_data->exception_generated == SET)
         {
@@ -145,7 +180,11 @@ void payload(void)
         shared_data->exception_expected = SET;
         shared_data->access_mut = SET;
         shared_data->arg1 = VA;
-        val_pe_access_mut_el3();    //Accessing MUT
+        if (val_pe_access_mut_el3())
+        {
+          val_print(ACS_PRINT_ERR, " Failed to access VA = 0x%lx", VA);
+          status_fail_cnt++;
+        }
 
         if (shared_data->exception_generated == CLEAR)
         {

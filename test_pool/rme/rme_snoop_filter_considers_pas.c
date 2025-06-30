@@ -42,20 +42,28 @@ void payload2(void)
   VA2 = val_get_free_va(size);
   attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(INNER_SHAREABLE)
                      | PGT_ENTRY_AP_RW | PAS_ATTR(REALM_PAS));
-  val_add_mmu_entry_el3(VA2, PA, attr);
+  if (val_add_mmu_entry_el3(VA2, PA, attr))
+  {
+    val_set_status(index, "FAIL", 1);
+    return;
+  }
 
   /* Access VA2 from this PE */
   shared_data->num_access = 1;
   shared_data->shared_data_access[0].addr = VA2;
   shared_data->shared_data_access[0].access_type = READ_DATA;
 
-  val_pe_access_mut_el3();
+  if (val_pe_access_mut_el3())
+  {
+    val_set_status(index, "FAIL", 2);
+    return;
+  }
   pe2_data = shared_data->shared_data_access[0].data;
 
   if (pe2_data == Data2)
   {
     val_set_test_data(index, pe2_data, 0);
-    val_set_status(index, "FAIL", 01);
+    val_set_status(index, "FAIL", 3);
   }
   else
     val_set_status(index, "PASS", 01);
@@ -85,17 +93,29 @@ void payload1(void)
   attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(INNER_SHAREABLE)
                      | PGT_ENTRY_AP_RW | PAS_ATTR(ROOT_PAS));
   VA1 = val_get_free_va(size);
-  val_add_mmu_entry_el3(VA1, PA, attr);
+  if (val_add_mmu_entry_el3(VA1, PA, attr))
+  {
+    val_set_status(my_index, "FAIL", 01);
+    return;
+  }
 
   /* Store Data1 and Data2 in the PA_RT address */
   shared_data->num_access = 1;
   shared_data->shared_data_access[0].addr = VA1;
   shared_data->shared_data_access[0].data = Data1;
   shared_data->shared_data_access[0].access_type = WRITE_DATA;
-  val_pe_access_mut_el3();
+  if (val_pe_access_mut_el3())
+  {
+    val_set_status(my_index, "FAIL", 02);
+    return;
+  }
 
   /* Perform CIPAPA to ensure Data1 is flushed */
-  val_data_cache_ops_by_pa_el3(PA, ROOT_PAS);
+  if (val_data_cache_ops_by_pa_el3(PA, ROOT_PAS))
+  {
+    val_set_status(my_index, "FAIL", 03);
+    return;
+  }
 
   shared_data->num_access = 2;
   shared_data->shared_data_access[0].addr = VA1;
@@ -103,7 +123,11 @@ void payload1(void)
   shared_data->shared_data_access[1].addr = VA1;
   shared_data->shared_data_access[1].data = Data2;
   shared_data->shared_data_access[1].access_type = WRITE_DATA;
-  val_pe_access_mut_el3();
+  if (val_pe_access_mut_el3())
+  {
+    val_set_status(my_index, "FAIL", 04);
+    return;
+  }
 
   //Moving to the next PE index to execute payload2
   if ((my_index + 1) >= val_pe_get_num())
@@ -117,7 +141,7 @@ void payload1(void)
   if (!timeout)
   {
     val_print(ACS_PRINT_ERR, " **Timed out** for PE index = %d", sec_index);
-    val_set_status(sec_index, "FAIL", 02);
+    val_set_status(sec_index, "FAIL", 05);
     return;
   }
 
@@ -127,7 +151,7 @@ void payload1(void)
     val_print(ACS_PRINT_ERR, " The data read in PE2 is 0x%x", pe2_data);
     val_print(ACS_PRINT_ERR, " which is same as the data stored in PE1, ", 0);
     val_print(ACS_PRINT_ERR, " 0x%x", Data2);
-    val_set_status(sec_index, "FAIL", 01);
+    val_set_status(sec_index, "FAIL", 06);
   }
   else
     val_set_status(my_index, "PASS", 01);

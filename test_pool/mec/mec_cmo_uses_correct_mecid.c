@@ -49,11 +49,29 @@ payload1(void)
       val_data_cache_ops_by_va((addr_t)&VA_RL, CLEAN_AND_INVALIDATE);
       val_data_cache_ops_by_va((addr_t)&mem_attr, CLEAN_AND_INVALIDATE);
 
-      val_add_gpt_entry_el3(PA_RL, GPT_ANY);
-      val_add_mmu_entry_el3(VA_RL, PA_RL, (mem_attr | LOWER_ATTRS(PAS_ATTR(REALM_PAS))));
+      if (val_add_gpt_entry_el3(PA_RL, GPT_ANY))
+      {
+        val_set_status(pe_index, "FAIL", 01);
+        return;
+      }
 
-      val_rlm_enable_mec();
-      val_rlm_configure_mecid(MECID1);
+      if (val_add_mmu_entry_el3(VA_RL, PA_RL, (mem_attr | LOWER_ATTRS(PAS_ATTR(REALM_PAS)))))
+      {
+        val_set_status(pe_index, "FAIL", 02);
+        return;
+      }
+
+      if (val_rlm_enable_mec())
+      {
+        val_set_status(pe_index, "FAIL", 03);
+        return;
+      }
+
+      if (val_rlm_configure_mecid(MECID1))
+      {
+        val_set_status(pe_index, "FAIL", 04);
+        return;
+      }
 
       /* Store RANDOM_DATA_1 in PA_RT*/
       data_wt_rl = RANDOM_DATA_1;
@@ -62,11 +80,23 @@ payload1(void)
       shared_data->shared_data_access[0].data = data_wt_rl;
       shared_data->shared_data_access[0].access_type = WRITE_DATA;
 
-      val_pe_access_mut_el3();
+      if (val_pe_access_mut_el3())
+      {
+        val_set_status(pe_index, "FAIL", 05);
+        return;
+      }
 
-      val_rlm_configure_mecid(MECID2);
+      if (val_rlm_configure_mecid(MECID2))
+      {
+        val_set_status(pe_index, "FAIL", 06);
+        return;
+      }
 
-      val_data_cache_ops_by_va_el3(VA_RL, CLEAN_AND_INVALIDATE);
+      if (val_data_cache_ops_by_va_el3(VA_RL, CLEAN_AND_INVALIDATE))
+      {
+        val_set_status(pe_index, "FAIL", 07);
+        return;
+      }
 
       val_set_status(pe_index, "PASS", 01);
       return;
@@ -74,27 +104,69 @@ payload1(void)
 
   if (pe_index == 1)
   {
-      val_add_gpt_entry_el3(PA_RL, GPT_ANY);
-      val_add_mmu_entry_el3(VA_RL, PA_RL, (mem_attr | LOWER_ATTRS(PAS_ATTR(REALM_PAS))));
+      if (val_add_gpt_entry_el3(PA_RL, GPT_ANY))
+      {
+        val_set_status(pe_index, "FAIL", 01);
+        return;
+      }
+      if (val_add_mmu_entry_el3(VA_RL, PA_RL, (mem_attr | LOWER_ATTRS(PAS_ATTR(REALM_PAS)))))
+      {
+        val_set_status(pe_index, "FAIL", 02);
+        return;
+      }
 
-      val_rlm_enable_mec();
-      val_rlm_configure_mecid(MECID1);
+      if (val_rlm_enable_mec())
+      {
+        val_set_status(pe_index, "FAIL", 03);
+        return;
+      }
+
+      if (val_rlm_configure_mecid(MECID1))
+      {
+        val_set_status(pe_index, "FAIL", 04);
+        return;
+      }
 
       shared_data->num_access = 1;
       shared_data->shared_data_access[0].addr = VA_RL;
       shared_data->shared_data_access[0].access_type = READ_DATA;
-      val_pe_access_mut_el3();
+      val_data_cache_ops_by_va((addr_t)&shared_data->num_access, CLEAN_AND_INVALIDATE);
+      val_data_cache_ops_by_va((addr_t)&shared_data->shared_data_access[0].access_type,
+                                                                 CLEAN_AND_INVALIDATE);
+      val_data_cache_ops_by_va((addr_t)&shared_data->shared_data_access[0].addr,
+                                                                 CLEAN_AND_INVALIDATE);
+
+      if (val_pe_access_mut_el3())
+      {
+          val_set_status(pe_index, "FAIL", 05);
+          return;
+      }
+
+      if (val_rlm_disable_mec())
+      {
+          val_set_status(pe_index, "FAIL", 06);
+          return;
+      }
 
       data_rd_rl = shared_data->shared_data_access[0].data;
       if (data_rd_rl != RANDOM_DATA_1)
       {
-          val_set_status(pe_index, "FAIL", 01);
+          val_set_status(pe_index, "FAIL", 07);
           return;
       }
 
-      /* Restore MECID to GMECID */
-      val_rlm_configure_mecid(VAL_GMECID);
-      val_rlm_disable_mec();
+  /* Restore MECID to GMECID */
+  if (val_rlm_configure_mecid(VAL_GMECID))
+  {
+      val_set_status(pe_index, "FAIL", 8);
+      return;
+  }
+
+  if (val_rlm_disable_mec())
+  {
+      val_set_status(pe_index, "FAIL", 9);
+      return;
+  }
 
       val_set_status(pe_index, "PASS", 01);
       return;
@@ -110,8 +182,17 @@ payload2(void)
   if (pe_index == 0)
   {
 
-      val_rlm_enable_mec();
-      val_rlm_configure_mecid(MECID1);
+      if (val_rlm_enable_mec())
+      {
+          val_set_status(pe_index, "FAIL", 8);
+          return;
+      }
+
+      if (val_rlm_configure_mecid(MECID1))
+      {
+          val_set_status(pe_index, "FAIL", 9);
+          return;
+      }
 
       /* Store RANDOM_DATA_2 in VA_RL*/
       data_wt_rl = RANDOM_DATA_2;
@@ -120,7 +201,11 @@ payload2(void)
       shared_data->shared_data_access[0].data = data_wt_rl;
       shared_data->shared_data_access[0].access_type = WRITE_DATA;
 
-      val_pe_access_mut_el3();
+      if (val_pe_access_mut_el3())
+      {
+          val_set_status(pe_index, "FAIL", 10);
+          return;
+      }
 
       val_set_status(pe_index, "PASS", 01);
       return;
@@ -128,12 +213,29 @@ payload2(void)
 
   if (pe_index == 1)
   {
-      val_rlm_enable_mec();
-      val_rlm_configure_mecid(MECID2);
+      if (val_rlm_enable_mec())
+      {
+          val_set_status(pe_index, "FAIL", 9);
+          return;
+      }
 
-      val_data_cache_ops_by_va_el3(VA_RL, CLEAN_AND_INVALIDATE);
+      if (val_rlm_configure_mecid(MECID2))
+      {
+          val_set_status(pe_index, "FAIL", 10);
+          return;
+      }
 
-      val_rlm_configure_mecid(MECID1);
+      if (val_data_cache_ops_by_va_el3(VA_RL, CLEAN_AND_INVALIDATE))
+      {
+          val_set_status(pe_index, "FAIL", 11);
+          return;
+      }
+
+      if (val_rlm_configure_mecid(MECID1))
+      {
+          val_set_status(pe_index, "FAIL", 12);
+          return;
+      }
 
       shared_data->num_access = 1;
       shared_data->shared_data_access[0].addr = VA_RL;
@@ -144,20 +246,38 @@ payload2(void)
       val_data_cache_ops_by_va((addr_t)&shared_data->shared_data_access[0].addr,
                                                                  CLEAN_AND_INVALIDATE);
 
-      val_pe_access_mut_el3();
-      val_rlm_disable_mec();
+      if (val_pe_access_mut_el3())
+      {
+          val_set_status(pe_index, "FAIL", 13);
+          return;
+      }
+
+      if (val_rlm_disable_mec())
+      {
+          val_set_status(pe_index, "FAIL", 14);
+          return;
+      }
 
       data_rd_rl = shared_data->shared_data_access[0].data;
       if (data_rd_rl != RANDOM_DATA_2)
       {
-          val_set_status(pe_index, "FAIL", 02);
+          val_set_status(pe_index, "FAIL", 15);
           return;
       }
   }
 
   /* Restore MECID to GMECID */
-  val_rlm_configure_mecid(VAL_GMECID);
-  val_rlm_disable_mec();
+  if (val_rlm_configure_mecid(VAL_GMECID))
+  {
+      val_set_status(pe_index, "FAIL", 16);
+      return;
+  }
+
+  if (val_rlm_disable_mec())
+  {
+      val_set_status(pe_index, "FAIL", 17);
+      return;
+  }
 
   val_set_status(pe_index, "PASS", 01);
   return;
@@ -169,11 +289,29 @@ payload4(uint32_t PoX)
 {
   uint32_t pe_index = val_pe_get_index_mpid(val_pe_get_mpid());
 
-  val_add_gpt_entry_el3(PA_RL, GPT_ANY);
-  val_add_mmu_entry_el3(VA_RL, PA_RL, (mem_attr | LOWER_ATTRS(PAS_ATTR(REALM_PAS))));
+  if (val_add_gpt_entry_el3(PA_RL, GPT_ANY))
+  {
+      val_set_status(pe_index, "FAIL", 11);
+      return;
+  }
 
-  val_rlm_enable_mec();
-  val_rlm_configure_mecid(MECID1);
+  if (val_add_mmu_entry_el3(VA_RL, PA_RL, (mem_attr | LOWER_ATTRS(PAS_ATTR(REALM_PAS)))))
+  {
+      val_set_status(pe_index, "FAIL", 12);
+      return;
+  }
+
+  if (val_rlm_enable_mec())
+  {
+      val_set_status(pe_index, "FAIL", 13);
+      return;
+  }
+
+  if (val_rlm_configure_mecid(MECID1))
+  {
+      val_set_status(pe_index, "FAIL", 14);
+      return;
+  }
 
   /* Store RANDOM_DATA_1 in PA_RT*/
   data_wt_rl = RANDOM_DATA_3;
@@ -182,37 +320,80 @@ payload4(uint32_t PoX)
   shared_data->shared_data_access[0].data = data_wt_rl;
   shared_data->shared_data_access[0].access_type = WRITE_DATA;
 
-  val_pe_access_mut_el3();
+  if (val_pe_access_mut_el3())
+  {
+      val_set_status(pe_index, "FAIL", 15);
+      return;
+  }
 
-  val_rlm_configure_mecid(MECID2);
+  if (val_rlm_configure_mecid(MECID2))
+  {
+      val_set_status(pe_index, "FAIL", 16);
+      return;
+  }
 
-  if (PoX == PoPA)
-      val_data_cache_ops_by_pa_el3(PA_RL, REALM_PAS);
+  if (PoX == PoPA) {
+      if (val_data_cache_ops_by_pa_el3(PA_RL, REALM_PAS))
+      {
+          val_set_status(pe_index, "FAIL", 17);
+          return;
+      }
+  }
+
   else if (PoX == PoE)
-      val_cmo_to_poe(PA_RL);
+  {
+      if (val_cmo_to_poe(PA_RL))
+      {
+          val_set_status(pe_index, "FAIL", 18);
+          return;
+      }
+  }
   else if (PoX == PoC)
-      val_data_cache_ops_by_va_el3(VA_RL, CLEAN_AND_INVALIDATE);
+  {
+      if (val_data_cache_ops_by_va_el3(VA_RL, CLEAN_AND_INVALIDATE))
+      {
+          val_set_status(pe_index, "FAIL", 19);
+          return;
+      }
+  }
 
-  val_rlm_configure_mecid(MECID1);
+  if (val_rlm_configure_mecid(MECID1))
+  {
+      val_set_status(pe_index, "FAIL", 20);
+      return;
+  }
 
   shared_data->num_access = 1;
   shared_data->shared_data_access[0].addr = VA_RL;
   shared_data->shared_data_access[0].access_type = READ_DATA;
-  val_pe_access_mut_el3();
+  if (val_pe_access_mut_el3())
+  {
+      val_set_status(pe_index, "FAIL", 21);
+      return;
+  }
 
   data_rd_rl = shared_data->shared_data_access[0].data;
 
   if (data_rd_rl != data_wt_rl)
   {
-      val_set_status(pe_index, "FAIL", 03);
+      val_set_status(pe_index, "FAIL", 22);
       return;
   }
 
-  /* Restore MECID to GMECID */
-  val_rlm_configure_mecid(VAL_GMECID);
-  val_rlm_disable_mec();
+   /* Restore MECID to GMECID */
+  if (val_rlm_configure_mecid(VAL_GMECID))
+  {
+      val_set_status(pe_index, "FAIL", 23);
+      return;
+  }
 
-  val_set_status(pe_index, "PASS", 01);
+  if (val_rlm_disable_mec())
+  {
+      val_set_status(pe_index, "FAIL", 24);
+      return;
+  }
+
+  val_set_status(pe_index, "PASS", 25);
   return;
 }
 

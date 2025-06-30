@@ -51,7 +51,13 @@ payload()
   uint32_t index = val_pe_get_index_mpid(val_pe_get_mpid());
 
   //Enable the Legacy_TZ_EN tie-off in the system
-  val_prog_legacy_tz(SET);
+  if (val_prog_legacy_tz(SET))
+  {
+    val_print(ACS_PRINT_ERR, "\n  Programming LEGACY_TZ_EN failed", 0);
+    val_set_status(index, "FAIL", 01);
+    return;
+  }
+
   num_smmu = val_smmu_get_info(SMMU_NUM_CTRL, 0);
 
   if (num_smmu == 0) {

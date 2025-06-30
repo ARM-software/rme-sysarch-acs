@@ -58,13 +58,24 @@ payload()
     VA = val_get_free_va(size);
     PA = root_registers_cfg->rt_reg_info[reg_cnt].rt_reg_base_addr;
     /* Use the register addresses as PAs to map them with secure access PAS */
-    val_add_mmu_entry_el3(VA, PA, (attr | LOWER_ATTRS(PAS_ATTR(SECURE_PAS))));
+    if (val_add_mmu_entry_el3(VA, PA, (attr | LOWER_ATTRS(PAS_ATTR(SECURE_PAS)))))
+    {
+      val_print(ACS_PRINT_ERR, "\n  Failed to add MMU entry for register 0x%llx", PA);
+      status_fail_cnt++;
+      continue;
+    }
 
     shared_data->shared_data_access[0].data = 0xdeadc0de;
     shared_data->arg1 = VA;
     shared_data->access_mut = SET;
     shared_data->exception_expected = CLEAR;
-    val_pe_access_mut_el3();  //Accessing MUT
+    //Accessing MUT
+    if (val_pe_access_mut_el3())
+    {
+      val_print(ACS_PRINT_ERR, " Failed to access the root register from secure PAS", 0);
+      status_fail_cnt++;
+      continue;
+    }
 
     rd_data = shared_data->shared_data_access[0].data;
     if (shared_data->exception_generated == SET || rd_data == 0xdeadc0de)

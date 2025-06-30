@@ -83,6 +83,7 @@ val_smmu_execute_tests(uint32_t num_pe)
 
   g_curr_module = 1 << SMMU_MODULE_ID;
 
+  val_print(ACS_PRINT_ALWAYS, "\n******************************************************* \n", 0);
   status |= smmu_implements_rme_entry(num_pe);
   status |= smmu_responds_to_gpt_tlb_entry();
 

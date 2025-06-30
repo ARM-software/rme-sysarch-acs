@@ -26,7 +26,7 @@
 #include "val/include/rme_acs_pe.h"
 #include "val/include/rme_acs_el32.h"
 
-#define TEST_NAME "dpt_p2p_different_rootport_invalid"
+#define TEST_NAME  "dpt_p2p_different_rootport_invalid"
 #define TEST_DESC  "TDI DPT Check - P2P Different RP - Invalid Access      "
 #define TEST_RULE  "RQRMPD"
 
@@ -152,9 +152,27 @@ payload(void)
   /* Map the Pointers in EL3 as NS Access PAS so that EL3 can access this struct pointers */
   pgt_attr_el3 = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(OUTER_SHAREABLE) |
                                  PGT_ENTRY_AP_RW | PAS_ATTR(NONSECURE_PAS));
-  val_add_mmu_entry_el3((uint64_t)(&pgt_desc), (uint64_t)(&pgt_desc), pgt_attr_el3);
-  val_add_mmu_entry_el3((uint64_t)(&master), (uint64_t)(&master), pgt_attr_el3);
-  val_add_mmu_entry_el3((uint64_t)(mem_desc), (uint64_t)(mem_desc), pgt_attr_el3);
+  if (val_add_mmu_entry_el3((uint64_t)(&pgt_desc), (uint64_t)(&pgt_desc), pgt_attr_el3))
+  {
+      val_print(ACS_PRINT_ERR, " Failed to add MMU entry for pgt_desc", 0);
+      val_set_status(pe_index, "FAIL", 01);
+      return;
+  }
+
+  if (val_add_mmu_entry_el3((uint64_t)(&master), (uint64_t)(&master), pgt_attr_el3))
+  {
+      val_print(ACS_PRINT_ERR, " Failed to add MMU entry for master", 0);
+      val_set_status(pe_index, "FAIL", 02);
+      return;
+  }
+
+  if (val_add_mmu_entry_el3((uint64_t)(mem_desc), (uint64_t)(mem_desc), pgt_attr_el3))
+  {
+      val_print(ACS_PRINT_ERR, " Failed to add MMU entry for mem_desc", 0);
+      val_set_status(pe_index, "FAIL", 03);
+      return;
+  }
+
 
   for (instance = 0; instance < num_exercisers; ++instance)
   {
@@ -278,13 +296,25 @@ payload(void)
       cfg_addr = val_pcie_get_bdf_config_addr(rp_bdf);
       pgt_attr_el3 = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(OUTER_SHAREABLE)
                           | GET_ATTR_INDEX(DEV_MEM_nGnRnE) | PGT_ENTRY_AP_RW | PAS_ATTR(ROOT_PAS));
-      val_add_mmu_entry_el3(va1, cfg_addr, pgt_attr_el3);
+      if (val_add_mmu_entry_el3(va1, cfg_addr, pgt_attr_el3))
+      {
+          val_print(ACS_PRINT_ERR,
+                    " Failed to add MMU entry for cfg_addr: 0x%lx", cfg_addr);
+          test_fail++;
+          continue;
+      }
 
       shared_data->num_access = 1;
       shared_data->shared_data_access[0].addr = va1 + da_cap_base + RMEDA_CTL2;
       shared_data->shared_data_access[0].data = sel_str_lock_bit;
       shared_data->shared_data_access[0].access_type = WRITE_DATA;
-      val_pe_access_mut_el3();
+      if (val_pe_access_mut_el3())
+      {
+          val_print(ACS_PRINT_ERR,
+            " Failed to write RMEDA_CTL2 with sel_str_lock_bit: 0x%lx", sel_str_lock_bit);
+          test_fail++;
+          continue;
+      }
 
       val_pcie_read_cfg(rp_bdf, da_cap_base + RMEDA_CTL2, &reg_value);
       val_print(ACS_PRINT_DEBUG, " RMEDA_CTL2 after write = 0x%llx", reg_value);
@@ -304,18 +334,52 @@ payload(void)
       bar_buf_in_phys = (uint64_t)val_memory_virt_to_phys((void *)tgt_bar_base);
 
       /* Change the AccessPAS of the buffer to Realm PAS */
-      val_add_gpt_entry_el3(dram_buf_in_phys, GPT_ANY);
+      if (val_add_gpt_entry_el3(dram_buf_in_phys, GPT_ANY))
+      {
+          val_print(ACS_PRINT_ERR,
+            " Failed to add GPT entry for PA 0x%llx", dram_buf_in_phys);
+          test_fail++;
+          continue;
+      }
       pgt_attr_el3 = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(OUTER_SHAREABLE)
                         | GET_ATTR_INDEX(DEV_MEM_nGnRnE) | PGT_ENTRY_AP_RW | PAS_ATTR(REALM_PAS));
-      val_add_mmu_entry_el3((uint64_t)dram_buf_in_virt, (uint64_t)dram_buf_in_virt, pgt_attr_el3);
-      val_add_mmu_entry_el3((uint64_t)tgt_bar_base, (uint64_t)tgt_bar_base, pgt_attr_el3);
+
+      if (val_add_mmu_entry_el3((uint64_t)dram_buf_in_virt,
+                                (uint64_t)dram_buf_in_virt, pgt_attr_el3))
+      {
+          val_print(ACS_PRINT_ERR, " Failed to add MMU entry for dram_buf_in_virt: 0x%llx",
+                    (uint64_t)dram_buf_in_virt);
+          test_fail++;
+          continue;
+      }
+
+      if (val_add_mmu_entry_el3((uint64_t)tgt_bar_base, (uint64_t)tgt_bar_base, pgt_attr_el3))
+      {
+          val_print(ACS_PRINT_ERR,
+            " Failed to add MMU entry for tgt_bar_base: 0x%llx", (uint64_t)tgt_bar_base);
+          test_fail++;
+          continue;
+      }
 
       /* Set the buffer to value 0 */
-      val_memory_set_el3(dram_buf_in_virt, dma_len, 0);
+      if (val_memory_set_el3(dram_buf_in_virt, dma_len, 0))
+      {
+          val_print(ACS_PRINT_ERR,
+                    " Failed to set memory to 0 for instance %4x", instance);
+          test_fail++;
+          goto free_mem;
+      }
+
       val_pe_cache_clean_invalidate_range((uint64_t)dram_buf_in_virt, (uint64_t)(dma_len));
 
       /* Set the input buffer with the Test Data */
-      val_memory_set_el3(dram_buf_in_virt, dma_len, TEST_DATA);
+      if (val_memory_set_el3(dram_buf_in_virt, dma_len, TEST_DATA))
+      {
+        val_print(ACS_PRINT_ERR, " Failed to set memory to 0 for instance %4x", instance);
+        test_fail++;
+        goto free_mem;
+      }
+
       val_pe_cache_clean_invalidate_range((uint64_t)dram_buf_in_virt, (uint64_t)(dma_len));
 
       mem_desc->virtual_address = (uint64_t)dram_buf_in_virt;
@@ -333,7 +397,7 @@ payload(void)
       if (master.smmu_index != ACS_INVALID_INDEX) {
           if (val_smmu_enable(master.smmu_index)) {
                 val_print(ACS_PRINT_ERR, " Exerciser %x smmu disable error", instance);
-                val_set_status(pe_index, "FAIL", 2);
+                val_set_status(pe_index, "FAIL", 4);
                 test_fail++;
                 continue;
           }
@@ -372,7 +436,13 @@ payload(void)
       /* Set pgt_desc.pgt_base to NULL to create new translation table, val_realm_pgt_create
          will update pgt_desc.pgt_base to point to created translation table */
       pgt_desc.pgt_base = (uint64_t) NULL;
-      val_rlm_pgt_create(mem_desc, &pgt_desc);
+      if (val_rlm_pgt_create(mem_desc, &pgt_desc))
+      {
+          val_print(ACS_PRINT_ERR,
+            " Failed to create page table for instance %4x", instance);
+          test_fail++;
+          goto free_mem;
+      }
 
       /* Write pgt_base to the VTTBR register so that EL3 can update while programming STE */
       val_pe_reg_write(VTTBR, pgt_desc.pgt_base);
@@ -382,7 +452,13 @@ payload(void)
       mem_desc->length = tgt_bar_size;
       mem_desc->attributes = PGT_STAGE2_AP_RW;
 
-      val_rlm_pgt_create(mem_desc, &pgt_desc);
+      if (val_rlm_pgt_create(mem_desc, &pgt_desc))
+      {
+          val_print(ACS_PRINT_ERR,
+            " Failed to create page table for instance %4x", instance);
+          test_fail++;
+          goto free_mem;
+      }
 
       /* Enable the stage2 mapping for Realm SMMU Transaction */
       master.stage2 = 1;
@@ -390,7 +466,12 @@ payload(void)
 
       /* Configure the SMMU tables for this exerciser to use this page table
          for VA to PA translations */
-      val_smmu_rlm_map_el3(&master, &pgt_desc);
+      if (val_smmu_rlm_map_el3(&master, &pgt_desc))
+      {
+          val_print(ACS_PRINT_ERR, " Failed to map SMMU for instance %4x", instance);
+          test_fail++;
+          goto free_mem;
+      }
 
       /* Send an ATS Translation Request for the VA */
       val_exerciser_set_param(DMA_ATTRIBUTES, (uint64_t)tgt_bar_base, dma_len, instance);
@@ -424,11 +505,20 @@ payload(void)
       }
 
       /* Add DPT entry for the PA with Read Write Access */
-      val_dpt_add_entry((uint64_t)tgt_bar_base,
-                       ((((uint64_t)(master.smmu_index)) << 32) | DPT_NO_ACCESS_ENTRY));
+      if (val_dpt_add_entry((uint64_t)tgt_bar_base,
+                       ((((uint64_t)(master.smmu_index)) << 32) | DPT_RDWR_ACCESS_ENTRY)))
+      {
+          val_print(ACS_PRINT_ERR, " DPT entry add failure %4x", instance);
+          test_fail++;
+          goto free_mem;
+      }
 
-      val_dpt_invalidate_all(((uint64_t)(master.smmu_index)));
-
+      if (val_dpt_invalidate_all(((uint64_t)(master.smmu_index))))
+      {
+          val_print(ACS_PRINT_ERR, " DPT invalidate failure %4x", instance);
+          test_fail++;
+          goto free_mem;
+      }
 
       /* Trigger DMA from input buffer to exerciser memory */
       val_exerciser_ops(START_DMA, EDMA_TO_DEVICE, instance);
@@ -459,10 +549,20 @@ free_mem:
       val_exerciser_ops(ATS_INV_CACHE, 0, instance);
 
       /* Add DPT entry for the PA with Read Write Access */
-      val_dpt_add_entry((uint64_t)tgt_bar_base,
-                       ((((uint64_t)(master.smmu_index)) << 32) | DPT_RDWR_ACCESS_ENTRY));
+      if (val_dpt_add_entry((uint64_t)tgt_bar_base,
+                       ((((uint64_t)(master.smmu_index)) << 32) | DPT_RDWR_ACCESS_ENTRY)))
+      {
+          val_print(ACS_PRINT_ERR, " DPT entry add failure %4x", instance);
+          test_fail++;
+          continue;
+      }
 
-      val_dpt_invalidate_all(((uint64_t)(master.smmu_index)));
+      if (val_dpt_invalidate_all(((uint64_t)(master.smmu_index))))
+      {
+          val_print(ACS_PRINT_ERR, " DPT invalidate failure %4x", instance);
+          test_fail++;
+          continue;
+      }
 
 
       if (val_pcie_find_capability(bdf, PCIE_ECAP, ECID_ATS, &cap_base) == PCIE_SUCCESS)
@@ -487,11 +587,31 @@ free_mem:
       /* Change the AccessPAS of the buffer to Realm PAS */
       pgt_attr_el3 = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(OUTER_SHAREABLE)
                      | GET_ATTR_INDEX(DEV_MEM_nGnRnE) | PGT_ENTRY_AP_RW | PAS_ATTR(NONSECURE_PAS));
-      val_add_mmu_entry_el3((uint64_t)tgt_bar_base, (uint64_t)tgt_bar_base, pgt_attr_el3);
+      if (val_add_mmu_entry_el3((uint64_t)tgt_bar_base, (uint64_t)tgt_bar_base, pgt_attr_el3))
+      {
+          val_print(ACS_PRINT_ERR,
+            " Failed to add MMU entry for tgt_bar_base: 0x%llx", (uint64_t)tgt_bar_base);
+          test_fail++;
+          continue;
+      }
 
       //Clear the memory and it's protection by making it NS
-      val_add_mmu_entry_el3((uint64_t)dram_buf_in_virt, dram_buf_in_phys, pgt_attr_el3);
-      val_memory_set_el3((uint64_t *)dram_buf_in_virt, test_data_blk_size, 0);
+      if (val_add_mmu_entry_el3((uint64_t)dram_buf_in_virt, dram_buf_in_phys, pgt_attr_el3))
+      {
+          val_print(ACS_PRINT_ERR,
+            " free_mem: Failed to add MMU entry for dram_buf_in_virt: 0x%llx",
+            (uint64_t)dram_buf_in_virt);
+          test_fail++;
+          continue;
+      }
+
+      if (val_memory_set_el3((uint64_t *)dram_buf_in_virt, test_data_blk_size, 0))
+      {
+          val_print(ACS_PRINT_ERR,
+            " free_mem: Failed to set memory to 0 for instance %4x", instance);
+          test_fail++;
+          continue;
+      }
       val_pe_cache_clean_invalidate_range((uint64_t)dram_buf_in_virt,
                                           (uint64_t)(test_data_blk_size));
 
@@ -502,7 +622,7 @@ free_mem:
   if (test_skip)
       val_set_status(pe_index, "SKIP", 01);
   else if (test_fail)
-      val_set_status(pe_index, "FAIL", 01);
+      val_set_status(pe_index, "FAIL", 05);
   else
       val_set_status(pe_index, "PASS", 01);
 

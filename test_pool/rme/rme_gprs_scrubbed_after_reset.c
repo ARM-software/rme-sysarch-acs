@@ -1,4 +1,4 @@
-/** @file
+   /** @file
  * Copyright (c) 2023-2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
@@ -45,7 +45,13 @@ void payload(void)
           goto reset_done;
 
   //Change the security state to Realm from NS by writing to SCR_EL#.NS and NSE bits
-  val_change_security_state_el3(REALM_STATE);
+  if (val_change_security_state_el3(REALM_STATE))
+  {
+    val_print(ACS_PRINT_ERR,
+      "\n    Security State change failure to 0x%lx State", (uint64_t)REALM_STATE);
+    val_set_status(index, "FAIL", 01);
+    return;
+  }
 
   //Write to the GPRs from x19-x29 and execute reset
   val_write_reset_status(RESET_TST2_FLAG);
