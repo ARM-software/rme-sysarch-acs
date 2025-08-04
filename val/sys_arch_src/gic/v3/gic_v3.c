@@ -311,8 +311,8 @@ v3_Init(void)
   /* Get the max interrupt */
   max_num_interrupts = val_get_max_intid();
 
-  val_print(ACS_PRINT_DEBUG, " GIC_INIT: D base %llx\n", gicd_base);
-  val_print(ACS_PRINT_DEBUG, " GIC_INIT: Interrupts %d\n", max_num_interrupts);
+  val_print(ACS_PRINT_DEBUG, " GIC_INIT: D base %llx", gicd_base);
+  val_print(ACS_PRINT_DEBUG, " GIC_INIT: Interrupts %d", max_num_interrupts);
 
   /* Disable all interrupt */
   for (index = 0; index < max_num_interrupts; index++)

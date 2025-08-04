@@ -56,6 +56,7 @@ void payload(void)
 
     shared_data->arg0 = mem_region_cfg->regn_info[regn_cnt].base_addr;
     security_state = mem_region_cfg->regn_info[regn_cnt].resourse_pas;
+    val_print(ACS_PRINT_TEST, " Checking GPC for resource 0x%llx", shared_data->arg0);
 
     for (int pas_cnt = 0; pas_cnt < 4; ++pas_cnt)
     {

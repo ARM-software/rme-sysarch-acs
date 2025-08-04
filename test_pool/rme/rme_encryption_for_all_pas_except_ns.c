@@ -86,6 +86,7 @@ void payload(void)
   }
 
   /* Store Random data in VA_NS and access the rest of the VAs */
+  val_print(ACS_PRINT_TEST, " Storing data in PA of NS_PAS and flushing it", 0);
   wt_data_ns = RANDOM_DATA_1;
   shared_data->num_access = 1;
   shared_data->shared_data_access[0].addr = VA_NS;
@@ -106,6 +107,7 @@ void payload(void)
       return;
   }
 
+  val_print(ACS_PRINT_TEST, " Accessing the PA from all the PAS except NonSecure", 0);
   shared_data->num_access = 3;
   shared_data->shared_data_access[0].addr = VA_RT;
   shared_data->shared_data_access[0].access_type = READ_DATA;

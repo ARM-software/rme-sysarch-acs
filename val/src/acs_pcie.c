@@ -1582,8 +1582,9 @@ uint32_t val_pcie_bitfield_check(uint32_t bdf, uint64_t *bitfield_entry)
 
   if (status != PCIE_SUCCESS)
   {
-      val_print(ACS_PRINT_ERR, " PCIe Capability 0x%x", id);
+      val_print(ACS_PRINT_ALWAYS, "\n\t\tWARN:  PCIe Capability 0x%x", id);
       val_print(ACS_PRINT_ALWAYS, " not found for BDF 0x%x", bdf);
+      val_print(ACS_PRINT_ERR, " ", 0);
       return status;
   }
 
@@ -1694,7 +1695,7 @@ val_pcie_register_bitfields_check(uint64_t *bf_info_table, uint32_t num_bitfield
 
   num_fails = num_pass = tbl_index = 0;
 
-  val_print(ACS_PRINT_INFO, " Number of bit-field entries to check %d",
+  val_print(ACS_PRINT_INFO, " Number of bit-field entries to check %d\n",
             num_bitfield_entries);
 
   while (tbl_index < g_pcie_bdf_table->num_entries)
@@ -1721,6 +1722,8 @@ val_pcie_register_bitfields_check(uint64_t *bf_info_table, uint32_t num_bitfield
               bf_entry++;
               continue;
           }
+          val_print(ACS_PRINT_TEST, " Checking BDF: 0x%x", bdf);
+
 
           /* Check for the compliance */
           if (val_pcie_bitfield_check(bdf, (void *)bf_entry))
@@ -2374,8 +2377,9 @@ uint32_t val_pcie_write_detect_bitfield_check(uint32_t bdf, uint64_t *bitfield_e
 
   if (status != PCIE_SUCCESS)
   {
-      val_print(ACS_PRINT_INFO, " PCIe Capability 0x%x", id);
+      val_print(ACS_PRINT_ALWAYS, "\n\t\tWARN:  PCIe Capability 0x%x", id);
       val_print(ACS_PRINT_ALWAYS, " not found for BDF 0x%x", bdf);
+      val_print(ACS_PRINT_WARN, " ", 0);
       return status;
   }
 

@@ -417,10 +417,7 @@ pal_pe_get_num()
 uint32_t
 pal_psci_get_conduit(void)
 {
-   #ifdef ENABLE_OOB
-      return CONDUIT_HVC;
-   #endif
-  return CONDUIT_NONE;
+  return CONDUIT_SMC;
 }
 
 uint32_t pal_get_cpu_count(void)

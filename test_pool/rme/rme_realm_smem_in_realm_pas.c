@@ -60,6 +60,7 @@ void payload(void)
 
   for (int pas_cnt = 0; pas_cnt < 4; ++pas_cnt)
   {
+      val_print(ACS_PRINT_TEST, " Accessing Realm SMEM with PAS = %lld", pas_list[pas_cnt]);
       if (val_add_mmu_entry_el3(VA, PA, (attr | LOWER_ATTRS(PAS_ATTR(pas_list[pas_cnt])))))
       {
         val_print(ACS_PRINT_ERR, " Failed to add MMU entry for VA 0x%llx", VA);
@@ -118,7 +119,7 @@ void payload(void)
         rd_data1 = shared_data->shared_data_access[0].data;
         shared_data->pas_filter_flag = CLEAR;
 
-        val_print(ACS_PRINT_TEST, " The data read when res pas != acc pas is 0x%lx", rd_data1);
+        val_print(ACS_PRINT_INFO, " The data read when res pas != acc pas is 0x%lx", rd_data1);
         /* If fault is not generated, check that the load of the address must not be updated */
         if (shared_data->exception_generated == CLEAR)
         {

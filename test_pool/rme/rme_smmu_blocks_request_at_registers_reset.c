@@ -56,6 +56,7 @@ uint32_t test_sequence(void *dram_buf1_virt, void *dram_buf1_phys, uint32_t inst
   val_data_cache_ops_by_va((addr_t)dram_buf1_virt, CLEAN_AND_INVALIDATE);
 
   /* Perform DMA OUT to copy contents of dram_buf1 to exerciser memory */
+  val_print(ACS_PRINT_TEST, " Performing the DMA when SMMU is in reset", instance);
   val_exerciser_set_param(DMA_ATTRIBUTES, (uint64_t)dram_buf1_phys, dma_len, instance);
   if (!val_exerciser_ops(START_DMA, EDMA_TO_DEVICE, instance)) {
       val_print(ACS_PRINT_ERR, " DMA write is successful to exerciser %4x", instance);
@@ -117,6 +118,8 @@ payload(void)
     /* Disable SMMU globally by writing reset values to SMMU_CR0.SMMUEN and
      * SMMU_ROOT_CR0.ACCESSEN thereby setting the SMMU in reset state.
      */
+    val_print(ACS_PRINT_TEST,
+      " Disabling SMMU %d through it's Control registers in both Root and NS state", smmu_index);
     if (smmu_index != ACS_INVALID_INDEX) {
         if (val_smmu_access_disable(smmu_base))
         {

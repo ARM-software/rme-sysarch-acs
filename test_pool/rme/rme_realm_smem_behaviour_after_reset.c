@@ -70,6 +70,7 @@ void payload(void)
     val_set_status(index, "FAIL", 02);
     return;
   }
+  val_print(ACS_PRINT_TEST, " Writing a data to PA from Realm state", 0);
   shared_data->num_access = 1;
   shared_data->shared_data_access[0].addr = PA_RLM;
   shared_data->shared_data_access[0].data = wt_data;
@@ -81,6 +82,7 @@ void payload(void)
     return;
   }
 
+  val_print(ACS_PRINT_TEST, " Going to system reset", 0);
   val_write_reset_status(RESET_TST12_FLAG);
   val_save_global_test_data();
   val_system_reset();
@@ -96,6 +98,7 @@ reset_done:
     return;
   }
   /* Read the PA from realm SMEM after reset */
+  val_print(ACS_PRINT_TEST, " Reading the data from PA after reset", 0);
   shared_data->num_access = 1;
   shared_data->shared_data_access[0].addr = PA_RLM;
   shared_data->shared_data_access[0].access_type = READ_DATA;
@@ -107,9 +110,9 @@ reset_done:
   }
   rd_data = shared_data->shared_data_access[0].data;
 
-  val_print(ACS_PRINT_TEST, " The data stored is 0x%lx", wt_data);
-  val_print(ACS_PRINT_TEST, " and the data read after the reset is 0x%lx", rd_data);
-  val_print(ACS_PRINT_TEST, " The test expects the data to be not same", 0);
+  val_print(ACS_PRINT_DEBUG, " The data stored is 0x%lx", wt_data);
+  val_print(ACS_PRINT_DEBUG, " and the data read after the reset is 0x%lx", rd_data);
+  val_print(ACS_PRINT_DEBUG, " The test expects the data to be not same", 0);
   if (wt_data == rd_data)
     val_set_status(index, "FAIL", 06);
 

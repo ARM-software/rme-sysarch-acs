@@ -227,6 +227,7 @@ payload(uint32_t num_pe)
   }
 
   /* Loop CLIDR to check if a cache level is implemented */
+  val_print(ACS_PRINT_TEST, " Checking the cache level implementation from CCSIDR_EL1 register", 0);
   i = 0;
   while (i < MAX_CACHE_LEVEL) {
       reg_read_data = val_pe_reg_read(CLIDR_EL1);
@@ -240,6 +241,7 @@ payload(uint32_t num_pe)
       i++;
   }
 
+  val_print(ACS_PRINT_TEST, " Reading the registers and storing them in rd_data_array[]", 0);
   for (i = 1; i < NUM_OF_REGISTERS; i++) {
       rd_data_array[i] = return_reg_value(reg_list[i].reg_name, reg_list[i].dependency);
       val_data_cache_ops_by_va((addr_t)(rd_data_array + i), CLEAN_AND_INVALIDATE);
@@ -248,6 +250,7 @@ payload(uint32_t num_pe)
   for (i = 0; i < num_pe; i++) {
       if (i != my_index) {
           timeout = TIMEOUT_LARGE;
+          val_print(ACS_PRINT_TEST, " Executing id_regs_check on PE index = %d", i);
           val_execute_on_pe(i, id_regs_check, 0);
           while ((--timeout) && (IS_RESULT_PENDING(val_get_status(i))))
                   ;

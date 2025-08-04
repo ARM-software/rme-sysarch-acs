@@ -103,6 +103,7 @@ void payload(void)
 
   /* Load VA_NS first to ensure the data is brought to cache level and then,
    * Store Random data in VA_NS and access from the rest of the PASs */
+  val_print(ACS_PRINT_TEST, " initialising the PA of GPI_ANY from Non-secure PAS", 0);
   shared_data->num_access = 1;
   shared_data->shared_data_access[0].addr = VA_NS;
   shared_data->shared_data_access[0].data = INIT_DATA;
@@ -115,6 +116,7 @@ void payload(void)
   }
 
   //CMO to PoPA for PA_NS
+  val_print(ACS_PRINT_TEST, " Issuing CMO to PoPA for PA at NS", 0);
   if (val_data_cache_ops_by_pa_el3(PA, NONSECURE_PAS))
   {
       val_print(ACS_PRINT_ERR, " Failed to issue CMO for PA 0x%lx", PA);
@@ -153,6 +155,7 @@ void payload(void)
       val_set_status(index, "FAIL", 9);
       return;
   }
+  val_print(ACS_PRINT_TEST, " Accessing the PA from all the other PAS", 0);
   data_rt = shared_data->shared_data_access[1].data;
   data_rl = shared_data->shared_data_access[2].data;
   data_s = shared_data->shared_data_access[3].data;

@@ -94,10 +94,10 @@ void payload(void)
                       " Unable to create page table with given attributes", 0);
       val_set_status(index, "FAIL", 04);
       return;
-      }
-
+  }
 
   /*PA is initialized with the initial DATA*/
+  val_print(ACS_PRINT_TEST, " Initializing PA 0x%lx of GPI_ANY with INIT_DATA", PA);
   *(uint64_t *)PA = (uint64_t) INIT_DATA;
 
   /* Map the PA with VA_Secure and VA_Non-Secure with Non-Cacheable attribute */
@@ -119,6 +119,7 @@ void payload(void)
   }
 
   /* Read VA1 and VA2 and Write Random data in VA1*/
+  val_print(ACS_PRINT_TEST, " Accessing PA with Secure and NonSecure PAS", 0);
   wt_data_s = RANDOM_DATA_1;
   shared_data->num_access = 3;
   shared_data->shared_data_access[0].addr = VA_S;
@@ -140,6 +141,7 @@ void payload(void)
   rd_data_ns = shared_data->shared_data_access[1].data;
 
   /* CMO to PoPA for PA1 at secure PAS */
+  val_print(ACS_PRINT_TEST, " Issuing CMO to PoPA for PA 0x%lx at both the PASs", PA);
   if (val_data_cache_ops_by_pa_el3(PA, SECURE_PAS)) {
       val_print(ACS_PRINT_ERR, " Failed to issue CMO for PA 0x%lx", PA);
       val_set_status(index, "FAIL", 8);
@@ -154,6 +156,7 @@ void payload(void)
   }
 
   /* Access the data stored in VA2 */
+  val_print(ACS_PRINT_TEST, " Accessing PA from NS PAS after CMO to PoPA", 0);
   shared_data->num_access = 1;
   shared_data->shared_data_access[0].addr = VA_NS;
   shared_data->shared_data_access[0].access_type = READ_DATA;

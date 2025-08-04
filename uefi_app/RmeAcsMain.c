@@ -40,13 +40,12 @@ UINT32 g_print_test_check_id;
 UINT32 g_print_mmio;
 UINT32 g_curr_module;
 UINT32 g_enable_module;
-CHAR8 *g_skip_test_str[MAX_TEST_SKIP_NUM] = {
-  SKIP_TEST_SENTINEL, SKIP_TEST_SENTINEL, SKIP_TEST_SENTINEL, SKIP_TEST_SENTINEL,
-  SKIP_TEST_SENTINEL, SKIP_TEST_SENTINEL, SKIP_TEST_SENTINEL, SKIP_TEST_SENTINEL,
-  SKIP_TEST_SENTINEL, SKIP_TEST_SENTINEL,
-};
-CHAR8 *g_single_test_str = SINGLE_TEST_SENTINEL_STR;
-CHAR8 *g_single_module_str = SINGLE_MODULE_SENTINEL_STR;
+CHAR8 **g_skip_test_str;
+CHAR8 **g_execute_tests_str;
+CHAR8 **g_execute_modules_str;
+UINT32 g_num_skip = 0;
+UINT32 g_num_tests = 0;
+UINT32 g_num_modules = 0;
 UINT32 g_rme_tests_total;
 UINT32 g_rme_tests_pass;
 UINT32 g_rme_tests_fail;
@@ -287,42 +286,33 @@ HelpMsg (
          "-v      Verbosity of the Prints\n"
          "        1 shows all prints, 5 shows Errors\n"
          "        Note: pal_mmio prints can be enabled for specific modules by passing\n"
-         "              module numbers along with global verbosity level 1\n"
-         "              Module numbers are PE 0, GIC 1,  ...\n"
-         "              E.g., To enable mmio prints for PE and TIMER pass -v 102 \n"
-         "-mmio   Pass this flag to enable pal_mmio_read/write prints, use with -v 1\n"
-         "-l      Level of compliance to be tested for\n"
-         "        As per RME spec, 3 to 6\n"
+         "              module id along with global verbosity level 1\n"
+         "              Module ids are rme, gic,  ...\n"
+         "              E.g., To enable mmio prints for RME and DA pass -v 1,rme,da \n"
+         "-mmio   Pass this flag to enable pal_mmio_read/write and tdisp prints, use with -v 1\n"
          "-f      Name of the log file to record the test results in\n"
          "-skip   Test(s) to be skipped\n"
          "        Refer to section 2.3 of RME_ACS_Platform_Porting_Guide\n"
          "        To skip a module, use Model_ID as mentioned in user guide\n"
          "        To skip a particular test within a module, use the exact testcase name\n"
-         "-p      Enable/disable PCIe RME 6.0 (RCiEP) compliance tests\n"
-         "        1 - enables PCIe tests, 0 - disables PCIe tests\n"
-         "-t      If set, will only run the specified test, all others will be skipped.\n"
-         "-m      If set, will only run the specified module, all others will be skipped.\n"
+         "-t      If set, will only run the specified tests, all others will be skipped.\n"
+         "-m      If set, will only run the specified modules, all others will be skipped.\n"
          "-p2p    Pass this flag to indicate that PCIe Hierarchy Supports Peer-to-Peer\n"
          "-cache  Pass this flag to indicate that if the test system supports PCIe address translation cache\n"
-         "-timeout  Set timeout multiple for wakeup tests\n"
-         "        1 - min value  5 - max value\n"
   );
 }
 
 STATIC CONST SHELL_PARAM_ITEM ParamList[] = {
   {L"-v"    , TypeValue},    // -v    # Verbosity of the Prints. 1 shows all prints, 5 shows Errors
-  {L"-l"    , TypeValue},    // -l    # Level of compliance to be tested for.
   {L"-f"    , TypeValue},    // -f    # Name of the log file to record the test results in.
   {L"-skip" , TypeValue},    // -skip # test(s) to skip execution
   {L"-help" , TypeFlag},     // -help # help : info about commands
   {L"-h"    , TypeFlag},     // -h    # help : info about commands
-  {L"-p"    , TypeValue},    // -p    # Enable/disable PCIe RME 6.0 (RCiEP) compliance tests.
   {L"-mmio" , TypeFlag},     // -mmio # Enable pal_mmio prints
   {L"-t"    , TypeValue},    // -t    # Test to be run
   {L"-m"    , TypeValue},    // -m    # Module to be run
   {L"-p2p", TypeFlag},       // -p2p  # Peer-to-Peer is supported
   {L"-cache", TypeFlag},     // -cache# PCIe address translation cache is supported
-  {L"-timeout" , TypeValue}, // -timeout # Set timeout multiple for wakeup tests
   {NULL     , TypeMax}
   };
 
@@ -366,6 +356,15 @@ ShellAppMainrme (
       CmdLineArg = ShellCommandLineGetValue(ParamPackage, L"-skip");
 
       if (CmdLineArg != NULL) {
+          UINTN str_len = StrLen(CmdLineArg);
+          EFI_STATUS Status;
+          Status = gBS->AllocatePool(EfiBootServicesData,
+                                     str_len * sizeof(CHAR8 *),
+                                     (VOID **)&g_skip_test_str);
+          if (EFI_ERROR(Status)) {
+              Print(L"\nError: Unable to allocate memory for skip string array");
+              return SHELL_OUT_OF_RESOURCES;
+          }
           CHAR16 *WorkingStr = AllocateCopyPool(StrSize(CmdLineArg), CmdLineArg);
           if (WorkingStr == NULL) {
               Print(L"\nError: Unable to allocate memory for skip string");
@@ -373,9 +372,8 @@ ShellAppMainrme (
           }
 
           CHAR16 *Token = WorkingStr;
-          UINTN j = 0;
 
-          while (*Token != L'\0' && j < MAX_TEST_SKIP_NUM) {
+          while (*Token != L'\0' && g_num_skip < str_len) {
               CHAR16 *Next = StrStr(Token, L",");
               if (Next != NULL)
                   *Next = L'\0';
@@ -389,14 +387,12 @@ ShellAppMainrme (
                   *End = L'\0';
                   End--;
               }
-
               UINTN Len = StrLen(Token);
-              g_skip_test_str[j] = AllocateZeroPool(Len + 1);
-              if (g_skip_test_str[j]) {
-                  UnicodeStrToAsciiStrS(Token, g_skip_test_str[j], Len + 1);
-                  j++;
+              g_skip_test_str[g_num_skip] = AllocateZeroPool(Len + 1);
+              if (g_skip_test_str[g_num_skip]) {
+                  UnicodeStrToAsciiStrS(Token, g_skip_test_str[g_num_skip], Len + 1);
+                  g_num_skip++;
               }
-
               if (Next != NULL)
                   Token = Next + 1;
               else
@@ -405,9 +401,7 @@ ShellAppMainrme (
       }
   }
 
-
-
-    // Options with Values
+  // Options with Values
   CmdLineArg  = ShellCommandLineGetValue (ParamPackage, L"-v");
   if (CmdLineArg != NULL) {
     CHAR16 *token;
@@ -493,27 +487,107 @@ ShellAppMainrme (
   }
 
 
-  // Options with Values
-  CmdLineArg  = ShellCommandLineGetValue (ParamPackage, L"-t");
-  if (CmdLineArg != NULL) {
-    UINTN Len = StrLen(CmdLineArg);
-    g_single_test_str = AllocateZeroPool(Len + 1);
-    if (g_single_test_str) {
-        UnicodeStrToAsciiStrS(CmdLineArg, g_single_test_str, Len + 1);
-        Print(L"\n[DEBUG] Single test selected: %s", g_single_test_str);
+// Options with Values
+CmdLineArg = ShellCommandLineGetValue(ParamPackage, L"-t");
+if (CmdLineArg != NULL) {
+    UINTN str_len = StrLen(CmdLineArg);
+    EFI_STATUS Status;
+    Status = gBS->AllocatePool(EfiBootServicesData,
+                               str_len * sizeof(CHAR8 *),
+                               (VOID **)&g_execute_tests_str);
+    if (EFI_ERROR(Status)) {
+        Print(L"\nError: Unable to allocate memory for execute test string array");
+        return SHELL_OUT_OF_RESOURCES;
     }
-  }
+
+    CHAR16 *WorkingStr = AllocateCopyPool(StrSize(CmdLineArg), CmdLineArg);
+    if (WorkingStr == NULL) {
+        Print(L"\nError: Unable to allocate memory for test string");
+        return SHELL_OUT_OF_RESOURCES;
+    }
+
+    CHAR16 *Token = WorkingStr;
+    UINTN j = 0;
+
+    while (*Token != L'\0' && j < str_len) {
+        CHAR16 *Next = StrStr(Token, L",");
+        if (Next != NULL)
+            *Next = L'\0';
+
+        // Trim leading spaces
+        while (*Token == L' ') Token++;
+
+        // Trim trailing spaces
+        CHAR16 *End = Token + StrLen(Token) - 1;
+        while (End > Token && *End == L' ') {
+            *End = L'\0';
+            End--;
+        }
+
+        UINTN Len = StrLen(Token);
+        g_execute_tests_str[g_num_tests] = AllocateZeroPool(Len + 1);
+        if (g_execute_tests_str[g_num_tests]) {
+            UnicodeStrToAsciiStrS(Token, g_execute_tests_str[g_num_tests], Len + 1);
+            g_num_tests++;
+        }
+        if (Next != NULL)
+            Token = Next + 1;
+        else
+            break;
+        j++;
+    }
+}
 
   // Options with Values
-  CmdLineArg  = ShellCommandLineGetValue (ParamPackage, L"-m");
-  if (CmdLineArg != NULL) {
-    UINTN Len = StrLen(CmdLineArg);
-    g_single_module_str = AllocateZeroPool(Len + 1);
-    if (g_single_module_str) {
-        UnicodeStrToAsciiStrS(CmdLineArg, g_single_module_str, Len + 1);
-        Print(L"\n[DEBUG] Single module selected: %a", g_single_module_str);
+CmdLineArg = ShellCommandLineGetValue(ParamPackage, L"-m");
+if (CmdLineArg != NULL) {
+    UINTN str_len = StrLen(CmdLineArg);
+    EFI_STATUS Status;
+    Status = gBS->AllocatePool(EfiBootServicesData,
+                               str_len * sizeof(CHAR8 *),
+                               (VOID **)&g_execute_modules_str);
+    if (EFI_ERROR(Status)) {
+        Print(L"\nError: Unable to allocate memory for execute module string array");
+        return SHELL_OUT_OF_RESOURCES;
     }
-  }
+
+    CHAR16 *WorkingStr = AllocateCopyPool(StrSize(CmdLineArg), CmdLineArg);
+    if (WorkingStr == NULL) {
+        Print(L"\nError: Unable to allocate memory for module string");
+        return SHELL_OUT_OF_RESOURCES;
+    }
+
+    CHAR16 *Token = WorkingStr;
+    UINTN j = 0;
+
+    while (*Token != L'\0' && j < str_len) {
+        CHAR16 *Next = StrStr(Token, L",");
+        if (Next != NULL)
+            *Next = L'\0';
+
+        // Trim leading spaces
+        while (*Token == L' ') Token++;
+
+        // Trim trailing spaces
+        CHAR16 *End = Token + StrLen(Token) - 1;
+        while (End > Token && *End == L' ') {
+            *End = L'\0';
+            End--;
+        }
+
+        UINTN Len = StrLen(Token);
+        g_execute_modules_str[g_num_modules] = AllocateZeroPool(Len + 1);
+        if (g_execute_modules_str[g_num_modules]) {
+            UnicodeStrToAsciiStrS(Token, g_execute_modules_str[g_num_modules], Len + 1);
+            g_num_modules++;
+        }
+        if (Next != NULL)
+            Token = Next + 1;
+        else
+            break;
+        j++;
+    }
+}
 
   //
   // Initialize global counters

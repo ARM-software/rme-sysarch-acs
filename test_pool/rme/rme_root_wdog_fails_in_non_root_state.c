@@ -86,7 +86,7 @@ payload()
     timeout = val_get_counter_frequency() * 2;
     counter_freq = val_get_counter_frequency();
 
-    val_print(ACS_PRINT_TEST, " Root watchdog Interrupt id  %d", int_id);
+    val_print(ACS_PRINT_DEBUG, " Root watchdog Interrupt id  %d", int_id);
 
     if (val_gic_install_isr(int_id, isr)) {
             val_print(ACS_PRINT_ERR, " GIC Install Handler Failed...", 0);
@@ -108,6 +108,7 @@ payload()
         return;
     }
     //Generic flag will be set to ensure the disabling of I.A.F bit in PSTATE in el3
+    val_print(ACS_PRINT_DEBUG, " Programming the Root Watchdog register from NS PAS", 0);
     shared_data->generic_flag = SET;
     if (val_wd_set_ws0_el3(VA_RT_WDOG, timer_expire_ticks, counter_freq))
     {

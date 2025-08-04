@@ -107,12 +107,13 @@ payload(void)
           continue;
 
       bdf = val_exerciser_get_bdf(instance);
-      val_print(ACS_PRINT_TEST, " Exerciser BDF - 0x%x", bdf);
 
       if (val_pcie_get_rootport(bdf, &rp_bdf))
           continue;
 
       test_skip = 0;
+
+      val_print(ACS_PRINT_TEST, " Exerciser BDF - 0x%x", bdf);
 
       /* Check for DA Capability */
       if (val_pcie_find_da_capability(rp_bdf, &da_cap_base) != PCIE_SUCCESS)

@@ -75,6 +75,7 @@ payload()
       if (dp_type == RP)
       {
           test_skip = 0;
+          val_print(ACS_PRINT_TEST, " Checking BDF: 0x%x", bdf);
 
           /* Get the PCIE DVSEC Capability register */
           if (val_pcie_find_da_capability(bdf, &da_cap_base) != PCIE_SUCCESS)

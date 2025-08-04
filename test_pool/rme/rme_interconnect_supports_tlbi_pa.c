@@ -47,6 +47,8 @@ void payload(void)
   PA = val_get_free_pa(size, size);
   VA = val_get_free_va(size);
   attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(NON_SHAREABLE) | PGT_ENTRY_AP_RW);
+
+  val_print(ACS_PRINT_TEST, " Accessing the PA of Secure resource PAS from Secure PAS", 0);
   /* Map VA to PA as secure access PAS in MMU and PA to secure resource PAS in GPT */
   if (val_add_gpt_entry_el3(PA, GPT_SECURE))
   {
@@ -81,6 +83,7 @@ void payload(void)
     return;
   }
   //Access VA after the GPT change
+  val_print(ACS_PRINT_TEST, " Accessing the PA of Non resource PAS from Secure PAS", 0);
   shared_data->exception_expected = SET;
   shared_data->access_mut = SET;
   shared_data->arg1 = VA;

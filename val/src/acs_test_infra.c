@@ -88,7 +88,7 @@ val_log_context(uint32_t level, char8_t *string, uint64_t data, const char *file
     pal_print(string, data);
     /* Print file name and line number for ERR and WARN */
     if (level == ACS_PRINT_ERR || level == ACS_PRINT_WARN) {
-        pal_print("  [FILE: %a]", (uint64_t)file);
+        pal_print("[FILE: %a]", (uint64_t)file);
         pal_print("  [LINE: %d]", line);
     }
   }
@@ -313,6 +313,44 @@ void print_suite_from_testname(char8_t *testname)
 }
 
 /**
+  @brief  This API checks if all the tests in the current module needs to be skipped.
+          Skip if no tests are to be executed with user override options.
+          1. Caller       - Test suite
+          2. Prerequisite - None.
+
+  @param module_id Name of the module
+
+  @return         ACS_STATUS_SKIP - if the user override has no tests to run in the current module
+                  ACS_STATUS_PASS - if tests are to be run in the current module
+ **/
+uint32_t
+val_check_skip_module(char8_t *module_id)
+{
+  uint32_t i, dont_skip = 0;
+
+  /* Case 1 - Don't skip the module if the module number is mentioned in -m option parameters */
+  for (i = 0; i < g_num_modules; i++) {
+    if (val_memory_compare(g_execute_modules_str[i],
+                           module_id, val_strnlen(g_execute_modules_str[i])) == 0)
+      dont_skip++;
+  }
+
+  /* Case 2 - Don't skip the module if any of module's tests are in -t option parameters  */
+  for (i = 0; i < g_num_tests; i++) {
+    if (val_memory_compare(module_id, g_execute_tests_str[i], val_strnlen(module_id)) == 0) {
+        dont_skip++;
+    }
+  }
+
+  /* Skip the module if neither of above 2 cases are true */
+  if ((!dont_skip) && (g_num_tests || g_num_modules)) {
+      return ACS_STATUS_SKIP;
+  }
+
+  return ACS_STATUS_PASS;
+}
+
+/**
   @brief  This API prints the test name, description and
           sets the test status to pending for the input number of PEs.
           1. Caller       - Application layer
@@ -329,6 +367,7 @@ val_initialize_test(char8_t *testname, char8_t *desc, uint32_t num_pe, char8_t *
 {
   uint32_t i;
   uint32_t index = val_pe_get_index_mpid(val_pe_get_mpid());
+  uint32_t dont_skip = 0;
 
   g_print_in_test_context = 1;
   val_print(ACS_PRINT_ALWAYS, "\n", 0);
@@ -339,28 +378,40 @@ val_initialize_test(char8_t *testname, char8_t *desc, uint32_t num_pe, char8_t *
   val_print(ACS_PRINT_ALWAYS, "\n", 0);
   val_pe_initialize_default_exception_handler(val_pe_default_esr);
 
-  g_rme_tests_total++;
-
   for (i = 0; i < num_pe; i++)
       val_set_status(i, "PENDING", 0);
 
-  for (i = 0 ; i < MAX_TEST_SKIP_NUM ; i++) {
+  /* Skip the test if it one of the -skip option parameters */
+  for (i = 0 ; i < g_num_skip ; i++) {
       if (val_memory_compare(g_skip_test_str[i], testname, val_strnlen(g_skip_test_str[i])) == 0) {
           val_print(ACS_PRINT_ALWAYS, "\n USER OVERRIDE  - Skip Test        ", 0);
           val_set_status(index, "SKIP", 0);
           return ACS_STATUS_SKIP;
       }
   }
-  if ((val_memory_compare(g_single_test_str, SINGLE_TEST_SENTINEL_STR,
-                          val_strnlen(g_single_test_str)) != 0 &&
-       val_memory_compare(g_single_test_str, testname, val_strnlen(g_single_test_str)) != 0) &&
-      (val_memory_compare(g_single_module_str, SINGLE_MODULE_SENTINEL_STR,
-                          val_strnlen(g_single_module_str)) == 0 ||
-       val_memory_compare(g_single_module_str, testname, val_strnlen(g_single_module_str)) != 0)) {
-    val_print(ACS_PRINT_ALWAYS, "\n USER OVERRIDE VIA SINGLE TEST - Skip Test        ", 0);
-    val_set_status(index, "SKIP", 0);
-    return ACS_STATUS_SKIP;
+
+  /* Don't skip if the test belongs to one of the modules in -m option parameters */
+  for (i = 0; i < g_num_modules; i++) {
+    if (val_memory_compare(g_execute_modules_str[i],
+                           testname, val_strnlen(g_execute_modules_str[i])) == 0)
+      dont_skip++;
   }
+
+  /* Don't skip if test_num is one of the -t option parameters */
+  for (i = 0; i < g_num_tests; i++) {
+    if (val_memory_compare(testname, g_execute_tests_str[i], val_strnlen(testname)) == 0) {
+        dont_skip++;
+    }
+  }
+
+  if ((!dont_skip) && (g_num_tests || g_num_modules)) {
+      val_set_status(index, "SKIP", 0);
+      val_print(ACS_PRINT_ALWAYS, "\n USER OVERRIDE  - Skip Test        ", 0);
+      return ACS_STATUS_SKIP;
+  }
+
+  dont_skip = 1;
+  g_rme_tests_total++;
 
   return ACS_STATUS_PASS;
 }

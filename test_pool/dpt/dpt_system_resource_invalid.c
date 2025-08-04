@@ -111,7 +111,7 @@ payload(void)
       if (val_pcie_find_capability(bdf, PCIE_ECAP, ECID_ATS, &cap_base) != PCIE_SUCCESS)
             continue;
 
-      val_print(ACS_PRINT_TEST, " Enabling the ATS Cache for the exerciser: 0x%x", bdf);
+      val_print(ACS_PRINT_DEBUG, " Enabling the ATS Cache for the exerciser: 0x%x", bdf);
       val_pcie_read_cfg(bdf, cap_base + ATS_CTRL, &reg_value);
       reg_value |= ATS_CACHING_EN;
       val_pcie_write_cfg(bdf, cap_base + ATS_CTRL, reg_value);

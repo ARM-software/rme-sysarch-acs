@@ -172,7 +172,7 @@ payload(void)
           continue;
       }
 
-      val_print(ACS_PRINT_TEST, " Target exerciser BDF - 0x%x", tgt_e_bdf);
+      val_print(ACS_PRINT_DEBUG, " Target exerciser BDF - 0x%x", tgt_e_bdf);
 
       if (val_device_lock(req_e_bdf))
       {

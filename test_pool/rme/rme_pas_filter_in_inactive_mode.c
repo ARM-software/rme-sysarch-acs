@@ -55,6 +55,7 @@ void payload(void)
     return;
   }
   //Change the Active mode of the PAS filter
+  val_print(ACS_PRINT_TEST, " Changing the Active mode of the PAS filter to In-Active", 0);
   if (val_pas_filter_active_mode_el3(CLEAR))
   {
     val_print(ACS_PRINT_ERR, " Active mode of the PAS filter couldn't be programmed", 0);
@@ -71,6 +72,8 @@ void payload(void)
 
     shared_data->arg0 = mem_region_pas_filter_cfg->regn_info[regn_cnt].base_addr;
     security_state = mem_region_pas_filter_cfg->regn_info[regn_cnt].resourse_pas;
+    val_print(ACS_PRINT_TEST, " Checking the PAS filtering for the resource: 0x%llx",
+              shared_data->arg0);
     if (val_add_mmu_entry_el3(VA, shared_data->arg0,
         (attr | LOWER_ATTRS(PAS_ATTR(security_state)))))
     {

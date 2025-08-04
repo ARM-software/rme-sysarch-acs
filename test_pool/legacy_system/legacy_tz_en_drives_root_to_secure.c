@@ -55,6 +55,8 @@ payload()
   attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(NON_SHAREABLE) | PGT_ENTRY_AP_RW);
   for (uint64_t reg_cnt = 0; reg_cnt < num_reg; ++reg_cnt) {
 
+    val_print(ACS_PRINT_TEST, " Checking for the region: 0x%llx", PA);
+
     VA = val_get_free_va(size);
     PA = root_registers_cfg->rt_reg_info[reg_cnt].rt_reg_base_addr;
     /* Use the register addresses as PAs to map them with secure access PAS */

@@ -48,6 +48,7 @@ uint32_t test_sequence1(void *dram_buf1_virt, void *dram_buf1_phys, uint32_t ins
   dram_buf2_virt = dram_buf1_virt + (test_data_blk_size / 2);
   dma_len = test_data_blk_size / 2;
 
+  val_print(ACS_PRINT_TEST, " DMA transaction for Non-Secure memory", 0);
   /* Write dram_buf1 with known data and flush the buffer to main memory */
   if (val_memory_set_el3((uint64_t *)dram_buf1_virt, dma_len, KNOWN_DATA))
   {
@@ -103,6 +104,8 @@ uint32_t test_sequence1(void *dram_buf1_virt, void *dram_buf1_phys, uint32_t ins
       val_print(ACS_PRINT_ERR, "\n  Failed to add GPT entry for PA 0x%llx", PA);
       return 1;
     }
+
+    val_print(ACS_PRINT_TEST, " DMA transaction for PAS: %lld", res_pas[mem_cnt]);
 
     /* Perform DMA OUT to copy contents of PA to exerciser memory and
      * observe that DMA transaction is not successful

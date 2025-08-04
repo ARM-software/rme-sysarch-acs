@@ -36,9 +36,16 @@ uint64_t  g_exception_ret_addr;
 uint64_t  g_ret_addr;
 uint32_t  g_rl_smmu_init;
 
-extern char8_t *g_skip_test_str[];
-extern char8_t *g_single_test_str;
-extern char8_t *g_single_module_str;
+char8_t **g_execute_tests_str;
+char8_t **g_execute_modules_str;
+char8_t **g_skip_test_str;
+
+extern char8_t *g_skip_array[];
+extern uint32_t g_num_skip;
+extern char8_t *g_test_array[];
+extern uint32_t g_num_tests;
+extern char8_t *g_module_array[];
+extern uint32_t g_num_modules;
 
 uint32_t
 createPeInfoTable(
@@ -225,6 +232,17 @@ ShellAppMainrme(
 
   val_print(ACS_PRINT_ALWAYS, " (Print level is %2d)\n\n", g_print_level);
 
+  g_skip_test_str = g_skip_array;
+
+  /* Check if there is a user override to run specific tests*/
+  if (g_num_tests) {
+      g_execute_tests_str   = g_test_array;
+  }
+
+  /* Check if there is a user override to run specific modules*/
+  if (g_num_modules) {
+      g_execute_modules_str = g_module_array;
+  }
 
   val_print(ACS_PRINT_ALWAYS, " Creating Platform Information Tables \n", 0);
   Status = createPeInfoTable();
@@ -234,8 +252,8 @@ ShellAppMainrme(
   if (Status)
     return Status;
  createTimerInfoTable();
- createPcieVirtInfoTable();
  createPeripheralInfoTable();
+ createPcieVirtInfoTable();
 
  val_allocate_shared_mem();
 

@@ -47,21 +47,17 @@ val_rme_da_execute_tests(uint32_t num_pe)
   uint64_t num_smmus = val_smmu_get_info(SMMU_NUM_CTRL, 0);
   uint64_t smmu_base_arr[num_smmus], pgt_attr_el3;
 
-  for (i = 0 ; i < MAX_TEST_SKIP_NUM ; i++) {
+  for (i = 0 ; i < g_num_skip ; i++) {
       if (val_memory_compare(g_skip_test_str[i], DA_MODULE, val_strnlen(g_skip_test_str[i])) == 0) {
           val_print(ACS_PRINT_ALWAYS, "\n USER Override - Skipping all RME-DA tests \n", 0);
           return ACS_STATUS_SKIP;
       }
   }
 
-  if ((val_memory_compare(g_single_module_str, SINGLE_MODULE_SENTINEL_STR,
-                          val_strnlen(g_single_module_str)) != 0 &&
-       val_memory_compare(g_single_module_str, DA_MODULE, val_strnlen(g_single_module_str)) != 0) &&
-      (val_memory_compare(g_single_test_str, SINGLE_TEST_SENTINEL_STR,
-                          val_strnlen(g_single_test_str)) == 0 ||
-       val_memory_compare(DA_MODULE, g_single_test_str, val_strnlen(DA_MODULE)) != 0)) {
+  /* Check if there are any tests to be executed in current module with user override options*/
+  status = val_check_skip_module(DA_MODULE);
+  if (status) {
     val_print(ACS_PRINT_ALWAYS, "\n USER Override - Skipping all RME-DA tests \n", 0);
-    val_print(ACS_PRINT_ALWAYS, " (Running only a single module)\n", 0);
     return ACS_STATUS_SKIP;
   }
 
@@ -102,7 +98,8 @@ val_rme_da_execute_tests(uint32_t num_pe)
       reset_status != RESET_LS_TEST3_FLAG)
   {
       /* DA-ACS tests */
-      val_print(ACS_PRINT_ALWAYS, "\n*******************************************************\n", 0);
+      val_print(ACS_PRINT_ALWAYS,
+                "\n\n*******************************************************\n", 0);
       status = da_dvsec_register_config_entry();
       status |= da_smmu_implementation_entry();
       status |= da_tee_io_capability_entry();

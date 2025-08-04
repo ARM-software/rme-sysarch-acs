@@ -49,10 +49,10 @@ val_pe_create_info_table(uint64_t *pe_info_table)
 {
   gPsciConduit = pal_psci_get_conduit();
   if (gPsciConduit == CONDUIT_UNKNOWN) {
-      val_print(ACS_PRINT_WARN, " FADT not found, assuming SMC as PSCI conduit", 0);
+      val_print(ACS_PRINT_INFO, " FADT not found, assuming SMC as PSCI conduit", 0);
       gPsciConduit = CONDUIT_SMC;
   } else if (gPsciConduit == CONDUIT_NONE) {
-      val_print(ACS_PRINT_WARN, " PSCI not supported, assuming SMC as conduit for tests"
+      val_print(ACS_PRINT_INFO, " PSCI not supported, assuming SMC as conduit for tests"
                                 " Multi-PE and wakeup tests likely to fail", 0);
       gPsciConduit = CONDUIT_SMC;
   } else if (gPsciConduit == CONDUIT_HVC)

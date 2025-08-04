@@ -73,6 +73,8 @@ payload(void)
 
       test_skip = 0;
 
+      val_print(ACS_PRINT_TEST, " Checking BDF: 0x%x", bdf);
+
       /* Map the Bar address to Root PAS */
       va = val_get_free_va(val_get_min_tg());
       pgt_attr_el3 = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(OUTER_SHAREABLE)

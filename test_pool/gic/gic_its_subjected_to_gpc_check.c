@@ -47,7 +47,7 @@ intr_handler(void)
   /* Clear the interrupt pending state */
   irq_pending = 0;
 
-  val_print(ACS_PRINT_TEST, " Received the interrupt %x       ", lpi_int_id);
+  val_print(ACS_PRINT_INFO, " Received the interrupt %x       ", lpi_int_id);
   val_gic_end_of_interrupt(lpi_int_id);
   return;
 }
@@ -280,7 +280,6 @@ payload(void)
     val_gic_free_msi(e_bdf, device_id, its_id, lpi_int_id + instance, msi_index);
 
     if (test_skip) {
-      val_print(ACS_PRINT_TEST, " Test is skipped internally", 0);
       val_set_status(index, "SKIP", 2);
       return;
     }

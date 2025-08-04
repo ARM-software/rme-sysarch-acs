@@ -50,6 +50,8 @@ void payload(void)
   {
 
     PA = mem_region_cfg->regn_info[regn_cnt].base_addr;
+    val_print(ACS_PRINT_TEST, " Checking the page granularity for region 0x%llx", PA);
+
     /* The page granularity is always assumed to be 4KB for the current resources*/
     pgs = p[0];
 

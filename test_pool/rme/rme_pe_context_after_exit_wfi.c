@@ -77,7 +77,8 @@ payload()
     return;
   }
 
-   /* Start EL1 PHY timer and initiate low power state entry for PE(WFI) */
+  /* Start EL1 PHY timer and initiate low power state entry for PE(WFI) */
+  val_print(ACS_PRINT_TEST, " Putting the PE into low power state using WFI", 0);
   val_timer_set_phy_el1(pe_timer_ticks);
   val_power_enter_semantic(RME_POWER_SEM_B);
 
@@ -86,6 +87,7 @@ payload()
    * if they've retained their original value after an exit from low power state
    */
   shared_data->generic_flag = CLEAR;
+  val_print(ACS_PRINT_TEST, " Checking the PE registers after low power state", 0);
   if (val_cmpr_pe_regs_aftr_low_pwr_el3())
   {
     val_print(ACS_PRINT_ERR, "\n    Comparision failed for PE Regsiters after low power state", 0);

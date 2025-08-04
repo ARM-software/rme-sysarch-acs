@@ -65,6 +65,7 @@ payload(void)
 
       if (dp_type == EP)
       {
+
           /* Get the BAR of the Endpoint */
           val_pcie_get_mmio_bar(bdf, &bar_base);
 
@@ -77,6 +78,8 @@ payload(void)
              continue;
 
           test_skip = 0;
+
+          val_print(ACS_PRINT_TEST, " Checking BDF: 0x%x", bdf);
 
           /* Get the PCIE DVSEC Capability register */
           if (val_pcie_find_da_capability(rp_bdf, &da_cap_base) != PCIE_SUCCESS)

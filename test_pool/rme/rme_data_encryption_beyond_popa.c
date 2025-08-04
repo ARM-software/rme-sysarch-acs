@@ -51,6 +51,7 @@ void payload(void)
   VA_NS = val_get_free_va(size);
   attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(NON_SHAREABLE) | PGT_ENTRY_AP_RW);
 
+  val_print(ACS_PRINT_TEST, " Mapping PA (GPI_ANY) with the VAs from all the PAS for PA 0x%lx", PA);
   if (val_add_gpt_entry_el3(PA, GPT_ANY))
   {
       val_print(ACS_PRINT_ERR, " Failed to add GPT entry for PA 0x%llx", PA);
@@ -83,6 +84,7 @@ void payload(void)
   }
 
   /* Store RANDOM_DATA_1 in PA_RT*/
+  val_print(ACS_PRINT_TEST, " Storing data in PA through ROOT PAS", 0);
   data_wt_rt = RANDOM_DATA_1;
   shared_data->num_access = 1;
   shared_data->shared_data_access[0].addr = VA_RT;
@@ -96,6 +98,7 @@ void payload(void)
   }
 
   val_print(ACS_PRINT_DEBUG, " Data stored in Root = 0x%lx", data_wt_rt);
+  val_print(ACS_PRINT_TEST, " Performing CMO to PoPA for all PAS", 0);
   /* CMO to PoPA for all PA of all pas */
   if (val_data_cache_ops_by_pa_el3(PA, SECURE_PAS))
   {
@@ -126,6 +129,7 @@ void payload(void)
   }
 
   /* Read the data from PA_RL, PA_S, PA_NS */
+  val_print(ACS_PRINT_TEST, " Reading data from Realm, Secure and NonSecure PAS", 0);
   shared_data->num_access = 3;
   shared_data->shared_data_access[0].addr = VA_RL;
   shared_data->shared_data_access[0].access_type = READ_DATA;

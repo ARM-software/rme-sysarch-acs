@@ -52,8 +52,8 @@
 
 #define VAL_EXTRACT_BITS(data, start, end) ((data >> start) & ((1ul << (end-start+1))-1))
 
-#define SINGLE_TEST_SENTINEL_STR   "SINGLE_TEST_NONE"
-#define SINGLE_MODULE_SENTINEL_STR "SINGLE_MODULE_NONE"
+#define EXECUTE_TEST_SENTINEL   "SINGLE_TEST_NONE"
+#define EXECUTE_MODULE_SENTINEL "SINGLE_MODULE_NONE"
 #define SKIP_TEST_SENTINEL         "SKIP_TEST_NONE"
 
 #define USER_SMC_IMM     0x100

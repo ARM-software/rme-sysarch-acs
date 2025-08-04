@@ -57,6 +57,7 @@ void payload(void)
   }
 
   /*PA is initialized with the initial DATA*/
+  val_print(ACS_PRINT_TEST, " Initializing PA with data 0x%lx", INIT_DATA);
   *(uint64_t *)PA = (uint64_t) INIT_DATA;
 
   if (val_add_mmu_entry_el3(VA_S/* VA1 */, PA, (attr | LOWER_ATTRS(PAS_ATTR(SECURE_PAS)))))
@@ -74,6 +75,7 @@ void payload(void)
   }
 
   /* Read VA1 and VA2 and Write Random data in VA1*/
+  val_print(ACS_PRINT_TEST, " Accessing PA from Secure and Non-secure PAS", 0);
   wt_data_s = RANDOM_DATA_2;
   shared_data->num_access = 3;
   shared_data->shared_data_access[0].addr = VA_S;
@@ -95,6 +97,8 @@ void payload(void)
   rd_data_ns = shared_data->shared_data_access[1].data;
 
   /* CMO to PoPA for PA1 at secure PAS */
+  val_print(ACS_PRINT_TEST,
+            " Issuing CMO to PoPA for PA from both secure and NS PAS after the STR from Secure", 0);
   if (val_data_cache_ops_by_pa_el3(PA, SECURE_PAS)) {
       val_print(ACS_PRINT_ERR, " Failed to issue CMO for PA 0x%llx", PA);
       val_set_status(index, "FAIL", 05);
@@ -109,6 +113,7 @@ void payload(void)
   }
 
   /* Access the data stored in VA2 */
+  val_print(ACS_PRINT_TEST, " Accessing PA from NS PAS", 0);
   shared_data->num_access = 1;
   shared_data->shared_data_access[0].addr = VA_NS;
   shared_data->shared_data_access[0].access_type = READ_DATA;

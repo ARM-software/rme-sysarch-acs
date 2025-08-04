@@ -44,6 +44,7 @@ void payload(void)
   if (val_read_reset_status() == RESET_TST32_FLAG)
           goto reset_done;
 
+  val_print(ACS_PRINT_TEST, " Executing system Reset", 0);
   val_write_reset_status(RESET_TST32_FLAG);
   val_save_global_test_data();
   val_system_reset();
@@ -75,7 +76,7 @@ reset_done:
 
   for (int pas_cnt = 0; pas_cnt < 4; ++pas_cnt)
   {
-      val_print(ACS_PRINT_DEBUG, " Access PAS = 0x%llx", pas_list[pas_cnt]);
+      val_print(ACS_PRINT_TEST, " Checking the MSD SMEM from PAS = 0x%llx", pas_list[pas_cnt]);
       if (val_add_mmu_entry_el3(VA, PA, (attr | LOWER_ATTRS(PAS_ATTR(pas_list[pas_cnt])))))
       {
         val_print(ACS_PRINT_ERR, " Failed to add MMU entry for VA 0x%llx", VA);

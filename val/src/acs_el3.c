@@ -38,7 +38,6 @@ val_memory_set_el3(void *address, uint32_t size, uint8_t value)
   if (val_pe_get_index_mpid(val_pe_get_mpid()) != 0)
       return shared_data->status_code ? 1 : 0;
   if (shared_data->status_code != 0) {
-    val_print(ACS_PRINT_ERR, "\n", 0);
     val_print(ACS_PRINT_ERR, shared_data->error_msg, 0);
     return 1;
   }
@@ -63,7 +62,6 @@ val_data_cache_ops_by_va_el3(uint64_t address, uint32_t type)
   if (val_pe_get_index_mpid(val_pe_get_mpid()) != 0)
       return shared_data->status_code ? 1 : 0;
   if (shared_data->status_code != 0) {
-    val_print(ACS_PRINT_ERR, "\n", 0);
     val_print(ACS_PRINT_ERR, shared_data->error_msg, 0);
     return 1;
   }
@@ -89,7 +87,6 @@ val_add_mmu_entry_el3(uint64_t VA, uint64_t PA, uint64_t attr)
   if (val_pe_get_index_mpid(val_pe_get_mpid()) != 0)
       return shared_data->status_code ? 1 : 0;
   if (shared_data->status_code != 0) {
-    val_print(ACS_PRINT_ERR, "\n", 0);
     val_print(ACS_PRINT_ERR, shared_data->error_msg, 0);
     return 1;
   }
@@ -114,7 +111,6 @@ val_add_gpt_entry_el3(uint64_t PA, uint64_t gpi)
   if (val_pe_get_index_mpid(val_pe_get_mpid()) != 0)
       return shared_data->status_code ? 1 : 0;
   if (shared_data->status_code != 0) {
-    val_print(ACS_PRINT_ERR, "\n", 0);
     val_print(ACS_PRINT_ERR, shared_data->error_msg, 0);
     return 1;
   }
@@ -136,7 +132,6 @@ val_pe_access_mut_el3(void)
   if (val_pe_get_index_mpid(val_pe_get_mpid()) != 0)
       return shared_data->status_code ? 1 : 0;
   if (shared_data->status_code != 0) {
-    val_print(ACS_PRINT_ERR, "\n", 0);
     val_print(ACS_PRINT_ERR, shared_data->error_msg, 0);
     return 1;
   }
@@ -162,7 +157,6 @@ val_data_cache_ops_by_pa_el3(uint64_t PA, uint64_t acc_pas)
   if (val_pe_get_index_mpid(val_pe_get_mpid()) != 0)
       return shared_data->status_code ? 1 : 0;
   if (shared_data->status_code != 0) {
-    val_print(ACS_PRINT_ERR, "\n", 0);
     val_print(ACS_PRINT_ERR, shared_data->error_msg, 0);
     return 1;
   }
@@ -184,7 +178,6 @@ val_rme_install_handler_el3(void)
   if (val_pe_get_index_mpid(val_pe_get_mpid()) != 0)
       return shared_data->status_code ? 1 : 0;
   if (shared_data->status_code != 0) {
-    val_print(ACS_PRINT_ERR, "\n", 0);
     val_print(ACS_PRINT_ERR, shared_data->error_msg, 0);
     return 1;
   }
@@ -206,7 +199,6 @@ val_enable_ns_encryption(void)
   if (val_pe_get_index_mpid(val_pe_get_mpid()) != 0)
       return shared_data->status_code ? 1 : 0;
   if (shared_data->status_code != 0) {
-    val_print(ACS_PRINT_ERR, "\n", 0);
     val_print(ACS_PRINT_ERR, shared_data->error_msg, 0);
     return 1;
   }
@@ -228,7 +220,6 @@ val_disable_ns_encryption(void)
   if (val_pe_get_index_mpid(val_pe_get_mpid()) != 0)
       return shared_data->status_code ? 1 : 0;
   if (shared_data->status_code != 0) {
-    val_print(ACS_PRINT_ERR, "\n", 0);
     val_print(ACS_PRINT_ERR, shared_data->error_msg, 0);
     return 1;
   }
@@ -251,7 +242,6 @@ val_read_pe_regs_bfr_low_pwr_el3(void)
   if (val_pe_get_index_mpid(val_pe_get_mpid()) != 0)
       return shared_data->status_code ? 1 : 0;
   if (shared_data->status_code != 0) {
-    val_print(ACS_PRINT_ERR, "\n", 0);
     val_print(ACS_PRINT_ERR, shared_data->error_msg, 0);
     return 1;
   }
@@ -274,7 +264,6 @@ val_cmpr_pe_regs_aftr_low_pwr_el3(void)
   if (val_pe_get_index_mpid(val_pe_get_mpid()) != 0)
       return shared_data->status_code ? 1 : 0;
   if (shared_data->status_code != 0) {
-    val_print(ACS_PRINT_ERR, "\n", 0);
     val_print(ACS_PRINT_ERR, shared_data->error_msg, 0);
     return 1;
   }
@@ -297,7 +286,6 @@ val_prog_legacy_tz(int enable)
   if (val_pe_get_index_mpid(val_pe_get_mpid()) != 0)
       return shared_data->status_code ? 1 : 0;
   if (shared_data->status_code != 0) {
-    val_print(ACS_PRINT_ERR, "\n", 0);
     val_print(ACS_PRINT_ERR, shared_data->error_msg, 0);
     return 1;
   }
@@ -319,7 +307,6 @@ val_wd_set_ws0_el3(uint64_t VA_RT_WDOG, uint32_t timeout, uint64_t counter_freq)
   if (val_pe_get_index_mpid(val_pe_get_mpid()) != 0)
       return shared_data->status_code ? 1 : 0;
   if (shared_data->status_code != 0) {
-    val_print(ACS_PRINT_ERR, "\n", 0);
     val_print(ACS_PRINT_ERR, shared_data->error_msg, 0);
     return 1;
   }
@@ -340,7 +327,6 @@ uint32_t val_pas_filter_active_mode_el3(int enable)
   if (val_pe_get_index_mpid(val_pe_get_mpid()) != 0)
       return shared_data->status_code ? 1 : 0;
   if (shared_data->status_code != 0) {
-    val_print(ACS_PRINT_ERR, "\n", 0);
     val_print(ACS_PRINT_ERR, shared_data->error_msg, 0);
     return 1;
   }
@@ -363,7 +349,6 @@ uint32_t val_smmu_access_enable(uint64_t smmu_base)
   if (val_pe_get_index_mpid(val_pe_get_mpid()) != 0)
       return shared_data->status_code ? 1 : 0;
   if (shared_data->status_code != 0) {
-    val_print(ACS_PRINT_ERR, "\n", 0);
     val_print(ACS_PRINT_ERR, shared_data->error_msg, 0);
     return 1;
   }
@@ -386,7 +371,6 @@ uint32_t val_smmu_access_disable(uint64_t smmu_base)
   if (val_pe_get_index_mpid(val_pe_get_mpid()) != 0)
       return shared_data->status_code ? 1 : 0;
   if (shared_data->status_code != 0) {
-    val_print(ACS_PRINT_ERR, "\n", 0);
     val_print(ACS_PRINT_ERR, shared_data->error_msg, 0);
     return 1;
   }
@@ -408,7 +392,6 @@ uint32_t val_change_security_state_el3(int sec_state)
   if (val_pe_get_index_mpid(val_pe_get_mpid()) != 0)
       return shared_data->status_code ? 1 : 0;
   if (shared_data->status_code != 0) {
-    val_print(ACS_PRINT_ERR, "\n", 0);
     val_print(ACS_PRINT_ERR, shared_data->error_msg, 0);
     return 1;
   }
@@ -429,7 +412,6 @@ uint32_t val_smmu_check_rmeda_el3(uint64_t smmu_base)
   if (val_pe_get_index_mpid(val_pe_get_mpid()) != 0)
       return shared_data->status_code ? 1 : 0;
   if (shared_data->status_code != 0) {
-    val_print(ACS_PRINT_ERR, "\n", 0);
     val_print(ACS_PRINT_ERR, shared_data->error_msg, 0);
     return 1;
   }
@@ -451,7 +433,6 @@ uint32_t val_rlm_smmu_init(uint64_t num_smmu, uint64_t *smmu_base_arr)
   if (val_pe_get_index_mpid(val_pe_get_mpid()) != 0)
       return shared_data->status_code ? 1 : 0;
   if (shared_data->status_code != 0) {
-    val_print(ACS_PRINT_ERR, "\n", 0);
     val_print(ACS_PRINT_ERR, shared_data->error_msg, shared_data->error_code);
     return 1;
   }
@@ -472,7 +453,6 @@ uint32_t val_rlm_smmu_map(uint32_t smmu_info)
   if (val_pe_get_index_mpid(val_pe_get_mpid()) != 0)
       return shared_data->status_code ? 1 : 0;
   if (shared_data->status_code != 0) {
-    val_print(ACS_PRINT_ERR, "\n", 0);
     val_print(ACS_PRINT_ERR, shared_data->error_msg, shared_data->error_code);
     return 1;
   }
@@ -494,7 +474,6 @@ uint32_t val_smmu_rlm_map_el3(smmu_master_attributes_t *smmu_attr, pgt_descripto
   if (val_pe_get_index_mpid(val_pe_get_mpid()) != 0)
       return shared_data->status_code ? 1 : 0;
   if (shared_data->status_code != 0) {
-    val_print(ACS_PRINT_ERR, "\n", 0);
     val_print(ACS_PRINT_ERR, shared_data->error_msg, shared_data->error_code);
     return 1;
   }
@@ -516,7 +495,6 @@ uint32_t val_dpt_add_entry(uint64_t translated_addr, uint32_t smmu_index)
   if (val_pe_get_index_mpid(val_pe_get_mpid()) != 0)
       return shared_data->status_code ? 1 : 0;
   if (shared_data->status_code != 0) {
-    val_print(ACS_PRINT_ERR, "\n", 0);
     val_print(ACS_PRINT_ERR, shared_data->error_msg, shared_data->error_code);
     return 1;
   }
@@ -537,7 +515,6 @@ uint32_t val_dpt_invalidate_all(uint64_t smmu_index)
   if (val_pe_get_index_mpid(val_pe_get_mpid()) != 0)
       return shared_data->status_code ? 1 : 0;
   if (shared_data->status_code != 0) {
-    val_print(ACS_PRINT_ERR, "\n", 0);
     val_print(ACS_PRINT_ERR, shared_data->error_msg, shared_data->error_code);
     return 1;
   }
@@ -560,7 +537,6 @@ val_rlm_pgt_create(memory_region_descriptor_t *mem_desc, pgt_descriptor_t *pgt_d
       return shared_data->status_code ? 1 : 0;
   if (shared_data->status_code != 0)
   {
-    val_print(ACS_PRINT_ERR, "\n", 0);
     val_print(ACS_PRINT_ERR, shared_data->error_msg, shared_data->error_code);
     return 1;
   }
@@ -583,7 +559,6 @@ val_rlm_pgt_destroy(pgt_descriptor_t *pgt_desc)
       return shared_data->status_code ? 1 : 0;
   if (shared_data->status_code != 0)
   {
-    val_print(ACS_PRINT_ERR, "\n", 0);
     val_print(ACS_PRINT_ERR, shared_data->error_msg, 0);
     return 1;
   }
@@ -604,7 +579,6 @@ uint32_t val_rlm_enable_mec(void)
   if (val_pe_get_index_mpid(val_pe_get_mpid()) != 0)
       return shared_data->status_code ? 1 : 0;
   if (shared_data->status_code != 0) {
-    val_print(ACS_PRINT_ERR, "\n", 0);
     val_print(ACS_PRINT_ERR, shared_data->error_msg, shared_data->error_code);
     return 1;
   }
@@ -625,7 +599,6 @@ uint32_t val_rlm_disable_mec(void)
   if (val_pe_get_index_mpid(val_pe_get_mpid()) != 0)
       return shared_data->status_code ? 1 : 0;
   if (shared_data->status_code != 0) {
-    val_print(ACS_PRINT_ERR, "\n", 0);
     val_print(ACS_PRINT_ERR, shared_data->error_msg, shared_data->error_code);
     return 1;
   }
@@ -646,7 +619,6 @@ uint32_t val_smmu_rlm_check_mec_impl(uint64_t smmu_base)
   if (val_pe_get_index_mpid(val_pe_get_mpid()) != 0)
       return shared_data->status_code ? 1 : 0;
   if (shared_data->status_code != 0) {
-    val_print(ACS_PRINT_ERR, "\n", 0);
     val_print(ACS_PRINT_ERR, shared_data->error_msg, shared_data->error_code);
     return 1;
   }
@@ -667,7 +639,6 @@ uint32_t val_smmu_rlm_get_mecidw(uint64_t smmu_base)
   if (val_pe_get_index_mpid(val_pe_get_mpid()) != 0)
       return shared_data->status_code ? 1 : 0;
   if (shared_data->status_code != 0) {
-    val_print(ACS_PRINT_ERR, "\n", 0);
     val_print(ACS_PRINT_ERR, shared_data->error_msg, shared_data->error_code);
     return 1;
   }
@@ -689,7 +660,6 @@ val_cmo_to_poe(uint64_t PA)
   if (val_pe_get_index_mpid(val_pe_get_mpid()) != 0)
       return shared_data->status_code ? 1 : 0;
   if (shared_data->status_code != 0) {
-    val_print(ACS_PRINT_ERR, "\n", 0);
     val_print(ACS_PRINT_ERR, shared_data->error_msg, shared_data->error_code);
     return 1;
   }
@@ -710,7 +680,6 @@ uint32_t val_rlm_configure_mecid(uint32_t mecid)
   if (val_pe_get_index_mpid(val_pe_get_mpid()) != 0)
       return shared_data->status_code ? 1 : 0;
   if (shared_data->status_code != 0) {
-    val_print(ACS_PRINT_ERR, "\n", 0);
     val_print(ACS_PRINT_ERR, shared_data->error_msg, shared_data->error_code);
     return 1;
   }
@@ -731,7 +700,6 @@ uint32_t val_smmu_rlm_configure_mecid(smmu_master_attributes_t *smmu_attr, uint3
   if (val_pe_get_index_mpid(val_pe_get_mpid()) != 0)
       return shared_data->status_code ? 1 : 0;
   if (shared_data->status_code != 0) {
-    val_print(ACS_PRINT_ERR, "\n", 0);
     val_print(ACS_PRINT_ERR, shared_data->error_msg, shared_data->error_code);
     return 1;
   }

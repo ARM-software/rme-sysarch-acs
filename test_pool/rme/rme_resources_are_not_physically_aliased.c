@@ -50,6 +50,7 @@ void payload(void)
     Base_Addr = mem_region_cfg->regn_info[regn_cnt].base_addr;
     region_size = mem_region_cfg->regn_info[regn_cnt].regn_size;
     Top_Addr = Base_Addr + region_size - 1;
+    val_print(ACS_PRINT_TEST, " Checking the aliasing for the PA, 0x%llx", Base_Addr);
 
     for (uint32_t cmpr_regn_cnt = regn_cnt + 1; cmpr_regn_cnt < num_regn; ++cmpr_regn_cnt)
     {

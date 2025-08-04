@@ -38,22 +38,18 @@ val_legacy_execute_tests(uint32_t num_pe)
   uint32_t status = ACS_STATUS_SKIP, i, reset_status;
   (void) num_pe;
 
-  for (i = 0 ; i < MAX_TEST_SKIP_NUM ; i++) {
-      if (val_memory_compare(g_skip_test_str[i], LEGACY_MODULE, sizeof(LEGACY_MODULE) - 1) == 0 &&
-          g_skip_test_str[i][sizeof(LEGACY_MODULE) - 1] == '\0') {
+  for (i = 0 ; i < g_num_skip ; i++) {
+      if (val_memory_compare((char8_t *)g_skip_test_str[i], LEGACY_MODULE,
+          val_strnlen(g_skip_test_str[i])) == 0) {
           val_print(ACS_PRINT_ALWAYS, "\n USER Override - Skipping all Legacy tests \n", 0);
           return ACS_STATUS_SKIP;
       }
   }
 
-  if ((val_memory_compare(g_single_module_str, SINGLE_MODULE_SENTINEL_STR,
-                          sizeof(SINGLE_MODULE_SENTINEL_STR) - 1) != 0 &&
-       val_memory_compare(g_single_module_str, LEGACY_MODULE, sizeof(LEGACY_MODULE) - 1) != 0) &&
-      (val_memory_compare(g_single_test_str, SINGLE_TEST_SENTINEL_STR,
-                          sizeof(SINGLE_TEST_SENTINEL_STR) - 1) == 0 ||
-       val_memory_compare(g_single_test_str, LEGACY_MODULE, sizeof(LEGACY_MODULE) - 1) != 0)) {
+  /* Check if there are any tests to be executed in current module with user override options*/
+  status = val_check_skip_module(LEGACY_MODULE);
+  if (status) {
     val_print(ACS_PRINT_ALWAYS, "\n USER Override - Skipping all Legacy system tests \n", 0);
-    val_print(ACS_PRINT_ALWAYS, " (Running only a single module)\n", 0);
     return ACS_STATUS_SKIP;
   }
   if (!pal_is_legacy_tz_enabled()) {
@@ -73,7 +69,7 @@ support the feature \n", 0);
   else if (reset_status == RESET_LS_DISBL_FLAG)
           goto reset_done_ls_dis;
 
-  val_print(ACS_PRINT_ALWAYS, "\n******************************************************* \n", 0);
+  val_print(ACS_PRINT_ALWAYS, "\n\n******************************************************* \n", 0);
   status = legacy_tz_support_check_entry();
   status |= legacy_tz_en_drives_root_to_secure_entry();
 

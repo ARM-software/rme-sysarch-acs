@@ -84,6 +84,7 @@ void payload(uint32_t num_pe)
           goto reset_done;
 
   /* Write to SCTLR_EL1 from the current PE */
+  val_print(ACS_PRINT_TEST, " Writing to SCTLR_EL1 from PE before reset", 0);
   write_reg();
 
   /* Execute the same write operation from the rest of the PEs */
@@ -107,7 +108,7 @@ void payload(uint32_t num_pe)
 
 reset_done:
   val_restore_global_test_data();
-  val_print(ACS_PRINT_TEST, " After system reset", 0);
+  val_print(ACS_PRINT_TEST, " Checking the SCTLR_EL1 value after system reset", 0);
 
   //GPR check
   check_status = check_gpr_after_reset();

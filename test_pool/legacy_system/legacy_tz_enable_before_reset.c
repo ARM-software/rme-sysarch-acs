@@ -52,6 +52,7 @@ payload()
           goto reset_done;
 
   //Enable the Legacy_TZ_EN tie-off in the system
+  val_print(ACS_PRINT_TEST, " Enabling LEGACY_TZ_EN", 0);
   if (val_prog_legacy_tz(SET))
   {
     val_print(ACS_PRINT_ERR, "\n  Programming LEGACY_TZ_EN failed", 0);
@@ -59,6 +60,7 @@ payload()
     return;
   }
 
+  val_print(ACS_PRINT_TEST, " Going to reset", 0);
   val_write_reset_status(RESET_LS_TEST3_FLAG);
   val_system_reset();
 
@@ -79,6 +81,7 @@ reset_done:
   }
 
   /* VAL_EXTRACT_BITS(data, start_bit, end_bit) */
+  val_print(ACS_PRINT_TEST, " Checking RME implementation bits after reset", 0);
   rme_impl_smmu = VAL_EXTRACT_BITS(val_smmu_read_cfg(SMMUv3_IDR0, smmu_index), BIT_30, BIT_30);
   val_print(ACS_PRINT_DEBUG, " The RME implementation bit of SMMUv3_IDR0 = %lx", rme_impl_smmu);
 

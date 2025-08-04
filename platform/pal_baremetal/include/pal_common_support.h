@@ -44,11 +44,6 @@ extern uint32_t g_print_in_test_context;
 #define MEM_ALIGN_32K      0x8000
 #define MEM_ALIGN_64K      0x10000
 
-#define MAX_TEST_SKIP_NUM      10
-#define SINGLE_MODULE_SENTINEL_STR "SINGLE_MODULE_NONE"
-#define SINGLE_TEST_SENTINEL_STR   "SINGLE_TEST_NONE"
-#define SKIP_TEST_SENTINEL         "SKIP_TEST_NONE"
-
 #define PCIE_EXTRACT_BDF_SEG(bdf)  ((bdf >> 24) & 0xFF)
 #define PCIE_EXTRACT_BDF_BUS(bdf)  ((bdf >> 16) & 0xFF)
 #define PCIE_EXTRACT_BDF_DEV(bdf)  ((bdf >> 8) & 0xFF)
@@ -96,7 +91,7 @@ void *mem_alloc(size_t alignment, size_t size);
       pal_uart_print(level, string, ##__VA_ARGS__);                     \
       /* Print file name and line number for ERR and WARN */            \
       if (level == ACS_PRINT_ERR || level == ACS_PRINT_WARN) {          \
-          pal_uart_print(level, "  [FILE: %a]", (uint64_t)FILENAME);           \
+          pal_uart_print(level, "\n  [FILE: %a]", (uint64_t)FILENAME);           \
           pal_uart_print(level, "  [LINE: %d]", __LINE__);                     \
       }                                                                 \
     }                                                                   \

@@ -63,7 +63,7 @@ val_report_status(uint32_t index, char8_t *state)
           g_print_in_test_context = 0;
           g_print_test_check_id = 0;
           val_print(ACS_PRINT_ALWAYS,
-            "\n******************************************************* \n", 0);
+            "\n*******************************************************\n", 0);
         }
         else {
             val_print(ACS_PRINT_ALWAYS, "\nResult=", 0);

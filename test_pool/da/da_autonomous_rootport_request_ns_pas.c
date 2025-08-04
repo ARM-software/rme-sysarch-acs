@@ -49,7 +49,7 @@ intr_handler(void)
   /* Clear the interrupt pending state */
   irq_pending = 0;
 
-  val_print(ACS_PRINT_TEST, " Received MSI interrupt %x       ", lpi_int_id);
+  val_print(ACS_PRINT_INFO, " Received MSI interrupt %x       ", lpi_int_id);
   val_gic_end_of_interrupt(lpi_int_id);
   return;
 }

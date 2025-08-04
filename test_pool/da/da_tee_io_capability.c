@@ -57,6 +57,8 @@ payload(void)
       {
           test_skip = 0;
 
+          val_print(ACS_PRINT_TEST, " Checking BDF: 0x%x", bdf);
+
           if (val_pcie_find_capability(bdf, PCIE_CAP, CID_PCIECS, &cap_base) != PCIE_SUCCESS)
           {
               val_print(ACS_PRINT_ERR, " PCIe Express Capability not present ", 0);

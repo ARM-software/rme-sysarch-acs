@@ -82,6 +82,7 @@ void payload(void)
   }
 
   /* Store RANDOM_DATA_1 in PA_S and (PA_S + 16)*/
+  val_print(ACS_PRINT_TEST, " Store the RANDOM_DATA_1 in PA of Secure PAS", 0);
   shared_data->num_access = 1;
   shared_data->shared_data_access[0].addr = VA_S;
   shared_data->shared_data_access[0].data = RANDOM_DATA_1;
@@ -93,6 +94,7 @@ void payload(void)
       return;
   }
 
+  val_print(ACS_PRINT_TEST, " Store the same data in PA + 16 bytes of Secure PAS", 0);
   shared_data->num_access = 1;
   shared_data->shared_data_access[0].addr = VA_S_NXT_BLK;
   shared_data->shared_data_access[0].data = RANDOM_DATA_1;
@@ -105,6 +107,7 @@ void payload(void)
   }
 
   /* CMO to PoPA for all PA of all pas */
+  val_print(ACS_PRINT_TEST, " Issuing CMO to PoPA for both the blocks in Secure and Non-Secure", 0);
   if (val_data_cache_ops_by_pa_el3(PA, SECURE_PAS))
   {
       val_print(ACS_PRINT_ERR, " Failed to issue CMO for PA 0x%llx", PA);
@@ -131,6 +134,7 @@ void payload(void)
   }
 
   /* Read the data from PA_NS and (PA_NS + 16) */
+  val_print(ACS_PRINT_TEST, " Reading data from PA and PA+16 from NonSecure PAS", 0);
   shared_data->num_access = 2;
   shared_data->shared_data_access[0].addr = VA_NS;
   shared_data->shared_data_access[0].access_type = READ_DATA;

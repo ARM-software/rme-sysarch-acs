@@ -85,8 +85,8 @@ payload()
 
     timeout = val_get_counter_frequency() * 2;
     counter_freq = val_get_counter_frequency();
-    val_print(ACS_PRINT_TEST, " Timer value = 0x%lx  ", timeout);
-    val_print(ACS_PRINT_TEST, " Root watchdog Interrupt id  %d", int_id);
+    val_print(ACS_PRINT_DEBUG, " Timer value = 0x%lx  ", timeout);
+    val_print(ACS_PRINT_DEBUG, " Root watchdog Interrupt id  %d", int_id);
 
     if (val_gic_install_isr(int_id, isr)) {
         val_print(ACS_PRINT_ERR, " GIC Install Handler Failed...", 0);
@@ -106,6 +106,8 @@ payload()
         val_set_status(index, "FAIL", 3);
         return;
     }
+
+    val_print(ACS_PRINT_TEST, " Programming the Root Watchdog register from Root PAS", 0);
     if (val_wd_set_ws0_el3(VA_RT_WDOG, timer_expire_ticks, counter_freq))
     {
         val_print(ACS_PRINT_ERR, " Failed to program  the WDOG", 0);

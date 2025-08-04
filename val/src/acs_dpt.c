@@ -45,22 +45,19 @@ val_rme_dpt_execute_tests(uint32_t num_pe)
   uint64_t smmu_base_arr[num_smmus], pgt_attr_el3;
   (void)num_pe;
 
-  for (i = 0 ; i < MAX_TEST_SKIP_NUM ; i++) {
-      if (val_memory_compare(g_skip_test_str[i], DPT_MODULE, val_strnlen(g_skip_test_str[i])) == 0)
+  for (i = 0 ; i < g_num_skip ; i++) {
+      if (val_memory_compare((char8_t *)g_skip_test_str[i], DPT_MODULE,
+                              val_strnlen(g_skip_test_str[i])) == 0)
       {
           val_print(ACS_PRINT_ALWAYS, "\n USER Override - Skipping all RME-DPT tests \n", 0);
           return ACS_STATUS_SKIP;
       }
   }
 
-  if ((val_memory_compare(g_single_module_str, SINGLE_MODULE_SENTINEL_STR,
-                          val_strnlen(g_single_module_str)) != 0 &&
-      val_memory_compare(g_single_module_str, DPT_MODULE, val_strnlen(g_single_module_str)) != 0) &&
-      (val_memory_compare(g_single_test_str, SINGLE_TEST_SENTINEL_STR,
-                          val_strnlen(g_single_test_str)) == 0 ||
-       val_memory_compare(DPT_MODULE, g_single_test_str, val_strnlen(DPT_MODULE)) != 0)) {
+  /* Check if there are any tests to be executed in current module with user override options*/
+  status = val_check_skip_module(DPT_MODULE);
+  if (status) {
     val_print(ACS_PRINT_ALWAYS, "\n USER Override - Skipping all RME-DPT tests \n", 0);
-    val_print(ACS_PRINT_ALWAYS, " (Running only a single module)\n", 0);
     return ACS_STATUS_SKIP;
   }
 
@@ -100,7 +97,7 @@ val_rme_dpt_execute_tests(uint32_t num_pe)
       reset_status != RESET_LS_DISBL_FLAG &&
       reset_status != RESET_LS_TEST3_FLAG)
   {
-    val_print(ACS_PRINT_ALWAYS, "\n*******************************************************\n", 0);
+    val_print(ACS_PRINT_ALWAYS, "\n\n*******************************************************\n", 0);
     status = dpt_system_resource_valid_without_dpti_entry();
     status |= dpt_system_resource_valid_with_dpti_entry();
     status |= dpt_system_resource_invalid_entry();

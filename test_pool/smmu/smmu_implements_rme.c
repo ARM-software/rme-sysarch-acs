@@ -45,6 +45,9 @@ payload()
   }
 
   while (num_smmu--) {
+
+      val_print(ACS_PRINT_TEST, " Checking SMMU Controller: %d", num_smmu);
+
       if (val_smmu_get_info(SMMU_CTRL_ARCH_MAJOR_REV, num_smmu) == 2) {
           val_print(ACS_PRINT_WARN, "Not valid for SMMU v2           ", 0);
           val_set_status(index, "SKIP", 02);

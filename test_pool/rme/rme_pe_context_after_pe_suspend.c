@@ -95,7 +95,7 @@ payload()
   /* Save all the registers before going to low power mode */
   if (val_read_pe_regs_bfr_low_pwr_el3())
   {
-    val_print(ACS_PRINT_ERR, "\n    Saving the PE Regsiter failed before low power state", 0);
+    val_print(ACS_PRINT_ERR, " Saving the PE Regsiter failed before low power state", 0);
     val_set_status(index, "FAIL", 1);
     return;
   }
@@ -105,6 +105,7 @@ payload()
   val_timer_set_system_timer((addr_t)cnt_base_n, sys_timer_ticks);
 
   /* Put current PE in to low power mode*/
+  val_print(ACS_PRINT_TEST, " Suspending the PE to low power state using PSCI_CPU_SUSPEND", 0);
   status = val_suspend_pe(0, 0);
   if (status) {
       val_print(ACS_PRINT_ERR, " Not able to suspend the PE : %d", status);
@@ -119,6 +120,7 @@ payload()
    * if they've retained their original value after an exit from low power state
    */
   shared_data->generic_flag = CLEAR;
+  val_print(ACS_PRINT_TEST, " Checking the PE registers after low power state", 0);
   if (val_cmpr_pe_regs_aftr_low_pwr_el3())
   {
     val_print(ACS_PRINT_ERR, "\n    Comparision failed for PE Regsiters after low power state", 0);

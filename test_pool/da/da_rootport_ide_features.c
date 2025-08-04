@@ -63,6 +63,8 @@ payload(void)
       {
           test_skip = 0;
 
+          val_print(ACS_PRINT_TEST, " Checking BDF: 0x%x", bdf);
+
           /* Get the PCIE IDE Extended Capability register */
           if (val_pcie_find_capability(bdf, PCIE_ECAP, ECID_IDE, &cap_base) != PCIE_SUCCESS)
           {

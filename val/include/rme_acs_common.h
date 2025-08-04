@@ -70,6 +70,9 @@ void
 val_mmio_write64(addr_t addr, uint64_t data);
 
 uint32_t
+val_check_skip_module(char8_t *module_id);
+
+uint32_t
 val_initialize_test(char8_t *testname, char8_t *desc, uint32_t num_pe, char8_t *ruleid);
 
 uint32_t
@@ -85,8 +88,8 @@ val_data_cache_ops_by_va(addr_t addr, uint32_t type);
 /* Module specific print APIs */
 
 typedef enum {
-    GIC_MODULE_ID,
     RME_MODULE_ID,
+    GIC_MODULE_ID,
     SMMU_MODULE_ID,
     DA_MODULE_ID,
     DPT_MODULE_ID,

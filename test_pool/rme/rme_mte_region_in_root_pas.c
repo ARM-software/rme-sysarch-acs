@@ -64,6 +64,8 @@ void payload(void)
 
   for (int pas_cnt = 0; pas_cnt < 4; ++pas_cnt)
   {
+    val_print(ACS_PRINT_TEST, " Accessing the MTE carve-out region from PAS: %lld",
+              pas_list[pas_cnt]);
     /* MTE carve-out region: Base Address */
     if (val_add_mmu_entry_el3(VA, mte_base, (attr | LOWER_ATTRS(PAS_ATTR(pas_list[pas_cnt])))))
     {

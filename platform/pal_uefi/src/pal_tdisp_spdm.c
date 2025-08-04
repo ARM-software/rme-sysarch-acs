@@ -57,11 +57,13 @@ void pal_form_get_version_msg(UINT32 req_id, UINT8 *request, UINT64 *req_length)
     request[28] = 0x01; // version count
     request[29] = 0x10; // version 1
     *req_length = 0x1e;
-    //Reads and prints many characters in the logs, so avoiding now
-    //rme_print(ACS_PRINT_INFO, L"Request message: 0x", 0);
+
+    if (g_print_mmio || (g_curr_module & g_enable_module))
+        rme_print(ACS_PRINT_INFO, L" Request message: 0x", 0);
     for (int  i = 0; i < *req_length; i++)
     {
-        //rme_print(ACS_PRINT_INFO, L"%x ", request[i]);
+        if (g_print_mmio || (g_curr_module & g_enable_module))
+          rme_print(ACS_PRINT_ALWAYS, L"%x ", request[i]);
     }
 
 }
@@ -96,11 +98,13 @@ void pal_form_tdisp_lock_msg(UINT32 req_id, UINT8 *request, UINT64 *req_length)
     // MMIO Reporting Offset for 8 bytes is treated as 0
     // BIND_P2P_ADDRESS_MASK for 8 bytes is treated as 0
     *req_length = 0x30;
-    //Reads and prints many characters in the logs, so avoiding now
-    //rme_print(ACS_PRINT_DEBUG, L"Request message: 0x", 0);
+
+    if (g_print_mmio || (g_curr_module & g_enable_module))
+        rme_print(ACS_PRINT_DEBUG, L" Request message: 0x", 0);
     for (int  i = 0; i < *req_length; i++)
     {
-        //rme_print(ACS_PRINT_INFO, L"%x ", request[i]);
+        if (g_print_mmio || (g_curr_module & g_enable_module))
+          rme_print(ACS_PRINT_ALWAYS, L"%x ", request[i]);
     }
 
 }
@@ -133,11 +137,13 @@ void pal_form_tdisp_run_msg(UINT32 req_id, UINT8 *request, UINT64 *req_length)
         request[28 + nonce_cnt] = response_8bit[28 + nonce_cnt];
     }
     *req_length = 0x3c;
-    //Reads and prints many characters in the logs, so avoiding now
-    //rme_print(ACS_PRINT_DEBUG, L"Request message: 0x", 0);
+
+    if (g_print_mmio || (g_curr_module & g_enable_module))
+        rme_print(ACS_PRINT_DEBUG, L" Request message: 0x", 0);
     for (int  i = 0; i < *req_length; i++)
     {
-        //rme_print(ACS_PRINT_INFO, L"%x ", request[i]);
+        if (g_print_mmio || (g_curr_module & g_enable_module))
+          rme_print(ACS_PRINT_ALWAYS, L"%x ", request[i]);
     }
 
 }
@@ -165,11 +171,13 @@ void pal_form_tdisp_get_state_msg(UINT32 req_id, UINT8 *request, UINT64 *req_len
     request[17] = VAL_EXTRACT_BITS(req_id, 8, 15);
     // Reserved till [27]
     *req_length = 0x1c;
-    //Reads and prints many characters in the logs, so avoiding now
-    //rme_print(ACS_PRINT_DEBUG, L"Request message: 0x", 0);
+
+    if (g_print_mmio || (g_curr_module & g_enable_module))
+        rme_print(ACS_PRINT_DEBUG, L" Request message: 0x", 0);
     for (int  i = 0; i < *req_length; i++)
     {
-        //rme_print(ACS_PRINT_INFO, L"%x ", request[i]);
+        if (g_print_mmio || (g_curr_module & g_enable_module))
+          rme_print(ACS_PRINT_ALWAYS, L"%x ", request[i]);
     }
 
 }
@@ -213,7 +221,8 @@ UINT32 pal_write_doe_msgo_doe_mailbox(UINT32 bdf, UINT32 *request, UINT64 req_le
 
     for (i = 0; i < doe_length; i++)
     {
-        rme_print(ACS_PRINT_INFO, L" Writing request[%lld]: 0x%lx to DOE mailbox", i, request[i]);
+        if (g_print_mmio || (g_curr_module & g_enable_module))
+          rme_print(ACS_PRINT_INFO, L" Writing request[%lld]: 0x%lx to DOE mailbox", i, request[i]);
         pal_mmio_write(Ecam + config_addr + doe_cap_base + DOE_WRITE_DATA_MAILBOX_REG, request[i]);
     }
 
@@ -263,7 +272,8 @@ UINT32 pal_host_pcie_doe_recv_resp(UINT32 bdf, UINT32 *resp_addr, UINT64 *resp_l
 
     length = value - 0x2;
     *resp_len = (UINT64)(length * 4);
-    rme_print(ACS_PRINT_INFO, L" Length of the DW: 0x%llx in bytes", *resp_len);
+    if (g_print_mmio || (g_curr_module & g_enable_module))
+        rme_print(ACS_PRINT_INFO, L" Length of the DW: 0x%llx in bytes", *resp_len);
 
     for (i = 0; i < length; i++)
     {
@@ -293,11 +303,12 @@ UINT32 pal_check_doe_response(UINT32 bdf)
         return 1;
     }
 
-    //Reads and prints many characters in the logs, so avoiding now
-    //rme_print(ACS_PRINT_INFO, L" Response: 0x", 0);
+    if (g_print_mmio || (g_curr_module & g_enable_module))
+        rme_print(ACS_PRINT_INFO, L" Response: 0x", 0);
     for (int i = 0; i < resp_len; i++)
     {
-        //rme_print(ACS_PRINT_INFO, L"%02x ", response_8bit[i]);
+        if (g_print_mmio || (g_curr_module & g_enable_module))
+          rme_print(ACS_PRINT_ALWAYS, L"%02x ", response_8bit[i]);
     }
 
     return 0;
@@ -333,11 +344,13 @@ UINT32 pal_device_unlock(UINT32 bdf)
     req_addr[17] = VAL_EXTRACT_BITS(req_id, 8, 15);
     // Reserved till [27]
     req_length = 0x1c;
-    //Reads and prints many characters in the logs, so avoiding now
-    //rme_print(ACS_PRINT_DEBUG, L"Request message: 0x", 0);
+
+    if (g_print_mmio || (g_curr_module & g_enable_module))
+          rme_print(ACS_PRINT_DEBUG, L" Request message: 0x", 0);
     for (int  i = 0; i < req_length; i++)
     {
-        //rme_print(ACS_PRINT_INFO, L"%x ", req_addr[i]);
+        if (g_print_mmio || (g_curr_module & g_enable_module))
+          rme_print(ACS_PRINT_ALWAYS, L"%x ", req_addr[i]);
     }
 
     req_addr_4byte = (UINT32 *)req_addr;
