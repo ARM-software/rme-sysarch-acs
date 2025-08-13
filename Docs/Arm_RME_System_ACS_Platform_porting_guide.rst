@@ -189,18 +189,24 @@ This section provides information on executing tests from the UEFI Shell applica
 
 .. code-block:: shell
 
-   Shell> rme.efi [-v <n>] [-skip <x,y,z>] [-t <test id>] [-m <module id>]
+   Shell> rme.efi [-v <n>] [-skip <x,y,z>] [-t <test name>] [-m <module name>]
 
 **Argument Descriptions**
 
-+----------+---------------------------------------------------------------+
-| Argument | Description                                                   |
-+==========+===============================================================+
-| -v       | Print verbosity level (1 to 5)                                |
-| -skip    | Skip specific tests or entire modules                         |
-| -t       | Run a single test                                             |
-| -m       | Run all tests in a single module (overrides -t)               |
-+----------+---------------------------------------------------------------+
+.. list-table:: Argument Descriptions
+  :header-rows: 1
+  :widths: 10 90
+
+  * - Argument
+    - Description
+  * - ``-v``
+    - Print verbosity level (1 to 5)
+  * - ``-skip``
+    - Skip specific tests or entire modules
+  * - ``-t``
+    - Run specific tests
+  * - ``-m``
+    - Run all tests in the mentioned modules (overrides -t)
 
 **Examples**
 

@@ -1,5 +1,12 @@
+****************************************************************
 Arm RME System Architecture Compliance Suite - Scenario Document
-=================================================================
+****************************************************************
+
+.. contents:: Contents
+  :depth: 2
+
+Testcase checklist
+==================
 
 .. list-table::
   :header-rows: 1
@@ -10,7 +17,7 @@ Arm RME System Architecture Compliance Suite - Scenario Document
     - **Algorithm**
   * - 
 
-      `rme_support_in_pe <test_pool/rme/rme_support_in_pe.c>`_
+      `rme_support_in_pe <../test_pool/rme/rme_support_in_pe.c>`_
 
     - 
 
@@ -22,7 +29,7 @@ Arm RME System Architecture Compliance Suite - Scenario Document
 
   * - 
 
-      `rme_gprs_scrubbed_after_reset <test_pool/rme/rme_gprs_scrubbed_after_reset.c>`_
+      `rme_gprs_scrubbed_after_reset <../test_pool/rme/rme_gprs_scrubbed_after_reset.c>`_
 
     - 
 
@@ -36,7 +43,7 @@ Arm RME System Architecture Compliance Suite - Scenario Document
 
   * - 
 
-      `rme_all_pe_has_feat_rng_or_rng_trap <test_pool/rme/rme_all_pe_has_feat_rng_or_rng_trap.c>`_
+      `rme_all_pe_has_feat_rng_or_rng_trap <../test_pool/rme/rme_all_pe_has_feat_rng_or_rng_trap.c>`_
 
     - 
 
@@ -50,7 +57,7 @@ Arm RME System Architecture Compliance Suite - Scenario Document
 
   * - 
 
-      `rme_gpc_for_system_resource <test_pool/rme/rme_gpc_for_system_resource.c>`_
+      `rme_gpc_for_system_resource <../test_pool/rme/rme_gpc_for_system_resource.c>`_
 
     - 
 
@@ -66,7 +73,7 @@ Arm RME System Architecture Compliance Suite - Scenario Document
 
   * - 
 
-      `rme_coherent_interconnect_supports_cmo_popa <test_pool/rme/rme_coherent_interconnect_supports_cmo_popa.c>`_
+      `rme_coherent_interconnect_supports_cmo_popa <../test_pool/rme/rme_coherent_interconnect_supports_cmo_popa.c>`_
 
     - 
 
@@ -94,7 +101,7 @@ Arm RME System Architecture Compliance Suite - Scenario Document
 
   * - 
 
-      `rme_resources_aligned_to_granularity <test_pool/rme/rme_resources_aligned_to_granularity.c>`_ & `rme_resources_are_not_physically_aliased <test_pool/rme/rme_resources_are_not_physically_aliased.c>`_
+      `rme_resources_aligned_to_granularity <../test_pool/rme/rme_resources_aligned_to_granularity.c>`_ & `rme_resources_are_not_physically_aliased <../test_pool/rme/rme_resources_are_not_physically_aliased.c>`_
 
     - 
 
@@ -111,7 +118,7 @@ Arm RME System Architecture Compliance Suite - Scenario Document
 
   * - 
 
-      `rme_pe_do_not_have_arch_diff <test_pool/rme/rme_pe_do_not_have_arch_diff.c>`_
+      `rme_pe_do_not_have_arch_diff <../test_pool/rme/rme_pe_do_not_have_arch_diff.c>`_
 
     - 
 
@@ -127,7 +134,7 @@ Arm RME System Architecture Compliance Suite - Scenario Document
 
   * - 
 
-      `rme_mte_region_in_root_pas <test_pool/rme/rme_mte_region_in_root_pas.c>`_
+      `rme_mte_region_in_root_pas <../test_pool/rme/rme_mte_region_in_root_pas.c>`_
 
     - 
 
@@ -140,7 +147,7 @@ Arm RME System Architecture Compliance Suite - Scenario Document
 
   * - 
 
-      `rme_encryption_for_all_pas_except_ns <test_pool/rme/rme_encryption_for_all_pas_except_ns.c>`_
+      `rme_encryption_for_all_pas_except_ns <../test_pool/rme/rme_encryption_for_all_pas_except_ns.c>`_
 
     - 
 
@@ -155,7 +162,7 @@ Arm RME System Architecture Compliance Suite - Scenario Document
 
   * - 
 
-      `rme_pas_filter_functionality <test_pool/rme/rme_pas_filter_functionality.c>`_
+      `rme_pas_filter_functionality <../test_pool/rme/rme_pas_filter_functionality.c>`_
 
     - 
 
@@ -173,7 +180,7 @@ Arm RME System Architecture Compliance Suite - Scenario Document
 
   * - 
 
-      `rme_realm_smem_behaviour_after_reset <test_pool/rme/rme_realm_smem_behaviour_after_reset.c>`_
+      `rme_realm_smem_behaviour_after_reset <../test_pool/rme/rme_realm_smem_behaviour_after_reset.c>`_
 
     - 
 
@@ -186,7 +193,7 @@ Arm RME System Architecture Compliance Suite - Scenario Document
 
   * - 
 
-      `rme_pcie_devices_support_gpc <test_pool/rme/rme_pcie_devices_support_gpc.c>`_
+      `rme_pcie_devices_support_gpc <../test_pool/rme/rme_pcie_devices_support_gpc.c>`_
 
     - 
 
@@ -200,7 +207,7 @@ Arm RME System Architecture Compliance Suite - Scenario Document
 
   * - 
 
-      `rme_data_encryption_beyond_popa <test_pool/rme/rme_data_encryption_beyond_popa.c>`_
+      `rme_data_encryption_beyond_popa <../test_pool/rme/rme_data_encryption_beyond_popa.c>`_
 
     - 
 
@@ -220,7 +227,7 @@ Arm RME System Architecture Compliance Suite - Scenario Document
 
   * - 
 
-      `rme_data_encryption_with_different_tweak <test_pool/rme/rme_data_encryption_with_different_tweak.c>`_
+      `rme_data_encryption_with_different_tweak <../test_pool/rme/rme_data_encryption_with_different_tweak.c>`_
 
     - 
 
@@ -238,7 +245,7 @@ Arm RME System Architecture Compliance Suite - Scenario Document
 
   * - 
 
-      `rme_msd_smem_in_root_pas <test_pool/rme/rme_msd_smem_in_root_pas.c>`_
+      `rme_msd_smem_in_root_pas <../test_pool/rme/rme_msd_smem_in_root_pas.c>`_
 
     - 
 
@@ -253,7 +260,7 @@ Arm RME System Architecture Compliance Suite - Scenario Document
 
   * - 
 
-      `rme_realm_smem_in_realm_pas <test_pool/rme/rme_realm_smem_in_realm_pas.c>`_
+      `rme_realm_smem_in_realm_pas <../test_pool/rme/rme_realm_smem_in_realm_pas.c>`_
 
     - 
 
@@ -266,7 +273,7 @@ Arm RME System Architecture Compliance Suite - Scenario Document
 
   * - 
 
-      `rme_snoop_filter_considers_pas <test_pool/rme/rme_snoop_filter_considers_pas.c>`_ & `rme_memory_associated_with_pas_till_popa <test_pool/rme/rme_memory_associated_with_pas_till_popa.c>`_
+      `rme_snoop_filter_considers_pas <../test_pool/rme/rme_snoop_filter_considers_pas.c>`_ & `rme_memory_associated_with_pas_till_popa <../test_pool/rme/rme_memory_associated_with_pas_till_popa.c>`_
 
     - 
 
@@ -291,7 +298,7 @@ Arm RME System Architecture Compliance Suite - Scenario Document
 
   * - 
 
-      `rme_cmo_popa_for_cacheability_shareability <test_pool/rme/rme_cmo_popa_for_cacheability_shareability.c>`_
+      `rme_cmo_popa_for_cacheability_shareability <../test_pool/rme/rme_cmo_popa_for_cacheability_shareability.c>`_
 
     - 
 
@@ -316,7 +323,7 @@ Arm RME System Architecture Compliance Suite - Scenario Document
 
   * - 
 
-      `rme_interconnect_supports_tlbi_pa <test_pool/rme/rme_interconnect_supports_tlbi_pa.c>`_
+      `rme_interconnect_supports_tlbi_pa <../test_pool/rme/rme_interconnect_supports_tlbi_pa.c>`_
 
     - 
 
@@ -334,7 +341,7 @@ Arm RME System Architecture Compliance Suite - Scenario Document
 
   * - 
 
-      `rme_ns_encryption_is_immutable <test_pool/rme/rme_ns_encryption_is_immutable.c>`_
+      `rme_ns_encryption_is_immutable <../test_pool/rme/rme_ns_encryption_is_immutable.c>`_
 
     - 
 
@@ -356,7 +363,7 @@ Arm RME System Architecture Compliance Suite - Scenario Document
 
   * - 
 
-      `rme_pe_context_after_exit_wfi <test_pool/rme/rme_pe_context_after_exit_wfi.c>`_ & `rme_pe_context_after_pe_suspend <test_pool/rme/rme_pe_context_after_pe_suspend.c>`_
+      `rme_pe_context_after_exit_wfi <../test_pool/rme/rme_pe_context_after_exit_wfi.c>`_ & `rme_pe_context_after_pe_suspend <../test_pool/rme/rme_pe_context_after_pe_suspend.c>`_
 
     - 
 
@@ -380,7 +387,7 @@ Arm RME System Architecture Compliance Suite - Scenario Document
 
   * - 
 
-      `rme_msd_save_restore_mem_in_root_pas <test_pool/rme/rme_msd_save_restore_mem_in_root_pas.c>`_
+      `rme_msd_save_restore_mem_in_root_pas <../test_pool/rme/rme_msd_save_restore_mem_in_root_pas.c>`_
 
     - 
 
@@ -392,7 +399,7 @@ Arm RME System Architecture Compliance Suite - Scenario Document
 
   * - 
 
-      `rme_rnvs_in_root_pas <test_pool/rme/rme_rnvs_in_root_pas.c>`_
+      `rme_rnvs_in_root_pas <../test_pool/rme/rme_rnvs_in_root_pas.c>`_
 
     - 
 
@@ -408,7 +415,7 @@ Arm RME System Architecture Compliance Suite - Scenario Document
 
   * - 
 
-      `rme_root_wdog_from_root_pas <test_pool/rme/rme_root_wdog_from_root_pas.c>`_ & `rme_root_wdog_fails_in_non_root_state <test_pool/rme/rme_root_wdog_fails_in_non_root_state.c>`_
+      `rme_root_wdog_from_root_pas <../test_pool/rme/rme_root_wdog_from_root_pas.c>`_ & `rme_root_wdog_fails_in_non_root_state <../test_pool/rme/rme_root_wdog_fails_in_non_root_state.c>`_
 
     - 
 
@@ -426,7 +433,7 @@ Arm RME System Architecture Compliance Suite - Scenario Document
 
   * - 
 
-      `rme_pas_filter_in_inactive_mode <test_pool/rme/rme_pas_filter_in_inactive_mode.c>`_
+      `rme_pas_filter_in_inactive_mode <../test_pool/rme/rme_pas_filter_in_inactive_mode.c>`_
 
     - 
 
@@ -442,7 +449,7 @@ Arm RME System Architecture Compliance Suite - Scenario Document
 
   * - 
 
-      `rme_smmu_blocks_request_at_registers_reset <test_pool/rme/rme_smmu_blocks_request_at_registers_reset.c>`_
+      `rme_smmu_blocks_request_at_registers_reset <../test_pool/rme/rme_smmu_blocks_request_at_registers_reset.c>`_
 
     - 
 
@@ -456,7 +463,7 @@ Arm RME System Architecture Compliance Suite - Scenario Document
 
   * - 
 
-      `rme_system_reset_propagation_to_all_pe <test_pool/rme/rme_system_reset_propagation_to_all_pe.c>`_
+      `rme_system_reset_propagation_to_all_pe <../test_pool/rme/rme_system_reset_propagation_to_all_pe.c>`_
 
     - 
 
@@ -469,7 +476,7 @@ Arm RME System Architecture Compliance Suite - Scenario Document
 
   * - 
 
-      `rme_msd_smem_in_root_after_reset <test_pool/rme/rme_msd_smem_in_root_after_reset.c>`_
+      `rme_msd_smem_in_root_after_reset <../test_pool/rme/rme_msd_smem_in_root_after_reset.c>`_
 
     - 
 
@@ -483,7 +490,7 @@ Arm RME System Architecture Compliance Suite - Scenario Document
 
   * - 
 
-      `gic_its_subjected_to_gpc_check <test_pool/gic/gic_its_subjected_to_gpc_check.c>`_
+      `gic_its_subjected_to_gpc_check <../test_pool/gic/gic_its_subjected_to_gpc_check.c>`_
 
     - 
 
@@ -500,7 +507,7 @@ Arm RME System Architecture Compliance Suite - Scenario Document
 
   * - 
 
-      `smmu_implements_rme <test_pool/smmu/smmu_implements_rme.c>`_
+      `smmu_implements_rme <../test_pool/smmu/smmu_implements_rme.c>`_
 
     - 
 
@@ -514,7 +521,7 @@ Arm RME System Architecture Compliance Suite - Scenario Document
 
   * - 
 
-      `smmu_responds_to_gpt_tlb <test_pool/smmu/smmu_responds_to_gpt_tlb.c>`_
+      `smmu_responds_to_gpt_tlb <../test_pool/smmu/smmu_responds_to_gpt_tlb.c>`_
 
     - 
 
@@ -532,7 +539,7 @@ Arm RME System Architecture Compliance Suite - Scenario Document
 
   * - 
 
-      `legacy_tz_support_check <test_pool/legacy_system/legacy_tz_support_check.c>`_
+      `legacy_tz_support_check <../test_pool/legacy_system/legacy_tz_support_check.c>`_
 
     - 
 
@@ -549,7 +556,7 @@ Arm RME System Architecture Compliance Suite - Scenario Document
 
   * - 
 
-      `legacy_tz_en_drives_root_to_secure <test_pool/legacy_system/legacy_tz_en_drives_root_to_secure.c>`_
+      `legacy_tz_en_drives_root_to_secure <../test_pool/legacy_system/legacy_tz_en_drives_root_to_secure.c>`_
 
     - 
 
@@ -563,7 +570,7 @@ Arm RME System Architecture Compliance Suite - Scenario Document
 
   * - 
 
-      `legacy_tz_enable_before_resetv <test_pool/legacy_system/legacy_tz_enable_before_reset.c>`_
+      `legacy_tz_enable_before_resetv <../test_pool/legacy_system/legacy_tz_enable_before_reset.c>`_
 
     - 
 
@@ -577,7 +584,7 @@ Arm RME System Architecture Compliance Suite - Scenario Document
 
   * - 
 
-      `legacy_tz_enable_after_reset <test_pool/legacy_system/legacy_tz_enable_after_reset.c>`_
+      `legacy_tz_enable_after_reset <../test_pool/legacy_system/legacy_tz_enable_after_reset.c>`_
 
     - 
 
@@ -593,7 +600,7 @@ Arm RME System Architecture Compliance Suite - Scenario Document
 
   * - 
 
-      `da_dvsec_register_config <test_pool/da/da_dvsec_register_config.c>`_
+      `da_dvsec_register_config <../test_pool/da/da_dvsec_register_config.c>`_
 
     - 
 
@@ -608,7 +615,7 @@ Arm RME System Architecture Compliance Suite - Scenario Document
 
   * - 
 
-      `da_smmu_implementation <test_pool/da/da_smmu_implementation.c>`_
+      `da_smmu_implementation <../test_pool/da/da_smmu_implementation.c>`_
 
     - 
 
@@ -621,7 +628,7 @@ Arm RME System Architecture Compliance Suite - Scenario Document
 
   * - 
 
-      `da_tee_io_capability <test_pool/da/da_tee_io_capability.c>`_
+      `da_tee_io_capability <../test_pool/da/da_tee_io_capability.c>`_
 
     - 
 
@@ -633,7 +640,7 @@ Arm RME System Architecture Compliance Suite - Scenario Document
 
   * - 
 
-      `da_rootport_ide_features <test_pool/da/da_rootport_ide_features.c>`_
+      `da_rootport_ide_features <../test_pool/da/da_rootport_ide_features.c>`_
 
     - 
 
@@ -651,7 +658,7 @@ Arm RME System Architecture Compliance Suite - Scenario Document
 
   * - 
 
-      `da_attribute_rmeda_ctl_registers <test_pool/da/da_attribute_rmeda_ctl_registers.c>`_
+      `da_attribute_rmeda_ctl_registers <../test_pool/da/da_attribute_rmeda_ctl_registers.c>`_
 
     - 
 
@@ -664,7 +671,7 @@ Arm RME System Architecture Compliance Suite - Scenario Document
 
   * - 
 
-      `da_p2p_btw_2_tdisp_devices <test_pool/da/da_p2p_btw_2_tdisp_devices.c>`_
+      `da_p2p_btw_2_tdisp_devices <../test_pool/da/da_p2p_btw_2_tdisp_devices.c>`_
 
     - 
 
@@ -681,7 +688,7 @@ Arm RME System Architecture Compliance Suite - Scenario Document
 
   * - 
 
-      `da_outgoing_request_with_ide_tbit <test_pool/da/da_outgoing_request_with_ide_tbit.c>`_
+      `da_outgoing_request_with_ide_tbit <../test_pool/da/da_outgoing_request_with_ide_tbit.c>`_
 
     - 
 
@@ -698,7 +705,7 @@ Arm RME System Architecture Compliance Suite - Scenario Document
 
   * - 
 
-      `da_incoming_request_ide_sec_locked <test_pool/da/da_incoming_request_ide_sec_locked.c>`_
+      `da_incoming_request_ide_sec_locked <../test_pool/da/da_incoming_request_ide_sec_locked.c>`_
 
     - 
 
@@ -731,7 +738,7 @@ Arm RME System Architecture Compliance Suite - Scenario Document
 
   * - 
 
-      `da_ctl_regs_rmsd_write_protect_property <test_pool/da/da_ctl_regs_rmsd_write_protect_property.c>`_
+      `da_ctl_regs_rmsd_write_protect_property <../test_pool/da/da_ctl_regs_rmsd_write_protect_property.c>`_
 
     - 
 
@@ -745,7 +752,7 @@ Arm RME System Architecture Compliance Suite - Scenario Document
 
   * - 
 
-      `da_ide_state_rootport_error <test_pool/da/da_ide_state_rootport_error.c>`_
+      `da_ide_state_rootport_error <../test_pool/da/da_ide_state_rootport_error.c>`_
 
     - 
 
@@ -759,7 +766,7 @@ Arm RME System Architecture Compliance Suite - Scenario Document
 
   * - 
 
-      `da_ide_state_tdisp_disable <test_pool/da/da_ide_state_tdisp_disable.c>`_
+      `da_ide_state_tdisp_disable <../test_pool/da/da_ide_state_tdisp_disable.c>`_
 
     - 
 
@@ -786,7 +793,7 @@ Arm RME System Architecture Compliance Suite - Scenario Document
 
   * - 
 
-      `da_selective_ide_register_property <test_pool/da/da_selective_ide_register_property.c>`_
+      `da_selective_ide_register_property <../test_pool/da/da_selective_ide_register_property.c>`_
 
     - 
 
@@ -811,7 +818,7 @@ Arm RME System Architecture Compliance Suite - Scenario Document
 
   * - 
 
-      `da_rootport_tdisp_disabled <test_pool/da/da_rootport_tdisp_disabled.c>`_
+      `da_rootport_tdisp_disabled <../test_pool/da/da_rootport_tdisp_disabled.c>`_
 
     - 
 
@@ -827,7 +834,7 @@ Arm RME System Architecture Compliance Suite - Scenario Document
 
   * - 
 
-      `da_autonomous_rootport_request_ns_pas <test_pool/da/da_autonomous_rootport_request_ns_pas.c>`_
+      `da_autonomous_rootport_request_ns_pas <../test_pool/da/da_autonomous_rootport_request_ns_pas.c>`_
 
     - 
 
@@ -846,7 +853,7 @@ Arm RME System Architecture Compliance Suite - Scenario Document
 
   * - 
 
-      `da_incoming_request_ide_non_sec_unlocked <test_pool/da/da_incoming_request_ide_non_sec_unlocked.c>`_
+      `da_incoming_request_ide_non_sec_unlocked <../test_pool/da/da_incoming_request_ide_non_sec_unlocked.c>`_
 
     - 
 
@@ -866,7 +873,7 @@ Arm RME System Architecture Compliance Suite - Scenario Document
 
   * - 
 
-      `da_outgoing_realm_rqst_ide_tbit_1 <test_pool/da/da_outgoing_realm_rqst_ide_tbit_1.c>`_ & `da_ide_tbit_0_for_root_request <test_pool/da/da_ide_tbit_0_for_root_request.c>`_
+      `da_outgoing_realm_rqst_ide_tbit_1 <../test_pool/da/da_outgoing_realm_rqst_ide_tbit_1.c>`_ & `da_ide_tbit_0_for_root_request <../test_pool/da/da_ide_tbit_0_for_root_request.c>`_
 
     - 
 
@@ -890,7 +897,7 @@ Arm RME System Architecture Compliance Suite - Scenario Document
 
   * - 
 
-      `da_rmsd_write_detect_property <test_pool/da/da_rmsd_write_detect_property.c>`_
+      `da_rmsd_write_detect_property <../test_pool/da/da_rmsd_write_detect_property.c>`_
 
     - 
 
@@ -918,7 +925,7 @@ Arm RME System Architecture Compliance Suite - Scenario Document
 
   * - 
 
-      `da_rootport_write_protect_full_protect_property <test_pool/da/da_rootport_write_protect_full_protect_property.c>`_
+      `da_rootport_write_protect_full_protect_property <../test_pool/da/da_rootport_write_protect_full_protect_property.c>`_
 
     - 
 
@@ -949,7 +956,7 @@ Arm RME System Architecture Compliance Suite - Scenario Document
 
   * - 
 
-      `da_interconnect_regs_rmsd_protected <test_pool/da/da_interconnect_regs_rmsd_protected.c>`_
+      `da_interconnect_regs_rmsd_protected <../test_pool/da/da_interconnect_regs_rmsd_protected.c>`_
 
     - 
 
@@ -963,7 +970,7 @@ Arm RME System Architecture Compliance Suite - Scenario Document
 
   * - 
 
-      `dpt_system_resource_valid_without_dpti <test_pool/dpt/dpt_system_resource_valid_without_dpti.c>`_, `dpt_system_resource_valid_with_dpti <test_pool/dpt/dpt_system_resource_valid_with_dpti.c>`_, `dpt_system_resource_invalid <test_pool/dpt/dpt_system_resource_invalid.c>`_, `dpt_p2p_same_rootport_valid <test_pool/dpt/dpt_p2p_same_rootport_valid.c>`_, `dpt_p2p_same_rootport_invalid <test_pool/dpt/dpt_p2p_same_rootport_invalid.c>`_, `dpt_p2p_different_rootport_valid <test_pool/dpt/dpt_p2p_different_rootport_valid.c>`_, `dpt_p2p_different_rootport_invalid <test_pool/dpt/dpt_p2p_different_rootport_invalid.c>`_
+      `dpt_system_resource_valid_without_dpti <../test_pool/dpt/dpt_system_resource_valid_without_dpti.c>`_, `dpt_system_resource_valid_with_dpti <../test_pool/dpt/dpt_system_resource_valid_with_dpti.c>`_, `dpt_system_resource_invalid <../test_pool/dpt/dpt_system_resource_invalid.c>`_, `dpt_p2p_same_rootport_valid <../test_pool/dpt/dpt_p2p_same_rootport_valid.c>`_, `dpt_p2p_same_rootport_invalid <../test_pool/dpt/dpt_p2p_same_rootport_invalid.c>`_, `dpt_p2p_different_rootport_valid <../test_pool/dpt/dpt_p2p_different_rootport_valid.c>`_, `dpt_p2p_different_rootport_invalid <../test_pool/dpt/dpt_p2p_different_rootport_invalid.c>`_
 
     - 
 
@@ -987,7 +994,7 @@ Arm RME System Architecture Compliance Suite - Scenario Document
 
   * - 
 
-      `mec_support_mecid_and_mecid_width <test_pool/mec/mec_support_mecid_and_mecid_width.c>`_ 
+      `mec_support_mecid_and_mecid_width <../test_pool/mec/mec_support_mecid_and_mecid_width.c>`_ 
 
     - 
 
@@ -1009,7 +1016,7 @@ Arm RME System Architecture Compliance Suite - Scenario Document
 
   * - 
 
-      `mec_mecid_assosiation_and_encryption <test_pool/mec/mec_mecid_assosiation_and_encryption.c>`_
+      `mec_mecid_assosiation_and_encryption <../test_pool/mec/mec_mecid_assosiation_and_encryption.c>`_
 
     - 
 
@@ -1029,7 +1036,7 @@ Arm RME System Architecture Compliance Suite - Scenario Document
 
   * - 
 
-      `mec_cmo_uses_correct_mecid <test_pool/mec/mec_cmo_uses_correct_mecid.c>`_
+      `mec_cmo_uses_correct_mecid <../test_pool/mec/mec_cmo_uses_correct_mecid.c>`_
 
     - 
 
@@ -1053,7 +1060,7 @@ Arm RME System Architecture Compliance Suite - Scenario Document
 
   * - 
 
-      `mec_effect_of_popa_cmo <test_pool/mec/mec_effect_of_popa_cmo.c>`_
+      `mec_effect_of_popa_cmo <../test_pool/mec/mec_effect_of_popa_cmo.c>`_
 
     - 
 
@@ -1123,7 +1130,7 @@ Arm RME System Architecture Compliance Suite - Scenario Document
 
 
 Out of Compliance scope rules
------------------------------
+=============================
 
 The following rules are out of compliance scope due to the following reasons:
 
