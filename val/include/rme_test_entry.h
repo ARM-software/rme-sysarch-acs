@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022-2024, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,37 +20,37 @@
 
 #include "rme_acs_pe.h"
 
-uint32_t rme001_entry(uint32_t num_pe);
-uint32_t rme002_entry(void);
-uint32_t rme003_entry(uint32_t num_pe);
-uint32_t rme004_entry(void);
-uint32_t rme005_entry(void);
-uint32_t rme006_entry(void);
-uint32_t rme007_entry(void);
-uint32_t rme008_entry(uint32_t num_pe);
-uint32_t rme009_entry(void);
-uint32_t rme010_entry(void);
-uint32_t rme011_entry(void);
-uint32_t rme012_entry(void);
-uint32_t rme013_entry(void);
-uint32_t rme014_entry(void);
-uint32_t rme015_entry(void);
-uint32_t rme016_entry(void);
-uint32_t rme017_entry(void);
-uint32_t rme018_entry(uint32_t num_pe);
-uint32_t rme019_entry(void);
-uint32_t rme020_entry(void);
-uint32_t rme021_entry(void);
-uint32_t rme022_entry(void);
-uint32_t rme023_entry(void);
-uint32_t rme024_entry(void);
-uint32_t rme025_entry(void);
-uint32_t rme026_entry(void);
-uint32_t rme027_entry(void);
-uint32_t rme028_entry(void);
-uint32_t rme029_entry(void);
-uint32_t rme030_entry(void);
-uint32_t rme031_entry(uint32_t num_pe);
-uint32_t rme032_entry(void);
+uint32_t rme_support_in_pe_entry(uint32_t num_pe);
+uint32_t rme_gprs_scrubbed_after_reset_entry(void);
+uint32_t rme_all_pe_has_feat_rng_or_rng_trap_entry(uint32_t num_pe);
+uint32_t rme_gpc_for_system_resource_entry(void);
+uint32_t rme_coherent_interconnect_supports_cmo_popa_entry(void);
+uint32_t rme_resources_aligned_to_granularity_entry(void);
+uint32_t rme_resources_are_not_physically_aliased_entry(void);
+uint32_t rme_pe_do_not_have_arch_diff_entry(uint32_t num_pe);
+uint32_t rme_mte_region_in_root_pas_entry(void);
+uint32_t rme_encryption_for_all_pas_except_ns_entry(void);
+uint32_t rme_pas_filter_functionality_entry(void);
+uint32_t rme_realm_smem_behaviour_after_reset_entry(void);
+uint32_t rme_pcie_devices_support_gpc_entry(void);
+uint32_t rme_data_encryption_beyond_popa_entry(void);
+uint32_t rme_data_encryption_with_different_tweak_entry(void);
+uint32_t rme_msd_smem_in_root_pas_entry(void);
+uint32_t rme_realm_smem_in_realm_pas_entry(void);
+uint32_t rme_snoop_filter_considers_pas_entry(uint32_t num_pe);
+uint32_t rme_cmo_popa_for_cacheability_shareability_entry(void);
+uint32_t rme_memory_associated_with_pas_till_popa_entry(void);
+uint32_t rme_interconnect_supports_tlbi_pa_entry(void);
+uint32_t rme_ns_encryption_is_immutable_entry(void);
+uint32_t rme_pe_context_after_exit_wfi_entry(void);
+uint32_t rme_pe_context_after_pe_suspend_entry(void);
+uint32_t rme_msd_save_restore_mem_in_root_pas_entry(void);
+uint32_t rme_rnvs_in_root_pas_entry(void);
+uint32_t rme_root_wdog_from_root_pas_entry(void);
+uint32_t rme_root_wdog_fails_in_non_root_state_entry(void);
+uint32_t rme_pas_filter_in_inactive_mode_entry(void);
+uint32_t rme_smmu_blocks_request_at_registers_reset_entry(void);
+uint32_t rme_system_reset_propagation_to_all_pe_entry(uint32_t num_pe);
+uint32_t rme_msd_smem_in_root_after_reset_entry(void);
 #endif /*__RME_TEST_ENTRY_H__*/
 

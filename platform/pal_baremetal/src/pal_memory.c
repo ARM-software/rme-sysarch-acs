@@ -17,7 +17,6 @@
 
 #include "platform_image_def.h"
 #include "platform_override_struct.h"
-#include "platform_override_fvp.h"
 #include "pal_common_support.h"
 
 // Note that while creating a list of mem map, the size of mappings will vary across platforms.
@@ -276,29 +275,29 @@ void map_pcie_ecam_bar_region(uint32_t num_ecam, uint64_t length, uint64_t attr)
 void map_test_mem_region(uint32_t length, uint32_t attr)
 {
     // Free Mem region. 2MB map.
-    mmap_region_list[mmap_list_curr_index].virtual_address  = FREE_MEM_START;
-    mmap_region_list[mmap_list_curr_index].physical_address = FREE_MEM_START;
+    mmap_region_list[mmap_list_curr_index].virtual_address  = PLAT_FREE_MEM_START;
+    mmap_region_list[mmap_list_curr_index].physical_address = PLAT_FREE_MEM_START;
     mmap_region_list[mmap_list_curr_index].length           = 0x20 * length;
     mmap_region_list[mmap_list_curr_index].attributes       = attr;
     mmap_list_curr_index++;
 
     // VA and PA TEST Mem region.
-    mmap_region_list[mmap_list_curr_index].virtual_address  = MEM_FREE_VA_TEST;
-    mmap_region_list[mmap_list_curr_index].physical_address = MEM_FREE_PA_TEST;
+    mmap_region_list[mmap_list_curr_index].virtual_address  = PLAT_FREE_VA_TEST;
+    mmap_region_list[mmap_list_curr_index].physical_address = PLAT_FREE_PA_TEST;
     mmap_region_list[mmap_list_curr_index].length           = 0x20 * length;
     mmap_region_list[mmap_list_curr_index].attributes       = attr;
     mmap_list_curr_index++;
 
     // NVM memory map.
-    mmap_region_list[mmap_list_curr_index].virtual_address  = RME_NVM_MEM;
-    mmap_region_list[mmap_list_curr_index].physical_address = RME_NVM_MEM;
+    mmap_region_list[mmap_list_curr_index].virtual_address  = PLAT_RME_ACS_NVM_MEM;
+    mmap_region_list[mmap_list_curr_index].physical_address = PLAT_RME_ACS_NVM_MEM;
     mmap_region_list[mmap_list_curr_index].length           = 0x20 * length;
     mmap_region_list[mmap_list_curr_index].attributes       = attr;
     mmap_list_curr_index++;
 
     // Shared data region
-    mmap_region_list[mmap_list_curr_index].virtual_address  = SHARED_ADDRESS;
-    mmap_region_list[mmap_list_curr_index].physical_address = SHARED_ADDRESS;
+    mmap_region_list[mmap_list_curr_index].virtual_address  = PLAT_SHARED_ADDRESS;
+    mmap_region_list[mmap_list_curr_index].physical_address = PLAT_SHARED_ADDRESS;
     mmap_region_list[mmap_list_curr_index].length           = 0x20 * length;
     mmap_region_list[mmap_list_curr_index].attributes       = attr;
     mmap_list_curr_index++;

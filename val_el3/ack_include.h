@@ -107,24 +107,23 @@
 #include <stdint.h>
 #include "pal_el3/pal_el3_print.h"
 #include "pal_el3/acs_el3.h"
-#include "val/include/rme_acs_el32.h"
 
 #endif //__ASSEMBLER__
 
-#include "val/include/sys_config.h"
+#include "val/include/rme_acs_el32.h"
 
 /* Address Defines related to shared data */
-#define ARM_TF_SHARED_ADDRESS (SHARED_ADDRESS + SIZE_4KB - 0x20)
-#define SHARED_OFFSET_ELR     (SHARED_ADDRESS + 0x8)
-#define SHARED_OFFSET_SPSR    (SHARED_ADDRESS + 0x10)
-#define SHARED_OFFSET_EXC_EXP (SHARED_ADDRESS + 0x18)
-#define SHARED_OFFSET_EXC_GEN (SHARED_ADDRESS + 0x20)
-#define SHARED_OFFSET_ACC_MUT (SHARED_ADDRESS + 0x28)
-#define SHARED_OFFSET_ESR_VAL (SHARED_ADDRESS + 0x30)
-#define SHARED_OFFSET_ARG0    (SHARED_ADDRESS + 0x38)
-#define SHARED_OFFSET_ARG1    (SHARED_ADDRESS + 0x40)
-#define ACS_EL3_STACK (SHARED_ADDRESS + SIZE_4KB - 0x100)
-#define ACS_EL3_HANDLER_SAVED_POINTER (SHARED_ADDRESS + 0x800)
+#define ARM_TF_SHARED_ADDRESS (PLAT_SHARED_ADDRESS + SIZE_4KB - 0x20)
+#define SHARED_OFFSET_ELR     (PLAT_SHARED_ADDRESS + 0x8)
+#define SHARED_OFFSET_SPSR    (PLAT_SHARED_ADDRESS + 0x10)
+#define SHARED_OFFSET_EXC_EXP (PLAT_SHARED_ADDRESS + 0x18)
+#define SHARED_OFFSET_EXC_GEN (PLAT_SHARED_ADDRESS + 0x20)
+#define SHARED_OFFSET_ACC_MUT (PLAT_SHARED_ADDRESS + 0x28)
+#define SHARED_OFFSET_ESR_VAL (PLAT_SHARED_ADDRESS + 0x30)
+#define SHARED_OFFSET_ARG0    (PLAT_SHARED_ADDRESS + 0x38)
+#define SHARED_OFFSET_ARG1    (PLAT_SHARED_ADDRESS + 0x40)
+#define ACS_EL3_STACK (PLAT_SHARED_ADDRESS + SIZE_4KB - 0x100)
+#define ACS_EL3_HANDLER_SAVED_POINTER (PLAT_SHARED_ADDRESS + 0x800)
 
 #ifndef __ASSEMBLER__
 
@@ -206,12 +205,13 @@ typedef struct {
     BlockHeader *free_list;     // Head of the free list
 } MemoryPool;
 
-uint32_t val_smmu_init(uint32_t num_smmu);
+void val_smmu_init_el3(uint32_t num_smmu, uint64_t smmu_base_arr[]);
 uint32_t val_smmu_rlm_map(smmu_master_attributes_t master_attr, pgt_descriptor_t pgt_desc);
 void val_security_state_change(uint64_t attr_nse_ns);
 void set_daif(void);
 void val_pas_filter_active_mode(int enable);
-void val_smmu_access_disable(void);
+void val_smmu_access_disable(uint64_t smmu_base);
+void val_smmu_access_enable(uint64_t smmu_base);
 void val_wd_set_ws0_el3(uint64_t VA_RT_WDOG,
                         uint32_t timer_expire_ticks,
                         uint64_t counter_freq);
@@ -239,7 +239,7 @@ void tlbi_alle3is(void);
 void isb(void);
 void rme_install_handler(void);
 void add_gpt_entry(uint64_t PA, uint64_t GPI);
-void add_mmu_entry(uint64_t VA, uint64_t PA, uint64_t acc_pas);
+uint32_t add_mmu_entry(uint64_t VA, uint64_t PA, uint64_t acc_pas);
 uint32_t val_realm_pgt_create(memory_region_descriptor_t *mem_desc, pgt_descriptor_t *pgt_desc);
 void val_realm_pgt_destroy(pgt_descriptor_t *pgt_desc);
 void map_shared_mem(void);
@@ -280,7 +280,7 @@ uint32_t log2_page_size(uint64_t size);
 void acs_str(uint64_t *address, uint64_t data);
 void acs_ldr_pas_filter(uint64_t *address, uint64_t data);
 uint32_t val_get_pgt_attr_indx(uint64_t table_desc);
-void *val_memory_virt_to_phys(void *va);
+void *val_memory_virt_to_phys_el3(void *va);
 void *val_memory_phys_to_virt(uint64_t pa);
 void *val_memory_alloc_el3(size_t size, size_t alignment);
 void val_memory_free_el3(void *ptr);

@@ -21,34 +21,39 @@
 #include  <Library/ShellLib.h>
 #include  <Library/UefiBootServicesTableLib.h>
 #include  <Library/CacheMaintenanceLib.h>
+#include  <Library/BaseLib.h>
+#include  <Library/MemoryAllocationLib.h>
 #include  <Protocol/LoadedImage.h>
 
 #include "val/include/val_interface.h"
 #include "val/include/rme_acs_pe.h"
 #include "val/include/rme_acs_val.h"
-#include "val/include/sys_config.h"
 
 #include "RmeAcs.h"
 
 UINT32 g_pcie_p2p;
 UINT32 g_pcie_cache_present;
 
-UINT32  g_print_level;
+UINT32 g_print_level;
+UINT32 g_print_in_test_context;
+UINT32 g_print_test_check_id;
 UINT32 g_print_mmio;
 UINT32 g_curr_module;
 UINT32 g_enable_module;
-UINT32  g_skip_test_num[MAX_TEST_SKIP_NUM] = { 10000, 10000, 10000, 10000, 10000,
-                                               10000, 10000, 10000, 10000, 10000 };
-UINT32  g_single_test = SINGLE_TEST_SENTINEL;
-UINT32  g_single_module = SINGLE_MODULE_SENTINEL;
-UINT32  g_rme_tests_total;
-UINT32  g_rme_tests_pass;
-UINT32  g_rme_tests_fail;
-UINT64  g_stack_pointer;
-UINT64  g_exception_ret_addr;
-UINT64  g_ret_addr;
-UINT32  g_wakeup_timeout;
-UINT32  g_rl_smmu_init;
+CHAR8 **g_skip_test_str;
+CHAR8 **g_execute_tests_str;
+CHAR8 **g_execute_modules_str;
+UINT32 g_num_skip = 0;
+UINT32 g_num_tests = 0;
+UINT32 g_num_modules = 0;
+UINT32 g_rme_tests_total;
+UINT32 g_rme_tests_pass;
+UINT32 g_rme_tests_fail;
+UINT64 g_stack_pointer;
+UINT64 g_exception_ret_addr;
+UINT64 g_ret_addr;
+UINT32 g_wakeup_timeout;
+UINT32 g_rl_smmu_init;
 SHELL_FILE_HANDLE g_rme_log_file_handle;
 
 STATIC VOID FlushImage (VOID)
@@ -81,7 +86,7 @@ createPeInfoTable (
 
   if (EFI_ERROR(Status))
   {
-    Print(L"Allocate Pool failed %x \n", Status);
+    Print(L"\nAllocate Pool failed %x ", Status);
     return Status;
   }
 
@@ -104,11 +109,52 @@ createGicInfoTable (
 
   if (EFI_ERROR(Status))
   {
-    Print(L"Allocate Pool failed %x \n", Status);
+    Print(L"\nAllocate Pool failed %x ", Status);
     return Status;
   }
 
   Status = val_gic_create_info_table(GicInfoTable);
+
+  return Status;
+
+}
+
+EFI_STATUS
+createMemCfgInfoTable (
+)
+{
+  EFI_STATUS Status;
+  UINT64     *GPCInfoTable;
+  UINT64     *PASInfoTable;
+  UINT64     *RootRegInfoTable;
+
+  Status = gBS->AllocatePool (EfiBootServicesData,
+                               MEM_GPC_REGION_TBL_SZ,
+                               (VOID **) &GPCInfoTable);
+
+  Status = gBS->AllocatePool (EfiBootServicesData,
+                               MEM_PAS_REGION_TBL_SZ,
+                               (VOID **) &PASInfoTable);
+
+  if (EFI_ERROR(Status))
+  {
+    Print(L"Allocate Pool failed %x \n", Status);
+    return Status;
+  }
+
+  val_mem_region_create_info_table(GPCInfoTable, PASInfoTable);
+
+  Status = gBS->AllocatePool (EfiBootServicesData,
+                               ROOT_REG_TBL_SZ,
+                               (VOID **) &RootRegInfoTable);
+
+  if (EFI_ERROR(Status))
+  {
+    Print(L"Allocate Pool failed %x \n", Status);
+    return Status;
+  }
+
+  val_root_register_create_info_table(RootRegInfoTable);
 
   return Status;
 
@@ -138,7 +184,7 @@ createTimerInfoTable(
 
   if (EFI_ERROR(Status))
   {
-    Print(L"Allocate Pool failed %x \n", Status);
+    Print(L"\nAllocate Pool failed %x ", Status);
     return Status;
   }
   val_timer_create_info_table(TimerInfoTable);
@@ -162,7 +208,7 @@ createPcieVirtInfoTable(
 
   if (EFI_ERROR(Status))
   {
-    Print(L"Allocate Pool failed %x \n", Status);
+    Print(L"\nAllocate Pool failed %x ", Status);
     return Status;
   }
   val_pcie_create_info_table(PcieInfoTable);
@@ -173,7 +219,7 @@ createPcieVirtInfoTable(
 
   if (EFI_ERROR(Status))
   {
-    Print(L"Allocate Pool failed %x \n", Status);
+    Print(L"\nAllocate Pool failed %x ", Status);
     return Status;
   }
 
@@ -186,7 +232,7 @@ createPcieVirtInfoTable(
 
   if (EFI_ERROR(Status))
   {
-    Print(L"Allocate Pool failed %x \n", Status);
+    Print(L"\nAllocate Pool failed %x ", Status);
     return Status;
   }
   val_iovirt_create_info_table(IoVirtInfoTable);
@@ -208,7 +254,7 @@ createPeripheralInfoTable(
 
   if (EFI_ERROR(Status))
   {
-    Print(L"Allocate Pool failed %x \n", Status);
+    Print(L"\nAllocate Pool failed %x ", Status);
     return Status;
   }
   val_peripheral_create_info_table(PeripheralInfoTable);
@@ -240,42 +286,33 @@ HelpMsg (
          "-v      Verbosity of the Prints\n"
          "        1 shows all prints, 5 shows Errors\n"
          "        Note: pal_mmio prints can be enabled for specific modules by passing\n"
-         "              module numbers along with global verbosity level 1\n"
-         "              Module numbers are PE 0, GIC 1,  ...\n"
-         "              E.g., To enable mmio prints for PE and TIMER pass -v 102 \n"
-         "-mmio   Pass this flag to enable pal_mmio_read/write prints, use with -v 1\n"
-         "-l      Level of compliance to be tested for\n"
-         "        As per RME spec, 3 to 6\n"
+         "              module id along with global verbosity level 1\n"
+         "              Module ids are rme, gic,  ...\n"
+         "              E.g., To enable mmio prints for RME and DA pass -v 1,rme,da \n"
+         "-mmio   Pass this flag to enable pal_mmio_read/write and tdisp prints, use with -v 1\n"
          "-f      Name of the log file to record the test results in\n"
          "-skip   Test(s) to be skipped\n"
-         "        Refer to section 4 of RME_ACS_User_Guide\n"
+         "        Refer to section 2.3 of RME_ACS_Platform_Porting_Guide\n"
          "        To skip a module, use Model_ID as mentioned in user guide\n"
-         "        To skip a particular test within a module, use the exact testcase number\n"
-         "-p      Enable/disable PCIe RME 6.0 (RCiEP) compliance tests\n"
-         "        1 - enables PCIe tests, 0 - disables PCIe tests\n"
-         "-t      If set, will only run the specified test, all others will be skipped.\n"
-         "-m      If set, will only run the specified module, all others will be skipped.\n"
+         "        To skip a particular test within a module, use the exact testcase name\n"
+         "-t      If set, will only run the specified tests, all others will be skipped.\n"
+         "-m      If set, will only run the specified modules, all others will be skipped.\n"
          "-p2p    Pass this flag to indicate that PCIe Hierarchy Supports Peer-to-Peer\n"
          "-cache  Pass this flag to indicate that if the test system supports PCIe address translation cache\n"
-         "-timeout  Set timeout multiple for wakeup tests\n"
-         "        1 - min value  5 - max value\n"
   );
 }
 
 STATIC CONST SHELL_PARAM_ITEM ParamList[] = {
   {L"-v"    , TypeValue},    // -v    # Verbosity of the Prints. 1 shows all prints, 5 shows Errors
-  {L"-l"    , TypeValue},    // -l    # Level of compliance to be tested for.
   {L"-f"    , TypeValue},    // -f    # Name of the log file to record the test results in.
   {L"-skip" , TypeValue},    // -skip # test(s) to skip execution
   {L"-help" , TypeFlag},     // -help # help : info about commands
   {L"-h"    , TypeFlag},     // -h    # help : info about commands
-  {L"-p"    , TypeValue},    // -p    # Enable/disable PCIe RME 6.0 (RCiEP) compliance tests.
   {L"-mmio" , TypeFlag},     // -mmio # Enable pal_mmio prints
   {L"-t"    , TypeValue},    // -t    # Test to be run
   {L"-m"    , TypeValue},    // -m    # Module to be run
   {L"-p2p", TypeFlag},       // -p2p  # Peer-to-Peer is supported
   {L"-cache", TypeFlag},     // -cache# PCIe address translation cache is supported
-  {L"-timeout" , TypeValue}, // -timeout # Set timeout multiple for wakeup tests
   {NULL     , TypeMax}
   };
 
@@ -299,8 +336,6 @@ ShellAppMainrme (
   CONST CHAR16       *CmdLineArg;
   CHAR16             *ProbParam;
   UINT32             Status;
-  UINT32             ReadVerbosity;
-  UINT32             i,j=0;
   VOID               *branch_label;
 
 
@@ -310,38 +345,96 @@ ShellAppMainrme (
   Status = ShellInitialize();
   Status = ShellCommandLineParse (ParamList, &ParamPackage, &ProbParam, TRUE);
   if (Status) {
-    Print(L"Shell command line parse error %x\n", Status);
-    Print(L"Unrecognized option %s passed\n", ProbParam);
+    Print(L"\nShell command line parse error %x", Status);
+    Print(L"\nUnrecognized option %s passed", ProbParam);
     HelpMsg();
     return SHELL_INVALID_PARAMETER;
   }
 
   // Options with Values
-  if (ShellCommandLineGetFlag (ParamPackage, L"-skip")) {
-      CmdLineArg  = ShellCommandLineGetValue (ParamPackage, L"-skip");
-      for (i=0 ; i < StrLen(CmdLineArg) ; i++){
-        g_skip_test_num[0] = StrDecimalToUintn((CONST CHAR16 *)(CmdLineArg+0));
-          if(*(CmdLineArg+i) == L','){
-              g_skip_test_num[++j] = StrDecimalToUintn((CONST CHAR16 *)(CmdLineArg+i+1));
+  if (ShellCommandLineGetFlag(ParamPackage, L"-skip")) {
+      CmdLineArg = ShellCommandLineGetValue(ParamPackage, L"-skip");
+
+      if (CmdLineArg != NULL) {
+          UINTN str_len = StrLen(CmdLineArg);
+          EFI_STATUS Status;
+          Status = gBS->AllocatePool(EfiBootServicesData,
+                                     str_len * sizeof(CHAR8 *),
+                                     (VOID **)&g_skip_test_str);
+          if (EFI_ERROR(Status)) {
+              Print(L"\nError: Unable to allocate memory for skip string array");
+              return SHELL_OUT_OF_RESOURCES;
+          }
+          CHAR16 *WorkingStr = AllocateCopyPool(StrSize(CmdLineArg), CmdLineArg);
+          if (WorkingStr == NULL) {
+              Print(L"\nError: Unable to allocate memory for skip string");
+              return SHELL_OUT_OF_RESOURCES;
+          }
+
+          CHAR16 *Token = WorkingStr;
+
+          while (*Token != L'\0' && g_num_skip < str_len) {
+              CHAR16 *Next = StrStr(Token, L",");
+              if (Next != NULL)
+                  *Next = L'\0';
+
+              // Trim leading spaces
+              while (*Token == L' ') Token++;
+
+              // Trim trailing spaces
+              CHAR16 *End = Token + StrLen(Token) - 1;
+              while (End > Token && *End == L' ') {
+                  *End = L'\0';
+                  End--;
+              }
+              UINTN Len = StrLen(Token);
+              g_skip_test_str[g_num_skip] = AllocateZeroPool(Len + 1);
+              if (g_skip_test_str[g_num_skip]) {
+                  UnicodeStrToAsciiStrS(Token, g_skip_test_str[g_num_skip], Len + 1);
+                  g_num_skip++;
+              }
+              if (Next != NULL)
+                  Token = Next + 1;
+              else
+                  break;
           }
       }
   }
 
-
-    // Options with Values
+  // Options with Values
   CmdLineArg  = ShellCommandLineGetValue (ParamPackage, L"-v");
-  if (CmdLineArg == NULL) {
-    g_print_level = G_PRINT_LEVEL;
+  if (CmdLineArg != NULL) {
+    CHAR16 *token;
+    CHAR16 *next = (CHAR16 *)CmdLineArg;
+
+    g_print_level = 1;  // Default to verbose
+
+      while ((token = StrStr(next, L",")) != NULL) {
+        *token = L'\0'; // Null-terminate current token
+
+        if (StrCmp(next, L"rme") == 0)         g_enable_module |= (1 << 0);
+        else if (StrCmp(next, L"gic") == 0)    g_enable_module |= (1 << 1);
+        else if (StrCmp(next, L"smmu") == 0)   g_enable_module |= (1 << 2);
+        else if (StrCmp(next, L"da") == 0)     g_enable_module |= (1 << 3);
+        else if (StrCmp(next, L"dpt") == 0)    g_enable_module |= (1 << 4);
+        else if (StrCmp(next, L"mec") == 0)    g_enable_module |= (1 << 5);
+        else if (StrCmp(next, L"ls") == 0)     g_enable_module |= (1 << 6);
+
+        next = token + 1; // Move past the comma
+      }
+
+      // Handle the last (or only) token
+      if (*next != L'\0') {
+        if (StrCmp(next, L"rme") == 0)         g_enable_module |= (1 << 0);
+        else if (StrCmp(next, L"gic") == 0)    g_enable_module |= (1 << 1);
+        else if (StrCmp(next, L"smmu") == 0)   g_enable_module |= (1 << 2);
+        else if (StrCmp(next, L"da") == 0)     g_enable_module |= (1 << 3);
+        else if (StrCmp(next, L"dpt") == 0)    g_enable_module |= (1 << 4);
+        else if (StrCmp(next, L"mec") == 0)    g_enable_module |= (1 << 5);
+        else if (StrCmp(next, L"ls") == 0)     g_enable_module |= (1 << 6);
+      }
   } else {
-    ReadVerbosity = StrDecimalToUintn(CmdLineArg);
-    while (ReadVerbosity/10) {
-      g_enable_module |= (1 << ReadVerbosity%10);
-      ReadVerbosity /= 10;
-    }
-    g_print_level = ReadVerbosity;
-    if (g_print_level > 5) {
-      g_print_level = G_PRINT_LEVEL;
-    }
+    g_print_level = G_PRINT_LEVEL;
   }
 
   // Options with Values
@@ -350,7 +443,7 @@ ShellAppMainrme (
     g_wakeup_timeout = 1;
   } else {
     g_wakeup_timeout = StrDecimalToUintn(CmdLineArg);
-    Print(L"Wakeup timeout multiple %d.\n", g_wakeup_timeout);
+    Print(L"\nWakeup timeout multiple %d.", g_wakeup_timeout);
     if (g_wakeup_timeout > 5)
         g_wakeup_timeout = 5;
     }
@@ -363,7 +456,7 @@ ShellAppMainrme (
     Status = ShellOpenFileByName(CmdLineArg, &g_rme_log_file_handle,
              EFI_FILE_MODE_WRITE | EFI_FILE_MODE_READ | EFI_FILE_MODE_CREATE, 0x0);
     if(EFI_ERROR(Status)) {
-         Print(L"Failed to open log file %s\n", CmdLineArg);
+         Print(L"\nFailed to open log file %s", CmdLineArg);
          g_rme_log_file_handle = NULL;
     }
   }
@@ -394,21 +487,113 @@ ShellAppMainrme (
   }
 
 
-  // Options with Values
-  CmdLineArg  = ShellCommandLineGetValue (ParamPackage, L"-t");
-  if (CmdLineArg != NULL) {
-    g_single_test = StrDecimalToUintn(CmdLineArg);
-  }
+// Options with Values
+CmdLineArg = ShellCommandLineGetValue(ParamPackage, L"-t");
+if (CmdLineArg != NULL) {
+    UINTN str_len = StrLen(CmdLineArg);
+    EFI_STATUS Status;
+    Status = gBS->AllocatePool(EfiBootServicesData,
+                               str_len * sizeof(CHAR8 *),
+                               (VOID **)&g_execute_tests_str);
+    if (EFI_ERROR(Status)) {
+        Print(L"\nError: Unable to allocate memory for execute test string array");
+        return SHELL_OUT_OF_RESOURCES;
+    }
+
+    CHAR16 *WorkingStr = AllocateCopyPool(StrSize(CmdLineArg), CmdLineArg);
+    if (WorkingStr == NULL) {
+        Print(L"\nError: Unable to allocate memory for test string");
+        return SHELL_OUT_OF_RESOURCES;
+    }
+
+    CHAR16 *Token = WorkingStr;
+    UINTN j = 0;
+
+    while (*Token != L'\0' && j < str_len) {
+        CHAR16 *Next = StrStr(Token, L",");
+        if (Next != NULL)
+            *Next = L'\0';
+
+        // Trim leading spaces
+        while (*Token == L' ') Token++;
+
+        // Trim trailing spaces
+        CHAR16 *End = Token + StrLen(Token) - 1;
+        while (End > Token && *End == L' ') {
+            *End = L'\0';
+            End--;
+        }
+
+        UINTN Len = StrLen(Token);
+        g_execute_tests_str[g_num_tests] = AllocateZeroPool(Len + 1);
+        if (g_execute_tests_str[g_num_tests]) {
+            UnicodeStrToAsciiStrS(Token, g_execute_tests_str[g_num_tests], Len + 1);
+            g_num_tests++;
+        }
+        if (Next != NULL)
+            Token = Next + 1;
+        else
+            break;
+        j++;
+    }
+}
 
   // Options with Values
-  CmdLineArg  = ShellCommandLineGetValue (ParamPackage, L"-m");
-  if (CmdLineArg != NULL) {
-    g_single_module = StrDecimalToUintn(CmdLineArg);
-  }
+CmdLineArg = ShellCommandLineGetValue(ParamPackage, L"-m");
+if (CmdLineArg != NULL) {
+    UINTN str_len = StrLen(CmdLineArg);
+    EFI_STATUS Status;
+    Status = gBS->AllocatePool(EfiBootServicesData,
+                               str_len * sizeof(CHAR8 *),
+                               (VOID **)&g_execute_modules_str);
+    if (EFI_ERROR(Status)) {
+        Print(L"\nError: Unable to allocate memory for execute module string array");
+        return SHELL_OUT_OF_RESOURCES;
+    }
+
+    CHAR16 *WorkingStr = AllocateCopyPool(StrSize(CmdLineArg), CmdLineArg);
+    if (WorkingStr == NULL) {
+        Print(L"\nError: Unable to allocate memory for module string");
+        return SHELL_OUT_OF_RESOURCES;
+    }
+
+    CHAR16 *Token = WorkingStr;
+    UINTN j = 0;
+
+    while (*Token != L'\0' && j < str_len) {
+        CHAR16 *Next = StrStr(Token, L",");
+        if (Next != NULL)
+            *Next = L'\0';
+
+        // Trim leading spaces
+        while (*Token == L' ') Token++;
+
+        // Trim trailing spaces
+        CHAR16 *End = Token + StrLen(Token) - 1;
+        while (End > Token && *End == L' ') {
+            *End = L'\0';
+            End--;
+        }
+
+        UINTN Len = StrLen(Token);
+        g_execute_modules_str[g_num_modules] = AllocateZeroPool(Len + 1);
+        if (g_execute_modules_str[g_num_modules]) {
+            UnicodeStrToAsciiStrS(Token, g_execute_modules_str[g_num_modules], Len + 1);
+            g_num_modules++;
+        }
+        if (Next != NULL)
+            Token = Next + 1;
+        else
+            break;
+        j++;
+    }
+}
 
   //
   // Initialize global counters
   //
+  g_print_in_test_context = 0;
+  g_print_test_check_id = 0;
   g_rme_tests_total = 0;
   g_rme_tests_pass  = 0;
   g_rme_tests_fail  = 0;
@@ -419,7 +604,7 @@ ShellAppMainrme (
   Print(L"\n Starting tests for (Print level is %2d)\n\n", g_print_level);
 
 
-  Print(L" Creating Platform Information Tables \n");
+  Print(L" Creating Platform Information Tables ");
   Status = createPeInfoTable();
   if (Status)
     return Status;
@@ -445,39 +630,35 @@ ShellAppMainrme (
   */
   configureGicIts();
 
+  /* Create the platform config tables for the RME Issue A tests */
+  createMemCfgInfoTable();
+
   /* Configure SMMUs, PCIe and Exerciser tables required for the ACS */
   Status = val_configure_acs();
   if (Status)
     return Status;
 
-  Print(L"\n      *** Starting RME tests ***  \n");
   Status |= val_rme_execute_tests(val_pe_get_num());
 
-  Print(L"\n      *** Starting Legacy System tests ***  \n");
   Status |= val_legacy_execute_tests(val_pe_get_num());
 
-  Print(L"\n      *** Starting GIC test ***  \n");
   Status |= val_gic_execute_tests(val_pe_get_num());
 
-  Print(L"\n      *** Starting IO Virtualization tests ***  \n");
   Status |= val_smmu_execute_tests(val_pe_get_num());
 
-  Print(L"\n      *** Starting RME DA tests ***  \n");
   Status |= val_rme_da_execute_tests(val_pe_get_num());
 
-  Print(L"\n      *** Starting RME DPT tests ***  \n");
   Status |= val_rme_dpt_execute_tests(val_pe_get_num());
 
-  Print(L"\n      *** Starting RME MEC tests ***  \n");
   Status |= val_rme_mec_execute_tests(val_pe_get_num());
 
 
 print_test_status:
-  val_print(ACS_PRINT_TEST, "\n     ------------------------------------------------------- \n", 0);
-  val_print(ACS_PRINT_TEST, "     Total Tests run  = %4d;", g_rme_tests_total);
-  val_print(ACS_PRINT_TEST, "  Tests Passed  = %4d", g_rme_tests_pass);
-  val_print(ACS_PRINT_TEST, "  Tests Failed = %4d\n", g_rme_tests_fail);
-  val_print(ACS_PRINT_TEST, "     --------------------------------------------------------- \n", 0);
+  val_print(ACS_PRINT_ALWAYS, "\n------------------------------------------------------- \n", 0);
+  val_print(ACS_PRINT_ALWAYS, " Total Tests run  = %4d;", g_rme_tests_total);
+  val_print(ACS_PRINT_ALWAYS, " Tests Passed  = %4d", g_rme_tests_pass);
+  val_print(ACS_PRINT_ALWAYS, " Tests Failed = %4d\n", g_rme_tests_fail);
+  val_print(ACS_PRINT_ALWAYS, "--------------------------------------------------------- \n", 0);
 
   freeRmeAcsMem();
 
@@ -485,7 +666,7 @@ print_test_status:
     ShellCloseFile(&g_rme_log_file_handle);
   }
 
-  Print(L"\n      *** RME tests complete. Reset the system. *** \n\n");
+  Print(L"\n********* RME tests complete. Reset the system *********\n\n");
 
   val_pe_context_restore(AA64WriteSp(g_stack_pointer));
 

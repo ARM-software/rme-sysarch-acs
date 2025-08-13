@@ -79,7 +79,7 @@ pal_mmio_read8(uint64_t addr)
 
   data = (*(volatile uint8_t *)addr);
   if (g_print_mmio || (g_curr_module & g_enable_module))
-      print(ACS_PRINT_INFO, " pal_mmio_read8 Address = %llx  Data = %lx \n", addr, data);
+      print(ACS_PRINT_INFO, " pal_mmio_read8 Address = %llx  Data = %lx ", addr, data);
 
   return data;
 }
@@ -99,7 +99,7 @@ pal_mmio_read16(uint64_t addr)
 
   data = (*(volatile uint16_t *)addr);
   if (g_print_mmio || (g_curr_module & g_enable_module))
-      print(ACS_PRINT_INFO, " pal_mmio_read16 Address = %llx  Data = %lx \n", addr, data);
+      print(ACS_PRINT_INFO, " pal_mmio_read16 Address = %llx  Data = %lx ", addr, data);
 
   return data;
 }
@@ -119,7 +119,7 @@ pal_mmio_read64(uint64_t addr)
 
   data = (*(volatile uint64_t *)addr);
   if (g_print_mmio || (g_curr_module & g_enable_module))
-      print(ACS_PRINT_INFO, " pal_mmio_read64 Address = %llx  Data = %llx \n", addr, data);
+      print(ACS_PRINT_INFO, " pal_mmio_read64 Address = %llx  Data = %llx ", addr, data);
 
   return data;
 }
@@ -140,7 +140,7 @@ pal_mmio_read(uint64_t addr)
   data = (*(volatile uint32_t *)addr);
 
   if (g_print_mmio || (g_curr_module & g_enable_module))
-      print(ACS_PRINT_INFO, " pal_mmio_read Address = %llx  Data = %x \n", addr, data);
+      print(ACS_PRINT_INFO, " pal_mmio_read Address = %llx  Data = %x ", addr, data);
 
   return data;
 
@@ -159,7 +159,7 @@ void
 pal_mmio_write8(uint64_t addr, uint8_t data)
 {
   if (g_print_mmio || (g_curr_module & g_enable_module))
-      print(ACS_PRINT_INFO, " pal_mmio_write8 Address = %llx  Data = %lx \n", addr, data);
+      print(ACS_PRINT_INFO, " pal_mmio_write8 Address = %llx  Data = %lx ", addr, data);
 
   *(volatile uint8_t *)addr = data;
 }
@@ -177,7 +177,7 @@ void
 pal_mmio_write16(uint64_t addr, uint16_t data)
 {
   if (g_print_mmio || (g_curr_module & g_enable_module))
-      print(ACS_PRINT_INFO, " pal_mmio_write16 Address = %llx  Data = %lx \n", addr, data);
+      print(ACS_PRINT_INFO, " pal_mmio_write16 Address = %llx  Data = %lx ", addr, data);
 
   *(volatile uint16_t *)addr = data;
 }
@@ -195,7 +195,7 @@ void
 pal_mmio_write64(uint64_t addr, uint64_t data)
 {
   if (g_print_mmio || (g_curr_module & g_enable_module))
-      print(ACS_PRINT_INFO, " pal_mmio_write64 Address = %llx  Data = %llx \n", addr, data);
+      print(ACS_PRINT_INFO, " pal_mmio_write64 Address = %llx  Data = %llx ", addr, data);
 
   *(volatile uint64_t *)addr = data;
 }
@@ -214,12 +214,12 @@ pal_mmio_write(uint64_t addr, uint32_t data)
 {
 
   if (addr & 0x3) {
-      print(ACS_PRINT_WARN, "\n  Error-Input address is not aligned. Masking the last 2 bits \n");
+      print(ACS_PRINT_WARN, "  Error-Input address is not aligned. Masking the last 2 bits ");
       addr = addr & ~(0x3);  //make sure addr is aligned to 4 bytes
   }
 
   if (g_print_mmio || (g_curr_module & g_enable_module))
-      print(ACS_PRINT_INFO, " pal_mmio_write Address = %8x  Data = %x \n", addr, data);
+      print(ACS_PRINT_INFO, " pal_mmio_write Address = %8x  Data = %x ", addr, data);
 
     *(volatile uint32_t *)addr = data;
 }
@@ -417,14 +417,14 @@ pal_mem_alloc_cacheable(uint32_t Bdf, uint32_t Size, void **Pa)
                                EFI_SIZE_TO_PAGES(Size),
                                &Address);
   if (EFI_ERROR(Status)) {
-    print(ACS_PRINT_ERR, "Allocate Pool failed %x \n", Status);
+    print(ACS_PRINT_ERR, "Allocate Pool failed %x ", Status);
     return NULL;
   }
 
   /* Check Whether Cpu architectural protocol is installed */
   Status = gBS->LocateProtocol ( &gEfiCpuArchProtocolGuid, NULL, (VOID **)&Cpu);
   if (EFI_ERROR(Status)) {
-    print(ACS_PRINT_ERR, "Could not get Cpu Arch Protocol %x \n", Status);
+    print(ACS_PRINT_ERR, "Could not get Cpu Arch Protocol %x ", Status);
     return NULL;
   }
 
@@ -434,7 +434,7 @@ pal_mem_alloc_cacheable(uint32_t Bdf, uint32_t Size, void **Pa)
                                      Size,
                                      EFI_MEMORY_WB);
   if (EFI_ERROR (Status)) {
-    print(ACS_PRINT_ERR, "Could not Set Memory Attribute %x \n", Status);
+    print(ACS_PRINT_ERR, "Could not Set Memory Attribute %x ", Status);
     return NULL;
   }
 
@@ -567,7 +567,7 @@ pal_mem_alloc_pages (uint32_t NumPages)
                                &PageBase);
   if (EFI_ERROR(Status))
   {
-    print(ACS_PRINT_ERR, " Allocate Pages failed %x \n", Status);
+    print(ACS_PRINT_ERR, " Allocate Pages failed %x ", Status);
     return NULL;
   }
 
@@ -704,32 +704,10 @@ uint32_t pal_strncmp(const char8_t *str1, const char8_t *str2, uint32_t len)
     }
 }
 
-void *pal_strncpy(void *DestinationStr, const void *SourceStr, uint32_t Length)
-{
-  const char *s = SourceStr;
-  char *d = DestinationStr;
-
-  if (d == NULL) {
-      return NULL;
-  }
-
-  char* ptr = d;
-
-  while (*s && Length--)
-  {
-      *d = *s;
-      d++;
-      s++;
-  }
-  *d = '\0';
-
-  return ptr;
-}
-
 int32_t
 pal_mem_compare(void *Src, void *Dest, uint32_t Len)
 {
-    if (Len != 0) {
+  if (Len != 0) {
     register const unsigned char *p1 = Dest, *p2 = Src;
 
     do {
@@ -756,41 +734,41 @@ pal_mem_set(void *buf, uint32_t size, uint8_t value)
 /**
  @brief Writes the reset status on Non-Volatile memory.
 
- @param RME_ACS_NVM_MEM Address of Non-Volatile memory
+ @param rme_nvm_mem Address of Non-Volatile memory
  @param status          Status to be saved on the memory.
 
  @return None
 **/
 void
 pal_write_reset_status(
-  uint64_t RME_ACS_NVM_MEM,
+  uint64_t rme_nvm_mem,
   uint32_t status
   )
 {
-  *(uint32_t *)RME_ACS_NVM_MEM = status;
+  *(uint32_t *)rme_nvm_mem = status;
 }
 
 /**
  @brief Reads the reset status from Non-Volatile memory.
 
- @param RME_ACS_NVM_MEM Address of Non-Volatile memory
+ @param rme_nvm_mem Address of Non-Volatile memory
  @param status          Status to be saved on the memory.
 
  @return None
 **/
 uint32_t
 pal_read_reset_status(
-  uint64_t RME_ACS_NVM_MEM
+  uint64_t rme_nvm_mem
   )
 {
-  return (*(uint32_t *)RME_ACS_NVM_MEM);
+  return (*(uint32_t *)rme_nvm_mem);
 }
 
 /**
   @brief Saves the test status, i.e., total tests, tests
          passed and tests failed before any system reset
          on Non-Volatile Memory.
-  @param RME_ACS_NVM_MEM Address for Non-Volatile memory
+  @param rme_nvm_mem Address for Non-Volatile memory
   @param rme_tests_total Total rme tests
   @param rme_tests_pass  Tests PASSED
   @param rme_tests_fail  Tests FAILED
@@ -799,7 +777,7 @@ pal_read_reset_status(
 **/
 void
 pal_save_global_test_data(
-  uint64_t RME_ACS_NVM_MEM,
+  uint64_t rme_nvm_mem,
   uint32_t rme_tests_total,
   uint32_t rme_tests_pass,
   uint32_t rme_tests_fail
@@ -808,7 +786,7 @@ pal_save_global_test_data(
 
   uint32_t *addr;
 
-  addr = (uint32_t *)(RME_ACS_NVM_MEM + 0x10);
+  addr = (uint32_t *)(rme_nvm_mem + 0x10);
   *addr = rme_tests_total;
   *(addr + 1) = rme_tests_pass;
   *(addr + 2) = rme_tests_fail;
@@ -818,7 +796,7 @@ pal_save_global_test_data(
   @brief Restores the tests status i.e., total tests, tests
          passed and tests failed from Non-Volatile Memory
          after a system reset.
-  @param RME_ACS_NVM_MEM Address for Non-Volatile memory
+  @param rme_nvm_mem Address for Non-Volatile memory
   @param rme_tests_total Total rme tests
   @param rme_tests_pass  Tests PASSED
   @param rme_tests_fail  Tests FAILED
@@ -827,7 +805,7 @@ pal_save_global_test_data(
 **/
 void
 pal_restore_global_test_data(
-  uint64_t RME_ACS_NVM_MEM,
+  uint64_t rme_nvm_mem,
   uint32_t *rme_tests_total,
   uint32_t *rme_tests_pass,
   uint32_t *rme_tests_fail
@@ -835,7 +813,7 @@ pal_restore_global_test_data(
 {
   uint32_t *addr;
 
-  addr = (uint32_t *)(RME_ACS_NVM_MEM + 0x10);
+  addr = (uint32_t *)(rme_nvm_mem + 0x10);
   *rme_tests_total = *addr;
   *rme_tests_pass = *(addr + 1);
   *rme_tests_fail = *(addr + 2);

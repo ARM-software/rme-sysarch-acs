@@ -28,11 +28,11 @@ Most of the tests are executed from UEFI Shell by executing the RME UEFI shell a
   - To get the latest version of the code with bug fixes and new features, use the master branch.
 
 ## Additional reading
-  - For information about the implementable RME rules test algorithm and for unimplemented RME rules, see [arm RME System ACS Scenario document](Docs/Arm_RME_System_Architecture_Compliance_Suite_Scenario_Document.pdf)
-  - For details on the RME System ACS UEFI Shell Application, see [arm RME System ACS User guide document](Docs/Arm_RME_System_Architecture_Compliance_Suite_User_Guide.pdf).
+  - For information about the implementable RME rules test algorithm and for unimplemented RME rules, see [arm RME System ACS Scenario document](Docs/Arm_RME_System_Architecture_Compliance_Suite_Scenario_Document.rst)
+  - For details on the RME System ACS UEFI Shell Application, see [arm RME System ACS Porting guide document](Docs/Arm_RME_System_ACS_Platform_porting_guide.rst).
   - For details on the Design of the RME System ACS, see. the [arm RME System ACS Validation Methodology document](Docs/Arm_RME_System_Architecture_Compliance_Suite_Validation_Methodology.pdf)
   - For details on the RME ACS Bare-metal support, see the
-          - [arm RME System ACS Baremetal user guide document](Docs/Arm_RME_System_Architecture_Compliance_Suite_Bare-metal_User_Guide.pdf)
+          - [arm RME System ACS Porting guide document](Docs/Arm_RME_System_ACS_Platform_porting_guide.rst)
           - [Baremetal code](platform/pal_baremetal/)
 
 ## Target platforms
@@ -56,11 +56,8 @@ For more information, see [arm RME System ACS Validation Methodology document](D
     Before starting the ACS build, ensure that the following requirements are met.
 
 - Partner needs to provide their inputs to these following files...
-   - val/src/sys_config.c, 
-   - val/include/sys_config.h
-   - val/include/platform_overrride_fvp.h.
-- Partner can refer [RME_ACS_SysARCUI_Tool](tools/SysARCUI/README.md) for generating val/src/sys_config.c and val/include/platform_overrride_fvp.h files based on the memory mapping of their respective platform.
-- Partners are welcome to give their feedback on this tool improvement.
+   - platform/pal_baremetal/FVP/include/platform_override_fvp.h -> For Bare-metal platform,
+   - platform/pal_uefi/include/platform_overrride_fvp.h -> For UEFI platform.
 - Any mainstream Linux based OS distribution running on a x86 or aarch64 machine.
 - git clone --branch edk2-stable202208 --depth 1 https://github.com/tianocore/edk2
 - git clone https://github.com/tianocore/edk2-libc [ Checkout SHA: 61687168fe02ac4d933a36c9145fdd242ac424d1]
@@ -88,16 +85,6 @@ If the build environment is Linux, perform the following steps:
 5.  Change each "SBSA" string to "RME" string in MdePkg/Include/IndustryStandard/Acpi61.h using the command, ":%s/SBSA/RME/g"
 5.  source ShellPkg/Application/rme-acs/tools/scripts/acsbuild.sh
 
-### Windows build environment
-If the build environment is Windows, perform the following steps:
-1. Set the toolchain path to GCC13.2 or above.
-2. Setup the environment for AARCH64 EDK2 build.
-3. Setup the environment for PACKAGES_PATH.
-4. Build the RME shell application.
-   For example,
-   build -a AARCH64 -t GCC49 -p ShellPkg/ShellPkg.dsc -m
-   ShellPkg/Application/rme-acs/uefi_app/RmeAcs.inf
-
 ### Build output
 
 The EFI executable file is generated at <edk2_path>/Build/Shell/DEBUG_GCC49/AARCH64/Rme.efi
@@ -107,7 +94,7 @@ The EFI executable file is generated at <edk2_path>/Build/Shell/DEBUG_GCC49/AARC
 
 The execution of the compliance suite varies depending on the test environment. These steps assume that the test suite is invoked through the ACS UEFI shell application.
 
-##For details about the RME System ACS UEFI Shell application, see [Arm RME System ACS USER Guide](Docs/Arm_RME_System_Architecture_Compliance_Suite_User_Guide.pdf)
+##For details about the RME System ACS UEFI Shell application, see [Arm RME System ACS Porting Guide](Docs/Arm_RME_System_ACS_Platform_porting_guide.rst)
 
 ### Post-Silicon
 
@@ -119,7 +106,7 @@ On a system where a USB port is available and functional, perform the following 
 4. To determine the file system number of the plugged in USB drive, execute 'map -r' command.
 5. Type 'fsx' where 'x' is replaced by the number determined in step 4.
 6. To start the compliance tests, run the executable Rme.efi with the appropriate parameters.
-   For details on the parameters, refer to [Arm RME System ACS USER Guide](Docs/Arm_RME_System_Architecture_Compliance_Suite_User_Guide.pdf).
+   For details on the parameters, refer to [Arm RME System ACS Porting Guide](Docs/Arm_RME_System_ACS_Platform_porting_guide.rst).
 7. Copy the UART console output to a log file for analysis and certification.
 
 
@@ -136,7 +123,7 @@ On an emulation environment with secondary storage, perform the following steps:
 4. To determine the file system number of the secondary storage, execute 'map -r' command.
 5. Type 'fsx' where 'x' is replaced by the number determined in step 4.
 6. To start the compliance tests, run the executable Rme.efi with the appropriate parameters.
-   For details on the parameters, see the [Arm RME System ACS USER Guide](Docs/Arm_RME_System_Architecture_Compliance_Suite_User_Guide.pdf)
+   For details on the parameters, see the [Arm RME System ACS Porting Guide](Docs/Arm_RME_System_ACS_Platform_porting_guide.rst)
 7. Copy the UART console output to a log file for analysis and certification.
 
 
@@ -148,7 +135,7 @@ On an emulation platform where secondary storage is not available, perform the f
 2. Build UEFI image including the UEFI Shell.
 3. Boot the system to UEFI shell.
 4. Run the executable 'Rme.efi' to start the compliance tests. For details about the parameters,
-   see the [Arm RME System ACS USER Guide](Docs/Arm_RME_System_Architecture_Compliance_Suite_User_Guide.pdf)
+   see the [Arm RME System ACS Porting Guide](Docs/Arm_RME_System_ACS_Platform_porting_guide.rst)
 5. Copy the UART console output to a log file for analysis and certification.
 
 
@@ -162,9 +149,8 @@ Below tests are not qualified in model. These are expected to pass in any valid 
   - test_pool/legacy_system/test_ls002.c - Require Legacy TZ Support.
   - test_pool/legacy_system/test_ls003.c - Require Legacy TZ Support.
   - test_pool/legacy_system/test_ls004.c - Require Legacy TZ Support.
-  - test_pool/rme/test_rme029.c - Model Issue.
+  - test_pool/rme/pas_filter_check_in_inactive_mode.c - Model Issue.
   - test_pool/rme/test_rme022.c - Require NS encryption to be programmable.
-  - test_pool/gic/test_g001.c -   Model issue.
   - test_pool/rme/test_rme015.c - Model limitation.
   - test_pool/da/test_da019.c - ImpDef RP write-protect and full-protect registers not present in Model.
   - test_pool/da/test_da020.c - ImpDef interconnect registers not present in Model.
@@ -173,7 +159,7 @@ Below tests are not qualified in model. These are expected to pass in any valid 
 RME System ACS is distributed under Apache v2.0 License.
 
 ## [Feedback, contributions, and support]
--   For support, send an email to "[support-rme-sysarch-acs@arm.com](mailto:support-systemready-acs@arm.com)" with details.
+-   For support, send an email to "[support-rme-sysarch-acs@arm.com](mailto:support-rme-sysarch-acs@arm.com)" with details.
 -   Arm licensees may contact Arm directly through their partner managers.
 -   Arm welcomes code contributions through GitHub pull requests. See GitHub documentation on how to raise pull requests.
 

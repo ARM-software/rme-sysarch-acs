@@ -51,7 +51,6 @@
   src/acs_pgt.c
   src/acs_el3.c
   src/acs_legacy.c
-  src/sys_config.c
   sys_arch_src/smmu_v3/smmu_v3.c
   sys_arch_src/gic/gic.c
   sys_arch_src/gic/rme_exception.c

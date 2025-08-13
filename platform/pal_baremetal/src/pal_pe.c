@@ -135,7 +135,7 @@ PalAllocateSecondaryStack(uint64_t mpidr)
   {
       gSecondaryPeStack = pal_mem_alloc(NumPe * SIZE_STACK_SECONDARY_PE);
       if (gSecondaryPeStack == NULL){
-          print(ACS_PRINT_ERR, "FATAL - Allocation for Secondary stack failed \n", 0);
+          print(ACS_PRINT_ERR, "FATAL - Allocation for Secondary stack failed ", 0);
       }
       pal_pe_data_cache_ops_by_va((uint64_t)&gSecondaryPeStack, CLEAN_AND_INVALIDATE);
   }
@@ -417,10 +417,7 @@ pal_pe_get_num()
 uint32_t
 pal_psci_get_conduit(void)
 {
-   #ifdef ENABLE_OOB
-      return CONDUIT_HVC;
-   #endif
-  return CONDUIT_NONE;
+  return CONDUIT_SMC;
 }
 
 uint32_t pal_get_cpu_count(void)

@@ -41,7 +41,7 @@ void val_exerciser_create_info_table(void)
   /* if no bdf table ptr return error */
   if (bdf_table->num_entries == 0)
   {
-      val_print(ACS_PRINT_DEBUG, "\n       No BDFs discovered            ", 0);
+      val_print(ACS_PRINT_DEBUG, " No BDFs discovered            ", 0);
       return;
   }
 
@@ -54,7 +54,7 @@ void val_exerciser_create_info_table(void)
       if (val_pcie_read_cfg(Bdf, TYPE01_VIDR, &reg_value) == PCIE_NO_MAPPING)
       {
           /* Return if there is a bdf mapping issue */
-          val_print(ACS_PRINT_ERR, "\n      BDF 0x%x mapping issue", Bdf);
+          val_print(ACS_PRINT_ERR, " BDF 0x%x mapping issue", Bdf);
           return;
       }
 
@@ -63,10 +63,10 @@ void val_exerciser_create_info_table(void)
       {
           g_exerciser_info_table.e_info[g_exerciser_info_table.num_exerciser].bdf = Bdf;
           g_exerciser_info_table.e_info[g_exerciser_info_table.num_exerciser++].initialized = 0;
-          val_print(ACS_PRINT_DEBUG, "    exerciser Bdf %x\n", Bdf);
+          val_print(ACS_PRINT_DEBUG, " exerciser Bdf %x", Bdf);
       }
   }
-  val_print(ACS_PRINT_TEST, " PCIE_INFO: Number of exerciser cards : %4d\n",
+  val_print(ACS_PRINT_ALWAYS, "\n PCIE_INFO: Number of exerciser cards : %4d",
                                                              g_exerciser_info_table.num_exerciser);
   return;
 }
@@ -125,7 +125,7 @@ uint32_t val_get_exerciser_err_info(EXERCISER_ERROR_CODE type)
     case UNCORR_PTLP_EGR_BLK:
          return UNCORR_PTLP_EGR_BLK_OFFSET;
     default:
-         val_print(ACS_PRINT_ERR, "\n   Invalid error offset ", 0);
+         val_print(ACS_PRINT_ERR, " Invalid error offset ", 0);
          return 0;
     }
 }
@@ -221,7 +221,7 @@ uint32_t val_exerciser_init(uint32_t instance)
   {
       Bdf = g_exerciser_info_table.e_info[instance].bdf;
       if (pal_exerciser_get_state(&state, Bdf) || (state != EXERCISER_ON)) {
-          val_print(ACS_PRINT_ERR, "\n   Exerciser Bdf %lx not ready", Bdf);
+          val_print(ACS_PRINT_ERR, " Exerciser Bdf %lx not ready", Bdf);
           return 1;
       }
 
@@ -238,7 +238,7 @@ uint32_t val_exerciser_init(uint32_t instance)
 
       g_exerciser_info_table.e_info[instance].initialized = 1;
   } else
-          val_print(ACS_PRINT_INFO, "\n  Already initialized %d", instance);
+          val_print(ACS_PRINT_INFO, " Already initialized %d", instance);
   return 0;
 }
 /**

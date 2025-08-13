@@ -24,8 +24,6 @@
 
 extern uint64_t tt_l0_base[];
 
-addr_t val_memory_ioremap(void *addr, uint32_t size, uint64_t attr);
-
 void val_memory_unmap(void *ptr);
 void *val_memory_alloc(uint32_t size);
 void *val_memory_calloc(uint32_t num, uint32_t size);
@@ -42,7 +40,10 @@ void val_memory_free_pages(void *page_base, uint32_t num_pages);
 void *val_aligned_alloc(uint32_t alignment, uint32_t size);
 void val_memory_free_aligned(void *addr);
 uint32_t val_memory_compare_src_el3(uint32_t *src, uint32_t *dest, uint32_t size);
+uint32_t val_strnlen(const char8_t *str);
 // NSEL2 MMU mem map APIs
+uint32_t val_setup_mmu(void);
+uint32_t val_enable_mmu(void);
 void val_mmu_add_mmap(void);
 void *val_mmu_get_mmap_list(void);
 uint32_t val_mmu_get_mapping_count(void);
@@ -54,5 +55,8 @@ extern void val_sctlr_write(uint64_t value, uint64_t el_num);
 extern uint64_t val_sctlr_read(uint64_t el_num);
 extern uint64_t val_ttbr0_read(uint64_t el_num);
 extern uint64_t val_read_current_el(void);
+
+uint32_t val_is_ns_encryption_programmable(void);
+uint32_t val_is_pas_filter_mode_programmable(void);
 
 #endif // __RME_ACS_MEMORY_H__

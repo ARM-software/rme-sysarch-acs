@@ -19,7 +19,7 @@
 
 #define TEST_DATA 0x999
 
-struct_sh_data *shared_data = (struct_sh_data *) SHARED_ADDRESS;
+struct_sh_data *shared_data = (struct_sh_data *) PLAT_SHARED_ADDRESS;
 
 void map_shared_mem(void)
 {
@@ -37,6 +37,7 @@ void rme_install_handler(void)
 {
   save_vbar_el3(armtf_handler);
   INFO("armtf_handler: 0x%lx\n", *(armtf_handler));
+  INFO("armtf_handler address: 0x%llx\n", ARM_TF_SHARED_ADDRESS);
   program_vbar_el3(&exception_handler_user);
 }
 
@@ -164,6 +165,13 @@ void plat_arm_acs_smc_handler(uint64_t services, uint64_t arg0, uint64_t arg1, u
   INFO("User SMC Call started for service = 0x%lx arg0 = 0x%lx arg1 = 0x%lx arg2 = 0x%lx \n",
         services, arg0, arg1, arg2);
 
+  bool mapped = ((at_s1e3w((uint64_t)shared_data)) & 0x1) != 0x1;
+
+  if (mapped) {
+    shared_data->status_code = 0;
+    shared_data->error_code = 0;
+    shared_data->error_msg[0] = '\0';
+  }
   switch (services)
   {
     case RME_INSTALL_HANDLER:
@@ -177,8 +185,19 @@ void plat_arm_acs_smc_handler(uint64_t services, uint64_t arg0, uint64_t arg1, u
       break;
     case RME_ADD_MMU_ENTRY:
       INFO("RME MMU mapping service \n");
-      add_mmu_entry(arg0, arg1, arg2);
-      tlbi_vae3(arg0);
+      if (add_mmu_entry(arg0, arg1, arg2) == 0) {
+          tlbi_vae3(arg0);
+          shared_data->status_code = 0;
+          shared_data->error_code = 0;
+          shared_data->error_msg[0] = '\0';
+      } else {
+          shared_data->status_code = 1;
+          const char *msg = "EL3: MMU entry addition failed";
+          int i = 0; while (msg[i] && i < sizeof(shared_data->error_msg) - 1) {
+              shared_data->error_msg[i] = msg[i]; i++;
+          }
+          shared_data->error_msg[i] = '\0';
+      }
       break;
     case RME_MAP_SHARED_MEM:
       map_shared_mem();
@@ -238,7 +257,10 @@ void plat_arm_acs_smc_handler(uint64_t services, uint64_t arg0, uint64_t arg1, u
       break;
     case SMMU_ROOT_SERVICE:
       INFO("ROOT SMMU service \n");
-      val_smmu_access_disable();
+      if (arg1)
+        val_smmu_access_enable(arg0);
+      else
+        val_smmu_access_disable(arg0);
       break;
     case SEC_STATE_CHANGE:
       INFO("Security STte change service \n");
@@ -250,7 +272,15 @@ void plat_arm_acs_smc_handler(uint64_t services, uint64_t arg0, uint64_t arg1, u
       break;
     case RME_PGT_CREATE:
       INFO("RME pgt_create service \n");
-      val_realm_pgt_create((memory_region_descriptor_t *)arg0, (pgt_descriptor_t *) arg1);
+      if (val_realm_pgt_create((memory_region_descriptor_t *)arg0, (pgt_descriptor_t *) arg1) != 0)
+      {
+          shared_data->status_code = 1;
+          const char *msg = "EL3: PGT creation failed";
+          int i = 0; while (msg[i] && i < sizeof(shared_data->error_msg) - 1) {
+              shared_data->error_msg[i] = msg[i]; i++;
+          }
+          shared_data->error_msg[i] = '\0';
+      }
       break;
     case RME_PGT_DESTROY:
       INFO("RME pgt_destroy service \n");
@@ -267,6 +297,15 @@ void plat_arm_acs_smc_handler(uint64_t services, uint64_t arg0, uint64_t arg1, u
       cmo_cipae(arg0);
       break;
     default:
+      if (mapped) {
+        shared_data->status_code = 0xFFFFFFFF;
+        const char *msg = "EL3: Unknown SMC service";
+        int i = 0;
+        while (msg[i] && i < sizeof(shared_data->error_msg) - 1) {
+              shared_data->error_msg[i] = msg[i]; i++;
+        }
+        shared_data->error_msg[i] = '\0';
+      }
       INFO(" Service not present\n");
       break;
   }

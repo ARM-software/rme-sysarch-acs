@@ -49,20 +49,20 @@ val_pe_create_info_table(uint64_t *pe_info_table)
 {
   gPsciConduit = pal_psci_get_conduit();
   if (gPsciConduit == CONDUIT_UNKNOWN) {
-      val_print(ACS_PRINT_WARN, " FADT not found, assuming SMC as PSCI conduit\n", 0);
+      val_print(ACS_PRINT_INFO, " FADT not found, assuming SMC as PSCI conduit", 0);
       gPsciConduit = CONDUIT_SMC;
   } else if (gPsciConduit == CONDUIT_NONE) {
-      val_print(ACS_PRINT_WARN, " PSCI not supported, assuming SMC as conduit for tests\n"
-                                " Multi-PE and wakeup tests likely to fail\n", 0);
+      val_print(ACS_PRINT_INFO, " PSCI not supported, assuming SMC as conduit for tests"
+                                " Multi-PE and wakeup tests likely to fail", 0);
       gPsciConduit = CONDUIT_SMC;
   } else if (gPsciConduit == CONDUIT_HVC)
-      val_print(ACS_PRINT_INFO, " Using HVC as PSCI conduit\n", 0);
+      val_print(ACS_PRINT_INFO, " Using HVC as PSCI conduit", 0);
   else
-      val_print(ACS_PRINT_INFO, " Using SMC as PSCI conduit\n", 0);
+      val_print(ACS_PRINT_INFO, " Using SMC as PSCI conduit", 0);
 
 
   if (pe_info_table == NULL) {
-      val_print(ACS_PRINT_ERR, "Input memory for PE Info table cannot be NULL \n", 0);
+      val_print(ACS_PRINT_ERR, "Input memory for PE Info table cannot be NULL ", 0);
       return ACS_STATUS_ERR;
   }
 
@@ -71,10 +71,10 @@ val_pe_create_info_table(uint64_t *pe_info_table)
   pal_pe_create_info_table(g_pe_info_table);
   val_data_cache_ops_by_va((addr_t)&g_pe_info_table, CLEAN_AND_INVALIDATE);
 
-  val_print(ACS_PRINT_TEST, " PE_INFO: Number of PE detected       : %4d \n", val_pe_get_num());
+  val_print(ACS_PRINT_ALWAYS, "\n PE_INFO: Number of PE detected       : %4d", val_pe_get_num());
 
   if (val_pe_get_num() == 0) {
-      val_print(ACS_PRINT_ERR, "\n *** CRITICAL ERROR: Num PE is 0x0 ***\n", 0);
+      val_print(ACS_PRINT_ERR, " *** CRITICAL ERROR: Num PE is 0x0 ***", 0);
       return ACS_STATUS_ERR;
   }
   return ACS_STATUS_PASS;
@@ -121,11 +121,7 @@ val_pe_get_mpid()
 {
   uint64_t data;
 
-  #ifdef TARGET_LINUX
-    data = 0;
-  #else
-    data = val_pe_reg_read(MPIDR_EL1);
-  #endif
+  data = val_pe_reg_read(MPIDR_EL1);
   /* Return the Affinity bits */
   data = data & MPIDR_AFF_MASK;
   return data;
@@ -146,7 +142,7 @@ val_pe_get_mpid_index(uint32_t index)
   PE_INFO_ENTRY *entry;
 
   if (index > g_pe_info_table->header.num_of_pe) {
-        val_report_status(index, RESULT_FAIL(0, 0xFF), NULL);
+        val_report_status(index, "FAIL");
         return 0xFFFFFF;
   }
 
@@ -234,8 +230,8 @@ val_execute_on_pe(uint32_t index, void (*payload)(void), uint64_t test_input)
   int timeout = TIMEOUT_LARGE;
 
   if (index > g_pe_info_table->header.num_of_pe) {
-      val_print(ACS_PRINT_ERR, "Input Index exceeds Num of PE %x \n", index);
-      val_report_status(index, RESULT_FAIL(0, 0xFF), NULL);
+      val_print(ACS_PRINT_ERR, "Input Index exceeds Num of PE %x ", index);
+      val_report_status(index, "FAIL");
       return;
   }
 
@@ -252,16 +248,16 @@ val_execute_on_pe(uint32_t index, void (*payload)(void), uint64_t test_input)
   } while (g_smc_args.Arg0 == (uint64_t)ARM_SMC_PSCI_RET_ALREADY_ON && timeout--);
 
   if (g_smc_args.Arg0 == (uint64_t)ARM_SMC_PSCI_RET_ALREADY_ON)
-      val_print(ACS_PRINT_ERR, "\n       PSCI_CPU_ON: cpu already on  ", 0);
+      val_print(ACS_PRINT_ERR, " PSCI_CPU_ON: cpu already on  ", 0);
   else {
       if (g_smc_args.Arg0 == 0) {
-          val_print(ACS_PRINT_INFO, "\n       PSCI_CPU_ON: success  ", 0);
+          val_print(ACS_PRINT_INFO, " PSCI_CPU_ON: success  ", 0);
           return;
       } else
-          val_print(ACS_PRINT_ERR, "\n       PSCI_CPU_ON: failure  ", 0);
+          val_print(ACS_PRINT_ERR, " PSCI_CPU_ON: failure  ", 0);
 
   }
-  val_set_status(index, RESULT_FAIL(0, 0x120 - (int)g_smc_args.Arg0));
+  val_set_status(index, "FAIL", (0x120 - (int)g_smc_args.Arg0));
 }
 
 /**
@@ -278,16 +274,14 @@ val_pe_install_esr(uint32_t exception_type, void (*esr)(uint64_t, void *))
 {
 
   if (exception_type > 3) {
-      val_print(ACS_PRINT_ERR, "Invalid Exception type %x \n", exception_type);
+      val_print(ACS_PRINT_ERR, " Invalid Exception type %x ", exception_type);
       return ACS_STATUS_ERR;
   }
 
-#ifndef TARGET_LINUX
   if (pal_target_is_bm())
       val_gic_rme_install_esr(exception_type, esr);
   else
       pal_pe_install_esr(exception_type, esr);
-#endif
 
   return 0;
 }
@@ -351,20 +345,19 @@ val_pe_default_esr(uint64_t interrupt_type, void *context)
     uint32_t index = val_pe_get_index_mpid(val_pe_get_mpid());
 
     val_print(ACS_PRINT_WARN,
-                 "\n        Unexpected exception of type %d occurred", interrupt_type);
+                 " Unexpected exception of type %d occurred", interrupt_type);
 
-#ifndef TARGET_LINUX
     if (pal_target_is_bm()) {
-        val_print(ACS_PRINT_WARN, "\n        FAR reported = 0x%llx", rme_gic_get_far());
-        val_print(ACS_PRINT_WARN, "\n        ESR reported = 0x%llx", rme_gic_get_esr());
-        val_print(ACS_PRINT_WARN, "\n        ELR reported = 0x%llx", rme_gic_get_elr());
+        val_print(ACS_PRINT_WARN, " FAR reported = 0x%llx", rme_gic_get_far());
+        val_print(ACS_PRINT_WARN, " ESR reported = 0x%llx", rme_gic_get_esr());
+        val_print(ACS_PRINT_WARN, " ELR reported = 0x%llx", rme_gic_get_elr());
     } else {
-        val_print(ACS_PRINT_WARN, "\n        FAR reported = 0x%llx", val_pe_get_far(context));
-        val_print(ACS_PRINT_WARN, "\n        ESR reported = 0x%llx", val_pe_get_esr(context));
-        val_print(ACS_PRINT_WARN, "\n        ELR reported = 0x%llx", val_pe_get_elr(context));
+        val_print(ACS_PRINT_WARN, " FAR reported = 0x%llx", val_pe_get_far(context));
+        val_print(ACS_PRINT_WARN, " ESR reported = 0x%llx", val_pe_get_esr(context));
+        val_print(ACS_PRINT_WARN, " ELR reported = 0x%llx", val_pe_get_elr(context));
     }
-#endif
-    val_set_status(index, RESULT_FAIL(0, 01));
+
+    val_set_status(index, "FAIL", 01);
     val_pe_update_elr(context, g_exception_ret_addr);
 }
 
@@ -379,7 +372,6 @@ val_pe_default_esr(uint64_t interrupt_type, void *context)
 void
 val_pe_cache_invalidate_range(uint64_t start_addr, uint64_t length)
 {
-#ifndef TARGET_LINUX
   uint64_t aligned_addr, end_addr, line_length;
 
   line_length = 2 << ((val_pe_reg_read(CTR_EL0) >> 16) & 0xf);
@@ -390,7 +382,6 @@ val_pe_cache_invalidate_range(uint64_t start_addr, uint64_t length)
       val_data_cache_ops_by_va(aligned_addr, INVALIDATE);
       aligned_addr += line_length;
   }
-#endif
 }
 
 /**
@@ -427,7 +418,6 @@ val_pe_cache_clean_invalidate_range(uint64_t start_addr, uint64_t length)
 void
 val_pe_cache_clean_range(uint64_t start_addr, uint64_t length)
 {
-#ifndef TARGET_LINUX
   uint64_t aligned_addr, end_addr, line_length;
 
   line_length = 2 << ((val_pe_reg_read(CTR_EL0) >> 16) & 0xf);
@@ -438,7 +428,6 @@ val_pe_cache_clean_range(uint64_t start_addr, uint64_t length)
       val_data_cache_ops_by_va(aligned_addr, CLEAN);
       aligned_addr += line_length;
   }
-#endif
 }
 
 /**

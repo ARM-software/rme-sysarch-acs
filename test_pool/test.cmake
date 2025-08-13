@@ -31,7 +31,7 @@
 
  # Compile all .c/.S files from test directory
  file(GLOB TEST_SRC
-     "${ROOT_DIR}/test_pool/*/test*.c"
+     "${ROOT_DIR}/test_pool/*/*.c"
  )
 
  # Create TEST library

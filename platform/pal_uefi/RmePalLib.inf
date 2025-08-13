@@ -40,7 +40,7 @@
   src/pal_exerciser.c
   src/pal_smmu.c
   src/pal_tdisp_spdm.c
-  src/pal_register.c
+  src/pal_plat_cfg.c
 
 [Packages]
   ArmPkg/ArmPkg.dec

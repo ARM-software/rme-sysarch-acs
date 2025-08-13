@@ -69,7 +69,7 @@ typedef struct {
 } GICv2m_MSI_FRAME_INFO;
 
 uint32_t
-g001_entry(uint32_t num_pe);
+gic_its_subjected_to_gpc_check_entry(uint32_t num_pe);
 uint32_t
 g002_entry(uint32_t num_pe);
 uint32_t

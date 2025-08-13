@@ -112,9 +112,7 @@ static int smmu_cmdq_write_cmd(smmu_dev_t *smmu, uint64_t *cmd)
         cmd_dst[i] = cmd[i];
     queue.prod = smmu_cmdq_inc_prod(&queue);
 
-#ifndef TARGET_LINUX
     mem_barrier();
-#endif
     val_mmio_write_el3((uint64_t)cmdq->prod_reg, queue.prod);
 
     return ret;
@@ -277,7 +275,7 @@ static uint32_t smmu_strtab_init_linear(smmu_dev_t *smmu)
         return 0;
     }
 
-    cfg->strtab_phys = align_to_size((uint64_t)val_memory_virt_to_phys(cfg->strtab_ptr), size);
+    cfg->strtab_phys = align_to_size((uint64_t)val_memory_virt_to_phys_el3(cfg->strtab_ptr), size);
     cfg->strtab64 = (uint64_t *)align_to_size((uint64_t)cfg->strtab_ptr, size);
     cfg->l1_ent_count = 1 << smmu->sid_bits;
     cfg->strtab_base_cfg = BITFIELD_SET(STRTAB_BASE_CFG_FMT, STRTAB_BASE_CFG_FMT_LINEAR) |
@@ -299,7 +297,7 @@ static uint32_t smmu_event_queue_init(smmu_dev_t *smmu)
         ERROR("\n      Failed to allocate queue struct.     ");
         return 0;
     }
-    eventq->base_phys = (uint64_t)val_memory_virt_to_phys(eventq->base_ptr);
+    eventq->base_phys = (uint64_t)val_memory_virt_to_phys_el3(eventq->base_ptr);
     eventq->base = (uint8_t *)eventq->base_ptr;
 
     eventq->prod_reg = (uint32_t *)(smmu->base + SMMU_R_EVTQ_PROD);
@@ -326,7 +324,7 @@ static uint32_t smmu_cmd_queue_init(smmu_dev_t *smmu)
         return 0;
     }
 
-    cmdq->base_phys = (uint64_t)val_memory_virt_to_phys(cmdq->base_ptr);
+    cmdq->base_phys = (uint64_t)val_memory_virt_to_phys_el3(cmdq->base_ptr);
     cmdq->base = (uint8_t *)cmdq->base_ptr;
 
     cmdq->prod_reg = (uint32_t *)(smmu->base + SMMU_R_CMDQ_PROD);
@@ -394,7 +392,7 @@ static int smmu_strtab_init_level2(smmu_dev_t *smmu, uint32_t sid)
         return 0;
     }
 
-    desc->l2desc_phys = align_to_size((uint64_t)val_memory_virt_to_phys(desc->l2ptr), size);
+    desc->l2desc_phys = align_to_size((uint64_t)val_memory_virt_to_phys_el3(desc->l2ptr), size);
     desc->l2desc64 = (uint64_t *)align_to_size((uint64_t)desc->l2ptr, size);
     for (ste = desc->l2desc64, i = 0; i < (1 << STRTAB_SPLIT); ++i, ste += STRTAB_STE_DWORDS)
         smmu_strtab_write_ste(NULL, ste, smmu);
@@ -436,7 +434,7 @@ static int smmu_strtab_init_2level(smmu_dev_t *smmu)
         return 0;
     }
 
-    cfg->strtab_phys = (uint64_t)val_memory_virt_to_phys(cfg->strtab_ptr);
+    cfg->strtab_phys = (uint64_t)val_memory_virt_to_phys_el3(cfg->strtab_ptr);
     cfg->strtab64 = (uint64_t *)cfg->strtab_ptr;
     cfg->strtab_base_cfg = BITFIELD_SET(STRTAB_BASE_CFG_FMT, STRTAB_BASE_CFG_FMT_2LVL) |
                            BITFIELD_SET(STRTAB_BASE_CFG_LOG2SIZE, log2size) |
@@ -756,7 +754,8 @@ static int smmu_cdtab_alloc_leaf_table(smmu_cdtab_l1_ctx_desc_t *l1_desc)
         ERROR("\n      failed to allocate context descriptor table     ");
         return 1;
     }
-    l1_desc->l2desc_phys = align_to_size((uint64_t)val_memory_virt_to_phys(l1_desc->l2ptr), size);
+    l1_desc->l2desc_phys = align_to_size((uint64_t)val_memory_virt_to_phys_el3(l1_desc->l2ptr),
+                                         size);
     l1_desc->l2desc64 = (uint64_t *)align_to_size((uint64_t)l1_desc->l2ptr, size);
     return 0;
 }
@@ -879,7 +878,7 @@ static int smmu_cdtab_alloc(smmu_master_t *master)
     }
 
     cdcfg->cdtab_phys =
-                align_to_size((uint64_t)val_memory_virt_to_phys(cdcfg->cdtab_ptr), l1_tbl_size);
+                align_to_size((uint64_t)val_memory_virt_to_phys_el3(cdcfg->cdtab_ptr), l1_tbl_size);
     cdcfg->cdtab64 = (uint64_t *)align_to_size((uint64_t)cdcfg->cdtab_ptr, l1_tbl_size);
 
     return 1;
@@ -1351,9 +1350,9 @@ val_smmu_dpt_init(smmu_dev_t *smmu)
 
 /**
   @brief  Scan all available SMMUs in the system and initialize all v3.x SMMUs
-  @return Initialzation status
+  @return None
 **/
-uint32_t val_smmu_init(uint32_t num_smmu)
+void val_smmu_init_el3(uint32_t num_smmu, uint64_t *smmu_base_arr)
 {
     int i;
 
@@ -1363,34 +1362,61 @@ uint32_t val_smmu_init(uint32_t num_smmu)
 
     g_num_smmus = num_smmu;
     if (g_num_smmus == 0)
-        return 1;
+        return;
 
     g_smmu = val_memory_calloc_el3(g_num_smmus, sizeof(smmu_dev_t), BYTES_PER_DWORD);
     if (!g_smmu)
     {
-        ERROR("\n      val_smmu_init: memory allocation failure     ");
-        return 1;
+        shared_data->status_code = 1;
+        const char *msg = "EL3: SMMU_INIT: Memory allocation failed";
+        ERROR("\n  %s", msg);
+        int j = 0; while (msg[j] && j < sizeof(shared_data->error_msg) - 1) {
+            shared_data->error_msg[j] = msg[j]; j++;
+        }
+        shared_data->error_msg[j] = '\0';
+        return;
     }
 
     for (i = 0; i < g_num_smmus; ++i) {
-        if (EXTRACT(ARCH_REV, val_mmio_read_el3(ROOT_IOVIRT_SMMUV3_BASE + SMMU_AIDR_OFFSET)) != 3)
+        if (EXTRACT(ARCH_REV, val_mmio_read_el3(smmu_base_arr[0] + SMMU_AIDR_OFFSET)) != 3)
         {
             ERROR("\n val_smmu_init: SMMUv3.x supported, \
                                 skipping smmu %d", i);
             continue;
         }
-        g_smmu[i].base = ROOT_IOVIRT_SMMUV3_BASE;
+        g_smmu[i].base = smmu_base_arr[i];
         if (smmu_init(&g_smmu[i]))
         {
-            ERROR("\n      val_smmu_init: smmu %d init failed     ", i);
+            shared_data->status_code = 1;
+            shared_data->error_code = i;
+            const char *msg = "EL3: SMMU_INIT:  initialisation failed for smmu :";
+            ERROR("\n  %s", msg);
+            ERROR(" %lx", shared_data->error_code);
+            int j = 0; while (msg[j] && j < sizeof(shared_data->error_msg) - 1) {
+                shared_data->error_msg[j] = msg[j]; j++;
+            }
+            shared_data->error_msg[j] = '\0';
             g_smmu[i].base = 0;
-            return 1;
+            return;
         }
 
-        val_smmu_dpt_init(&g_smmu[i]);
+        if (val_smmu_dpt_init(&g_smmu[i]))
+        {
+            shared_data->status_code = 1;
+            shared_data->error_code = i;
+            const char *msg = "EL3: SMMU_INIT:  DPT initialisation failed for smmu :";
+            ERROR("\n %s", msg);
+            ERROR(" %lx", shared_data->error_code);
+            int j = 0; while (msg[j] && j < sizeof(shared_data->error_msg) - 1) {
+                shared_data->error_msg[j] = msg[j]; j++;
+            }
+            shared_data->error_msg[j] = '\0';
+            g_smmu[i].base = 0;
+            return;
+        }
     }
 
-    return 0;
+    return;
 }
 
 /**

@@ -29,7 +29,9 @@ extern uint32_t g_print_level;
 extern uint32_t g_print_mmio;
 extern uint32_t g_curr_module;
 extern uint32_t g_enable_module;
+extern uint32_t g_print_in_test_context;
 
+#define ACS_PRINT_ALWAYS  6    /* No log-level prefix or newline. For inline/multi-part prints */
 #define ACS_PRINT_ERR   5      /* Only Errors. use this to de-clutter the terminal and focus only on specifics */
 #define ACS_PRINT_WARN  4      /* Only warnings & errors. use this to de-clutter the terminal and focus only on specifics */
 #define ACS_PRINT_TEST  3      /* Test description and result descriptions. THIS is DEFAULT */
@@ -41,10 +43,6 @@ extern uint32_t g_enable_module;
 #define MEM_ALIGN_16K      0x4000
 #define MEM_ALIGN_32K      0x8000
 #define MEM_ALIGN_64K      0x10000
-
-#define MAX_TEST_SKIP_NUM      10
-#define SINGLE_TEST_SENTINEL   10000
-#define SINGLE_MODULE_SENTINEL 10001
 
 #define PCIE_EXTRACT_BDF_SEG(bdf)  ((bdf >> 24) & 0xFF)
 #define PCIE_EXTRACT_BDF_BUS(bdf)  ((bdf >> 16) & 0xFF)
@@ -59,8 +57,45 @@ extern uint32_t g_enable_module;
 
 void pal_uart_print(int log, const char *fmt, ...);
 void *mem_alloc(size_t alignment, size_t size);
-#define print(verbose, string, ...)  if(verbose >= g_print_level) \
-                                                   pal_uart_print(verbose, string, ##__VA_ARGS__)
+#define FILENAME (__builtin_strrchr("/" __FILE__, '/') + 1)
+#define print(level, string, ...)                                       \
+  do {                                                                  \
+    if ((level) >= g_print_level) {                                     \
+      if ((level) == ACS_PRINT_DEBUG) {                                 \
+        if (g_print_in_test_context)                                    \
+          pal_uart_print(level, "\n\t\tPAL_DBG : ");                     \
+        else                                                            \
+          pal_uart_print(level, "\n\tPAL_DBG : ");                       \
+      } else if ((level) == ACS_PRINT_ERR) {                            \
+        if (g_print_in_test_context)                                    \
+          pal_uart_print(level, "\n\t\tPAL_ERR : ");                     \
+        else                                                            \
+          pal_uart_print(level, "\n\tPAL_ERR : ");                       \
+      } else if ((level) == ACS_PRINT_INFO) {                           \
+        if (g_print_in_test_context)                                    \
+          pal_uart_print(level, "\n\t\tPAL_INFO: ");                    \
+        else                                                            \
+          pal_uart_print(level, "\n\tPAL_INFO: ");                      \
+      } else if ((level) == ACS_PRINT_WARN) {                           \
+        if (g_print_in_test_context)                                    \
+          pal_uart_print(level, "\n\t\tPAL_WARN: ");                    \
+        else                                                            \
+          pal_uart_print(level, "\n\tPAL_WARN: ");                      \
+      } else if ((level) == ACS_PRINT_ALWAYS) {                         \
+        pal_uart_print(level, string, ##__VA_ARGS__);                   \
+        break;                                                          \
+      } else {                                                          \
+        pal_uart_print(level, string, ##__VA_ARGS__);                   \
+        break;                                                          \
+      }                                                                 \
+      pal_uart_print(level, string, ##__VA_ARGS__);                     \
+      /* Print file name and line number for ERR and WARN */            \
+      if (level == ACS_PRINT_ERR || level == ACS_PRINT_WARN) {          \
+          pal_uart_print(level, "\n  [FILE: %a]", (uint64_t)FILENAME);           \
+          pal_uart_print(level, "  [LINE: %d]", __LINE__);                     \
+      }                                                                 \
+    }                                                                   \
+  } while (0)
 
 #define PCIE_CREATE_BDF(Seg, Bus, Dev, Func) ((Seg << 24) | (Bus << 16) | (Dev << 8) | Func)
 #define PCIE_CREATE_BDF_PACKED(bdf)  PCIE_EXTRACT_BDF_FUNC(bdf) | \
@@ -147,7 +182,6 @@ void *mem_alloc(size_t alignment, size_t size);
 #define PASID_OFFSET         0x04
 #define PASID_NUM_SHIFT      8
 #define PASID_NUM_MASK       0x1f
-#define PER_FLAG_MSI_ENABLED 0x2
 
 /* DOE Capability Register */
 #define DOE_CAP_ID 0x002E
@@ -649,7 +683,6 @@ typedef enum {
 
 int32_t pal_mem_compare(void *Src, void *Dest, uint32_t Len);
 void *pal_memcpy(void *DestinationBuffer, const void *SourceBuffer, uint32_t Length);
-void *pal_strncpy(void *DestinationStr, const void *SourceStr, uint32_t Length);
 uint32_t pal_strncmp(const char8_t *str1, const char8_t *str2, uint32_t len);
 void pal_mem_set(void *buf, uint32_t size, uint8_t value);
 

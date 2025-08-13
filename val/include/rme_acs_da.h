@@ -67,25 +67,25 @@ val_register_get_num_entries(void);
 uint32_t
 val_intercnt_sec_prpty_check(uint64_t *register_entry_info);
 
-uint32_t da001_entry(void);
-uint32_t da002_entry(void);
-uint32_t da003_entry(void);
-uint32_t da004_entry(void);
-uint32_t da005_entry(void);
-uint32_t da006_entry(void);
-uint32_t da007_entry(void);
-uint32_t da008_entry(void);
-uint32_t da009_entry(void);
-uint32_t da010_entry(void);
-uint32_t da011_entry(void);
-uint32_t da012_entry(void);
-uint32_t da013_entry(void);
-uint32_t da014_entry(void);
-uint32_t da015_entry(void);
-uint32_t da016_entry(void);
-uint32_t da017_entry(void);
-uint32_t da018_entry(void);
-uint32_t da019_entry(void);
-uint32_t da020_entry(void);
+uint32_t da_dvsec_register_config_entry(void);
+uint32_t da_smmu_implementation_entry(void);
+uint32_t da_tee_io_capability_entry(void);
+uint32_t da_rootport_ide_features_entry(void);
+uint32_t da_attribute_rmeda_ctl_registers_entry(void);
+uint32_t da_p2p_btw_2_tdisp_devices_entry(void);
+uint32_t da_outgoing_request_with_ide_tbit_entry(void);
+uint32_t da_incoming_request_ide_sec_locked_entry(void);
+uint32_t da_ctl_regs_rmsd_write_protect_property_entry(void);
+uint32_t da_ide_state_rootport_error_entry(void);
+uint32_t da_ide_state_tdisp_disable_entry(void);
+uint32_t da_selective_ide_register_property_entry(void);
+uint32_t da_rootport_tdisp_disabled_entry(void);
+uint32_t da_autonomous_rootport_request_ns_pas_entry(void);
+uint32_t da_incoming_request_ide_non_sec_unlocked_entry(void);
+uint32_t da_outgoing_realm_rqst_ide_tbit_1_entry(void);
+uint32_t da_ide_tbit_0_for_root_request_entry(void);
+uint32_t da_rmsd_write_detect_property_entry(void);
+uint32_t da_rootport_write_protect_full_protect_property_entry(void);
+uint32_t da_interconnect_regs_rmsd_protected_entry(void);
 
 #endif

@@ -23,23 +23,23 @@
 #define DPT_RDWR_ACCESS_ENTRY      17
 
 uint32_t
-dpt001_entry(void);
+dpt_system_resource_valid_without_dpti_entry(void);
 
 uint32_t
-dpt002_entry(void);
+dpt_system_resource_valid_with_dpti_entry(void);
 
 uint32_t
-dpt003_entry(void);
+dpt_system_resource_invalid_entry(void);
 
 uint32_t
-dpt004_entry(void);
+dpt_p2p_different_rootport_valid_entry(void);
 
 uint32_t
-dpt005_entry(void);
+dpt_p2p_different_rootport_invalid_entry(void);
 
 uint32_t
-dpt006_entry(void);
+dpt_p2p_same_rootport_valid_entry(void);
 
 uint32_t
-dpt007_entry(void);
+dpt_p2p_same_rootport_invalid_entry(void);
 #endif

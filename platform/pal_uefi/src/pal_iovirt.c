@@ -52,38 +52,38 @@ dump_block(IOVIRT_BLOCK *block) {
   NODE_DATA_MAP *map = &block->data_map[0];
   switch(block->type) {
       case IOVIRT_NODE_ITS_GROUP:
-      rme_print(ACS_PRINT_INFO, L"\n ITS Group: Num ITS:%d\n", (*map).id[0]);
+      rme_print(ACS_PRINT_INFO, L" ITS Group: Num ITS:%d", (*map).id[0]);
       for(i = 0; i < block->data.its_count; i++)
-          rme_print(ACS_PRINT_INFO, L"  ITS ID : %d\n", (*map).id[i]);
+          rme_print(ACS_PRINT_INFO, L" ITS ID : %d", (*map).id[i]);
       return;
       case IOVIRT_NODE_NAMED_COMPONENT:
       rme_print(ACS_PRINT_INFO,
-                 L" Named Component: Device Name:%a\n", block->data.name);
+                 L" Named Component: Device Name:%a", block->data.name);
       break;
       case IOVIRT_NODE_PCI_ROOT_COMPLEX:
       rme_print(ACS_PRINT_INFO,
-                 L" Root Complex: PCI segment number:%d\n", block->data.rc.segment);
+                 L" Root Complex: PCI segment number:%d", block->data.rc.segment);
       break;
       case IOVIRT_NODE_SMMU:
       case IOVIRT_NODE_SMMU_V3:
-      rme_print(ACS_PRINT_INFO, L" SMMU: Major Rev:%d Base Address:0x%llx\n",
+      rme_print(ACS_PRINT_INFO, L" SMMU: Major Rev:%d Base Address:0x%llx",
                  block->data.smmu.arch_major_rev, block->data.smmu.base);
       break;
       case IOVIRT_NODE_PMCG:
       rme_print(ACS_PRINT_INFO,
-                 L" PMCG: Base:0x%x\n Overflow GSIV:0x%x Node Reference:0x%x\n",
+                 L" PMCG: Base:0x%x\n Overflow GSIV:0x%x Node Reference:0x%x",
                  block->data.pmcg.base, block->data.pmcg.overflow_gsiv, block->data.pmcg.node_ref);
       break;
   }
   rme_print(ACS_PRINT_INFO,
-             L" Number of ID Mappings:%d\n", block->num_data_map);
+             L" Number of ID Mappings:%d", block->num_data_map);
   for(i = 0; i < block->num_data_map; i++, map++) {
-      rme_print(ACS_PRINT_INFO,
-                 L"  input_base:0x%x id_count:0x%x\n  output_base:0x%x output ref:0x%x\n",
-            (*map).map.input_base, (*map).map.id_count,
-            (*map).map.output_base, (*map).map.output_ref);
+      rme_print(ACS_PRINT_INFO, L" input_base:0x%x id_count:0x%x",
+                                (*map).map.input_base, (*map).map.id_count);
+      rme_print(ACS_PRINT_INFO, L" output_base:0x%x output ref:0x%x",
+                                (*map).map.output_base, (*map).map.output_ref);
   }
-  rme_print(ACS_PRINT_INFO, L"\n");
+  rme_print(ACS_PRINT_ALWAYS, L"");
 }
 
 STATIC UINTN
@@ -103,7 +103,7 @@ dump_iort_table(IOVIRT_INFO_TABLE *iovirt)
 {
   UINT32 i;
   IOVIRT_BLOCK *block = &iovirt->blocks[0];
-  rme_print(ACS_PRINT_INFO, L" Number of IOVIRT blocks = %d\n", iovirt->num_blocks);
+  rme_print(ACS_PRINT_INFO, L" Number of IOVIRT blocks = %d", iovirt->num_blocks);
   for(i = 0; i < iovirt->num_blocks; i++, block = IOVIRT_NEXT_BLOCK(block))
     dump_block(block);
 }
@@ -159,13 +159,13 @@ check_mapping_overlap(IOVIRT_INFO_TABLE *iovirt)
             if(tmp->type == IOVIRT_NODE_ITS_GROUP) {
                key_block->flags |= (1 << IOVIRT_FLAG_DEVID_OVERLAP_SHIFT);
                block->flags |= (1 << IOVIRT_FLAG_DEVID_OVERLAP_SHIFT);
-               rme_print(ACS_PRINT_INFO, L"\n Overlapping device ids %x-%x and %x-%x \n",
+               rme_print(ACS_PRINT_INFO, L" Overlapping device ids %x-%x and %x-%x ",
                           key_start, key_end, start, end);
             }
             else {
                key_block->flags |= (1 << IOVIRT_FLAG_STRID_OVERLAP_SHIFT);
                block->flags |= (1 << IOVIRT_FLAG_STRID_OVERLAP_SHIFT);
-               rme_print(ACS_PRINT_INFO, L"\n Overlapping stream ids %x-%x and %x-%x \n",
+               rme_print(ACS_PRINT_INFO, L" Overlapping stream ids %x-%x and %x-%x ",
                           key_start, key_end, start, end);
             }
           }
@@ -230,7 +230,7 @@ iort_add_block(IORT_TABLE *iort, IORT_NODE *iort_node, IOVIRT_INFO_TABLE *IoVirt
   VOID *node_data = &(iort_node->node_data[0]);
 
   rme_print(ACS_PRINT_INFO,
-             L" IORT node offset:%x, type: %d\n", (UINT8 *)iort_node - (UINT8 *)iort,
+             L" IORT node offset:%x, type: %d", (UINT8 *)iort_node - (UINT8 *)iort,
              iort_node->type);
 
   SetMem(data, sizeof(NODE_DATA), 0);
@@ -282,7 +282,7 @@ iort_add_block(IORT_TABLE *iort, IORT_NODE *iort_node, IOVIRT_INFO_TABLE *IoVirt
       count = &IoVirtTable->num_pmcgs;
       break;
     default:
-       rme_print(ACS_PRINT_ERR, L" Invalid IORT node type\n");
+       rme_print(ACS_PRINT_ERR, L" Invalid IORT node type");
        return (UINT32) -1;
   }
 
@@ -392,7 +392,7 @@ pal_iovirt_create_info_table(IOVIRT_INFO_TABLE *IoVirtTable)
   /* Create iovirt block for each IORT node*/
   for (i = 0; i < iort->node_count; i++) {
     if (iort_node >= iort_end) {
-      rme_print(ACS_PRINT_ERR, L" Bad IORT table \n");
+      rme_print(ACS_PRINT_ERR, L" Bad IORT table ");
       return;
     }
     iort_add_block(iort, iort_node, IoVirtTable, &next_block);
@@ -400,41 +400,6 @@ pal_iovirt_create_info_table(IOVIRT_INFO_TABLE *IoVirtTable)
   }
   dump_iort_table(IoVirtTable);
   check_mapping_overlap(IoVirtTable);
-}
-
-/**
-  @brief  Check if given SMMU node has unique context bank interrupt ids
-
-  @param  smmu_block smmu IOVIRT block base address
-
-  @return 0 if test fails, 1 if test passes
-**/
-UINT32
-pal_iovirt_check_unique_ctx_intid(UINT64 smmu_block)
-{
-  IOVIRT_BLOCK *block = (IOVIRT_BLOCK *)smmu_block;
-  /* This test has already been done while parsing IORT */
-  /* Check the flags to get the test result */
-  if(block->flags & (1 << IOVIRT_FLAG_SMMU_CTX_INT_SHIFT))
-    return 0;
-  return 1;
-}
-
-/**
-  @brief  Check if given root complex node has unique requestor id to stream id mapping
-
-  @param  rc_block root complex IOVIRT block base address
-
-  @return 0 if test fails, 1 if test passes
-**/
-
-UINT32
-pal_iovirt_unique_rid_strid_map(UINT64 rc_block)
-{
-  IOVIRT_BLOCK *block = (IOVIRT_BLOCK *)rc_block;
-  if(block->flags & (1 << IOVIRT_FLAG_STRID_OVERLAP_SHIFT))
-    return 0;
-  return 1;
 }
 
 UINT64
@@ -475,7 +440,7 @@ pal_iovirt_get_rc_smmu_base (
 
   if (!mapping_found) {
       rme_print(ACS_PRINT_ERR,
-               L"\n       RID to Stream ID/Dev ID map not found ", 0);
+               L" RID to Stream ID/Dev ID map not found ", 0);
       return 0xFFFFFFFF;
   }
 
@@ -490,7 +455,7 @@ pal_iovirt_get_rc_smmu_base (
                                                     (*map).map.id_count))
           {
               rme_print(ACS_PRINT_DEBUG,
-                         L"\n       find RC block->data.smmu.base : %llx", block->data.smmu.base);
+                         L" find RC block->data.smmu.base : %llx", block->data.smmu.base);
               return block->data.smmu.base;
           }
       }

@@ -68,7 +68,7 @@ static int smmu_cmdq_build_cmd(uint64_t *cmd, uint8_t opcode)
         cmd[1] |= BITFIELD_SET(CMDQ_CFGI_1_RANGE, CMDQ_CFGI_1_ALL_STES);
         break;
     default:
-        val_print(ACS_PRINT_ERR, "\n      Unsupported SMMU command 0x%x    ", opcode);
+        val_print(ACS_PRINT_ERR, " Unsupported SMMU command 0x%x    ", opcode);
         return -1;
     }
 
@@ -90,7 +90,7 @@ static int smmu_cmdq_write_cmd(smmu_dev_t *smmu, uint64_t *cmd)
         timeout--;
 
     if (!timeout) {
-        val_print(ACS_PRINT_ERR, "\n      SMMU CMD queue is full     ", 0);
+        val_print(ACS_PRINT_ERR, " SMMU CMD queue is full     ", 0);
         return -1;
     }
 
@@ -100,9 +100,7 @@ static int smmu_cmdq_write_cmd(smmu_dev_t *smmu, uint64_t *cmd)
         cmd_dst[i] = cmd[i];
     queue.prod = smmu_cmdq_inc_prod(&queue);
 
-#ifndef TARGET_LINUX
     ArmExecuteMemoryBarrier();
-#endif
     val_mmio_write((uint64_t)cmdq->prod_reg, queue.prod);
 
     return ret;
@@ -137,10 +135,14 @@ static void smmu_cmdq_poll_until_consumed(smmu_dev_t *smmu)
     }
 
     if (!timeout) {
-        val_print(ACS_PRINT_ERR, "\n    CMDQ poll timeout at 0x%08x       ", queue.prod);
-        val_print(ACS_PRINT_ERR, "\n    prod_reg = 0x%08x       ", val_mmio_read((uint64_t)smmu->cmdq.prod_reg));
-        val_print(ACS_PRINT_ERR, "\n    cons_reg = 0x%08x       ", val_mmio_read((uint64_t)smmu->cmdq.cons_reg));
-        val_print(ACS_PRINT_ERR, "\n    gerror   = 0x%08x       ", val_mmio_read(smmu->base + SMMU_GERROR_OFFSET));
+        val_print(ACS_PRINT_ERR,
+            " CMDQ poll timeout at 0x%08x", queue.prod);
+        val_print(ACS_PRINT_ERR,
+            " prod_reg = 0x%08x", val_mmio_read((uint64_t)smmu->cmdq.prod_reg));
+        val_print(ACS_PRINT_ERR,
+            " cons_reg = 0x%08x", val_mmio_read((uint64_t)smmu->cmdq.cons_reg));
+        val_print(ACS_PRINT_ERR,
+            " gerror   = 0x%08x", val_mmio_read(smmu->base + SMMU_GERROR_OFFSET));
     }
 }
 
@@ -212,7 +214,7 @@ static uint32_t smmu_strtab_init_linear(smmu_dev_t *smmu)
     size = (1 << smmu->sid_bits) * (STRTAB_STE_DWORDS << 3);
     cfg->strtab_ptr = val_memory_calloc(2, size);
     if (!cfg->strtab_ptr) {
-        val_print(ACS_PRINT_ERR, "\n      Failed to allocate linear stream table.     ", 0);
+        val_print(ACS_PRINT_ERR, " Failed to allocate linear stream table.     ", 0);
         return 0;
     }
 
@@ -235,7 +237,7 @@ static uint32_t smmu_cmd_queue_init(smmu_dev_t *smmu)
     cmdq_size = (cmdq_size < 32)?32:cmdq_size;
     cmdq->base_ptr = val_memory_calloc(2, cmdq_size);
     if (!cmdq->base_ptr) {
-        val_print(ACS_PRINT_ERR, "\n      Failed to allocate queue struct.     ", 0);
+        val_print(ACS_PRINT_ERR, " Failed to allocate queue struct.     ", 0);
         return 0;
     }
 
@@ -303,7 +305,7 @@ static int smmu_strtab_init_level2(smmu_dev_t *smmu, uint32_t sid)
     desc->span = STRTAB_SPLIT + 1;
     desc->l2ptr = val_memory_calloc(2, size);
     if (!desc->l2ptr) {
-        val_print(ACS_PRINT_ERR, "\n	failed to allocate l2 stream table for SID %u	", sid);
+        val_print(ACS_PRINT_ERR, "	failed to allocate l2 stream table for SID %u	", sid);
         return 0;
     }
     desc->l2desc_phys = align_to_size((uint64_t)val_memory_virt_to_phys(desc->l2ptr), size);
@@ -322,7 +324,7 @@ static int smmu_strtab_init_level1(smmu_dev_t *smmu)
     cfg->l1_desc = val_memory_calloc(cfg->l1_ent_count, sizeof(*cfg->l1_desc));
 
     if (!cfg->l1_desc) {
-        val_print(ACS_PRINT_ERR, "\n      failed to allocate l1 stream table desc     ", 0);
+        val_print(ACS_PRINT_ERR, " failed to allocate l1 stream table desc     ", 0);
         return 0;
     }
 
@@ -343,7 +345,7 @@ static int smmu_strtab_init_2level(smmu_dev_t *smmu)
     l1_tbl_size = cfg->l1_ent_count * STRTAB_L1_DESC_SIZE;
     cfg->strtab_ptr = val_memory_alloc(2 * l1_tbl_size);
     if (!cfg->strtab_ptr) {
-        val_print(ACS_PRINT_ERR, "\n      failed to allocate l1 stream table     ", 0);
+        val_print(ACS_PRINT_ERR, " failed to allocate l1 stream table     ", 0);
         return 0;
     }
 
@@ -372,7 +374,7 @@ static uint32_t smmu_strtab_init(smmu_dev_t *smmu)
         ret = smmu_strtab_init_linear(smmu);
 
     if (!ret) {
-        val_print(ACS_PRINT_ERR, "\n      Stream table init failed     ", 0);
+        val_print(ACS_PRINT_ERR, " Stream table init failed     ", 0);
         return ret;
     }
 
@@ -407,7 +409,7 @@ static int smmu_dev_disable(smmu_dev_t *smmu)
 
     ret = smmu_reg_write_sync(smmu, 0, SMMU_CR0_OFFSET, SMMU_CR0ACK_OFFSET);
     if (ret)
-        val_print(ACS_PRINT_ERR, "\n    failed to clear cr0     ", 0);
+        val_print(ACS_PRINT_ERR, " failed to clear cr0     ", 0);
 
     return ret;
 }
@@ -432,7 +434,7 @@ static int smmu_reset(smmu_dev_t *smmu)
 
     ret = smmu_reg_write_sync(smmu, 0, SMMU_CR0_OFFSET, SMMU_CR0ACK_OFFSET);
     if (ret) {
-        val_print(ACS_PRINT_ERR, "\n      failed to clear SMMU_CR0     ", 0);
+        val_print(ACS_PRINT_ERR, " failed to clear SMMU_CR0     ", 0);
         return ret;
     }
 
@@ -455,7 +457,7 @@ static int smmu_reset(smmu_dev_t *smmu)
     ret = smmu_reg_write_sync(smmu, en, SMMU_CR0_OFFSET,
                       SMMU_CR0ACK_OFFSET);
     if (ret) {
-        val_print(ACS_PRINT_ERR, "\n      failed to enable command queue     ", 0);
+        val_print(ACS_PRINT_ERR, " failed to enable command queue     ", 0);
         return ret;
     }
 
@@ -465,7 +467,7 @@ static int smmu_reset(smmu_dev_t *smmu)
     ret = smmu_reg_write_sync(smmu, en, SMMU_CR0_OFFSET,
                       SMMU_CR0ACK_OFFSET);
     if (ret) {
-        val_print(ACS_PRINT_ERR, "\n      failed to enable SMMU     ", 0);
+        val_print(ACS_PRINT_ERR, " failed to enable SMMU     ", 0);
         return ret;
     }
 
@@ -480,14 +482,14 @@ uint32_t smmu_set_state(uint32_t smmu_index, uint32_t en)
 
     if (smmu_index >= g_num_smmus)
     {
-        val_print(ACS_PRINT_ERR, "\n      smmu_set_state: invalid smmu index    ", 0);
+        val_print(ACS_PRINT_ERR, " smmu_set_state: invalid smmu index    ", 0);
         return 1;
     }
 
     smmu = &g_smmu[smmu_index];
     if (smmu->base == 0)
     {
-        val_print(ACS_PRINT_ERR, "\n      smmu_set_state: smmu unsupported     ", 0);
+        val_print(ACS_PRINT_ERR, " smmu_set_state: smmu unsupported     ", 0);
         return 1;
     }
 
@@ -502,7 +504,7 @@ uint32_t smmu_set_state(uint32_t smmu_index, uint32_t en)
                       SMMU_CR0ACK_OFFSET);
     if (ret)
     {
-        val_print(ACS_PRINT_ERR, "\n      smmu_set_state: failed to set SMMU state     ", 0);
+        val_print(ACS_PRINT_ERR, " smmu_set_state: failed to set SMMU state     ", 0);
         return ret;
     }
     return 0;
@@ -552,7 +554,7 @@ static uint32_t smmu_probe(smmu_dev_t *smmu)
         smmu->supported.s2p = 1;
 
     if (!(data & (IDR0_S1P | IDR0_S2P))) {
-        val_print(ACS_PRINT_ERR, "\n      no translation support!     ", 0);
+        val_print(ACS_PRINT_ERR, " no translation support!     ", 0);
         return 0;
     }
 
@@ -562,13 +564,13 @@ static uint32_t smmu_probe(smmu_dev_t *smmu)
     case IDR0_TTF_AARCH64:
         break;
     default:
-        val_print(ACS_PRINT_ERR, "\n      AArch64 table format not supported!     ", 0);
+        val_print(ACS_PRINT_ERR, " AArch64 table format not supported!     ", 0);
         return 0;
     }
 
     data = val_mmio_read(smmu->base + SMMU_IDR1_OFFSET);
     if (data & (IDR1_TABLES_PRESET | IDR1_QUEUES_PRESET)) {
-        val_print(ACS_PRINT_ERR, "\n      fixed table base address not supported     ", 0);
+        val_print(ACS_PRINT_ERR, " fixed table base address not supported     ", 0);
         return 0;
     }
 
@@ -579,7 +581,7 @@ static uint32_t smmu_probe(smmu_dev_t *smmu)
     smmu->ssid_bits = BITFIELD_GET(IDR1_SSIDSIZE, data);
 
     val_print(ACS_PRINT_INFO, " ssid_bits = %d", smmu->ssid_bits);
-    val_print(ACS_PRINT_INFO, " sid_bits = %d\n", smmu->sid_bits);
+    val_print(ACS_PRINT_INFO, " sid_bits = %d", smmu->sid_bits);
 
     if (smmu->sid_bits <= STRTAB_SPLIT)
         smmu->supported.st_level_2lvl = 0;
@@ -588,14 +590,14 @@ static uint32_t smmu_probe(smmu_dev_t *smmu)
     data = val_mmio_read(smmu->base + SMMU_IDR5_OFFSET);
 
     if (BITFIELD_GET(IDR5_OAS, data) >= SMMU_OAS_MAX_IDX) {
-        val_print(ACS_PRINT_ERR, "\n      Unknown output address size     ", 0);
+        val_print(ACS_PRINT_ERR, " Unknown output address size     ", 0);
         return 0;
     }
     smmu->oas = smmu_oas[BITFIELD_GET(IDR5_OAS, data)];
     smmu->ias = get_max(smmu->ias, smmu->oas);
 
     val_print(ACS_PRINT_INFO, " ias %d-bit ", smmu->ias);
-    val_print(ACS_PRINT_INFO, "oas %d-bit\n", smmu->oas);
+    val_print(ACS_PRINT_INFO, " oas %d-bit", smmu->oas);
 
     return 1;
 }
@@ -617,8 +619,8 @@ static void dump_strtab(uint64_t *ste)
     int i;
 
     for (i = 0; i < 8; i++) {
-        val_print(ACS_PRINT_INFO, "ste[%d] = ", i);
-        val_print(ACS_PRINT_INFO, "%p\n", ste[i]);
+        val_print(ACS_PRINT_INFO, " ste[%d] = ", i);
+        val_print(ACS_PRINT_INFO, "%p", ste[i]);
     }
 }
 
@@ -627,8 +629,8 @@ static void dump_cdtab(uint64_t *ctx_desc)
     int i;
 
     for (i = 0; i < 8; i++) {
-        val_print(ACS_PRINT_INFO, "ctx_desc[%d] = ", i);
-        val_print(ACS_PRINT_INFO, "%llx\n", ctx_desc[i]);
+        val_print(ACS_PRINT_INFO, " ctx_desc[%d] = ", i);
+        val_print(ACS_PRINT_INFO, "%llx", ctx_desc[i]);
     }
 }
 
@@ -647,7 +649,7 @@ static int smmu_cdtab_alloc_leaf_table(smmu_cdtab_l1_ctx_desc_t *l1_desc)
 
     l1_desc->l2ptr = val_memory_alloc(size*2);
     if (!l1_desc->l2ptr) {
-        val_print(ACS_PRINT_ERR, "\n      failed to allocate context descriptor table     ", 0);
+        val_print(ACS_PRINT_ERR, " failed to allocate context descriptor table     ", 0);
         return 1;
     }
     l1_desc->l2desc_phys = align_to_size((uint64_t)val_memory_virt_to_phys(l1_desc->l2ptr), size);
@@ -686,14 +688,14 @@ static int smmu_cdtab_write_ctx_desc(smmu_master_t *master,
 
     if (ssid >= (1 << master->stage1_config.s1cdmax))
     {
-        val_print(ACS_PRINT_ERR, "\n      smmu_cdtab_write_ctx_desc: ssid out of range     ", 0);
+        val_print(ACS_PRINT_ERR, " smmu_cdtab_write_ctx_desc: ssid out of range     ", 0);
         return 0;
     }
 
     cdptr = smmu_cdtab_get_ctx_desc(master);
     if (!cdptr)
     {
-        val_print(ACS_PRINT_ERR, "\n      smmu_cdtab_write_ctx_desc: cdptr is NULL     ", 0);
+        val_print(ACS_PRINT_ERR, " smmu_cdtab_write_ctx_desc: cdptr is NULL     ", 0);
         return 0;
     }
 
@@ -766,7 +768,7 @@ static int smmu_cdtab_alloc(smmu_master_t *master)
 
     cdcfg->cdtab_ptr = val_memory_calloc(2, l1_tbl_size);
     if (!cdcfg->cdtab_ptr) {
-        val_print(ACS_PRINT_ERR, "\n      smmu_cdtab_alloc: alloc failed     ", 0);
+        val_print(ACS_PRINT_ERR, " smmu_cdtab_alloc: alloc failed     ", 0);
         return 0;
     }
 
@@ -826,14 +828,14 @@ uint32_t val_smmu_map(smmu_master_attributes_t master_attr, pgt_descriptor_t pgt
 
     if (master_attr.smmu_index >= g_num_smmus)
     {
-        val_print(ACS_PRINT_ERR, "\n      val_smmu_map: invalid smmu index     ", 0);
+        val_print(ACS_PRINT_ERR, " val_smmu_map: invalid smmu index     ", 0);
         return 1;
     }
 
     smmu = &g_smmu[master_attr.smmu_index];
     if (smmu->base == 0)
     {
-        val_print(ACS_PRINT_ERR, "\n      val_smmu_map: smmu unsupported     ", 0);
+        val_print(ACS_PRINT_ERR, " val_smmu_map: smmu unsupported     ", 0);
         return 1;
     }
 
@@ -867,14 +869,14 @@ uint32_t val_smmu_map(smmu_master_attributes_t master_attr, pgt_descriptor_t pgt
 
     if (master_attr.streamid >= (0x1ul << smmu->sid_bits))
     {
-        val_print(ACS_PRINT_ERR, "\n    val_smmu_map: sid %d out of range       ", master_attr.streamid);
+        val_print(ACS_PRINT_ERR, " val_smmu_map: sid %d out of range       ", master_attr.streamid);
         return 1;
     }
 
     if (smmu->supported.st_level_2lvl) {
         if (!smmu_strtab_init_level2(smmu, master->sid))
         {
-            val_print(ACS_PRINT_ERR, "\n      val_smmu_map: l2 stream table init failed     ", 0);
+            val_print(ACS_PRINT_ERR, " val_smmu_map: l2 stream table init failed     ", 0);
             return 1;
         }
     }
@@ -1013,21 +1015,20 @@ uint32_t val_smmu_init(void)
     g_smmu = val_memory_calloc(g_num_smmus, sizeof(smmu_dev_t));
     if (!g_smmu)
     {
-        val_print(ACS_PRINT_ERR, "\n      val_smmu_init: memory allocation failure     ", 0);
+        val_print(ACS_PRINT_ERR, " val_smmu_init: memory allocation failure     ", 0);
         return ACS_STATUS_ERR;
     }
 
     for (i = 0; i < g_num_smmus; ++i) {
         if (val_iovirt_get_smmu_info(SMMU_CTRL_ARCH_MAJOR_REV, i) != 3)
-	{
-	    val_print(ACS_PRINT_ERR, "\n val_smmu_init: SMMUv3.x supported, \
-			    skipping smmu %d", i);
+	    {
+	        val_print(ACS_PRINT_ERR, " val_smmu_init: SMMUv3.x supported, skipping smmu %d", i);
             continue;
         }
         g_smmu[i].base = val_iovirt_get_smmu_info(SMMU_CTRL_BASE, i);
         if (smmu_init(&g_smmu[i]))
         {
-            val_print(ACS_PRINT_ERR, "\n      val_smmu_init: smmu %d init failed     ", i);
+            val_print(ACS_PRINT_ERR, " val_smmu_init: smmu %d init failed     ", i);
             g_smmu[i].base = 0;
             return ACS_STATUS_ERR;
         }
@@ -1048,7 +1049,7 @@ val_smmu_get_info(SMMU_INFO_e type, uint32_t smmu_index)
 
     if (smmu_index >= g_num_smmus)
     {
-        val_print(ACS_PRINT_ERR, "\n    val_smmu_get_info: invalid smmu index(%d)       ", smmu_index);
+        val_print(ACS_PRINT_ERR, " val_smmu_get_info: invalid smmu index(%d)       ", smmu_index);
         return 0;
     }
     smmu = &g_smmu[smmu_index];

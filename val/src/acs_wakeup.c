@@ -37,7 +37,7 @@ static uint32_t val_get_psci_ver(void)
 
   pal_pe_call_smc(&smc_args, gPsciConduit);
 
-  //val_print(ACS_PRINT_DEBUG, "\n       PSCI VERSION = %X", smc_args.Arg0);
+  //val_print(ACS_PRINT_DEBUG, " PSCI VERSION = %X", smc_args.Arg0);
 
   return smc_args.Arg0;
 }
@@ -58,7 +58,7 @@ static uint32_t val_get_psci_features(uint64_t psci_func_id)
 
   pal_pe_call_smc(&smc_args, gPsciConduit);
 
-  //val_print(ACS_PRINT_DEBUG, "\n       PSCI FEATURS = %d", smc_args.Arg0);
+  //val_print(ACS_PRINT_DEBUG, " PSCI FEATURS = %d", smc_args.Arg0);
 
   return smc_args.Arg0;
 }
@@ -78,12 +78,12 @@ val_suspend_pe(uint64_t entry, uint32_t context_id)
   uint32_t power_state;
 
   psci_major_ver = (val_get_psci_ver() >> 16);
-  val_print(ACS_PRINT_DEBUG, "\n       PSCI MAJOR VERSION = %X", psci_major_ver);
+  val_print(ACS_PRINT_DEBUG, " PSCI MAJOR VERSION = %X", psci_major_ver);
   if (psci_major_ver < 1)
     power_state = 0;
   else {
       pwr_state_fmt = (val_get_psci_features(ARM_SMC_ID_PSCI_CPU_SUSPEND_AARCH64) >> 1);
-      val_print(ACS_PRINT_DEBUG, "\n       PSCI PWR_STATE_FMT = %d                ",
+      val_print(ACS_PRINT_DEBUG, " PSCI PWR_STATE_FMT = %d                ",
                                                                 pwr_state_fmt);
       if (pwr_state_fmt == ARM_SMC_ID_PSCI_POWER_STATE_FMT_ORIGINAL)
         power_state = 0;

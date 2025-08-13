@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022-2023, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2023, 2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,80 +17,86 @@
 
 #include "include/rme_acs_val.h"
 #include "include/rme_acs_common.h"
-
+#include "include/rme_acs_cfg.h"
+#include "include/rme_acs_pe.h"
 
 /**
-  @brief  Parse the input status and print the appropriate information to console
+  @brief  Print the appropriate information to console based on string state
           1. Caller       - Application layer
           2. Prerequisite - None
-  @param  index  - index of the PE who is reporting this status.
-  @param  status  - 32-bit value concatenated from state, level, error value
-  @param  ruleid  - 8 bit pointer to the SCENARIO_ID string.
+  @param  index     - index of the PE who is reporting this status.
+  @param  state     - pointer to the state string ("PASS", "FAIL", etc).
   @return  none
  **/
 void
-val_report_status(uint32_t index, uint32_t status, char8_t *ruleid)
+val_report_status(uint32_t index, char8_t *state)
 {
+  volatile VAL_SHARED_MEM_t *pe_mem;
+  pe_mem = (VAL_SHARED_MEM_t *)pal_mem_get_shared_addr();
+  pe_mem = pe_mem + index;
 
-  if (IS_TEST_FAIL(status))
-      val_print(ACS_PRINT_ERR, "\n       Failed on PE - %4d ", index);
-
-  if (IS_TEST_PASS(status)) {
-    val_print(ACS_PRINT_DEBUG, "\n       ", 0);
-    val_print(ACS_PRINT_DEBUG, ruleid, 0);
-    val_print(ACS_PRINT_DEBUG, "\n                                  ", 0);
-    val_print(ACS_PRINT_TEST, ": Result:  PASS \n", status);
+  if (val_memory_compare("FAIL", state, sizeof("FAIL")) == 0) {
+      val_print(ACS_PRINT_ALWAYS, "\nFailed on PE - %4d ", index);
   }
+
+  if (val_memory_compare("SKIP", state, sizeof("SKIP")) == 0) {
+      val_print(ACS_PRINT_ALWAYS, "\nSkipped on PE - %4d", index);
+  }
+
+  if (val_memory_compare("PASS", state, sizeof("PASS")) == 0)
+  {
+    val_print(ACS_PRINT_ALWAYS, "\nResult: PASS \n", 0);
+  }
+
   else
-    if (IS_TEST_FAIL(status)) {
-      if (ruleid) {
-            val_print(ACS_PRINT_ERR, "\n       ", 0);
-            val_print(ACS_PRINT_ERR, ruleid, 0);
-            val_print(ACS_PRINT_ERR, "\n       Checkpoint -- %2d             \
-                          ",status & STATUS_MASK);
-      }
-      val_print(ACS_PRINT_ERR, ": Result:  FAIL \n", 0);
+    if (val_memory_compare("FAIL", state, sizeof("FAIL")) == 0) {
+        val_print(ACS_PRINT_ALWAYS, " Checkpoint -- %2d", (uint64_t)pe_mem->checkpoint);
+        val_print(ACS_PRINT_ALWAYS, "\nResult: FAIL \n", 0);
     }
     else
-      if (IS_TEST_SKIP(status)) {
-          if (ruleid) {
-              val_print(ACS_PRINT_WARN, "\n       ", 0);
-              val_print(ACS_PRINT_WARN, ruleid, 0);
-              val_print(ACS_PRINT_WARN, "\n       Checkpoint -- %2d             \
-                          ",status & STATUS_MASK);
-          }
-          val_print(ACS_PRINT_WARN, ": Result:  SKIPPED \n", 0);
+      if (val_memory_compare("SKIP", state, sizeof("SKIP")) == 0) {
+        val_print(ACS_PRINT_ALWAYS, " Checkpoint -- %2d", (uint64_t)pe_mem->checkpoint);
+        val_print(ACS_PRINT_ALWAYS, "\nResult: SKIPPED \n", 0);
       }
       else
-        if (IS_TEST_START(status))
-          val_print(ACS_PRINT_INFO, "\n       START  ", status);
-        else
-          if (IS_TEST_END(status))
-            val_print(ACS_PRINT_INFO, "       END  \n\n", status);
-          else
-            val_print(ACS_PRINT_ERR, ": Result:  %8x  \n", status);
-
+        if (val_memory_compare("END", state, sizeof("END")) == 0) {
+          g_print_in_test_context = 0;
+          g_print_test_check_id = 0;
+          val_print(ACS_PRINT_ALWAYS,
+            "\n*******************************************************\n", 0);
+        }
+        else {
+            val_print(ACS_PRINT_ALWAYS, "\nResult=", 0);
+            val_print(ACS_PRINT_ALWAYS, state, 0);
+            val_print(ACS_PRINT_ALWAYS, " \n", 0);
+            return;
+        }
 }
 
 /**
-  @brief  Record the state and status of the test execution
+  @brief  Record the string-based state, test name, and checkpoint for the test
           1. Caller       - Test Suite
           2. Prerequisite - val_allocate_shared_mem
-  @param  index  - index of the PE who is reporting this status.
-  @param  status - 32-bit value concatenated from state, level, error value
-
-  @return  none
+  @param  index      - index of the PE who is reporting this status.
+  @param  state      - string result status ("PASS", "FAIL", "SKIP", etc.)
+  @param  checkpoint - checkpoint identifier to tag result
+  @return none
 **/
 void
-val_set_status(uint32_t index, uint32_t status)
+val_set_status(uint32_t index, char8_t *state, uint32_t checkpoint)
 {
   volatile VAL_SHARED_MEM_t *mem;
 
   mem = (VAL_SHARED_MEM_t *) pal_mem_get_shared_addr();
   mem = mem + index;
-  mem->status = status;
 
-  val_data_cache_ops_by_va((addr_t)&mem->status, CLEAN_AND_INVALIDATE);
+  val_memcpy((void *)mem->state, state, sizeof(mem->state) - 1);
+  mem->state[sizeof(mem->state) - 1] = '\0';
+
+  mem->checkpoint = checkpoint;
+
+  val_pe_cache_invalidate_range((addr_t)mem->state, sizeof(mem->state));
+  val_data_cache_ops_by_va((addr_t)&mem->checkpoint, CLEAN_AND_INVALIDATE);
 }
 
 /**
@@ -100,7 +106,7 @@ val_set_status(uint32_t index, uint32_t status)
   @param  index  - index of the PE who is reporting this status.
   @return 32-bit value concatenated from state, level, error value
 **/
-uint32_t
+char8_t *
 val_get_status(uint32_t index)
 {
   volatile VAL_SHARED_MEM_t *mem;
@@ -108,9 +114,7 @@ val_get_status(uint32_t index)
   mem = (VAL_SHARED_MEM_t *) pal_mem_get_shared_addr();
   mem = mem + index;
 
-  val_data_cache_ops_by_va((addr_t)&mem->status, INVALIDATE);
+  val_data_cache_ops_by_va((addr_t)mem->state, INVALIDATE);
 
-  return (uint32_t)(mem->status);
-
+  return (char8_t *)(mem->state);
 }
-

@@ -18,8 +18,8 @@
 #include "val_el3/ack_include.h"
 
 static MemoryPool mem_pool = {
-    .base = (uint8_t *)FREE_MEM_SMMU, // Hardcoded address
-    .size = MEMORY_POOL_SIZE,
+    .base = (uint8_t *)PLAT_FREE_MEM_SMMU, // Hardcoded address
+    .size = PLAT_MEMORY_POOL_SIZE,
     .free_list = NULL,
 };
 
@@ -48,7 +48,14 @@ void val_data_cache_ops_by_va_el3(uint64_t VA, uint32_t type)
       invalidate_cache((uint64_t *)VA);
       break;
     default:
-      ERROR("Invalid cache operation\n");
+      shared_data->status_code = 1;
+      shared_data->error_code = 0;
+      const char *msg = "EL3: Invalid cache operation";
+      ERROR("\n %s", msg);
+      int i = 0; while (msg[i] && i < sizeof(shared_data->error_msg) - 1) {
+          shared_data->error_msg[i] = msg[i]; i++;
+      }
+      shared_data->error_msg[i] = '\0';
       break;
   }
 }
@@ -135,7 +142,17 @@ void val_pe_reg_list_cmp_msd(void)
   }
   //If the comparision is failed at any time, SET the shared generic flag
   if (cmp_fail > 0)
-      shared_data->generic_flag = SET;
+  {
+    shared_data->generic_flag = SET;
+    shared_data->status_code = 1;
+    const char *msg = "EL3: Register comparision failed";
+    int i = 0; while (msg[i] && i < sizeof(shared_data->error_msg) - 1) {
+        shared_data->error_msg[i] = msg[i]; i++;
+    }
+    shared_data->error_msg[i] = '\0';
+  } else {
+    INFO("Register comparision passed\n");
+  }
 
 }
 
@@ -199,6 +216,7 @@ void val_pas_filter_active_mode(int enable)
   //Change the mode to Active from In-active
   pal_pas_filter_active_mode(enable);
 }
+
 /**
   @brief   This API Enables root watchdog by writing to Control Base register
   @param   wdog_ctrl_base - Watchdog control base register
@@ -287,9 +305,19 @@ void val_wd_set_ws0_el3(uint64_t VA_RT_WDOG, uint32_t timeout, uint64_t counter_
            by writing to ACCESSEN bit of SMMU_ROOT_CR0 register.
   @return  None
  **/
-void val_smmu_access_disable(void)
+void val_smmu_access_disable(uint64_t smmu_base)
 {
-  *(uint32_t *)(ROOT_IOVIRT_SMMUV3_BASE + SMMU_ROOT_CR0) = CLEAR;
+  *(uint32_t *)(smmu_base + SMMU_ROOT_CR0) = CLEAR;
+}
+
+/**
+  @brief   This API Enables accesses from the SMMU and client devices
+           by writing to ACCESSEN bit of SMMU_ROOT_CR0 register.
+  @return  None
+ **/
+void val_smmu_access_enable(uint64_t smmu_base)
+{
+  *(uint32_t *)(smmu_base + SMMU_ROOT_CR0) = SET;
 }
 
 /**
@@ -471,7 +499,7 @@ void *val_memory_calloc_el3(size_t num, size_t size, size_t alignment)
  * @param  Va  Virtual address
  * @return Va  Returns the VA because of the 1:1 memory mapping
  */
-void *val_memory_virt_to_phys(void *va)
+void *val_memory_virt_to_phys_el3(void *va)
 {
   return va;
 }
@@ -497,29 +525,49 @@ void val_smmu_root_config_service(uint64_t arg0, uint64_t arg1, uint64_t arg2)
   uint64_t data;
   smmu_master_attributes_t smmu_attr;
   pgt_descriptor_t pgt_attr;
+  uint64_t smmu_base;
+
+  smmu_base = arg1;
 
   switch (arg0)
   {
-      case SMMU_ROOT_RME_IMPL_CHK:
-          INFO("SMMU base address & offset: 0x%lx \n",
-                      (uint64_t)ROOT_IOVIRT_SMMUV3_BASE + SMMU_ROOT_IDRO);
-          data = *(uint32_t *)(ROOT_IOVIRT_SMMUV3_BASE + SMMU_ROOT_IDRO);
-          INFO("SMMU ROOT IDRO: 0x%lx", data);
-          shared_data->shared_data_access[0].data = data;
-          break;
-      case SMMU_RLM_PGT_INIT:
-          INFO("SMMU Realm Initialisation\n");
-          val_smmu_init(arg1);
-          break;
-      case SMMU_RLM_SMMU_MAP:
-          INFO("SMMU realm page table map\n");
-          memcpy((void *)&smmu_attr, (void *)arg1, sizeof(smmu_master_attributes_t));
-          memcpy((void *)&pgt_attr, (void *)arg2, sizeof(pgt_descriptor_t));
-          val_smmu_rlm_map((smmu_master_attributes_t)smmu_attr, (pgt_descriptor_t)pgt_attr);
-          break;
-      case SMMU_RLM_ADD_DPT_ENTRY:
+       case SMMU_ROOT_RME_IMPL_CHK:
+         INFO("SMMU base address & offset: 0x%lx \n", (uint64_t)smmu_base + SMMU_ROOT_IDRO);
+         data = *(uint32_t *)(smmu_base + SMMU_ROOT_IDRO);
+         INFO("SMMU ROOT IDRO: 0x%lx", data);
+         shared_data->shared_data_access[0].data = data;
+         break;
+       case SMMU_RLM_PGT_INIT:
+         INFO("SMMU Realm Initialisation\n");
+         val_smmu_init_el3(arg1, (uint64_t *)arg2);
+         break;
+       case SMMU_RLM_SMMU_MAP:
+         INFO("SMMU realm page table map\n");
+         memcpy((void *)&smmu_attr, (void *)arg1, sizeof(smmu_master_attributes_t));
+         memcpy((void *)&pgt_attr, (void *)arg2, sizeof(pgt_descriptor_t));
+         if (val_smmu_rlm_map((smmu_master_attributes_t)smmu_attr, (pgt_descriptor_t)pgt_attr))
+         {
+              shared_data->status_code = 1;
+              shared_data->error_code = smmu_attr.smmu_index;
+              const char *msg = "EL3: SMMU Realm map failed";
+              int i = 0; while (msg[i] && i < sizeof(shared_data->error_msg) - 1) {
+                  shared_data->error_msg[i] = msg[i]; i++;
+              }
+              shared_data->error_msg[i] = '\0';
+         }
+         break;
+       case SMMU_RLM_ADD_DPT_ENTRY:
           INFO("SMMU add DPT entry\n");
-          val_dpt_add_entry(arg1, arg2);
+          if (val_dpt_add_entry(arg1, arg2))
+          {
+              shared_data->status_code = 1;
+              shared_data->error_code = VAL_EXTRACT_BITS(arg2, 32, 63);
+              const char *msg = "EL3: SMMU DPT Add entry failed";
+              int i = 0; while (msg[i] && i < sizeof(shared_data->error_msg) - 1) {
+                  shared_data->error_msg[i] = msg[i]; i++;
+              }
+              shared_data->error_msg[i] = '\0';
+          }
           break;
       case SMMU_RLM_DPTI:
           INFO("SMMU DPT Invalidate\n");
@@ -533,7 +581,16 @@ void val_smmu_root_config_service(uint64_t arg0, uint64_t arg1, uint64_t arg2)
           break;
       case SMMU_CONFIG_MECID:
           memcpy((void *)&smmu_attr, (void *)arg1, sizeof(smmu_master_attributes_t));
-          val_smmu_set_rlm_ste_mecid((smmu_master_attributes_t)smmu_attr, arg2);
+          if (val_smmu_set_rlm_ste_mecid((smmu_master_attributes_t)smmu_attr, arg2))
+          {
+              shared_data->status_code = 1;
+              shared_data->error_code = smmu_attr.smmu_index;
+              const char *msg = "EL3: SMMU Realm set MECID failed";
+              int i = 0; while (msg[i] && i < sizeof(shared_data->error_msg) - 1) {
+                  shared_data->error_msg[i] = msg[i]; i++;
+              }
+              shared_data->error_msg[i] = '\0';
+          }
           break;
       default:
           INFO(" Invalid SMMU ROOT register config\n");
@@ -592,6 +649,12 @@ void val_enable_mec(void)
     } else {
         /* Log an error if FEAT_MEC or FEAT_SCTLR2 is not supported */
         ERROR("PE doesn't support FEAT_MEC or FEAT_SCTLR2\n");
+        shared_data->status_code = 1;
+        const char *msg = "EL3: FEAT_MEC OR FEAT_SCTLR2 absent";
+        int i = 0; while (msg[i] && i < sizeof(shared_data->error_msg) - 1) {
+            shared_data->error_msg[i] = msg[i]; i++;
+        }
+        shared_data->error_msg[i] = '\0';
     }
 }
 
@@ -614,7 +677,13 @@ void val_disable_mec(void)
         write_sctlr2_el3(sctlr2_el3);
     } else {
         /* Log an error if FEAT_MEC or FEAT_SCTLR2 is not supported */
-        ERROR("PE doesn't support FEAT_MEC or FEAT_SCTLR2\n");
+        shared_data->status_code = 1;
+        const char *msg = "EL3: FEAT_MEC OR FEAT_SCTLR2 absent";
+        ERROR("\n %s", msg);
+        int i = 0; while (msg[i] && i < sizeof(shared_data->error_msg) - 1) {
+            shared_data->error_msg[i] = msg[i]; i++;
+        }
+        shared_data->error_msg[i] = '\0';
     }
 }
 

@@ -23,13 +23,13 @@
 #define PoC  0x2
 
 uint32_t
-mec001_entry(uint32_t num_pe);
+mec_support_mecid_and_mecid_width_entry(uint32_t num_pe);
 uint32_t
-mec002_entry(void);
+mec_mecid_assosiation_and_encryption_entry(void);
 uint32_t
-mec003_entry(void);
+mec_effect_of_popa_cmo_entry(void);
 uint32_t
-mec004_entry(uint32_t num_pe);
+mec_cmo_uses_correct_mecid_entry(uint32_t num_pe);
 
 uint32_t val_is_mec_supported(void);
 uint32_t val_mec_validate_mecid(uint32_t mecid1, uint32_t mecid2, uint8_t PoX);

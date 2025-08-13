@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022, 2024, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2024, 2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -83,7 +83,7 @@ palPcieGetBdf(UINT32 ClassCode, UINT32 StartBdf)
 
   Status = gBS->LocateHandleBuffer (ByProtocol, &gEfiPciIoProtocolGuid, NULL, &HandleCount, &HandleBuffer);
   if (EFI_ERROR (Status)) {
-    rme_print(ACS_PRINT_INFO, L" No PCI devices found in the system\n");
+    rme_print(ACS_PRINT_INFO, L" No PCI devices found in the system");
     return EFI_SUCCESS;
   }
 
@@ -108,7 +108,7 @@ palPcieGetBdf(UINT32 ClassCode, UINT32 StartBdf)
           if (!EFI_ERROR (Status)) {
             Hdr = &PciHeader.Bridge.Hdr;
             rme_print(ACS_PRINT_INFO,
-                       L" %03d.%02d.%02d class_code = %d %d\n",
+                       L" %03d.%02d.%02d class_code = %d %d",
                        Bus, Dev, Index, Hdr->ClassCode[1], Hdr->ClassCode[2]);
             if (Hdr->ClassCode[2] == ((ClassCode >> 16) & 0xFF)) {
               if (Hdr->ClassCode[1] == ((ClassCode >> 8) & 0xFF)) {
@@ -170,7 +170,7 @@ palPcieGetBase(UINT32 bdf, UINT32 bar_index)
 
   Status = gBS->LocateHandleBuffer (ByProtocol, &gEfiPciIoProtocolGuid, NULL, &HandleCount, &HandleBuffer);
   if (EFI_ERROR (Status)) {
-    rme_print(ACS_PRINT_INFO, L" No PCI devices found in the system\n");
+    rme_print(ACS_PRINT_INFO, L" No PCI devices found in the system");
     return EFI_SUCCESS;
   }
 

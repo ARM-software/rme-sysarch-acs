@@ -57,7 +57,7 @@ pal_peripheral_create_info_table(PERIPHERAL_INFO_TABLE *peripheralInfoTable)
 
   if (peripheralInfoTable == NULL) {
     rme_print(ACS_PRINT_ERR,
-               L" Input Peripheral Table Pointer is NULL. Cannot create Peripheral INFO \n");
+               L" Input Peripheral Table Pointer is NULL. Cannot create Peripheral INFO ");
     return;
   }
 
@@ -75,7 +75,7 @@ pal_peripheral_create_info_table(PERIPHERAL_INFO_TABLE *peripheralInfoTable)
           per_info->type  = PERIPHERAL_TYPE_USB;
           per_info->base0 = palPcieGetBase(DeviceBdf, BAR0);
           per_info->bdf   = DeviceBdf;
-          rme_print(ACS_PRINT_INFO, L" Found a USB controller %4x \n", per_info->base0);
+          rme_print(ACS_PRINT_INFO, L" Found a USB controller %4x ", per_info->base0);
           peripheralInfoTable->header.num_usb++;
           per_info++;
        }
@@ -92,7 +92,7 @@ pal_peripheral_create_info_table(PERIPHERAL_INFO_TABLE *peripheralInfoTable)
           per_info->type  = PERIPHERAL_TYPE_SATA;
           per_info->base0 = palPcieGetBase(DeviceBdf, BAR0);
           per_info->bdf   = DeviceBdf;
-          rme_print(ACS_PRINT_INFO, L" Found a SATA controller %4x \n", per_info->base0);
+          rme_print(ACS_PRINT_INFO, L" Found a SATA controller %4x ", per_info->base0);
           peripheralInfoTable->header.num_sata++;
           per_info++;
        }

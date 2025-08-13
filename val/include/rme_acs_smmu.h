@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022-2023, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2023, 2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -32,29 +32,14 @@
 #define SMMUv3_IIDR   0x18
 #define SMMUv3_AIDR   0x1C
 
-uint64_t
-val_smmu_ssid_bits(uint32_t smmu_index);
-
 uint32_t
 val_smmu_read_cfg(uint32_t offset, uint32_t index);
-
-uint64_t
-val_smmu_ops(SMMU_OPS_e ops, uint32_t index, void *param1, void *param2);
-
-uint32_t
-val_smmu_max_pasids(uint32_t smmu_index);
-
-uint32_t
-val_smmu_create_pasid_entry(uint32_t smmu_index, uint32_t pasid);
 
 uint32_t
 val_smmu_enable(uint32_t smmu_index);
 
 uint32_t
 val_smmu_disable(uint32_t smmu_index);
-
-uint64_t
-val_smmu_pa2iova(uint32_t smmu_index, uint64_t pa);
 
 uint32_t
 val_smmu_init(void);
@@ -71,8 +56,8 @@ void
 val_smmu_unmap(smmu_master_attributes_t master);
 
 uint32_t
-i001_entry(uint32_t num_pe);
+smmu_implements_rme_entry(uint32_t num_pe);
 uint32_t
-i002_entry(void);
+smmu_responds_to_gpt_tlb_entry(void);
 
 #endif

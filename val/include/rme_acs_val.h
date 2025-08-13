@@ -23,12 +23,12 @@
 #include "rme_acs_cfg.h"
 #include "rme_acs_common.h"
 
-
 typedef struct {
-  uint64_t    data0;
-  uint64_t    data1;
-  uint32_t    status;
-} VAL_SHARED_MEM_t;
+  uint64_t data0;
+  uint64_t data1;
+  char8_t    state[64];   // "PASS", "FAIL", etc.
+  uint32_t   checkpoint;
+} __attribute__((aligned(64))) VAL_SHARED_MEM_t;
 
 uint64_t
 val_pe_reg_read(uint32_t reg_id);
@@ -49,12 +49,12 @@ uint8_t
 val_is_el2_enabled(void);
 
 void
-val_report_status(uint32_t id, uint32_t status, char8_t *ruleid);
+val_report_status(uint32_t index, char8_t *state);
 
 void
-val_set_status(uint32_t index, uint32_t status);
+val_set_status(uint32_t index, char8_t *state, uint32_t checkpoint);
 
-uint32_t
+char8_t *
 val_get_status(uint32_t id);
 
 uint32_t
@@ -87,5 +87,14 @@ val_pe_get_vtcr(VTCR_EL2_INFO *vtcr);
 uint32_t
 val_pe_get_vtbr(uint64_t *ttbr_ptr);
 
-#endif
+void
+val_mem_region_create_info_table(uint64_t *mem_gpc_region_table,
+                                 uint64_t *mem_pas_region_table);
 
+MEM_REGN_INFO_TABLE *
+val_mem_gpc_info_table(void);
+
+MEM_REGN_INFO_TABLE *
+val_mem_pas_info_table(void);
+
+#endif

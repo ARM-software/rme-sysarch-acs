@@ -27,7 +27,9 @@ extern UINT32 g_curr_module;
 extern UINT32 g_enable_module;
 extern UINT32 g_pcie_p2p;
 extern UINT32 g_pcie_cache_present;
+extern UINT32 g_print_in_test_context;
 
+#define ACS_PRINT_ALWAYS  6    /* No log-level prefix or newline. For inline/multi-part prints */
 #define ACS_PRINT_ERR   5      /* Only Errors. use this to de-clutter the terminal and focus only on specifics */
 #define ACS_PRINT_WARN  4      /* Only warnings & errors. use this to de-clutter the terminal and focus only on specifics */
 #define ACS_PRINT_TEST  3      /* Test description and result descriptions. THIS is DEFAULT */
@@ -57,6 +59,56 @@ extern UINT32 g_pcie_cache_present;
 #define BAR_MT_SHIFT    3
 #define BAR_BASE_SHIFT  4
 
+typedef struct {
+  UINT32 type;
+  UINT32 bdf;
+  UINT64 address;
+  UINT32 property;
+} REGISTER_INFO_TABLE;
+
+typedef enum {
+  PCIE_RP = 0,
+  INTERCONNECT = 1
+} REGISTER_TYPE;
+
+typedef enum {
+  RMSD_WRITE_PROTECT = 0,
+  RMSD_FULL_PROTECT = 1,
+  RMSD_PROTECT = 2
+} RMSD_SECURITY_PROPERTY;
+
+/**
+  @brief  structure instance for region types
+**/
+typedef struct {
+  UINT32 num_of_regn_gpc;
+  UINT32 num_of_regn_pas_filter;
+} MEM_REGN_INFO_HDR;
+
+/**
+  @brief  structure instance for Region details
+**/
+typedef struct {
+  UINT32   base_addr;
+  UINT32   regn_size;
+  UINT64   resourse_pas;
+} MEM_REGN_INFO_ENTRY;
+
+typedef struct {
+  MEM_REGN_INFO_HDR    header;
+  MEM_REGN_INFO_ENTRY  regn_info[];
+} MEM_REGN_INFO_TABLE;
+
+typedef struct {
+  UINT64 rt_reg_base_addr;
+  UINT64 rt_reg_size;
+} RT_REG_INFO_ENTRY;
+
+typedef struct {
+  UINT32 num_reg;
+  RT_REG_INFO_ENTRY rt_reg_info[];
+} ROOT_REGSTR_TABLE;
+
 typedef enum {
   MMIO = 0,
   IO = 1
@@ -78,8 +130,47 @@ typedef struct {
   UINT64   Arg7;
 } ARM_SMC_ARGS;
 
-#define rme_print(verbose, string, ...) if(verbose >= g_print_level) \
-                                            Print(string, ##__VA_ARGS__)
+#define FILENAME (__builtin_strrchr("/" __FILE__, '/') + 1)
+
+#define rme_print(verbose, string, ...)                                 \
+  do {                                                                  \
+    if ((verbose) >= g_print_level) {                                   \
+      if ((verbose) == ACS_PRINT_DEBUG) {                               \
+        if (g_print_in_test_context)                                    \
+          Print(L"\n\t\tPAL_DBG : ");                                    \
+        else                                                            \
+          Print(L"\n\tPAL_DBG : ");                                      \
+      } else if ((verbose) == ACS_PRINT_ERR) {                          \
+        if (g_print_in_test_context)                                    \
+          Print(L"\n\t\tPAL_ERR : ");                                    \
+        else                                                            \
+          Print(L"\n\tPAL_ERR : ");                                      \
+      } else if ((verbose) == ACS_PRINT_INFO) {                         \
+        if (g_print_in_test_context)                                    \
+          Print(L"\n\t\tPAL_INFO: ");                                   \
+        else                                                            \
+          Print(L"\n\tPAL_INFO: ");                                     \
+      } else if ((verbose) == ACS_PRINT_WARN) {                         \
+        if (g_print_in_test_context)                                    \
+          Print(L"\n\t\tPAL_WARN: ");                                   \
+        else                                                            \
+          Print(L"\n\tPAL_WARN: ");                                     \
+      } else if ((verbose) == ACS_PRINT_ALWAYS) {                       \
+        Print(string, ##__VA_ARGS__);                                   \
+        break;                                                          \
+      } else {                                                          \
+        Print(string, ##__VA_ARGS__);                                   \
+        break;                                                          \
+      }                                                                 \
+      Print(string, ##__VA_ARGS__);                                     \
+      /* Print file name and line number for ERR and WARN */            \
+      if (verbose == ACS_PRINT_ERR || verbose == ACS_PRINT_WARN) {          \
+          Print(L"  [FILE: %a]", (UINT64)FILENAME);                    \
+          Print(L"  [LINE: %d]", __LINE__);                              \
+      }                                                                 \
+    }                                                                   \
+  } while (0)
+
 #define VAL_EXTRACT_BITS(data, start, end) ((data >> start) & ((1ul << (end-start+1))-1))
 /**
   Conduits for service calls (SMC vs HVC).
@@ -398,7 +489,6 @@ VOID    *pal_mem_alloc_cacheable(UINT32 bdf, UINT32 size, VOID **pa);
 VOID    pal_mem_free_cacheable(UINT32 bdf, UINT32 size, VOID *va, VOID *pa);
 VOID    *pal_mem_virt_to_phys(VOID *va);
 VOID    *pal_mem_phys_to_virt(UINT64 pa);
-UINT64  pal_memory_get_unpopulated_addr(UINT64 *addr, UINT32 instance);
 VOID pal_mem_free(VOID *buffer);
 
 UINT32 pal_pe_get_num();

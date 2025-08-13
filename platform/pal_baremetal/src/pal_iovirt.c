@@ -67,7 +67,7 @@ pal_iovirt_get_rc_smmu_base (
 
   if (!mapping_found) {
       print(ACS_PRINT_ERR,
-               "\n       RID to Stream ID/Dev ID map not found ", 0);
+               " RID to Stream ID/Dev ID map not found ", 0);
       return 0xFFFFFFFF;
 
   }
@@ -83,7 +83,7 @@ pal_iovirt_get_rc_smmu_base (
                                                     (*map).map.id_count))
           {
               print(ACS_PRINT_DEBUG,
-                         "\n       find RC block->data.smmu.base : %llx", block->data.smmu.base);
+                         " find RC block->data.smmu.base : %llx", block->data.smmu.base);
               return block->data.smmu.base;
           }
       }
@@ -127,34 +127,34 @@ dump_block(IOVIRT_BLOCK *block) {
   NODE_DATA_MAP *map = &(block->data_map[0]);
   switch(block->type) {
       case IOVIRT_NODE_ITS_GROUP:
-      print(ACS_PRINT_INFO, "\n ITS Group: Num ITS:%d\n", (*map).id[0]);
+      print(ACS_PRINT_INFO, " ITS Group: Num ITS:%d", (*map).id[0]);
       for(i = 0; i < block->data.its_count; i++)
-          print(ACS_PRINT_INFO, "  ITS ID : %d\n", (*map).id[i]);
+          print(ACS_PRINT_INFO, " ITS ID : %d", (*map).id[i]);
       return;
       case IOVIRT_NODE_PCI_ROOT_COMPLEX:
       print(ACS_PRINT_INFO,
-                 " Root Complex: PCI segment number:%d\n", block->data.rc.segment);
+                 " Root Complex: PCI segment number:%d", block->data.rc.segment);
       break;
       case IOVIRT_NODE_SMMU:
       case IOVIRT_NODE_SMMU_V3:
-      print(ACS_PRINT_INFO, " SMMU: Major Rev:%d Base Address:0x%x\n",
+      print(ACS_PRINT_INFO, " SMMU: Major Rev:%d Base Address:0x%x",
                  block->data.smmu.arch_major_rev, block->data.smmu.base);
       break;
       case IOVIRT_NODE_PMCG:
       print(ACS_PRINT_INFO,
-                 " PMCG: Base:0x%x\n Overflow GSIV:0x%x Node Reference:0x%x\n",
+                 " PMCG: Base:0x%x\n Overflow GSIV:0x%x Node Reference:0x%x",
                  block->data.pmcg.base, block->data.pmcg.overflow_gsiv, block->data.pmcg.node_ref);
       break;
   }
   print(ACS_PRINT_INFO,
-             " Number of ID Mappings:%d\n", block->num_data_map);
+             " Number of ID Mappings:%d", block->num_data_map);
   for(i = 0; i < block->num_data_map; i++, map++) {
-      print(ACS_PRINT_INFO,
-                 "  input_base:0x%x id_count:0x%x\n  output_base:0x%x output ref:0x%x\n",
-            (*map).map.input_base, (*map).map.id_count,
+      print(ACS_PRINT_INFO, " input_base:0x%x id_count:0x%x",
+            (*map).map.input_base, (*map).map.id_count);
+      print(ACS_PRINT_INFO, " output_base:0x%x output ref:0x%x",
             (*map).map.output_base, (*map).map.output_ref);
   }
-  print(ACS_PRINT_INFO, "\n");
+  print(ACS_PRINT_INFO, "");
 }
 
 void
@@ -235,7 +235,7 @@ pal_iovirt_create_info_table(IOVIRT_INFO_TABLE *IoVirtTable)
           IoVirtTable->num_pmcgs++;
           break;
           default:
-          print(ACS_PRINT_ERR, "Invalid IORT node type\n");
+          print(ACS_PRINT_ERR, "Invalid IORT node type");
           return;
      }
 
@@ -268,38 +268,9 @@ pal_iovirt_create_info_table(IOVIRT_INFO_TABLE *IoVirtTable)
   }
 
   block = &(IoVirtTable->blocks[0]);
-  print(ACS_PRINT_DEBUG, " Number of IOVIRT blocks = %d\n", IoVirtTable->num_blocks);
+  print(ACS_PRINT_DEBUG, " Number of IOVIRT blocks = %d", IoVirtTable->num_blocks);
   for(i = 0; i < IoVirtTable->num_blocks; i++, block = IOVIRT_NEXT_BLOCK(block)) {
     block = ALIGN_MEMORY(block, bound);
     dump_block(block);
   }
-}
-
-/**
-  @brief  Check if given SMMU node has unique context bank interrupt ids
-
-  @param  smmu_block smmu IOVIRT block base address
-
-  @return 0 if test fails, 1 if test passes
-**/
-uint32_t
-pal_iovirt_check_unique_ctx_intid(uint64_t smmu_block)
-{
-  IOVIRT_BLOCK *block = (IOVIRT_BLOCK *)smmu_block;
-  /* This test has already been done while parsing IORT */
-  /* Check the flags to get the test result */
-  if(block->flags & (1 << IOVIRT_FLAG_SMMU_CTX_INT_SHIFT)) {
-    return 0;
-  }
-  return 1;
-
-}
-
-uint32_t
-pal_iovirt_unique_rid_strid_map(uint64_t rc_block)
-{
-  IOVIRT_BLOCK *block = (IOVIRT_BLOCK *)rc_block;
-  if(block->flags & (1 << IOVIRT_FLAG_STRID_OVERLAP_SHIFT))
-    return 0;
-  return 1;
 }

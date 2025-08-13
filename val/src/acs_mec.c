@@ -18,6 +18,7 @@
 #include "include/rme_acs_val.h"
 #include "include/rme_acs_common.h"
 #include "include/rme_acs_mec.h"
+#include "include/rme_acs_iovirt.h"
 #include "include/rme_acs_el32.h"
 #include "include/mem_interface.h"
 #include "include/val_interface.h"
@@ -34,37 +35,55 @@
 uint32_t
 val_rme_mec_execute_tests(uint32_t num_pe)
 {
-  uint32_t status, i, reset_status, num_smmus;
+  uint32_t status, i, reset_status, smmu_cnt;
+  uint64_t num_smmus = val_smmu_get_info(SMMU_NUM_CTRL, 0);
+  uint64_t smmu_base_arr[num_smmus], pgt_attr_el3;
 
-  for (i = 0 ; i < MAX_TEST_SKIP_NUM ; i++) {
-      if (g_skip_test_num[i] == ACS_RME_MEC_TEST_NUM_BASE) {
-          val_print(ACS_PRINT_TEST, "\n USER Override - Skipping all RME-MEC tests \n", 0);
+  for (i = 0 ; i < g_num_skip ; i++) {
+      if (val_memory_compare((char8_t *)g_skip_test_str[i], MEC_MODULE,
+                             val_strnlen(g_skip_test_str[i])) == 0)
+      {
+          val_print(ACS_PRINT_ALWAYS, "\n USER Override - Skipping all RME-MEC tests \n", 0);
           return ACS_STATUS_SKIP;
       }
   }
 
-  if (g_single_module != SINGLE_MODULE_SENTINEL && g_single_module != ACS_RME_MEC_TEST_NUM_BASE &&
-       (g_single_test == SINGLE_MODULE_SENTINEL ||
-       (g_single_test - ACS_RME_MEC_TEST_NUM_BASE > 100 ||
-          g_single_test - ACS_RME_MEC_TEST_NUM_BASE <= 0))) {
-    val_print(ACS_PRINT_TEST, " USER Override - Skipping all RME-MEC tests \
-                    (running only a single module)\n", 0);
+  /* Check if there are any tests to be executed in current module with user override options*/
+  status = val_check_skip_module(MEC_MODULE);
+  if (status) {
+    val_print(ACS_PRINT_ALWAYS, "\n USER Override - Skipping all RME-MEC tests \n", 0);
     return ACS_STATUS_SKIP;
   }
 
   if (!val_is_mec_supported())
   {
-      val_print(ACS_PRINT_TEST, "\n Platform does not support MEC \
+      val_print(ACS_PRINT_ALWAYS, "\n Platform does not support MEC \
                        - Skipping all RME-MEC tests \n", 0);
       return ACS_STATUS_SKIP;
   }
 
-  g_curr_module = 1 << MEC_MODULE;
-
   if (!g_rl_smmu_init)
   {
-      num_smmus = val_iovirt_get_smmu_info(SMMU_NUM_CTRL, 0);
-      val_rlm_smmu_init(num_smmus);
+      smmu_cnt = 0;
+
+      while (smmu_cnt < num_smmus)
+      {
+        smmu_base_arr[smmu_cnt] = val_smmu_get_info(SMMU_CTRL_BASE, smmu_cnt);
+        smmu_cnt++;
+      }
+      /* Map the Pointer in EL3 as NS Access PAS so that EL3 can access this struct pointers */
+      pgt_attr_el3 = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(OUTER_SHAREABLE) |
+                                 PGT_ENTRY_AP_RW | PAS_ATTR(NONSECURE_PAS));
+      if (val_add_mmu_entry_el3((uint64_t)(smmu_base_arr), (uint64_t)(smmu_base_arr), pgt_attr_el3))
+      {
+        val_print(ACS_PRINT_ERR, " MMU mapping failed for smmu_base_arr", 0);
+        return ACS_STATUS_ERR;
+      }
+      if (val_rlm_smmu_init(num_smmus, smmu_base_arr))
+      {
+        val_print(ACS_PRINT_ERR, " SMMU REALM INIT failed", 0);
+        return ACS_STATUS_ERR;
+      }
 
       g_rl_smmu_init = 1;
   }
@@ -77,11 +96,11 @@ val_rme_mec_execute_tests(uint32_t num_pe)
       reset_status != RESET_LS_DISBL_FLAG &&
       reset_status != RESET_LS_TEST3_FLAG)
   {
-    status = mec001_entry(num_pe);
-    status |= mec002_entry();
-    status |= mec003_entry();
-    status |= mec004_entry(num_pe);
-    val_print_test_end(status, "RME-MEC");
+    val_print(ACS_PRINT_ALWAYS, "\n\n*******************************************************\n", 0);
+    status = mec_support_mecid_and_mecid_width_entry(num_pe);
+    status |= mec_mecid_assosiation_and_encryption_entry();
+    status |= mec_effect_of_popa_cmo_entry();
+    status |= mec_cmo_uses_correct_mecid_entry(2);
   }
 
   return status;
@@ -126,10 +145,22 @@ uint32_t val_mec_validate_mecid(uint32_t mecid1, uint32_t mecid2, uint8_t PoX)
 
   attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(NON_SHAREABLE) | PGT_ENTRY_AP_RW);
 
-  val_add_gpt_entry_el3(PA, GPT_ANY);
-  val_add_mmu_entry_el3(VA_RL, PA, (attr | LOWER_ATTRS(PAS_ATTR(REALM_PAS))));
+  if (val_add_gpt_entry_el3(PA, GPT_ANY))
+  {
+    val_print(ACS_PRINT_ERR, " GPT mapping failed for PA: 0x%llx", PA);
+    return ACS_STATUS_ERR;
+  }
+  if (val_add_mmu_entry_el3(VA_RL, PA, (attr | LOWER_ATTRS(PAS_ATTR(REALM_PAS)))))
+  {
+    val_print(ACS_PRINT_ERR, " MMU mapping failed for VA: 0x%llx", VA_RL);
+    return ACS_STATUS_ERR;
+  }
 
-  val_rlm_configure_mecid(mecid1);
+  if (val_rlm_configure_mecid(mecid1))
+  {
+    val_print(ACS_PRINT_ERR, " MEC configure failure for mecid: 0x%lx", mecid1);
+    return ACS_STATUS_ERR;
+  }
 
   /* Store RANDOM_DATA_1 in PA_RT*/
   data_wt_rl = RANDOM_DATA_4;
@@ -138,19 +169,40 @@ uint32_t val_mec_validate_mecid(uint32_t mecid1, uint32_t mecid2, uint8_t PoX)
   shared_data->shared_data_access[0].data = data_wt_rl;
   shared_data->shared_data_access[0].access_type = WRITE_DATA;
 
-  val_pe_access_mut_el3();
+  if (val_pe_access_mut_el3())
+  {
+    val_print(ACS_PRINT_ERR, " Access MUT failure for VA: 0x%llx", VA_RL);
+    return ACS_STATUS_ERR;
+  }
 
-  if (PoX == PoPA)
-    val_data_cache_ops_by_pa_el3(PA, REALM_PAS);
-  else if (PoX == PoE)
-    val_cmo_to_poe(PA);
+  if (PoX == PoPA) {
+    if (val_data_cache_ops_by_pa_el3(PA, REALM_PAS))
+    {
+      val_print(ACS_STATUS_ERR, " CMO till PoPA failed for PA: 0x%llx", PA);
+      return ACS_STATUS_ERR;
+    }
+  }
+  else if (PoX == PoE) {
+    if (val_cmo_to_poe(PA))
+    {
+      val_print(ACS_PRINT_ERR, " CMO till POE failed for PA: 0x%llx", PA);
+    }
+  }
 
-  val_rlm_configure_mecid(mecid2);
+  if (val_rlm_configure_mecid(mecid2))
+  {
+    val_print(ACS_PRINT_ERR, " MECID Configuration failed for mecid: 0x%lx", mecid2);
+    return ACS_STATUS_ERR;
+  }
 
   shared_data->num_access = 1;
   shared_data->shared_data_access[0].addr = VA_RL;
   shared_data->shared_data_access[0].access_type = READ_DATA;
-  val_pe_access_mut_el3();
+  if (val_pe_access_mut_el3())
+  {
+    val_print(ACS_PRINT_ERR, " MUT Access failed for VA: 0x%llx after CMO", VA_RL);
+    return ACS_STATUS_ERR;
+  }
 
   data_rd_rl = shared_data->shared_data_access[0].data;
 

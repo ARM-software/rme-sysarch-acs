@@ -42,7 +42,7 @@ void default_irq_handler(uint64_t exception_type, void *context)
       g_intr_handler[ack_interrupt]();
   } else {
       val_print(ACS_PRINT_ERR,
-                "\n       GIC_INIT: Unregistered Handler for the interrupt_id : 0x%x",
+                " GIC_INIT: Unregistered Handler for the interrupt_id : 0x%x",
                 ack_interrupt);
   }
 
@@ -54,7 +54,7 @@ void default_irq_handler(uint64_t exception_type, void *context)
 
 void rme_gic_vector_table_init(void)
 {
-  val_print(ACS_PRINT_DEBUG, " GIC_INIT: Setting Up Vector Table...\n", 0);
+  val_print(ACS_PRINT_DEBUG, " GIC_INIT: Setting Up Vector Table...", 0);
 
   /* Setting Up Vector Table */
   rme_gic_set_el2_vector_table();
@@ -84,15 +84,15 @@ void val_gic_rme_install_esr(uint32_t exception_type, void (*esr)(uint64_t, void
 
 uint32_t common_exception_handler(uint32_t exception_type)
 {
-  val_print(ACS_PRINT_INFO, "\n       GIC_INIT: In Exception Handler Type : %x", exception_type);
+  val_print(ACS_PRINT_INFO, " GIC_INIT: In Exception Handler Type : %x", exception_type);
 
   /* Call Handler for exception, Handler would have
    * already been installed using install_esr call
    */
   g_esr_handler[exception_type](exception_type, NULL);
 
-  val_print(ACS_PRINT_INFO, "\n       GIC_INIT: Common Handler, FAR = %x", rme_gic_get_far());
-  val_print(ACS_PRINT_INFO, "\n       GIC_INIT: Common Handler, ESR = %x", rme_gic_get_esr());
+  val_print(ACS_PRINT_INFO, " GIC_INIT: Common Handler, FAR = %x", rme_gic_get_far());
+  val_print(ACS_PRINT_INFO, " GIC_INIT: Common Handler, ESR = %x", rme_gic_get_esr());
 
   /* If ELR is updated inside the handler then skip the elr update in assembly handler
    * Return 1 else return 0

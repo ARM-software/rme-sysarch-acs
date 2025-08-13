@@ -23,6 +23,8 @@
 
 uint32_t  g_enable_pcie_tests;
 uint32_t  g_print_level;
+uint32_t  g_print_in_test_context;
+uint32_t  g_print_test_check_id;
 uint32_t  g_print_mmio;
 uint32_t  g_curr_module;
 uint32_t  g_enable_module;
@@ -34,9 +36,16 @@ uint64_t  g_exception_ret_addr;
 uint64_t  g_ret_addr;
 uint32_t  g_rl_smmu_init;
 
-extern uint32_t g_skip_test_num[];
-extern uint32_t g_single_test;
-extern uint32_t g_single_module;
+char8_t **g_execute_tests_str;
+char8_t **g_execute_modules_str;
+char8_t **g_skip_test_str;
+
+extern char8_t *g_skip_array[];
+extern uint32_t g_num_skip;
+extern char8_t *g_test_array[];
+extern uint32_t g_num_tests;
+extern char8_t *g_module_array[];
+extern uint32_t g_num_modules;
 
 uint32_t
 createPeInfoTable(
@@ -71,6 +80,29 @@ createGicInfoTable(
   Status = val_gic_create_info_table(GicInfoTable);
 
   return Status;
+
+}
+
+void
+createMemCfgInfoTable (
+)
+{
+  uint64_t     *GPCInfoTable;
+  uint64_t     *PASInfoTable;
+  uint64_t     *RootRegInfoTable;
+
+  GPCInfoTable = val_aligned_alloc(SIZE_4K, sizeof(MEM_REGN_INFO_TABLE)
+                                   + GPC_PROTECTED_REGION_CNT * sizeof(MEM_REGN_INFO_TABLE));
+
+  PASInfoTable = val_aligned_alloc(SIZE_4K, sizeof(MEM_REGN_INFO_TABLE)
+                                   + PAS_PROTECTED_REGION_CNT * sizeof(MEM_REGN_INFO_TABLE));
+
+  val_mem_region_create_info_table(GPCInfoTable, PASInfoTable);
+
+  RootRegInfoTable = val_aligned_alloc(SIZE_4K, sizeof(ROOT_REGSTR_TABLE)
+                                       + RT_REG_CNT * sizeof(ROOT_REGSTR_TABLE));
+
+  val_root_register_create_info_table(RootRegInfoTable);
 
 }
 
@@ -164,12 +196,12 @@ ShellAppMainrme(
   g_print_level = PLATFORM_OVERRIDE_PRINT_LEVEL;
   if (g_print_level < ACS_PRINT_INFO)
   {
-      val_print(ACS_PRINT_ERR, "Print Level %d is not supported.\n", g_print_level);
-      val_print(ACS_PRINT_ERR, "Setting Print level to %d\n", ACS_PRINT_INFO);
+      val_print(ACS_PRINT_ERR, "Print Level %d is not supported.", g_print_level);
+      val_print(ACS_PRINT_ERR, "Setting Print level to %d", ACS_PRINT_INFO);
       g_print_level = ACS_PRINT_INFO;
   } else if (g_print_level > ACS_PRINT_ERR) {
-      val_print(ACS_PRINT_ERR, "Print Level %d is not supported.\n", g_print_level);
-      val_print(ACS_PRINT_ERR, "Setting Print level to %d\n", ACS_PRINT_ERR);
+      val_print(ACS_PRINT_ERR, "Print Level %d is not supported.", g_print_level);
+      val_print(ACS_PRINT_ERR, "Setting Print level to %d", ACS_PRINT_ERR);
       g_print_level = ACS_PRINT_ERR;
   }
 
@@ -189,17 +221,30 @@ ShellAppMainrme(
   //
   // Initialize global counters
   //
+  g_print_in_test_context = 0;
+  g_print_test_check_id = 0;
   g_rme_tests_total = 0;
   g_rme_tests_pass  = 0;
   g_rme_tests_fail  = 0;
 
-  val_print(g_print_level, "\n\n RME Architecture Compliance Suite \n", 0);
-  val_print(g_print_level, "    Version: Issue B.a ACS EAC   \n", 0);
+  val_print(ACS_PRINT_ALWAYS, "\n\n RME Architecture Compliance Suite \n", 0);
+  val_print(ACS_PRINT_ALWAYS, " Version: Issue B.a ACS EAC   \n", 0);
 
-  val_print(g_print_level, " (Print level is %2d)\n\n", g_print_level);
+  val_print(ACS_PRINT_ALWAYS, " (Print level is %2d)\n\n", g_print_level);
 
+  g_skip_test_str = g_skip_array;
 
-  val_print(g_print_level, " Creating Platform Information Tables \n", 0);
+  /* Check if there is a user override to run specific tests*/
+  if (g_num_tests) {
+      g_execute_tests_str   = g_test_array;
+  }
+
+  /* Check if there is a user override to run specific modules*/
+  if (g_num_modules) {
+      g_execute_modules_str = g_module_array;
+  }
+
+  val_print(ACS_PRINT_ALWAYS, " Creating Platform Information Tables \n", 0);
   Status = createPeInfoTable();
   if (Status)
     return Status;
@@ -207,8 +252,8 @@ ShellAppMainrme(
   if (Status)
     return Status;
  createTimerInfoTable();
- createPcieVirtInfoTable();
  createPeripheralInfoTable();
+ createPcieVirtInfoTable();
 
  val_allocate_shared_mem();
 
@@ -225,42 +270,38 @@ ShellAppMainrme(
   */
   configureGicIts();
 
+  /* Create the platform config tables for the RME Issue A tests */
+  createMemCfgInfoTable();
+
   /* Configure SMMUs, PCIe and Exerciser tables required for the ACS */
   Status = val_configure_acs();
   if (Status)
     return Status;
 
-  val_print(ACS_PRINT_TEST, "\n  *** Starting RME tests ***  \n", 0);
   Status |= val_rme_execute_tests(val_pe_get_num());
 
-  val_print(ACS_PRINT_TEST, "\n      *** Starting Legacy System tests ***  \n", 0);
   Status |= val_legacy_execute_tests(val_pe_get_num());
 
-  val_print(ACS_PRINT_TEST, "\n      *** Starting GIC test ***  \n", 0);
   Status |= val_gic_execute_tests(val_pe_get_num());
 
-  val_print(ACS_PRINT_TEST, "\n   *** Starting IO Virtualization tests ***      \n", 0);
   Status |= val_smmu_execute_tests(val_pe_get_num());
 
-  val_print(ACS_PRINT_TEST, "\n      *** Starting RME DA tests ***  \n", 0);
   Status |= val_rme_da_execute_tests(val_pe_get_num());
 
-  val_print(ACS_PRINT_TEST, "\n      *** Starting RME DPT tests ***  \n", 0);
   Status |= val_rme_dpt_execute_tests(val_pe_get_num());
 
-  val_print(ACS_PRINT_TEST, "\n      *** Starting RME MEC tests ***  \n", 0);
   Status |= val_rme_mec_execute_tests(val_pe_get_num());
 
 print_test_status:
-  val_print(ACS_PRINT_TEST, "\n     ------------------------------------------------------- \n", 0);
-  val_print(ACS_PRINT_TEST, "     Total Tests run  = %4d;", g_rme_tests_total);
-  val_print(ACS_PRINT_TEST, "  Tests Passed  = %4d", g_rme_tests_pass);
-  val_print(ACS_PRINT_TEST, "  Tests Failed = %4d\n", g_rme_tests_fail);
-  val_print(ACS_PRINT_TEST, "     --------------------------------------------------------- \n", 0);
+  val_print(ACS_PRINT_ALWAYS, "\n ------------------------------------------------------- \n", 0);
+  val_print(ACS_PRINT_ALWAYS, " Total Tests run  = %4d;", g_rme_tests_total);
+  val_print(ACS_PRINT_ALWAYS, " Tests Passed  = %4d", g_rme_tests_pass);
+  val_print(ACS_PRINT_ALWAYS, " Tests Failed = %4d\n", g_rme_tests_fail);
+  val_print(ACS_PRINT_ALWAYS, " --------------------------------------------------------- \n", 0);
 
   freeRmeAcsMem();
 
-  val_print(g_print_level, "\n      *** RME tests complete. Reset the system. *** \n\n", 0);
+  val_print(ACS_PRINT_ALWAYS, "\n********* RME tests complete. Reset the system *********\n\n", 0);
 
   val_pe_context_restore(AA64WriteSp(g_stack_pointer));
   while (1);

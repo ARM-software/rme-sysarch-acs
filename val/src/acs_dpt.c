@@ -21,7 +21,8 @@
 #include "include/rme_acs_da.h"
 #include "include/rme_acs_dpt.h"
 #include "include/rme_acs_smmu.h"
-#include "include/sys_config.h"
+#include "include/rme_acs_iovirt.h"
+
 #include "include/rme_acs_memory.h"
 #include "include/mem_interface.h"
 #include "include/rme_acs_el32.h"
@@ -39,31 +40,51 @@
 uint32_t
 val_rme_dpt_execute_tests(uint32_t num_pe)
 {
-  uint32_t status = ACS_STATUS_SKIP, i, reset_status, num_smmus;
+  uint32_t status = ACS_STATUS_SKIP, i, reset_status, smmu_cnt;
+  uint64_t num_smmus = val_smmu_get_info(SMMU_NUM_CTRL, 0);
+  uint64_t smmu_base_arr[num_smmus], pgt_attr_el3;
   (void)num_pe;
 
-  for (i = 0 ; i < MAX_TEST_SKIP_NUM ; i++) {
-      if (g_skip_test_num[i] == ACS_RME_DPT_TEST_NUM_BASE) {
-          val_print(ACS_PRINT_TEST, "\n USER Override - Skipping all RME tests \n", 0);
+  for (i = 0 ; i < g_num_skip ; i++) {
+      if (val_memory_compare((char8_t *)g_skip_test_str[i], DPT_MODULE,
+                              val_strnlen(g_skip_test_str[i])) == 0)
+      {
+          val_print(ACS_PRINT_ALWAYS, "\n USER Override - Skipping all RME-DPT tests \n", 0);
           return ACS_STATUS_SKIP;
       }
   }
 
-  if (g_single_module != SINGLE_MODULE_SENTINEL && g_single_module != ACS_RME_DPT_TEST_NUM_BASE &&
-       (g_single_test == SINGLE_MODULE_SENTINEL ||
-       (g_single_test - ACS_RME_DPT_TEST_NUM_BASE > 100 ||
-          g_single_test - ACS_RME_DPT_TEST_NUM_BASE <= 0))) {
-    val_print(ACS_PRINT_TEST, " USER Override - Skipping all RME tests \
-                    (running only a single module)\n", 0);
+  /* Check if there are any tests to be executed in current module with user override options*/
+  status = val_check_skip_module(DPT_MODULE);
+  if (status) {
+    val_print(ACS_PRINT_ALWAYS, "\n USER Override - Skipping all RME-DPT tests \n", 0);
     return ACS_STATUS_SKIP;
   }
 
-  g_curr_module = 1 << DPT_MODULE;
+  g_curr_module = 1 << DPT_MODULE_ID;
 
   if (!g_rl_smmu_init)
   {
-      num_smmus = val_iovirt_get_smmu_info(SMMU_NUM_CTRL, 0);
-      val_rlm_smmu_init(num_smmus);
+      smmu_cnt = 0;
+
+      while (smmu_cnt < num_smmus)
+      {
+        smmu_base_arr[smmu_cnt] = val_smmu_get_info(SMMU_CTRL_BASE, smmu_cnt);
+        smmu_cnt++;
+      }
+      /* Map the Pointer in EL3 as NS Access PAS so that EL3 can access this struct pointers */
+      pgt_attr_el3 = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(OUTER_SHAREABLE) |
+                                 PGT_ENTRY_AP_RW | PAS_ATTR(NONSECURE_PAS));
+      if (val_add_mmu_entry_el3((uint64_t)(smmu_base_arr), (uint64_t)(smmu_base_arr), pgt_attr_el3))
+      {
+        val_print(ACS_PRINT_ERR, " MMU mapping failed for smmu_base_arr", 0);
+        return ACS_STATUS_ERR;
+      }
+      if (val_rlm_smmu_init(num_smmus, smmu_base_arr))
+      {
+        val_print(ACS_PRINT_ERR, " SMMU REALM INIT failed", 0);
+        return ACS_STATUS_ERR;
+      }
 
       g_rl_smmu_init = 1;
   }
@@ -76,14 +97,14 @@ val_rme_dpt_execute_tests(uint32_t num_pe)
       reset_status != RESET_LS_DISBL_FLAG &&
       reset_status != RESET_LS_TEST3_FLAG)
   {
-    status = dpt001_entry();
-    status |= dpt002_entry();
-    status |= dpt003_entry();
-    status |= dpt004_entry();
-    status |= dpt005_entry();
-    status |= dpt006_entry();
-    status |= dpt007_entry();
-    val_print_test_end(status, "RME-DPT");
+    val_print(ACS_PRINT_ALWAYS, "\n\n*******************************************************\n", 0);
+    status = dpt_system_resource_valid_without_dpti_entry();
+    status |= dpt_system_resource_valid_with_dpti_entry();
+    status |= dpt_system_resource_invalid_entry();
+    status |= dpt_p2p_different_rootport_valid_entry();
+    status |= dpt_p2p_different_rootport_invalid_entry();
+    status |= dpt_p2p_same_rootport_valid_entry();
+    status |= dpt_p2p_same_rootport_invalid_entry();
   }
 
   return status;

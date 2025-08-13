@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022-2023, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2023, 2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,6 +17,7 @@
 
 #include "include/rme_acs_val.h"
 #include "include/rme_acs_timer_support.h"
+#include "include/rme_acs_timer.h"
 #include "include/rme_acs_wd.h"
 #include "include/rme_acs_common.h"
 
@@ -28,12 +29,5 @@
 uint64_t
 val_get_counter_frequency(void)
 {
-  uint64_t counter_freq;
-
-  /* Option to override system counter frequency value */
-  counter_freq = pal_timer_get_counter_frequency();
-  if (counter_freq == 0)
-      counter_freq = val_timer_get_info(TIMER_INFO_CNTFREQ, 0);
-
-  return counter_freq;
+  return val_timer_get_info(TIMER_INFO_CNTFREQ, 0);
 }

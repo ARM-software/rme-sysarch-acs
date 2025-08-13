@@ -18,10 +18,6 @@
 #ifndef __PAL_INTERFACE_H__
 #define __PAL_INTERFACE_H__
 
-#ifdef TARGET_LINUX
-#include <linux/slab.h>
-#endif
-
 #if TARGET_BM_BOOT
 
 #include "platform_override_fvp.h"
@@ -55,22 +51,11 @@
   #define MMU_PGT_OAS      PLATFORM_OVERRIDE_MMU_PGT_OAS
 #endif
 
-#ifdef TARGET_LINUX
-  typedef char          char8_t;
-  typedef long long int addr_t;
-#define TIMEOUT_LARGE    0x1000000
-#define TIMEOUT_MEDIUM   0x100000
-#define TIMEOUT_SMALL    0x1000
-
-#define PCIE_MAX_BUS   256
-#define PCIE_MAX_DEV    32
-#define PCIE_MAX_FUNC    8
-
-#elif TARGET_EMULATION
+#if TARGET_EMULATION
 #include <stdlib.h>
 #include <stdint.h>
 #include <stddef.h>
-#include "../platform/pal_baremetal/FVP/include/platform_override_fvp.h"
+#include "platform_override_fvp.h"
   typedef uint64_t addr_t;
   typedef char     char8_t;
   typedef uint64_t dma_addr_t;
@@ -84,6 +69,7 @@
 #define PCIE_MAX_FUNC   PLATFORM_BM_OVERRIDE_PCIE_MAX_FUNC
 
 #else
+#include "../../platform/pal_uefi/include/platform_override.h"
   typedef INT8   int8_t;
   typedef INT32  int32_t;
   typedef CHAR8  char8_t;
@@ -122,11 +108,6 @@
 #define PCIE_NO_MAPPING         0x10000001  /* A mapping to a Function does not exist */
 #define PCIE_CAP_NOT_FOUND      0x10000010  /* The specified capability was not found */
 #define PCIE_UNKNOWN_RESPONSE   0xFFFFFFFF  /* Function not found or UR response from completer */
-
-
-#define RME_ACS_NVM_MEM         0x82800000
-
-/**  PE Test related Definitions **/
 
 /**
   @brief Conduits for service calls (SMC vs HVC).
@@ -326,7 +307,6 @@ typedef struct {
 } TIMER_INFO_TABLE;
 
 void pal_timer_create_info_table(TIMER_INFO_TABLE *timer_info_table);
-uint64_t pal_timer_get_counter_frequency(void);
 
 /* PCIe Tests related definitions */
 
@@ -454,8 +434,6 @@ typedef struct {
 } IOVIRT_INFO_TABLE;
 
 void pal_iovirt_create_info_table(IOVIRT_INFO_TABLE *iovirt);
-uint32_t pal_iovirt_check_unique_ctx_intid(uint64_t smmu_block);
-uint32_t pal_iovirt_unique_rid_strid_map(uint64_t rc_block);
 uint64_t pal_iovirt_get_rc_smmu_base(IOVIRT_INFO_TABLE *iovirt, uint32_t rc_seg_num, uint32_t rid);
 
 /**
@@ -545,7 +523,6 @@ typedef struct {
 } PERIPHERAL_INFO_TABLE;
 
 void  pal_peripheral_create_info_table(PERIPHERAL_INFO_TABLE *per_info_table);
-uint32_t pal_peripheral_is_pcie(uint32_t seg, uint32_t bus, uint32_t dev, uint32_t fn);
 
 /**
   @brief MSI(X) controllers info structure
@@ -635,8 +612,6 @@ void     pal_mmio_write8(uint64_t addr, uint8_t data);
 void     pal_mmio_write16(uint64_t addr, uint16_t data);
 void     pal_mmio_write(uint64_t addr, uint32_t data);
 void     pal_mmio_write64(uint64_t addr, uint64_t data);
-
-void     pal_mem_set(void *Buf, uint32_t Size, uint8_t Value);
 
 void     pal_pe_update_elr(void *context, uint64_t offset);
 uint64_t pal_pe_get_esr(void *context);
@@ -811,8 +786,68 @@ typedef struct {
   uint32_t property;
 } REGISTER_INFO_TABLE;
 
+/* System Configuration */
+#define val_get_root_smem_base() PLAT_ROOT_SMEM_BASE
+#define val_get_realm_smem_base() PLAT_REALM_SMEM_BASE
+#define val_get_mte_protected_region_base() PLAT_MTE_PROTECTED_REGION_BASE
+#define val_get_mte_protected_region_size() PLAT_MTE_PROTECTED_REGION_SIZE
+#define val_get_msd_save_restore_mem() PLAT_MSD_SAVE_RESTORE_MEM
+#define val_get_rme_rnvs_mailbox_mem() PLAT_RME_RNVS_MAILBOX_MEM
+#define val_get_rt_wdog_ctrl() PLAT_RT_WDOG_CTRL
+#define val_get_rt_wdog_int_id() PLAT_RT_WDOG_INT_ID
+#define val_get_rme_acs_nvm_mem() PLAT_RME_ACS_NVM_MEM
+#define val_get_free_mem_start() PLAT_FREE_MEM_START
+#define val_get_free_va_test() PLAT_FREE_VA_TEST
+#define val_get_free_pa_test() PLAT_FREE_PA_TEST
+#define val_get_shared_address() PLAT_SHARED_ADDRESS
+#define val_get_free_mem_smmu() PLAT_FREE_MEM_SMMU
+#define val_get_memory_pool_size() PLAT_MEMORY_POOL_SIZE
+
+/**
+ * @brief structure instance for ROOT registers
+ */
+typedef struct {
+  uint64_t rt_reg_base_addr;
+  uint64_t rt_reg_size;
+} RT_REG_INFO_ENTRY;
+
+typedef struct {
+  uint32_t num_reg;
+  RT_REG_INFO_ENTRY rt_reg_info[];
+} ROOT_REGSTR_TABLE;
+
+/**
+  @brief  structure instance for region types
+**/
+typedef struct {
+  uint32_t num_of_regn_gpc;
+  uint32_t num_of_regn_pas_filter;
+} MEM_REGN_INFO_HDR;
+
+/**
+  @brief  structure instance for Region details
+**/
+typedef struct {
+  uint32_t   base_addr;
+  uint32_t   regn_size;
+  uint64_t   resourse_pas;
+} MEM_REGN_INFO_ENTRY;
+
+typedef struct {
+  MEM_REGN_INFO_HDR    header;
+  MEM_REGN_INFO_ENTRY  regn_info[];
+} MEM_REGN_INFO_TABLE;
+
 uint32_t pal_register_get_num_entries(void);
 void pal_register_create_info_table(REGISTER_INFO_TABLE *registerInfoTable);
+ROOT_REGSTR_TABLE *val_root_reg_info_table(void);
+void val_root_register_create_info_table(uint64_t *root_registers_cfg);
+void pal_root_register_create_info_table(ROOT_REGSTR_TABLE *table);
+void pal_mem_region_create_info_table(MEM_REGN_INFO_TABLE *gpc_table,
+                                      MEM_REGN_INFO_TABLE *pas_table);
 
-#endif
+uint32_t pal_is_legacy_tz_enabled(void);
+uint32_t pal_is_ns_encryption_programmable(void);
+uint32_t pal_is_pas_filter_mode_programmable(void);
+#endif /* __PAL_INTERFACE_H__ */
 
