@@ -15,8 +15,8 @@
  * limitations under the License.
  **/
 
-#include "val/include/rme_acs_pcie.h"
-#include "val/include/rme_acs_pcie_spec.h"
+#include "val/include/val_pcie.h"
+#include "val/include/val_pcie_spec.h"
 
 pcie_cfgreg_bitfield_entry bf_info_table[] = {
 

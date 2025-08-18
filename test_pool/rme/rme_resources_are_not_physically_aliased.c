@@ -15,12 +15,12 @@
  * limitations under the License.
  **/
 
-#include "val/include/rme_acs_val.h"
-#include "val/include/rme_acs_pe.h"
-#include "val/include/rme_acs_common.h"
+#include "val/include/val.h"
+#include "val/include/val_pe.h"
+#include "val/include/val_common.h"
 
 #include "val/include/val_interface.h"
-#include "val/include/rme_acs_el32.h"
+#include "val/include/val_el32.h"
 
 #define TEST_NAME  "rme_resources_are_not_physically_aliased"
 #define TEST_DESC  "To check if resources are not physically aliased       "

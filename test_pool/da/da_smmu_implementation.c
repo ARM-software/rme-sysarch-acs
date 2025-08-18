@@ -15,13 +15,13 @@
  * limitations under the License.
  **/
 
-#include "val/include/rme_acs_val.h"
+#include "val/include/val.h"
 #include "val/include/val_interface.h"
 
-#include "val/include/rme_acs_smmu.h"
-#include "val/include/rme_acs_iovirt.h"
-#include "val/include/rme_acs_pcie.h"
-#include "val/include/rme_acs_el32.h"
+#include "val/include/val_smmu.h"
+#include "val/include/val_iovirt.h"
+#include "val/include/val_pcie.h"
+#include "val/include/val_el32.h"
 
 #define TEST_NAME  "da_smmu_implementation"
 #define TEST_DESC  "Check if SMMU implements DA                            "

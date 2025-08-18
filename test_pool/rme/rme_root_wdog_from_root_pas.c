@@ -16,12 +16,12 @@
  **/
 
 
-#include "val/include/rme_acs_val.h"
+#include "val/include/val.h"
 #include "val/include/val_interface.h"
 
-#include "val/include/rme_acs_wd.h"
-#include "val/include/rme_acs_timer.h"
-#include "val/include/rme_acs_el32.h"
+#include "val/include/val_wd.h"
+#include "val/include/val_timer.h"
+#include "val/include/val_el32.h"
 
 #define TEST_NAME  "rme_root_wdog_from_root_pas"
 #define TEST_DESC  "Check Root Watchdog interrupt from Root state          "

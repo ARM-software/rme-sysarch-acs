@@ -16,9 +16,9 @@
 **/
 
 #include "val/include/val_interface.h"
-#include "val/include/rme_acs_pe.h"
-#include "val/include/rme_acs_val.h"
-#include "val/include/rme_acs_memory.h"
+#include "val/include/val_pe.h"
+#include "val/include/val.h"
+#include "val/include/val_memory.h"
 #include "RmeAcs.h"
 
 uint32_t  g_enable_pcie_tests;

@@ -15,15 +15,15 @@
  * limitations under the License.
  **/
 
-#include "val/include/rme_acs_val.h"
-#include "val/include/rme_acs_pe.h"
-#include "val/include/rme_acs_common.h"
-#include "val/include/rme_acs_memory.h"
-#include "val/include/rme_acs_pgt.h"
-#include "val/include/rme_test_entry.h"
+#include "val/include/val.h"
+#include "val/include/val_pe.h"
+#include "val/include/val_common.h"
+#include "val/include/val_memory.h"
+#include "val/include/val_pgt.h"
+#include "val/include/val_test_entry.h"
 #include "val/include/val_interface.h"
-#include "val/include/rme_acs_el32.h"
-#include "val/include/mem_interface.h"
+#include "val/include/val_el32.h"
+#include "val/include/val_mem_interface.h"
 
 #define TEST_NAME  "rme_cmo_popa_for_cacheability_shareability"
 #define TEST_DESC  "CMO to PoPA true for all cacheability and shareability "

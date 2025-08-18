@@ -15,12 +15,12 @@
  * limitations under the License.
  **/
 
-#include "val/include/rme_acs_val.h"
+#include "val/include/val.h"
 #include "val/include/val_interface.h"
 
-#include "val/include/rme_acs_pcie.h"
-#include "val/include/rme_acs_el32.h"
-#include "val/include/rme_acs_da.h"
+#include "val/include/val_pcie.h"
+#include "val/include/val_el32.h"
+#include "val/include/val_da.h"
 
 #define TEST_DESC "To Check the attribute of RMEDA_CTL registers          "
 #define TEST_NAME "da_attribute_rmeda_ctl_registers"

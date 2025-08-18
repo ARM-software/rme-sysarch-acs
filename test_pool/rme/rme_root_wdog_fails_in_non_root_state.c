@@ -16,14 +16,14 @@
  **/
 
 
-#include "val/include/rme_acs_val.h"
+#include "val/include/val.h"
 #include "val/include/val_interface.h"
 
-#include "val/include/rme_acs_wd.h"
-#include "val/include/rme_acs_timer.h"
-#include "val/include/rme_acs_el32.h"
-#include "val/include/rme_acs_pgt.h"
-#include "val/include/rme_acs_memory.h"
+#include "val/include/val_wd.h"
+#include "val/include/val_timer.h"
+#include "val/include/val_el32.h"
+#include "val/include/val_pgt.h"
+#include "val/include/val_memory.h"
 
 #define TEST_NAME  "rme_root_wdog_fails_in_non_root_state"
 #define TEST_DESC  "Check Root Watchdog programming fails in Non-Root state"

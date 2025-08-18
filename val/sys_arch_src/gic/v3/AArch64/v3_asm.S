@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022,2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,8 +16,8 @@
  **/
 
 #ifndef TARGET_EMULATION
-#include "include/rme_acs_pe.h"
-#include "sys_arch_src/gic/rme_exception.h"
+#include "include/val_pe.h"
+#include "sys_arch_src/gic/val_exception.h"
 #else
 #define ICC_IAR1_EL1    S3_0_C12_C12_0
 #define ICC_EOIR1_EL1   S3_0_C12_C12_1

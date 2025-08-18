@@ -16,15 +16,15 @@
  * limitations under the License.
  **/
 
-#include "val/include/rme_acs_val.h"
+#include "val/include/val.h"
 #include "val/include/val_interface.h"
 
-#include "val/include/rme_acs_el32.h"
-#include "val/include/rme_acs_pcie.h"
-#include "val/include/rme_acs_memory.h"
-#include "val/include/rme_acs_pcie_enumeration.h"
-#include "val/include/rme_acs_pe.h"
-#include "val/include/rme_acs_da.h"
+#include "val/include/val_el32.h"
+#include "val/include/val_pcie.h"
+#include "val/include/val_memory.h"
+#include "val/include/val_pcie_enumeration.h"
+#include "val/include/val_pe.h"
+#include "val/include/val_da.h"
 
 #include "da_rmsd_write_detect_property.h"
 

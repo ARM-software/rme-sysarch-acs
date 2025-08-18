@@ -15,14 +15,14 @@
  * limitations under the License.
  **/
 
-#include "val/include/rme_acs_val.h"
-#include "val/include/rme_acs_pe.h"
-#include "val/include/rme_acs_common.h"
+#include "val/include/val.h"
+#include "val/include/val_pe.h"
+#include "val/include/val_common.h"
 
-#include "val/include/rme_test_entry.h"
+#include "val/include/val_test_entry.h"
 #include "val/include/val_interface.h"
-#include "val/include/rme_acs_el32.h"
-#include "val/include/mem_interface.h"
+#include "val/include/val_el32.h"
+#include "val/include/val_mem_interface.h"
 
 #define TEST_NAME  "rme_system_reset_propagation_to_all_pe"
 #define TEST_DESC  "RME system reset propagates to all application PEs     "

@@ -15,13 +15,13 @@
  * limitations under the License.
  **/
 
-#include "val/include/rme_acs_val.h"
+#include "val/include/val.h"
 #include "val/include/val_interface.h"
 
-#include "val/include/rme_acs_timer.h"
-#include "val/include/rme_acs_pe.h"
-#include "val/include/rme_acs_el32.h"
-#include "val/include/rme_test_entry.h"
+#include "val/include/val_timer.h"
+#include "val/include/val_pe.h"
+#include "val/include/val_el32.h"
+#include "val/include/val_test_entry.h"
 
 #define TEST_NAME  "rme_pe_context_after_pe_suspend"
 #define TEST_DESC  "PE Context preserve check after exit from PE suspend   "

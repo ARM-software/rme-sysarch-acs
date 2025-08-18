@@ -15,7 +15,7 @@
  * limitations under the License.
  **/
 
-#include "val/include/rme_acs_val.h"
+#include "val/include/val.h"
 #include "val/include/val_interface.h"
 
 #include "da_dvsec_register_config.h"

@@ -110,7 +110,7 @@
 
 #endif //__ASSEMBLER__
 
-#include "val/include/rme_acs_el32.h"
+#include "val/include/val_el32.h"
 
 /* Address Defines related to shared data */
 #define ARM_TF_SHARED_ADDRESS (PLAT_SHARED_ADDRESS + SIZE_4KB - 0x20)

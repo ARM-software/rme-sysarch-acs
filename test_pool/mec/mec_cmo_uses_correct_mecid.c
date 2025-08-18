@@ -15,12 +15,12 @@
  * limitations under the License.
  **/
 
-#include "val/include/rme_acs_val.h"
+#include "val/include/val.h"
 #include "val/include/val_interface.h"
 
-#include "val/include/rme_acs_el32.h"
-#include "val/include/rme_acs_pe.h"
-#include "val/include/rme_acs_mec.h"
+#include "val/include/val_el32.h"
+#include "val/include/val_pe.h"
+#include "val/include/val_mec.h"
 
 #define TEST_NAME  "mec_cmo_uses_correct_mecid"
 #define TEST_DESC  "Check CMO uses correct MECID                           "
