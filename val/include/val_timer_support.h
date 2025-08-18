@@ -46,13 +46,13 @@ typedef enum {
 
 
 uint64_t
-ArmArchTimerReadReg(
+val_timer_ArmArchTimerReadReg(
   ARM_ARCH_TIMER_REGS   Reg
   );
 
 
 void
-ArmArchTimerWriteReg(
+val_timer_ArmArchTimerWriteReg(
     ARM_ARCH_TIMER_REGS   Reg,
     uint64_t              *data_buf
   );
@@ -60,11 +60,6 @@ ArmArchTimerWriteReg(
 uint64_t
 ArmReadCntFrq(
   void
-  );
-
-void
-ArmWriteCntFrq(
-  uint64_t   FreqInHz
   );
 
 uint64_t

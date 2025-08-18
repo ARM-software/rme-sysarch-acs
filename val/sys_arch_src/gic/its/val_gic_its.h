@@ -15,8 +15,8 @@
  * limitations under the License.
 **/
 
-#ifndef __RME_GIC_ITS_H
-#define __RME_GIC_ITS_H
+#ifndef __VAL_GIC_ITS_H
+#define __VAL_GIC_ITS_H
 
 #ifndef _TEST_
 #include "include/val_interface.h"
@@ -188,23 +188,23 @@
 #define ITS_NEXT_CMD_PTR    4
 #define NUM_BYTES_IN_DW     8
 
-uint32_t ArmGicRedistributorConfigurationForLPI(uint64_t rd_base);
+uint32_t val_gic_its_ArmGicRedistributorConfigurationForLPI(uint64_t rd_base);
 
-void ClearConfigTable(uint32_t int_id);
-void SetConfigTable(uint32_t int_id, uint32_t Priority);
+void val_gic_its_ClearConfigTable(uint32_t int_id);
+void val_gic_its_SetConfigTable(uint32_t int_id, uint32_t Priority);
 
-uint32_t val_its_gicd_lpi_support(uint64_t gicd_base);
-uint32_t val_its_gicr_lpi_support(uint64_t rd_base);
+uint32_t val_gic_its_gicd_lpi_support(uint64_t gicd_base);
+uint32_t val_gic_its_gicr_lpi_support(uint64_t rd_base);
 
 
-void EnableLPIsRD(uint64_t rd_base);
-void val_its_create_lpi_map(uint32_t its_index, uint32_t device_id,
+void val_gic_its_EnableLPIsRD(uint64_t rd_base);
+void val_gic_its_create_lpi_map(uint32_t its_index, uint32_t device_id,
                             uint32_t int_id, uint32_t Priority);
-void val_its_clear_lpi_map(uint32_t its_index, uint32_t device_id, uint32_t int_id);
+void val_gic_its_clear_lpi_map(uint32_t its_index, uint32_t device_id, uint32_t int_id);
 
-uint64_t val_its_get_translater_addr(uint32_t its_index);
-uint32_t val_its_get_max_lpi(void);
-uint32_t val_its_init(void);
-uint64_t val_its_get_curr_rdbase(uint64_t rd_base, uint32_t length);
+uint64_t val_gic_its_get_translater_addr(uint32_t its_index);
+uint32_t val_gic_its_get_max_lpi(void);
+uint32_t val_gic_its_init(void);
+uint64_t val_gic_its_get_curr_rdbase(uint64_t rd_base, uint32_t length);
 
 #endif

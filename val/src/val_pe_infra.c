@@ -348,9 +348,9 @@ val_pe_default_esr(uint64_t interrupt_type, void *context)
                  " Unexpected exception of type %d occurred", interrupt_type);
 
     if (pal_target_is_bm()) {
-        val_print(ACS_PRINT_WARN, " FAR reported = 0x%llx", rme_gic_get_far());
-        val_print(ACS_PRINT_WARN, " ESR reported = 0x%llx", rme_gic_get_esr());
-        val_print(ACS_PRINT_WARN, " ELR reported = 0x%llx", rme_gic_get_elr());
+        val_print(ACS_PRINT_WARN, " FAR reported = 0x%llx", val_gic_get_far());
+        val_print(ACS_PRINT_WARN, " ESR reported = 0x%llx", val_gic_get_esr());
+        val_print(ACS_PRINT_WARN, " ELR reported = 0x%llx", val_gic_get_elr());
     } else {
         val_print(ACS_PRINT_WARN, " FAR reported = 0x%llx", val_pe_get_far(context));
         val_print(ACS_PRINT_WARN, " ESR reported = 0x%llx", val_pe_get_esr(context));

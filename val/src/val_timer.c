@@ -45,7 +45,7 @@ val_timer_get_info(TIMER_INFO_e info_type, uint64_t instance)
   switch (info_type)
   {
       case TIMER_INFO_CNTFREQ:
-          return ArmArchTimerReadReg(CntFrq);
+          return val_timer_ArmArchTimerReadReg(CntFrq);
       case TIMER_INFO_PHY_EL1_INTID:
           return g_timer_info_table->header.ns_el1_timer_gsiv;
       case TIMER_INFO_VIR_EL1_INTID:
@@ -127,10 +127,10 @@ ArmGenericTimerEnableTimer(
 {
   uint64_t timer_ctrl_reg;
 
-  timer_ctrl_reg = ArmArchTimerReadReg(reg);
+  timer_ctrl_reg = val_timer_ArmArchTimerReadReg(reg);
   timer_ctrl_reg &= (~ARM_ARCH_TIMER_IMASK);
   timer_ctrl_reg |= ARM_ARCH_TIMER_ENABLE;
-  ArmArchTimerWriteReg(reg, &timer_ctrl_reg);
+  val_timer_ArmArchTimerWriteReg(reg, &timer_ctrl_reg);
 }
 
 /**
@@ -148,10 +148,10 @@ ArmGenericTimerDisableTimer(
 {
   uint64_t timer_ctrl_reg;
 
-  timer_ctrl_reg = ArmArchTimerReadReg(reg);
+  timer_ctrl_reg = val_timer_ArmArchTimerReadReg(reg);
   timer_ctrl_reg |= ARM_ARCH_TIMER_IMASK;
   timer_ctrl_reg &= ~ARM_ARCH_TIMER_ENABLE;
-  ArmArchTimerWriteReg(reg, &timer_ctrl_reg);
+  val_timer_ArmArchTimerWriteReg(reg, &timer_ctrl_reg);
 }
 
 /**
@@ -168,7 +168,7 @@ val_timer_set_phy_el1(uint64_t timeout)
 
   if (timeout != 0) {
     ArmGenericTimerDisableTimer(CntpCtl);
-    ArmArchTimerWriteReg(CntpTval, &timeout);
+    val_timer_ArmArchTimerWriteReg(CntpTval, &timeout);
     ArmGenericTimerEnableTimer(CntpCtl);
   } else {
     ArmGenericTimerDisableTimer(CntpCtl);
@@ -189,7 +189,7 @@ val_timer_set_vir_el1(uint64_t timeout)
 
   if (timeout != 0) {
     ArmGenericTimerDisableTimer(CntvCtl);
-    ArmArchTimerWriteReg(CntvTval, &timeout);
+    val_timer_ArmArchTimerWriteReg(CntvTval, &timeout);
     ArmGenericTimerEnableTimer(CntvCtl);
   } else {
     ArmGenericTimerDisableTimer(CntvCtl);
@@ -211,7 +211,7 @@ val_timer_set_phy_el2(uint64_t timeout)
 
   if (timeout != 0) {
     ArmGenericTimerDisableTimer(CnthpCtl);
-    ArmArchTimerWriteReg(CnthpTval, &timeout);
+    val_timer_ArmArchTimerWriteReg(CnthpTval, &timeout);
     ArmGenericTimerEnableTimer(CnthpCtl);
   } else {
     ArmGenericTimerDisableTimer(CnthpCtl);
@@ -232,7 +232,7 @@ val_timer_set_vir_el2(uint64_t timeout)
 
   if (timeout != 0) {
     ArmGenericTimerDisableTimer(CnthvCtl);
-    ArmArchTimerWriteReg(CnthvTval, &timeout);
+    val_timer_ArmArchTimerWriteReg(CnthvTval, &timeout);
     ArmGenericTimerEnableTimer(CnthvCtl);
   } else {
     ArmGenericTimerDisableTimer(CnthvCtl);

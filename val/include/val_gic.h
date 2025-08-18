@@ -70,18 +70,12 @@ typedef struct {
 
 uint32_t
 gic_its_subjected_to_gpc_check_entry(uint32_t num_pe);
-uint32_t
-g002_entry(uint32_t num_pe);
-uint32_t
-g003_entry(uint32_t num_pe);
-uint32_t
-g004_entry(uint32_t num_pe);
 
 uint32_t
-val_get_max_intid(void);
+val_gic_get_max_intid(void);
 
 addr_t
-val_get_gicd_base(void);
+val_gic_get_gicd_base(void);
 
 addr_t
 val_gic_get_pe_rdbase(uint64_t mpidr);
@@ -91,19 +85,13 @@ val_get_gicr_base(uint32_t *rdbase_len, uint32_t gicr_rd_index);
 
 
 addr_t
-val_get_gich_base(void);
+val_gic_get_gich_base(void);
 
 addr_t
-val_get_cpuif_base(void);
+val_gic_get_cpuif_base(void);
 
 uint32_t
 val_gic_espi_supported(void);
-
-uint32_t
-val_gic_max_espi_val(void);
-
-uint32_t
-val_gic_max_eppi_val(void);
 
 uint32_t
 val_gic_is_valid_espi(uint32_t int_id);

@@ -92,7 +92,7 @@ val_gic_create_info_table(uint64_t *gic_info_table)
   }
 
   if (pal_target_is_bm())
-      val_rme_gic_init();
+      val_gic_init();
   return ACS_STATUS_PASS;
 }
 
@@ -118,7 +118,7 @@ val_gic_free_info_table(void)
   @return  Address of GIC Distributor
 **/
 addr_t
-val_get_gicd_base(void)
+val_gic_get_gicd_base(void)
 {
 
   GIC_INFO_ENTRY  *gic_entry;
@@ -251,7 +251,7 @@ val_get_gicr_base(uint32_t *rdbase_len, uint32_t gicr_rd_index)
   @return  Address of GICH
 **/
 addr_t
-val_get_gich_base(void)
+val_gic_get_gich_base(void)
 {
 
   GIC_INFO_ENTRY  *gic_entry;
@@ -280,7 +280,7 @@ val_get_gich_base(void)
   @return  Address of GIC Redistributor
 **/
 addr_t
-val_get_cpuif_base(void)
+val_gic_get_cpuif_base(void)
 {
   GIC_INFO_ENTRY  *gic_entry;
 
@@ -329,19 +329,19 @@ val_gic_get_info(GIC_INFO_e type)
              return g_gic_info_table->header.gic_version;
           }
           /* Read Version from GICD_PIDR2 bit [7:4] */
-          return VAL_EXTRACT_BITS(val_mmio_read(val_get_gicd_base() + GICD_PIDR2), 4, 7);
+          return VAL_EXTRACT_BITS(val_mmio_read(val_gic_get_gicd_base() + GICD_PIDR2), 4, 7);
 
       case GIC_INFO_SEC_STATES:
           /* Read DS Bit from GICD_CTLR bit[6] */
-          return VAL_EXTRACT_BITS(val_mmio_read(val_get_gicd_base() + GICD_CTLR), 6, 6);
+          return VAL_EXTRACT_BITS(val_mmio_read(val_gic_get_gicd_base() + GICD_CTLR), 6, 6);
 
       case GIC_INFO_AFFINITY_NS:
           /* Read ARE_NS Bit from GICD_CTLR bit[5] */
-          return VAL_EXTRACT_BITS(val_mmio_read(val_get_gicd_base() + GICD_CTLR), 4, 4);
+          return VAL_EXTRACT_BITS(val_mmio_read(val_gic_get_gicd_base() + GICD_CTLR), 4, 4);
 
       case GIC_INFO_ENABLE_GROUP1NS:
           /* Read EnableGrp1NS Bit from GICD_CTLR bit[2] */
-          return VAL_EXTRACT_BITS(val_mmio_read(val_get_gicd_base() + GICD_CTLR), 0, 1);
+          return VAL_EXTRACT_BITS(val_mmio_read(val_gic_get_gicd_base() + GICD_CTLR), 0, 1);
 
       case GIC_INFO_SGI_NON_SECURE:
           /* The non-RAZ/WI bits from GICR_ISENABLER0 correspond to non-secure SGIs */
@@ -349,7 +349,7 @@ val_gic_get_info(GIC_INFO_e type)
 
       case GIC_INFO_SGI_NON_SECURE_LEGACY:
           /* The non-RAZ/WI bits from GICD_ISENABLER<n> correspond to non-secure SGIs */
-          return val_mmio_read(val_get_gicd_base() + GICD_ISENABLER);
+          return val_mmio_read(val_gic_get_gicd_base() + GICD_ISENABLER);
 
       case GIC_INFO_NUM_ITS:
           return g_gic_info_table->header.num_its;
@@ -372,9 +372,9 @@ val_gic_get_info(GIC_INFO_e type)
   @return  Maximum Interrupt ID
 **/
 uint32_t
-val_get_max_intid(void)
+val_gic_get_max_intid(void)
 {
-  return (32 * ((val_mmio_read(val_get_gicd_base() + GICD_TYPER) & 0x1F) + 1));
+  return (32 * ((val_mmio_read(val_gic_get_gicd_base() + GICD_TYPER) & 0x1F) + 1));
 }
 
 /**
@@ -391,7 +391,7 @@ uint32_t val_gic_route_interrupt_to_pe(uint32_t int_id, uint64_t mpidr)
 
   if (int_id > 31) {
       cpuaffinity = mpidr & (PE_AFF0 | PE_AFF1 | PE_AFF2 | PE_AFF3);
-      val_mmio_write64(val_get_gicd_base() + GICD_IROUTER + (8 * int_id), cpuaffinity);
+      val_mmio_write64(val_gic_get_gicd_base() + GICD_IROUTER + (8 * int_id), cpuaffinity);
   }
   else{
       val_print(ACS_PRINT_ERR,
@@ -415,8 +415,8 @@ uint32_t val_gic_get_interrupt_state(uint32_t int_id)
   uint32_t mask = (1 << reg_shift);
   uint32_t active, pending;
 
-  pending = val_mmio_read(val_get_gicd_base() + GICD_ISPENDR + (4 * reg_offset));
-  active = val_mmio_read(val_get_gicd_base() + GICD_ISACTIVER0 + (4 * reg_offset));
+  pending = val_mmio_read(val_gic_get_gicd_base() + GICD_ISPENDR + (4 * reg_offset));
+  active = val_mmio_read(val_gic_get_gicd_base() + GICD_ISACTIVER0 + (4 * reg_offset));
 
   return ((mask & active) || (mask & pending));
 }
@@ -434,10 +434,12 @@ void val_gic_clear_interrupt(uint32_t int_id)
     uint32_t reg_shift  = int_id % 32;
 
     if (val_gic_is_valid_espi(int_id))
-      val_rme_gic_clear_espi_interrupt(int_id);
+      val_gic_clear_espi_interrupt(int_id);
     else if ((int_id > 31) && (int_id < 1020)) {
-        val_mmio_write(val_get_gicd_base() + GICD_ICPENDR0 + (4 * reg_offset), (1 << reg_shift));
-        val_mmio_write(val_get_gicd_base() + GICD_ICACTIVER0 + (4 * reg_offset), (1 << reg_shift));
+        val_mmio_write(val_gic_get_gicd_base() + GICD_ICPENDR0 + (4 * reg_offset),
+                                                                 (1 << reg_shift));
+        val_mmio_write(val_gic_get_gicd_base() + GICD_ICACTIVER0 + (4 * reg_offset),
+                                                                 (1 << reg_shift));
     }
     else
         val_print(ACS_PRINT_ERR, " Invalid SPI interrupt ID number %d", int_id);
@@ -472,7 +474,7 @@ uint32_t val_gic_get_intr_trigger_type(uint32_t int_id, INTR_TRIGGER_INFO_TYPE_e
   uint32_t reg_offset;
   uint32_t config_bit_shift;
 
-  if (int_id > val_get_max_intid()) {
+  if (int_id > val_gic_get_max_intid()) {
     val_print(ACS_PRINT_ERR, " Invalid Interrupt ID number 0x%x ", int_id);
     return ACS_STATUS_ERR;
   }
@@ -480,7 +482,7 @@ uint32_t val_gic_get_intr_trigger_type(uint32_t int_id, INTR_TRIGGER_INFO_TYPE_e
   reg_offset = int_id / GICD_ICFGR_INTR_STRIDE;
   config_bit_shift  = GICD_ICFGR_INTR_CONFIG1(int_id);
 
-  reg_value = val_mmio_read(val_get_gicd_base() + GICD_ICFGR + (4 * reg_offset));
+  reg_value = val_mmio_read(val_gic_get_gicd_base() + GICD_ICFGR + (4 * reg_offset));
 
   if ((reg_value & (1 << config_bit_shift)) == 0)
     *trigger_type = INTR_TRIGGER_INFO_LEVEL_HIGH;
@@ -514,7 +516,7 @@ uint32_t val_gic_get_espi_intr_trigger_type(uint32_t int_id,
   reg_offset = (int_id - 4096) / GICD_ICFGR_INTR_STRIDE;
   config_bit_shift  = GICD_ICFGR_INTR_CONFIG1(int_id - 4096);
 
-  reg_value = val_mmio_read(val_get_gicd_base() + GICD_ICFGRE + (4 * reg_offset));
+  reg_value = val_mmio_read(val_gic_get_gicd_base() + GICD_ICFGRE + (4 * reg_offset));
 
   if ((reg_value & (1 << config_bit_shift)) == 0)
     *trigger_type = INTR_TRIGGER_INFO_LEVEL_HIGH;
@@ -543,7 +545,7 @@ void val_gic_set_intr_trigger(uint32_t int_id, INTR_TRIGGER_INFO_TYPE_e trigger_
    reg_offset = int_id / GICD_ICFGR_INTR_STRIDE;
    config_bit_shift  = GICD_ICFGR_INTR_CONFIG1(int_id);
 
-   reg_value = val_mmio_read(val_get_gicd_base() + GICD_ICFGR + (4 * reg_offset));
+   reg_value = val_mmio_read(val_gic_get_gicd_base() + GICD_ICFGR + (4 * reg_offset));
 
    if (trigger_type == INTR_TRIGGER_INFO_EDGE_RISING)
        reg_value = reg_value | ((uint32_t)1 << config_bit_shift);
@@ -551,9 +553,9 @@ void val_gic_set_intr_trigger(uint32_t int_id, INTR_TRIGGER_INFO_TYPE_e trigger_
        reg_value = reg_value & (~((uint32_t)1 << config_bit_shift));
 
    val_print(ACS_PRINT_INFO, " Writing to Register Address : 0x%llx ",
-                           val_get_gicd_base() + GICD_ICFGR + (4 * reg_offset));
+                           val_gic_get_gicd_base() + GICD_ICFGR + (4 * reg_offset));
 
-   val_mmio_write(val_get_gicd_base() + GICD_ICFGR + (4 * reg_offset), reg_value);
+   val_mmio_write(val_gic_get_gicd_base() + GICD_ICFGR + (4 * reg_offset), reg_value);
 }
 
 /**
@@ -566,42 +568,10 @@ val_gic_espi_supported(void)
 {
   uint32_t espi_support;
 
-  espi_support = val_rme_gic_espi_support();
+  espi_support = val_gic_espi_support();
 
   val_print(ACS_PRINT_INFO, " ESPI supported %d  ", espi_support);
   return espi_support;
-}
-
-/**
-  @brief   This API returns max extended SPI interrupt value
-  @param   None
-  @return  max extended spi int value
-**/
-uint32_t
-val_gic_max_espi_val(void)
-{
-  uint32_t max_espi_val;
-
-  max_espi_val = val_rme_gic_max_espi_val();
-
-  val_print(ACS_PRINT_INFO, " max ESPI value %d  ", max_espi_val);
-  return max_espi_val;
-}
-
-/**
-  @brief   This API returns max extended PPI interrupt value
-  @param   None
-  @return  max extended PPI int value
-**/
-uint32_t
-val_gic_max_eppi_val(void)
-{
-  uint32_t max_eppi_val;
-
-  max_eppi_val = val_rme_gic_max_eppi_val();
-
-  val_print(ACS_PRINT_INFO, " max EPPI value %d  ", max_eppi_val);
-  return max_eppi_val;
 }
 
 /**
@@ -612,7 +582,7 @@ val_gic_max_eppi_val(void)
 uint32_t
 val_gic_is_valid_espi(uint32_t int_id)
 {
-  return val_rme_gic_check_espi_interrupt(int_id);
+  return val_gic_check_espi_interrupt(int_id);
 }
 
 /**
@@ -623,5 +593,5 @@ val_gic_is_valid_espi(uint32_t int_id)
 uint32_t
 val_gic_is_valid_eppi(uint32_t int_id)
 {
-  return val_rme_gic_check_eppi_interrupt(int_id);
+  return val_gic_check_eppi_interrupt(int_id);
 }

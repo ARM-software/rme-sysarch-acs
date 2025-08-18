@@ -36,7 +36,7 @@ uint32_t GET_NUM_BITS(uint64_t value)
   return bit_pos;
 }
 
-uint64_t val_its_get_curr_rdbase(uint64_t rd_base, uint32_t length)
+uint64_t val_gic_its_get_curr_rdbase(uint64_t rd_base, uint32_t length)
 {
   uint64_t     Mpidr;
   uint32_t     Affinity, CpuAffinity;
@@ -84,12 +84,12 @@ uint64_t val_its_get_curr_rdbase(uint64_t rd_base, uint32_t length)
   return 0;
 }
 
-uint32_t val_its_gicd_lpi_support(uint64_t gicd_base)
+uint32_t val_gic_its_gicd_lpi_support(uint64_t gicd_base)
 {
   return (val_mmio_read(gicd_base + ARM_GICD_TYPER) & ARM_GICD_TYPER_LPIS);
 }
 
-uint32_t val_its_gicr_lpi_support(uint64_t rd_base)
+uint32_t val_gic_its_gicr_lpi_support(uint64_t rd_base)
 {
   return (val_mmio_read(rd_base + ARM_GICR_TYPER) & ARM_GICR_TYPER_PLPIS);
 }
@@ -468,7 +468,7 @@ uint64_t GetRDBaseFormat(uint32_t its_index)
 }
 
 
-void val_its_clear_lpi_map(uint32_t its_index, uint32_t device_id, uint32_t int_id)
+void val_gic_its_clear_lpi_map(uint32_t its_index, uint32_t device_id, uint32_t int_id)
 {
   uint64_t    value;
   uint64_t    RDBase;
@@ -482,7 +482,7 @@ void val_its_clear_lpi_map(uint32_t its_index, uint32_t device_id, uint32_t int_
   ItsCommandBase = g_gic_its_info->GicIts[its_index].CommandQBase;
 
   /* Clear Config table for LPI=int_id */
-  ClearConfigTable(int_id);
+  val_gic_its_ClearConfigTable(int_id);
 
   /* Get RDBase Depending on GITS_TYPER.PTA */
   RDBase = GetRDBaseFormat(its_index);
@@ -507,7 +507,7 @@ void val_its_clear_lpi_map(uint32_t its_index, uint32_t device_id, uint32_t int_
 
 }
 
-void val_its_create_lpi_map(uint32_t its_index, uint32_t device_id,
+void val_gic_its_create_lpi_map(uint32_t its_index, uint32_t device_id,
                             uint32_t int_id, uint32_t Priority)
 {
   uint64_t    value;
@@ -522,10 +522,10 @@ void val_its_create_lpi_map(uint32_t its_index, uint32_t device_id,
   ItsCommandBase = g_gic_its_info->GicIts[its_index].CommandQBase;
 
   /* Set Config table with enable the LPI = int_id, Priority. */
-  SetConfigTable(int_id, Priority);
+  val_gic_its_SetConfigTable(int_id, Priority);
 
   /* Enable Redistributor */
-  EnableLPIsRD(g_gic_its_info->GicRdBase);
+  val_gic_its_EnableLPIsRD(g_gic_its_info->GicRdBase);
 
   /* Enable ITS */
   EnableITS(ItsBase);
@@ -560,7 +560,7 @@ void val_its_create_lpi_map(uint32_t its_index, uint32_t device_id,
 }
 
 
-uint32_t val_its_get_max_lpi(void)
+uint32_t val_gic_its_get_max_lpi(void)
 {
   uint32_t    index;
   uint32_t    min_idbits = ARM_LPI_MAX_IDBITS;
@@ -582,7 +582,7 @@ uint32_t val_its_get_max_lpi(void)
 }
 
 
-uint64_t val_its_get_translater_addr(uint32_t its_index)
+uint64_t val_gic_its_get_translater_addr(uint32_t its_index)
 {
   return (g_gic_its_info->GicIts[its_index].Base + ARM_GITS_TRANSLATER);
 }
@@ -618,7 +618,7 @@ SetInitialConfiguration(
 }
 
 
-uint32_t val_its_init(void)
+uint32_t val_gic_its_init(void)
 {
   uint32_t    Status;
   uint32_t    index;
@@ -643,7 +643,7 @@ uint32_t val_its_init(void)
   }
 
   /* Configure Redistributor For LPIs */
-  Status = ArmGicRedistributorConfigurationForLPI(g_gic_its_info->GicRdBase);
+  Status = val_gic_its_ArmGicRedistributorConfigurationForLPI(g_gic_its_info->GicRdBase);
   if (Status)
     return Status;
 

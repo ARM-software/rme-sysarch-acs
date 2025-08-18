@@ -43,9 +43,9 @@ IsSpi(uint32_t int_id)
   @return gicd typer value
 **/
 uint32_t
-v3_read_gicdTyper(void)
+val_gic_v3_read_gicdTyper(void)
 {
-  return val_mmio_read(val_get_gicd_base() + GICD_TYPER);
+  return val_mmio_read(val_gic_get_gicd_base() + GICD_TYPER);
 }
 
 /**
@@ -54,9 +54,9 @@ v3_read_gicdTyper(void)
   @return gicr typer value
 **/
 uint64_t
-v3_read_gicr_typer(void)
+val_gic_v3_read_gicr_typer(void)
 {
-  return val_mmio_read64(v3_get_pe_gicr_base() + GICR_TYPER);
+  return val_mmio_read64(val_gic_v3_get_pe_gicr_base() + GICR_TYPER);
 }
 
 
@@ -147,7 +147,7 @@ WakeUpRD(void)
   @param  none
   @return pe rd base
 **/
-uint64_t v3_get_pe_gicr_base(void)
+uint64_t val_gic_v3_get_pe_gicr_base(void)
 {
   uint32_t                rdbase_len;
   uint64_t                rd_base;
@@ -163,9 +163,9 @@ uint64_t v3_get_pe_gicr_base(void)
   @return interrupt id
 **/
 uint32_t
-v3_AcknowledgeInterrupt(void)
+val_gic_v3_AcknowledgeInterrupt(void)
 {
-  return rme_gic_ack_intr();
+  return val_gic_ack_intr();
 }
 
 /**
@@ -174,9 +174,9 @@ v3_AcknowledgeInterrupt(void)
   @return none
 **/
 void
-v3_EndofInterrupt(uint32_t int_id)
+val_gic_v3_EndofInterrupt(uint32_t int_id)
 {
-  rme_gic_end_intr(int_id);
+  val_gic_end_intr(int_id);
 }
 
 /**
@@ -185,7 +185,7 @@ v3_EndofInterrupt(uint32_t int_id)
   @return none
 **/
 void
-v3_DisableInterruptSource(uint32_t int_id)
+val_gic_v3_DisableInterruptSource(uint32_t int_id)
 {
   uint32_t                regOffset;
   uint32_t                regShift;
@@ -193,8 +193,8 @@ v3_DisableInterruptSource(uint32_t int_id)
   uint64_t                rd_base;
   uint64_t                cpuRd_base;
 
-  if (v3_is_extended_spi(int_id) || v3_is_extended_ppi(int_id)) {
-      v3_disable_extended_interrupt_source(int_id);
+  if (val_gic_v3_is_extended_spi(int_id) || val_gic_v3_is_extended_ppi(int_id)) {
+      val_gic_v3_disable_extended_interrupt_source(int_id);
       return;
   }
 
@@ -203,7 +203,7 @@ v3_DisableInterruptSource(uint32_t int_id)
   regShift = int_id % 32;
 
   if (IsSpi(int_id)) {
-      val_mmio_write(val_get_gicd_base() + GICD_ICENABLER + (4 * regOffset), 1 << regShift);
+      val_mmio_write(val_gic_get_gicd_base() + GICD_ICENABLER + (4 * regOffset), 1 << regShift);
   } else {
     rd_base = val_get_gicr_base(&rdbase_len, 0);
     cpuRd_base = CurrentCpuRDBase(rd_base, rdbase_len);
@@ -220,7 +220,7 @@ v3_DisableInterruptSource(uint32_t int_id)
   @return none
 **/
 void
-v3_EnableInterruptSource(uint32_t int_id)
+val_gic_v3_EnableInterruptSource(uint32_t int_id)
 {
   uint32_t                regOffset;
   uint32_t                regShift;
@@ -228,8 +228,8 @@ v3_EnableInterruptSource(uint32_t int_id)
   uint64_t                rd_base;
   uint64_t                cpuRd_base;
 
-  if (v3_is_extended_spi(int_id) || v3_is_extended_ppi(int_id)) {
-      v3_enable_extended_interrupt_source(int_id);
+  if (val_gic_v3_is_extended_spi(int_id) || val_gic_v3_is_extended_ppi(int_id)) {
+      val_gic_v3_enable_extended_interrupt_source(int_id);
       return;
   }
   /* Calculate register offset and bit position */
@@ -237,7 +237,7 @@ v3_EnableInterruptSource(uint32_t int_id)
   regShift = int_id % 32;
 
   if (IsSpi(int_id)) {
-      val_mmio_write(val_get_gicd_base() + GICD_ISENABLER + (4 * regOffset), 1 << regShift);
+      val_mmio_write(val_gic_get_gicd_base() + GICD_ISENABLER + (4 * regOffset), 1 << regShift);
   } else {
     rd_base = val_get_gicr_base(&rdbase_len, 0);
     cpuRd_base = CurrentCpuRDBase(rd_base, rdbase_len);
@@ -263,8 +263,8 @@ v3_SetInterruptPriority(uint32_t int_id, uint32_t priority)
   uint64_t                rd_base;
   uint64_t                cpuRd_base;
 
-  if (v3_is_extended_spi(int_id) || v3_is_extended_ppi(int_id)) {
-      v3_set_extended_interrupt_priority(int_id, priority);
+  if (val_gic_v3_is_extended_spi(int_id) || val_gic_v3_is_extended_ppi(int_id)) {
+      val_gic_v3_set_extended_interrupt_priority(int_id, priority);
       return;
   }
 
@@ -273,8 +273,8 @@ v3_SetInterruptPriority(uint32_t int_id, uint32_t priority)
   regShift = (int_id % 4) * 8;
 
   if (IsSpi(int_id)) {
-      val_mmio_write(val_get_gicd_base() + GICD_IPRIORITYR + (4 * regOffset),
-                    (val_mmio_read(val_get_gicd_base() + GICD_IPRIORITYR + (4 * regOffset)) &
+      val_mmio_write(val_gic_get_gicd_base() + GICD_IPRIORITYR + (4 * regOffset),
+                    (val_mmio_read(val_gic_get_gicd_base() + GICD_IPRIORITYR + (4 * regOffset)) &
                      ~(0xff << regShift)) | priority << regShift);
   } else {
     rd_base = val_get_gicr_base(&rdbase_len, 0);
@@ -294,7 +294,7 @@ v3_SetInterruptPriority(uint32_t int_id, uint32_t priority)
   @return init success or failure
 **/
 void
-v3_Init(void)
+val_gic_v3_Init(void)
 {
   uint32_t   max_num_interrupts;
   uint32_t   index;
@@ -302,24 +302,24 @@ v3_Init(void)
   uint64_t   cpuTarget;
   uint64_t   Mpidr;
 
-  if (val_rme_gic_espi_support() || val_rme_gic_eppi_support())
-    v3_extended_init();
+  if (val_gic_espi_support() || val_gic_eppi_support())
+    val_gic_v3_extended_init();
 
   /* Get the distributor base */
-  gicd_base = val_get_gicd_base();
+  gicd_base = val_gic_get_gicd_base();
 
   /* Get the max interrupt */
-  max_num_interrupts = val_get_max_intid();
+  max_num_interrupts = val_gic_get_max_intid();
 
   val_print(ACS_PRINT_DEBUG, " GIC_INIT: D base %llx", gicd_base);
   val_print(ACS_PRINT_DEBUG, " GIC_INIT: Interrupts %d", max_num_interrupts);
 
   /* Disable all interrupt */
   for (index = 0; index < max_num_interrupts; index++)
-    v3_DisableInterruptSource(index);
+    val_gic_v3_DisableInterruptSource(index);
 
   /* Set vector table */
-  rme_gic_vector_table_init();
+  val_gic_vector_table_init();
 
   if (val_pe_reg_read(CurrentEL) == AARCH64_EL2) {
     /* Route exception to EL2 */

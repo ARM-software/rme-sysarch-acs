@@ -45,7 +45,7 @@ val_gic_reg_read(uint32_t reg_id)
       if (val_gic_get_info(GIC_INFO_VERSION) >= 3)
           return GicReadIchHcr();
       else
-          return val_mmio_read(val_get_gich_base() + 0); /* 0 is GICH_HCR offset */
+          return val_mmio_read(val_gic_get_gich_base() + 0); /* 0 is GICH_HCR offset */
   case ICH_MISR_EL2:
       return GicReadIchMisr();
   default:
@@ -73,7 +73,7 @@ val_gic_reg_write(uint32_t reg_id, uint64_t write_data)
       if (val_gic_get_info(GIC_INFO_VERSION) >= 3)
           GicWriteIchHcr(write_data);
       else
-          val_mmio_write(val_get_gich_base() + 0, write_data); /* 0 is GICH_HCR offset */
+          val_mmio_write(val_gic_get_gich_base() + 0, write_data); /* 0 is GICH_HCR offset */
       break;
   case ICC_IGRPEN1_EL1:
       GicWriteIccIgrpen1(write_data);
@@ -102,7 +102,7 @@ val_gic_is_valid_lpi(uint32_t int_id)
 {
   uint32_t max_lpi_id = 0;
 
-  max_lpi_id = val_its_get_max_lpi();
+  max_lpi_id = val_gic_its_get_max_lpi();
 
   if ((int_id < LPI_MIN_ID) || (int_id > max_lpi_id)) {
     /* Not Valid LPI */
@@ -128,7 +128,7 @@ val_gic_install_isr(uint32_t int_id, void (*isr)(void))
   uint32_t      reg_offset = int_id / 32;
   uint32_t      reg_shift  = int_id % 32;
 
-  if (((int_id > val_get_max_intid()) && (!val_gic_is_valid_lpi(int_id)) &&
+  if (((int_id > val_gic_get_max_intid()) && (!val_gic_is_valid_lpi(int_id)) &&
       (!val_gic_is_valid_espi(int_id)) && (!val_gic_is_valid_eppi(int_id))) || (int_id == 0)) {
       val_print(ACS_PRINT_ERR, " Invalid Interrupt ID number 0x%x ", int_id);
       return ACS_STATUS_ERR;
@@ -141,7 +141,7 @@ val_gic_install_isr(uint32_t int_id, void (*isr)(void))
       if (int_id > 31 && int_id < 1024) {
           /**** UEFI GIC code is not enabling interrupt in the Distributor ***/
           /**** So, do this here as a fail-safe. Remove if PAL guarantees this ***/
-          val_mmio_write(val_get_gicd_base() + GICD_ISENABLER + (4 * reg_offset),
+          val_mmio_write(val_gic_get_gicd_base() + GICD_ISENABLER + (4 * reg_offset),
                          (uint32_t)1 << reg_shift);
       }
   }
@@ -183,7 +183,7 @@ void val_gic_free_irq(uint32_t irq_num, uint32_t mapped_irq_num)
 uint32_t val_gic_end_of_interrupt(uint32_t int_id)
 {
   if (pal_target_is_bm())
-      val_rme_gic_endofInterrupt(int_id);
+      val_gic_endofInterrupt(int_id);
   else
       pal_gic_end_of_interrupt(int_id);
 
@@ -226,10 +226,10 @@ uint32_t val_gic_its_configure(void)
       /* Calculate Current PE Redistributor Base Address */
       if (g_gic_its_info->GicRdBase == 0) {
         if (g_gic_entry->type == ENTRY_TYPE_GICR_GICRD)
-          g_gic_its_info->GicRdBase = val_its_get_curr_rdbase(g_gic_entry->base,
+          g_gic_its_info->GicRdBase = val_gic_its_get_curr_rdbase(g_gic_entry->base,
                                                               (uint32_t)g_gic_entry->length);
         else
-          g_gic_its_info->GicRdBase = val_its_get_curr_rdbase(g_gic_entry->base, 0);
+          g_gic_its_info->GicRdBase = val_gic_its_get_curr_rdbase(g_gic_entry->base, 0);
       }
     } else if (g_gic_entry->type == ENTRY_TYPE_GICITS) {
       g_gic_its_info->GicIts[g_gic_its_info->GicNumIts].Base = g_gic_entry->base;
@@ -251,11 +251,11 @@ uint32_t val_gic_its_configure(void)
     goto its_fail;
   }
 
-  if (val_its_gicd_lpi_support(g_gic_its_info->GicDBase)
-      && val_its_gicr_lpi_support(g_gic_its_info->GicRdBase)) {
-    Status = val_its_init();
+  if (val_gic_its_gicd_lpi_support(g_gic_its_info->GicDBase)
+      && val_gic_its_gicr_lpi_support(g_gic_its_info->GicRdBase)) {
+    Status = val_gic_its_init();
     if ((Status)) {
-      val_print(ACS_PRINT_DEBUG, " ITS Configure : val_its_init failed", 0);
+      val_print(ACS_PRINT_DEBUG, " ITS Configure : val_gic_its_init failed", 0);
       goto its_fail;
     }
   } else {
@@ -294,7 +294,7 @@ uint32_t get_its_index(uint32_t its_id)
 
 /**
   @brief   This function clear msi-x table in PCIe config space
-           1. Caller       -  val_its_clear_lpi_map
+           1. Caller       -  val_gic_its_clear_lpi_map
            2. Prerequisite -  val_gic_its_configure
   @param   bdf BDF of the device
   @param   msi_index MSI Index in MSI-X table in Config space
@@ -341,7 +341,7 @@ void clear_msi_x_table(uint32_t bdf, uint32_t msi_index)
 
 /**
   @brief   This function fills msi-x table in PCIe config space
-           1. Caller       -  val_its_create_lpi_map
+           1. Caller       -  val_gic_its_create_lpi_map
            2. Prerequisite -  val_gic_its_configure
   @param   bdf BDF of the device
   @param   msi_index MSI Index in MSI-X table in Config space
@@ -421,7 +421,7 @@ void val_gic_free_msi(uint32_t bdf, uint32_t device_id, uint32_t its_id,
     val_print(ACS_PRINT_ERR, "GICD/GICRD Base Invalid value.", 0);
   }
 
-  val_its_clear_lpi_map(its_index, device_id, int_id);
+  val_gic_its_clear_lpi_map(its_index, device_id, int_id);
   clear_msi_x_table(bdf, msi_index);
 }
 
@@ -460,9 +460,9 @@ uint32_t val_gic_request_msi(uint32_t bdf, uint32_t device_id, uint32_t its_id,
     return ACS_STATUS_ERR;
   }
 
-  val_its_create_lpi_map(its_index, device_id, int_id, LPI_PRIORITY1);
+  val_gic_its_create_lpi_map(its_index, device_id, int_id, LPI_PRIORITY1);
 
-  msi_addr = val_its_get_translater_addr(its_index);
+  msi_addr = val_gic_its_get_translater_addr(its_index);
   msi_data = int_id;
 
 

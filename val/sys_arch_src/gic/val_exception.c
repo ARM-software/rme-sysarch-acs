@@ -34,7 +34,7 @@ void default_irq_handler(uint64_t exception_type, void *context)
   (void) exception_type;
   (void) context;
 
-  iar_ack_val = val_rme_gic_acknowledgeInterrupt();
+  iar_ack_val = val_gic_acknowledgeInterrupt();
   ack_interrupt = iar_ack_val & 0xFFFFFF;
 
   /* Call Interrupt handler if installed otherwise print err. */
@@ -47,17 +47,17 @@ void default_irq_handler(uint64_t exception_type, void *context)
   }
 
   /* End Of Interrupt */
-  val_rme_gic_endofInterrupt(ack_interrupt);
+  val_gic_endofInterrupt(ack_interrupt);
 
   return;
 }
 
-void rme_gic_vector_table_init(void)
+void val_gic_vector_table_init(void)
 {
   val_print(ACS_PRINT_DEBUG, " GIC_INIT: Setting Up Vector Table...", 0);
 
   /* Setting Up Vector Table */
-  rme_gic_set_el2_vector_table();
+  val_gic_set_el2_vector_table();
 
   /* Install Default handler for IRQ */
   val_gic_rme_install_esr(EXCEPT_AARCH64_IRQ, default_irq_handler);
@@ -66,13 +66,13 @@ void rme_gic_vector_table_init(void)
 uint32_t val_gic_rme_install_isr(uint32_t interrupt_id, void (*isr)(void))
 {
   /* Step 1: Disable Interrupt before registering Handler */
-  val_rme_gic_disableInterruptSource(interrupt_id);
+  val_gic_disableInterruptSource(interrupt_id);
 
   /* Step 2: Register ISR for the particular interrupt */
   g_intr_handler[interrupt_id] = (irq_handler) isr;
 
   /* Step 3: Enable Interrupt */
-  val_rme_gic_enableInterruptSource(interrupt_id);
+  val_gic_enableInterruptSource(interrupt_id);
 
   return 0;
 }
@@ -91,8 +91,8 @@ uint32_t common_exception_handler(uint32_t exception_type)
    */
   g_esr_handler[exception_type](exception_type, NULL);
 
-  val_print(ACS_PRINT_INFO, " GIC_INIT: Common Handler, FAR = %x", rme_gic_get_far());
-  val_print(ACS_PRINT_INFO, " GIC_INIT: Common Handler, ESR = %x", rme_gic_get_esr());
+  val_print(ACS_PRINT_INFO, " GIC_INIT: Common Handler, FAR = %x", val_gic_get_far());
+  val_print(ACS_PRINT_INFO, " GIC_INIT: Common Handler, ESR = %x", val_gic_get_esr());
 
   /* If ELR is updated inside the handler then skip the elr update in assembly handler
    * Return 1 else return 0

@@ -21,7 +21,7 @@
 static uint64_t ConfigBase;
 
 uint32_t
-ArmGicSetItsConfigTableBase(
+val_gic_its_ArmGicSetItsConfigTableBase(
     uint64_t    GicRedistributorBase
   )
 {
@@ -65,7 +65,7 @@ ArmGicSetItsConfigTableBase(
 
 
 uint32_t
-ArmGicSetItsPendingTableBase(
+val_gic_its_ArmGicSetItsPendingTableBase(
     uint64_t    GicRedistributorBase
   )
 {
@@ -106,13 +106,13 @@ ArmGicSetItsPendingTableBase(
 }
 
 
-void ClearConfigTable(uint32_t IntID)
+void val_gic_its_ClearConfigTable(uint32_t IntID)
 {
   val_mmio_write8(ConfigBase + (IntID - ARM_LPI_MINID), LPI_DISABLE);
 }
 
 
-void SetConfigTable(uint32_t IntID, uint32_t Priority)
+void val_gic_its_SetConfigTable(uint32_t IntID, uint32_t Priority)
 {
   uint8_t    value;
 
@@ -121,7 +121,7 @@ void SetConfigTable(uint32_t IntID, uint32_t Priority)
 }
 
 
-void EnableLPIsRD(uint64_t GicRedistributorBase)
+void val_gic_its_EnableLPIsRD(uint64_t GicRedistributorBase)
 {
   uint32_t    value;
 
@@ -132,19 +132,19 @@ void EnableLPIsRD(uint64_t GicRedistributorBase)
 
 
 uint32_t
-ArmGicRedistributorConfigurationForLPI(
+val_gic_its_ArmGicRedistributorConfigurationForLPI(
     uint64_t    GicRedistributorBase
   )
 {
   uint32_t    Status;
   /* Set Configuration Table Base */
 
-  Status = ArmGicSetItsConfigTableBase(GicRedistributorBase);
+  Status = val_gic_its_ArmGicSetItsConfigTableBase(GicRedistributorBase);
   if ((Status))
     return Status;
 
   /* Set Pending Table Base For Each Redistributor */
-  Status = ArmGicSetItsPendingTableBase(GicRedistributorBase);
+  Status = val_gic_its_ArmGicSetItsPendingTableBase(GicRedistributorBase);
   if ((Status))
     return Status;
 

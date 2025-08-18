@@ -38,14 +38,14 @@
        .global  _CONCATENATE (__USER_LABEL_PREFIX__, func__)    ;\
        .type ASM_PFX(func__), %function
 
-GCC_ASM_EXPORT(rme_gic_ack_intr)
-GCC_ASM_EXPORT(rme_gic_end_intr)
+GCC_ASM_EXPORT(val_gic_ack_intr)
+GCC_ASM_EXPORT(val_gic_end_intr)
 
 
-ASM_PFX(rme_gic_ack_intr):
+ASM_PFX(val_gic_ack_intr):
    mrs x0, ICC_IAR1_EL1
    ret
 
-ASM_PFX(rme_gic_end_intr):
+ASM_PFX(val_gic_end_intr):
    msr ICC_EOIR1_EL1, x0
    ret

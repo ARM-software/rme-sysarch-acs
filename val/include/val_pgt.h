@@ -62,7 +62,6 @@ uint64_t val_pgt_get_attributes(pgt_descriptor_t pgt_desc,
 		                uint64_t virtual_address, uint64_t *attributes);
 uint32_t val_pe_mmu_map_add(memory_region_descriptor_t *mem_desc);
 uint32_t val_pe_mmu_map_rmv(memory_region_descriptor_t *mem_desc);
-uint64_t modify_desc(uint64_t table_desc, uint8_t bit_to_set, uint64_t value_to_set);
 uint32_t val_realm_pgt_create(memory_region_descriptor_t *mem_desc, pgt_descriptor_t *pgt_desc);
 
 #endif

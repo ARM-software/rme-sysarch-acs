@@ -17,10 +17,10 @@
 #ifndef __GIC_V2_H__
 #define __GIC_V2_H__
 
-void v2_Init(void);
-void v2_EnableInterruptSource(uint32_t int_id);
-void v2_DisableInterruptSource(uint32_t int_id);
-uint32_t v2_AcknowledgeInterrupt(void);
-void v2_EndofInterrupt(uint32_t int_id);
+void val_gic_v2_Init(void);
+void val_gic_v2_EnableInterruptSource(uint32_t int_id);
+void val_gic_v2_DisableInterruptSource(uint32_t int_id);
+uint32_t val_gic_v2_AcknowledgeInterrupt(void);
+void val_gic_v2_EndofInterrupt(uint32_t int_id);
 
 #endif /*__GIC_V2_H__ */

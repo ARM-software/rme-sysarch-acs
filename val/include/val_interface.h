@@ -141,6 +141,8 @@ void     val_pcie_free_info_table(void);
 
 //Legacy system VAL APIs
 uint32_t val_legacy_execute_tests(uint32_t num_pe);
+ROOT_REGSTR_TABLE *val_root_reg_info_table(void);
+void val_root_register_create_info_table(uint64_t *root_registers_cfg);
 
 /* GIC VAL APIs */
 uint32_t val_gic_create_info_table(uint64_t *gic_info_table);
@@ -259,5 +261,22 @@ uint32_t val_rme_dpt_execute_tests(uint32_t num_pe);
 
 /* RME-MEC APIs */
 uint32_t val_rme_mec_execute_tests(uint32_t num_pe);
+
+/* System Configuration */
+#define val_get_root_smem_base() PLAT_ROOT_SMEM_BASE
+#define val_get_realm_smem_base() PLAT_REALM_SMEM_BASE
+#define val_get_mte_protected_region_base() PLAT_MTE_PROTECTED_REGION_BASE
+#define val_get_mte_protected_region_size() PLAT_MTE_PROTECTED_REGION_SIZE
+#define val_get_msd_save_restore_mem() PLAT_MSD_SAVE_RESTORE_MEM
+#define val_get_rme_rnvs_mailbox_mem() PLAT_RME_RNVS_MAILBOX_MEM
+#define val_get_rt_wdog_ctrl() PLAT_RT_WDOG_CTRL
+#define val_get_rt_wdog_int_id() PLAT_RT_WDOG_INT_ID
+#define val_get_rme_acs_nvm_mem() PLAT_RME_ACS_NVM_MEM
+#define val_get_free_mem_start() PLAT_FREE_MEM_START
+#define val_get_free_va_test() PLAT_FREE_VA_TEST
+#define val_get_free_pa_test() PLAT_FREE_PA_TEST
+#define val_get_shared_address() PLAT_SHARED_ADDRESS
+#define val_get_free_mem_smmu() PLAT_FREE_MEM_SMMU
+#define val_get_memory_pool_size() PLAT_MEMORY_POOL_SIZE
 
 #endif

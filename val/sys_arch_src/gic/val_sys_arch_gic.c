@@ -27,15 +27,15 @@
   @return init success or failure
 **/
 void
-val_rme_gic_init(void)
+val_gic_init(void)
 {
   uint32_t gic_version;
 
   gic_version = val_gic_get_info(GIC_INFO_VERSION);
   if ((gic_version == 3) || (gic_version == 4))
-      v3_Init();
+      val_gic_v3_Init();
   else
-      v2_Init();
+      val_gic_v2_Init();
 }
 
 /**
@@ -44,15 +44,15 @@ val_rme_gic_init(void)
   @return none
 **/
 void
-val_rme_gic_enableInterruptSource(uint32_t int_id)
+val_gic_enableInterruptSource(uint32_t int_id)
 {
   uint32_t gic_version;
 
   gic_version = val_gic_get_info(GIC_INFO_VERSION);
   if ((gic_version == 3) || (gic_version == 4))
-      v3_EnableInterruptSource(int_id);
+      val_gic_v3_EnableInterruptSource(int_id);
   else
-      v2_EnableInterruptSource(int_id);
+      val_gic_v2_EnableInterruptSource(int_id);
 }
 
 /**
@@ -61,15 +61,15 @@ val_rme_gic_enableInterruptSource(uint32_t int_id)
   @return none
 **/
 void
-val_rme_gic_disableInterruptSource(uint32_t int_id)
+val_gic_disableInterruptSource(uint32_t int_id)
 {
   uint32_t gic_version;
 
   gic_version = val_gic_get_info(GIC_INFO_VERSION);
   if ((gic_version == 3) || (gic_version == 4))
-      v3_DisableInterruptSource(int_id);
+      val_gic_v3_DisableInterruptSource(int_id);
   else
-      v2_DisableInterruptSource(int_id);
+      val_gic_v2_DisableInterruptSource(int_id);
 }
 
 /**
@@ -78,15 +78,15 @@ val_rme_gic_disableInterruptSource(uint32_t int_id)
   @return none
 **/
 uint32_t
-val_rme_gic_acknowledgeInterrupt(void)
+val_gic_acknowledgeInterrupt(void)
 {
   uint32_t gic_version;
 
   gic_version = val_gic_get_info(GIC_INFO_VERSION);
   if ((gic_version == 3) || (gic_version == 4))
-      return v3_AcknowledgeInterrupt();
+      return val_gic_v3_AcknowledgeInterrupt();
   else
-      return v2_AcknowledgeInterrupt();
+      return val_gic_v2_AcknowledgeInterrupt();
 }
 
 /**
@@ -95,15 +95,15 @@ val_rme_gic_acknowledgeInterrupt(void)
   @return none
 **/
 void
-val_rme_gic_endofInterrupt(uint32_t int_id)
+val_gic_endofInterrupt(uint32_t int_id)
 {
   uint32_t gic_version;
 
   gic_version = val_gic_get_info(GIC_INFO_VERSION);
   if ((gic_version == 3) || (gic_version == 4))
-      v3_EndofInterrupt(int_id);
+      val_gic_v3_EndofInterrupt(int_id);
   else
-      v2_EndofInterrupt(int_id);
+      val_gic_v2_EndofInterrupt(int_id);
 }
 
 /**
@@ -112,13 +112,13 @@ val_rme_gic_endofInterrupt(uint32_t int_id)
   @return 0 if not supported, 1 supported
 **/
 uint32_t
-val_rme_gic_espi_support(void)
+val_gic_espi_support(void)
 {
   uint32_t gic_version;
 
   gic_version = val_gic_get_info(GIC_INFO_VERSION);
   if (gic_version >= 3)
-      return (v3_read_gicdTyper() >> GICD_TYPER_ESPI_SHIFT) & GICD_TYPER_ESPI_MASK;
+      return (val_gic_v3_read_gicdTyper() >> GICD_TYPER_ESPI_SHIFT) & GICD_TYPER_ESPI_MASK;
   else
       return 0;
 }
@@ -129,7 +129,7 @@ val_rme_gic_espi_support(void)
   @return max espi value
 **/
 uint32_t
-val_rme_gic_max_espi_val(void)
+val_gic_max_espi_val(void)
 {
   uint32_t gic_version;
   uint32_t espi_range;
@@ -137,7 +137,7 @@ val_rme_gic_max_espi_val(void)
 
   gic_version = val_gic_get_info(GIC_INFO_VERSION);
   if (gic_version >= 3) {
-      espi_range = (v3_read_gicdTyper() >> GICD_TYPER_ESPI_RANGE_SHIFT) &
+      espi_range = (val_gic_v3_read_gicdTyper() >> GICD_TYPER_ESPI_RANGE_SHIFT) &
                                                                     GICD_TYPER_ESPI_RANGE_MASK;
       max_espi_val = (32 * (espi_range + 1) + 4095);
 
@@ -157,9 +157,9 @@ val_rme_gic_max_espi_val(void)
   @return 1: espi interrupt, 0: non-espi interrupt
 **/
 uint32_t
-val_rme_gic_check_espi_interrupt(uint32_t int_id)
+val_gic_check_espi_interrupt(uint32_t int_id)
 {
-  if (val_rme_gic_espi_support() && v3_is_extended_spi(int_id))
+  if (val_gic_espi_support() && val_gic_v3_is_extended_spi(int_id))
     return 1;
   else
     return 0;
@@ -170,9 +170,9 @@ val_rme_gic_check_espi_interrupt(uint32_t int_id)
   @param  interrupt
   @return none
 **/
-void val_rme_gic_clear_espi_interrupt(uint32_t int_id)
+void val_gic_clear_espi_interrupt(uint32_t int_id)
 {
-  v3_clear_extended_spi_interrupt(int_id);
+  val_gic_v3_clear_extended_spi_interrupt(int_id);
 }
 
 
@@ -182,13 +182,13 @@ void val_rme_gic_clear_espi_interrupt(uint32_t int_id)
   @return 0 if not supported, 1 supported
 **/
 uint32_t
-val_rme_gic_eppi_support(void)
+val_gic_eppi_support(void)
 {
   uint32_t gic_version;
 
   gic_version = val_gic_get_info(GIC_INFO_VERSION);
   if (gic_version >= 3) {
-      if ((v3_read_gicr_typer() >> GICD_TYPER_EPPI_NUM_SHIFT) & GICD_TYPER_EPPI_NUM_MASK)
+      if ((val_gic_v3_read_gicr_typer() >> GICD_TYPER_EPPI_NUM_SHIFT) & GICD_TYPER_EPPI_NUM_MASK)
         return 1;
       else
          return 0;
@@ -203,14 +203,15 @@ val_rme_gic_eppi_support(void)
   @return max eppi value
 **/
 uint32_t
-val_rme_gic_max_eppi_val(void)
+val_gic_max_eppi_val(void)
 {
   uint32_t gic_version;
   uint32_t ppi_range;
 
   gic_version = val_gic_get_info(GIC_INFO_VERSION);
   if (gic_version >= 3) {
-      ppi_range = ((v3_read_gicr_typer() >> GICD_TYPER_EPPI_NUM_SHIFT) & GICD_TYPER_EPPI_NUM_MASK);
+      ppi_range = ((val_gic_v3_read_gicr_typer() >> GICD_TYPER_EPPI_NUM_SHIFT)
+                                                   & GICD_TYPER_EPPI_NUM_MASK);
       if (ppi_range == 1)
         return 1087;
       else if (ppi_range == 2)
@@ -228,9 +229,9 @@ val_rme_gic_max_eppi_val(void)
   @return 1: eppi interrupt
 **/
 uint32_t
-val_rme_gic_check_eppi_interrupt(uint32_t int_id)
+val_gic_check_eppi_interrupt(uint32_t int_id)
 {
-  if (val_rme_gic_eppi_support() && v3_is_extended_ppi(int_id))
+  if (val_gic_eppi_support() && val_gic_v3_is_extended_ppi(int_id))
     return 1;
   else
     return 0;
@@ -242,9 +243,10 @@ val_rme_gic_check_eppi_interrupt(uint32_t int_id)
   @return 1: ppi interrupt
 **/
 uint32_t
-val_rme_gic_check_ppi(uint32_t int_id)
+val_gic_check_ppi(uint32_t int_id)
 {
-  if ((val_rme_gic_eppi_support() && v3_is_extended_ppi(int_id)) || (int_id > 15 && int_id < 32))
+  if ((val_gic_eppi_support() && val_gic_v3_is_extended_ppi(int_id))
+                                    || (int_id > 15 && int_id < 32))
     return 1;
   else
     return 0;

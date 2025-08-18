@@ -29,9 +29,9 @@
   @return none
 **/
 uint32_t
-v2_AcknowledgeInterrupt(void)
+val_gic_v2_AcknowledgeInterrupt(void)
 {
-  return val_mmio_read(val_get_cpuif_base() + GIC_ICCIAR);
+  return val_mmio_read(val_gic_get_cpuif_base() + GIC_ICCIAR);
 }
 
 /**
@@ -40,9 +40,9 @@ v2_AcknowledgeInterrupt(void)
   @return none
 **/
 void
-v2_EndofInterrupt(uint32_t int_id)
+val_gic_v2_EndofInterrupt(uint32_t int_id)
 {
-  val_mmio_write(val_get_cpuif_base() + GIC_ICCEIOR, int_id);
+  val_mmio_write(val_gic_get_cpuif_base() + GIC_ICCEIOR, int_id);
 }
 
 /**
@@ -51,7 +51,7 @@ v2_EndofInterrupt(uint32_t int_id)
   @return none
 **/
 void
-v2_DisableInterruptSource(uint32_t int_id)
+val_gic_v2_DisableInterruptSource(uint32_t int_id)
 {
   uint32_t                regOffset;
   uint32_t                regShift;
@@ -60,7 +60,7 @@ v2_DisableInterruptSource(uint32_t int_id)
   regOffset = int_id / 32;
   regShift = int_id % 32;
 
-  val_mmio_write(val_get_gicd_base() + GICD_ICENABLER + (4 * regOffset), 1 << regShift);
+  val_mmio_write(val_gic_get_gicd_base() + GICD_ICENABLER + (4 * regOffset), 1 << regShift);
 }
 
 /**
@@ -69,7 +69,7 @@ v2_DisableInterruptSource(uint32_t int_id)
   @return none
 **/
 void
-v2_EnableInterruptSource(uint32_t int_id)
+val_gic_v2_EnableInterruptSource(uint32_t int_id)
 {
   uint32_t                regOffset;
   uint32_t                regShift;
@@ -78,7 +78,7 @@ v2_EnableInterruptSource(uint32_t int_id)
   regOffset = int_id / 32;
   regShift = int_id % 32;
 
-  val_mmio_write(val_get_gicd_base() + GICD_ISENABLER + (4 * regOffset), 1 << regShift);
+  val_mmio_write(val_gic_get_gicd_base() + GICD_ISENABLER + (4 * regOffset), 1 << regShift);
 }
 
 /**
@@ -87,7 +87,7 @@ v2_EnableInterruptSource(uint32_t int_id)
   @return init success or failure
 **/
 void
-v2_Init(void)
+val_gic_v2_Init(void)
 {
   uint32_t   max_num_interrupts;
   uint32_t   index;
@@ -99,13 +99,13 @@ v2_Init(void)
 
 
   /* Get the distributor base */
-  gicd_base = val_get_gicd_base();
+  gicd_base = val_gic_get_gicd_base();
 
   /* Get the cpu interface base */
-  cpuif_base = val_get_cpuif_base();
+  cpuif_base = val_gic_get_cpuif_base();
 
   /* Get the max interrupt */
-  max_num_interrupts = val_get_max_intid();
+  max_num_interrupts = val_gic_get_max_intid();
 
   val_print(ACS_PRINT_DEBUG, " GIC_INIT: D base %x", gicd_base);
   val_print(ACS_PRINT_DEBUG, " GIC_INIT: CPU IF base %x", cpuif_base);
@@ -113,10 +113,10 @@ v2_Init(void)
 
   /* Disable all interrupt */
   for (index = 0; index < max_num_interrupts; index++)
-    v2_DisableInterruptSource(index);
+    val_gic_v2_DisableInterruptSource(index);
 
   /* Set vector table */
-  rme_gic_vector_table_init();
+  val_gic_vector_table_init();
 
   if (val_pe_reg_read(CurrentEL) == AARCH64_EL2) {
     /* Route exception to EL2 */
@@ -130,12 +130,12 @@ v2_Init(void)
       /* Calculate register offset and bit position */
       regOffset = index / 4;
       regShift = (index % 4) * 8;
-      val_mmio_write(val_get_gicd_base() + GICD_IPRIORITYR + (4 * regOffset),
-                    (val_mmio_read(val_get_gicd_base() + GICD_IPRIORITYR + (4 * regOffset)) &
+      val_mmio_write(val_gic_get_gicd_base() + GICD_IPRIORITYR + (4 * regOffset),
+                    (val_mmio_read(val_gic_get_gicd_base() + GICD_IPRIORITYR + (4 * regOffset)) &
                      ~(0xff << regShift)) | (GIC_DEFAULT_PRIORITY << regShift));
   }
 
-  cpuTarget = val_mmio_read(val_get_gicd_base() + GIC_ICDIPTR);
+  cpuTarget = val_mmio_read(val_gic_get_gicd_base() + GIC_ICDIPTR);
 
   /* Route SPI to primary PE */
   if (cpuTarget != 0) {
@@ -149,5 +149,5 @@ v2_Init(void)
   val_mmio_write(cpuif_base + GIC_ICCICR, 0x1);
 
   /* enable distributor */
-  val_mmio_write(val_get_gicd_base() + GICD_CTRL, 0x1);
+  val_mmio_write(val_gic_get_gicd_base() + GICD_CTRL, 0x1);
 }

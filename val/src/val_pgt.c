@@ -157,6 +157,16 @@ uint64_t get_block_size(uint32_t level)
     }
 }
 
+static uint64_t modify_desc(uint64_t table_desc, uint8_t bit_to_set, uint64_t value_to_set)
+{
+
+    /* To clear the bit at "bit_to_set" position */
+    table_desc &= ~(0x1ull << bit_to_set);
+    /* To set the bit at the "bit_to_set" position to required value_to_set */
+    return table_desc |= (value_to_set << bit_to_set);
+
+}
+
 uint32_t fill_translation_table(tt_descriptor_t tt_desc, memory_region_descriptor_t *mem_desc)
 {
     uint64_t block_size = 0x1ull << tt_desc.size_log2;
@@ -537,15 +547,7 @@ uint32_t val_pe_mmu_map_rmv(memory_region_descriptor_t *mem_desc)
     return 0;
 }
 
-uint64_t modify_desc(uint64_t table_desc, uint8_t bit_to_set, uint64_t value_to_set)
-{
 
-    /* To clear the bit at "bit_to_set" position */
-    table_desc &= ~(0x1ull << bit_to_set);
-    /* To set the bit at the "bit_to_set" position to required value_to_set */
-    return table_desc |= (value_to_set << bit_to_set);
-
-}
 
 /**
   @brief Get attributes of a page corresponding to a given virtual address.

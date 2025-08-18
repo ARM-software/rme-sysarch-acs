@@ -786,22 +786,7 @@ typedef struct {
   uint32_t property;
 } REGISTER_INFO_TABLE;
 
-/* System Configuration */
-#define val_get_root_smem_base() PLAT_ROOT_SMEM_BASE
-#define val_get_realm_smem_base() PLAT_REALM_SMEM_BASE
-#define val_get_mte_protected_region_base() PLAT_MTE_PROTECTED_REGION_BASE
-#define val_get_mte_protected_region_size() PLAT_MTE_PROTECTED_REGION_SIZE
-#define val_get_msd_save_restore_mem() PLAT_MSD_SAVE_RESTORE_MEM
-#define val_get_rme_rnvs_mailbox_mem() PLAT_RME_RNVS_MAILBOX_MEM
-#define val_get_rt_wdog_ctrl() PLAT_RT_WDOG_CTRL
-#define val_get_rt_wdog_int_id() PLAT_RT_WDOG_INT_ID
-#define val_get_rme_acs_nvm_mem() PLAT_RME_ACS_NVM_MEM
-#define val_get_free_mem_start() PLAT_FREE_MEM_START
-#define val_get_free_va_test() PLAT_FREE_VA_TEST
-#define val_get_free_pa_test() PLAT_FREE_PA_TEST
-#define val_get_shared_address() PLAT_SHARED_ADDRESS
-#define val_get_free_mem_smmu() PLAT_FREE_MEM_SMMU
-#define val_get_memory_pool_size() PLAT_MEMORY_POOL_SIZE
+
 
 /**
  * @brief structure instance for ROOT registers
@@ -840,8 +825,6 @@ typedef struct {
 
 uint32_t pal_register_get_num_entries(void);
 void pal_register_create_info_table(REGISTER_INFO_TABLE *registerInfoTable);
-ROOT_REGSTR_TABLE *val_root_reg_info_table(void);
-void val_root_register_create_info_table(uint64_t *root_registers_cfg);
 void pal_root_register_create_info_table(ROOT_REGSTR_TABLE *table);
 void pal_mem_region_create_info_table(MEM_REGN_INFO_TABLE *gpc_table,
                                       MEM_REGN_INFO_TABLE *pas_table);

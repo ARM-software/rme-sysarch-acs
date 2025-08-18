@@ -22,14 +22,14 @@
 #define ICC_IAR1_EL1    S3_0_C12_C12_0
 #define ICC_EOIR1_EL1   S3_0_C12_C12_1
 
-void rme_gic_set_el2_vector_table(void);
-uint32_t rme_gic_update_elr(uint64_t elr_value);
-uint32_t rme_gic_get_elr(void);
-uint32_t rme_gic_get_far(void);
-uint32_t rme_gic_get_esr(void);
-uint32_t rme_gic_ack_intr(void);
-void rme_gic_end_intr(uint32_t interrupt_id);
-void rme_gic_vector_table_init(void);
+void val_gic_set_el2_vector_table(void);
+uint32_t val_gic_update_elr(uint64_t elr_value);
+uint32_t val_gic_get_elr(void);
+uint32_t val_gic_get_far(void);
+uint32_t val_gic_get_esr(void);
+uint32_t val_gic_ack_intr(void);
+void val_gic_end_intr(uint32_t interrupt_id);
+void val_gic_vector_table_init(void);
 uint32_t common_exception_handler(uint32_t exception_type);
 
 void val_gic_rme_install_esr(uint32_t exception_type, void (*esr)(uint64_t, void *));
