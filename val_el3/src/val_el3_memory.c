@@ -19,6 +19,7 @@
 #include <val_el3_memory.h>
 #include <val_el3_mec.h>
 #include <val_el3_pe.h>
+#include <val_el3_pgt.h>
 
 struct_sh_data *shared_data = (struct_sh_data *) PLAT_SHARED_ADDRESS;
 
@@ -41,13 +42,33 @@ static size_t align_size(size_t size, size_t alignment)
 }
 
 /**
- * @brief Map EL3 shared memory region if required by platform.
- *
- * Note: Current implementation is a stub. Platform may override.
- */
-void val_el3_map_shared_mem(void)
+ *  @brief  This API is called to Map the shared buffer into EL3 page tables with NS RW attributes,
+ *          then populate EL3-local configuration so NS world can consume it immediately.
+ *          1. Caller       -  VAL
+ *  @param  shared_addr     -  The address of the shared memory buffer in EL3 to be read by NS
+ *  @return None
+**/
+void val_el3_map_shared_mem(uint64_t shared_addr)
 {
-        INFO(" Function not implemented\n");
+  uint64_t pgt_attr_el3;
+
+  pgt_attr_el3 = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(OUTER_SHAREABLE)
+                                      | PGT_ENTRY_AP_RW | PAS_ATTR(NONSECURE_PAS));
+
+  // Store base address in shared_addr pointer which will be used by NS world
+  val_el3_add_mmu_entry((uint64_t)shared_data, (uint64_t)shared_data, pgt_attr_el3);
+
+  // Store base address in shared_addr pointer which will be used by NS world
+  val_el3_add_mmu_entry(shared_addr, shared_addr, pgt_attr_el3);
+  *(uint64_t *)shared_addr = (uint64_t)shared_data;
+
+  struct_sh_data *sd = (struct_sh_data *)shared_data;
+  /* EL3 cfg populated for NS consumption */
+  sd->cfg_free_mem_start       = PLAT_FREE_MEM_START;
+  sd->cfg_free_mem_smmu        = PLAT_FREE_MEM_SMMU;
+  sd->cfg_memory_pool_size     = PLAT_MEMORY_POOL_SIZE;
+  sd->cfg_smmu_root_reg_offset = SMMUV3_ROOT_REG_OFFSET;
+
 }
 
 /**

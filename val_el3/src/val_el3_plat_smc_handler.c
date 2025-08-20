@@ -76,7 +76,7 @@ void plat_arm_acs_smc_handler(uint64_t services, uint64_t arg0, uint64_t arg1, u
       }
       break;
     case RME_MAP_SHARED_MEM:
-      val_el3_map_shared_mem();
+      val_el3_map_shared_mem(arg0);
       break;
     case RME_CMO_POPA:
       INFO("RME CMO to PoPA service \n");

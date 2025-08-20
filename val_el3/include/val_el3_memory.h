@@ -18,6 +18,7 @@
 #ifndef VAL_EL3_MEMORY_H
 #define VAL_EL3_MEMORY_H
 
+#include <pal_el3_config.h>
 #include <val_el3_helpers.h>
 
 /* Shared memory layout constants are provided by val_el3_helpers.h */
@@ -78,7 +79,7 @@ void val_el3_acs_str(uint64_t *address, uint64_t data);
 void val_el3_tlbi_vae3(uint64_t VA);
 void val_el3_tlbi_alle3is(void);
 void val_el3_isb(void);
-void val_el3_map_shared_mem(void);
+void val_el3_map_shared_mem(uint64_t shared_addr);
 void val_el3_access_mut(void);
 void val_el3_acs_ldr_pas_filter(uint64_t *address, uint64_t data);
 

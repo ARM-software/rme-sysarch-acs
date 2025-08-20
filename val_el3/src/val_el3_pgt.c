@@ -67,6 +67,7 @@ void val_el3_setup_acs_pgt_values(void)
     acs_pgt_info.size_used = 0;
 }
 
+
 static
 uint32_t get_pgt_index(uint32_t level)
 {

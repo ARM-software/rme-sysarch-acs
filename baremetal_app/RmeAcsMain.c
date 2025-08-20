@@ -231,6 +231,8 @@ ShellAppMainrme(
   val_print(ACS_PRINT_ALWAYS, " Version: Issue B.a ACS EAC   \n", 0);
 
   val_print(ACS_PRINT_ALWAYS, " (Print level is %2d)\n\n", g_print_level);
+  /* Initialize runtime-dependent globals (free mem, shared data, NVM). */
+  val_init_runtime_params();
 
   g_skip_test_str = g_skip_array;
 

@@ -97,6 +97,18 @@ val_add_mmu_entry_el3(uint64_t VA, uint64_t PA, uint64_t attr)
 }
 
 /**
+ *  @brief  This API maps the shared memory at EL3 and populates the EL3 specific memory information
+ *          Returns 1 on error, 0 on success.
+ *  @param  shared_addr - The address pointer to store the Shared address in EL3
+ *  @return None
+ **/
+void
+val_map_shared_mem_el3(uint64_t shared_addr)
+{
+  UserCallSMC(ARM_ACS_SMC_FID, RME_MAP_SHARED_MEM, shared_addr, 0, 0);
+}
+
+/**
  *  @brief   This API maps a given Physical Address into the GPT table
  *           with the specified GPI at EL3.
  *           Returns 1 on error, 0 on success.

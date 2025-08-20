@@ -39,7 +39,6 @@
 static
 void payload(void)
 {
-  struct_sh_data *shared_data = (struct_sh_data *) val_get_shared_address();
   uint32_t index = val_pe_get_index_mpid(val_pe_get_mpid()), attr;
   uint64_t pas_list[4] = {REALM_PAS, NONSECURE_PAS, SECURE_PAS, ROOT_PAS}, VA, size;
   uint64_t mte_base, mte_size, mte_mid, mte_end;

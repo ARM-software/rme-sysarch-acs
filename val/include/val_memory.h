@@ -18,6 +18,8 @@
 #ifndef __RME_ACS_MEMORY_H__
 #define __RME_ACS_MEMORY_H__
 
+#include "val_interface.h"
+
 #define MEM_MAP_SUCCESS  0x0
 #define MEM_MAP_NO_MEM   0x1
 #define MEM_MAP_FAILURE  0x2

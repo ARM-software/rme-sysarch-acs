@@ -38,7 +38,6 @@ static
 void payload(void)
 {
 
-  struct_sh_data *shared_data = (struct_sh_data *) val_get_shared_address();
   uint32_t index = val_pe_get_index_mpid(val_pe_get_mpid()), attr;
   uint64_t wt_data, rd_data, PA_RLM, size;
   uint64_t realm_smem_available = val_get_realm_smem_base();

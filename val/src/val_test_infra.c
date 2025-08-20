@@ -24,12 +24,13 @@
 #include "include/val_el32.h"
 #include "include/val_exerciser.h"
 #include "include/val_smmu.h"
+#include "include/val_pgt.h"
 
-uint64_t free_mem_var_pa = PLAT_FREE_PA_TEST;
-uint64_t free_mem_var_va = PLAT_FREE_VA_TEST;
-uint64_t rme_nvm_mem = PLAT_RME_ACS_NVM_MEM;
+uint64_t free_mem_var_pa;
+uint64_t free_mem_var_va;
+uint64_t rme_nvm_mem;
 
-struct_sh_data *shared_data = (struct_sh_data *) PLAT_SHARED_ADDRESS;
+struct_sh_data *shared_data;
 
 /**
   @brief  This API calls PAL layer to print a formatted string
@@ -45,41 +46,42 @@ struct_sh_data *shared_data = (struct_sh_data *) PLAT_SHARED_ADDRESS;
 
   @return        None
  **/
-void
-val_log_context(uint32_t level, char8_t *string, uint64_t data, const char *file, int line)
+void val_log_context(uint32_t level, char8_t *string, uint64_t data, const char *file, int line)
 {
 #ifndef TARGET_BM_BOOT
-  if (level >= g_print_level) {
-    if (level == ACS_PRINT_DEBUG) {
+  if (level >= g_print_level)
+  {
+    if (level == ACS_PRINT_DEBUG)
+    {
       if (g_print_in_test_context)
         pal_print("\n\t\tDBG : ", 0);
       else
         pal_print("\n\tDBG : ", 0);
-    }
-    else if (level == ACS_PRINT_ERR) {
+    } else if (level == ACS_PRINT_ERR)
+    {
       if (g_print_in_test_context)
         pal_print("\n\t\tERR : ", 0);
       else
         pal_print("\n\tERR : ", 0);
-    }
-    else if (level == ACS_PRINT_INFO) {
+    } else if (level == ACS_PRINT_INFO)
+    {
       if (g_print_in_test_context)
         pal_print("\n\t\tINFO: ", 0);
       else
         pal_print("\n\tINFO: ", 0);
-    }
-    else if (level == ACS_PRINT_WARN) {
+    } else if (level == ACS_PRINT_WARN)
+    {
       if (g_print_in_test_context)
         pal_print("\n\t\tWARN: ", 0);
       else
         pal_print("\n\tWARN: ", 0);
-    }
-    else if (level == ACS_PRINT_ALWAYS) {
-        // Do not print prefix or newline
-        pal_print(string, data);
-        return;
-    }
-    else {
+    } else if (level == ACS_PRINT_ALWAYS)
+    {
+      // Do not print prefix or newline
+      pal_print(string, data);
+      return;
+    } else
+    {
       if (g_print_test_check_id == 0)
         pal_print("  Check %d : ", ++g_print_test_check_id);
       else
@@ -87,51 +89,54 @@ val_log_context(uint32_t level, char8_t *string, uint64_t data, const char *file
     }
     pal_print(string, data);
     /* Print file name and line number for ERR and WARN */
-    if (level == ACS_PRINT_ERR || level == ACS_PRINT_WARN) {
-        pal_print("[FILE: %a]", (uint64_t)file);
-        pal_print("  [LINE: %d]", line);
+    if (level == ACS_PRINT_ERR || level == ACS_PRINT_WARN)
+    {
+      pal_print("[FILE: %a]", (uint64_t)file);
+      pal_print("  [LINE: %d]", line);
     }
   }
 #else
   if (level >= g_print_level) {
-      if (level == ACS_PRINT_DEBUG) {
-        if (g_print_in_test_context)
-          pal_uart_print(level, "\n\t\tDBG: ", 0);
-        else
-          pal_uart_print(level, "\n\tDBG: ", 0);
-      }
-      else if (level == ACS_PRINT_ERR) {
-        if (g_print_in_test_context)
-          pal_uart_print(level, "\n\t\tERR: ", 0);
-        else
-          pal_uart_print(level, "\n\tERR: ", 0);
-      }
-      else if (level == ACS_PRINT_INFO) {
-        if (g_print_in_test_context)
-          pal_uart_print(level, "\n\t\tINFO: ", 0);
-        else
-          pal_uart_print(level, "\n\tINFO", 0);
-      }
-      else if (level == ACS_PRINT_WARN) {
-        if (g_print_in_test_context)
-          pal_uart_print(level, "\n\t\tWARN: ", 0);
-        else
-          pal_uart_print(level, "\n\tWARN: ", 0);
-      }
-      else if (level == ACS_PRINT_ALWAYS) {
-        // Do not print prefix or newline
-        pal_uart_print(level, string, data);
-        return;
-      }
-      else {
-        pal_uart_print(level, "\n  Check %d : ", ++g_print_test_check_id);
-      }
+    if (level == ACS_PRINT_DEBUG)
+    {
+      if (g_print_in_test_context)
+        pal_uart_print(level, "\n\t\tDBG: ", 0);
+      else
+        pal_uart_print(level, "\n\tDBG: ", 0);
+    } else if (level == ACS_PRINT_ERR)
+    {
+      if (g_print_in_test_context)
+        pal_uart_print(level, "\n\t\tERR: ", 0);
+      else
+        pal_uart_print(level, "\n\tERR: ", 0);
+    } else if (level == ACS_PRINT_INFO)
+    {
+      if (g_print_in_test_context)
+        pal_uart_print(level, "\n\t\tINFO: ", 0);
+      else
+        pal_uart_print(level, "\n\tINFO", 0);
+    } else if (level == ACS_PRINT_WARN)
+    {
+      if (g_print_in_test_context)
+        pal_uart_print(level, "\n\t\tWARN: ", 0);
+      else
+        pal_uart_print(level, "\n\tWARN: ", 0);
+    } else if (level == ACS_PRINT_ALWAYS)
+    {
+      // Do not print prefix or newline
       pal_uart_print(level, string, data);
-      /* Print file name and line number for ERR and WARN */
-      if (level == ACS_PRINT_ERR || level == ACS_PRINT_WARN) {
-          pal_uart_print(level, "  [FILE: %a]", (uint64_t)file);
-          pal_uart_print(level, "  [LINE: %d]", line);
-      }
+      return;
+    } else
+    {
+      pal_uart_print(level, "\n  Check %d : ", ++g_print_test_check_id);
+    }
+    pal_uart_print(level, string, data);
+    /* Print file name and line number for ERR and WARN */
+    if (level == ACS_PRINT_ERR || level == ACS_PRINT_WARN)
+    {
+      pal_uart_print(level, "  [FILE: %a]", (uint64_t)file);
+      pal_uart_print(level, "  [LINE: %d]", line);
+    }
   }
 #endif
 }
@@ -148,14 +153,11 @@ val_log_context(uint32_t level, char8_t *string, uint64_t data, const char *file
 
   @return        None
  **/
-void
-val_print_raw(uint64_t uart_address, uint32_t level, char8_t *string,
-                                                                uint64_t data)
+void val_print_raw(uint64_t uart_address, uint32_t level, char8_t *string, uint64_t data)
 {
 
   if (level >= g_print_level)
-      pal_print_raw(uart_address, string, data);
-
+    pal_print_raw(uart_address, string, data);
 }
 
 /**
@@ -168,11 +170,9 @@ val_print_raw(uint64_t uart_address, uint32_t level, char8_t *string,
 
   @return       8-bits of data
  **/
-uint8_t
-val_mmio_read8(addr_t addr)
+uint8_t val_mmio_read8(addr_t addr)
 {
   return pal_mmio_read8(addr);
-
 }
 
 /**
@@ -185,11 +185,9 @@ val_mmio_read8(addr_t addr)
 
   @return       16-bits of data
  **/
-uint16_t
-val_mmio_read16(addr_t addr)
+uint16_t val_mmio_read16(addr_t addr)
 {
   return pal_mmio_read16(addr);
-
 }
 
 /**
@@ -202,11 +200,9 @@ val_mmio_read16(addr_t addr)
 
   @return       32-bits of data
  **/
-uint32_t
-val_mmio_read(addr_t addr)
+uint32_t val_mmio_read(addr_t addr)
 {
   return pal_mmio_read(addr);
-
 }
 
 /**
@@ -219,11 +215,9 @@ val_mmio_read(addr_t addr)
 
   @return       64-bits of data
  **/
-uint64_t
-val_mmio_read64(addr_t addr)
+uint64_t val_mmio_read64(addr_t addr)
 {
   return pal_mmio_read64(addr);
-
 }
 
 /**
@@ -237,8 +231,7 @@ val_mmio_read64(addr_t addr)
 
   @return       None
  **/
-void
-val_mmio_write8(addr_t addr, uint8_t data)
+void val_mmio_write8(addr_t addr, uint8_t data)
 {
 
   pal_mmio_write8(addr, data);
@@ -255,8 +248,7 @@ val_mmio_write8(addr_t addr, uint8_t data)
 
   @return       None
  **/
-void
-val_mmio_write16(addr_t addr, uint16_t data)
+void val_mmio_write16(addr_t addr, uint16_t data)
 {
 
   pal_mmio_write16(addr, data);
@@ -273,8 +265,7 @@ val_mmio_write16(addr_t addr, uint16_t data)
 
   @return       None
  **/
-void
-val_mmio_write(addr_t addr, uint32_t data)
+void val_mmio_write(addr_t addr, uint32_t data)
 {
 
   pal_mmio_write(addr, data);
@@ -290,8 +281,7 @@ val_mmio_write(addr_t addr, uint32_t data)
 
   @return       None
  **/
-void
-val_mmio_write64(addr_t addr, uint64_t data)
+void val_mmio_write64(addr_t addr, uint64_t data)
 {
 
   pal_mmio_write64(addr, data);
@@ -299,17 +289,18 @@ val_mmio_write64(addr_t addr, uint64_t data)
 
 void print_suite_from_testname(char8_t *testname)
 {
-    char8_t suite[32];
-    uint32_t i = 0;
+  char8_t suite[32];
+  uint32_t i = 0;
 
-    // Extract characters until first '_' or end of string
-    while (testname[i] != '_' && testname[i] != '\0' && i < sizeof(suite) - 1) {
-        suite[i] = testname[i];
-        i++;
-    }
-    suite[i] = '\0';  // Null-terminate the suite name
+  // Extract characters until first '_' or end of string
+  while (testname[i] != '_' && testname[i] != '\0' && i < sizeof(suite) - 1)
+  {
+    suite[i] = testname[i];
+    i++;
+  }
+  suite[i] = '\0'; // Null-terminate the suite name
 
-    val_print(ACS_PRINT_ALWAYS, "Suite: ", 0), val_print(ACS_PRINT_ALWAYS, suite, 0);
+  val_print(ACS_PRINT_ALWAYS, "Suite: ", 0), val_print(ACS_PRINT_ALWAYS, suite, 0);
 }
 
 /**
@@ -323,28 +314,32 @@ void print_suite_from_testname(char8_t *testname)
   @return         ACS_STATUS_SKIP - if the user override has no tests to run in the current module
                   ACS_STATUS_PASS - if tests are to be run in the current module
  **/
-uint32_t
-val_check_skip_module(char8_t *module_id)
+uint32_t val_check_skip_module(char8_t *module_id)
 {
   uint32_t i, dont_skip = 0;
 
   /* Case 1 - Don't skip the module if the module number is mentioned in -m option parameters */
-  for (i = 0; i < g_num_modules; i++) {
-    if (val_memory_compare(g_execute_modules_str[i],
-                           module_id, val_strnlen(g_execute_modules_str[i])) == 0)
+  for (i = 0; i < g_num_modules; i++)
+  {
+    if (val_memory_compare(g_execute_modules_str[i], module_id,
+                           val_strnlen(g_execute_modules_str[i]))
+        == 0)
       dont_skip++;
   }
 
   /* Case 2 - Don't skip the module if any of module's tests are in -t option parameters  */
-  for (i = 0; i < g_num_tests; i++) {
-    if (val_memory_compare(module_id, g_execute_tests_str[i], val_strnlen(module_id)) == 0) {
-        dont_skip++;
+  for (i = 0; i < g_num_tests; i++)
+  {
+    if (val_memory_compare(module_id, g_execute_tests_str[i], val_strnlen(module_id)) == 0)
+    {
+      dont_skip++;
     }
   }
 
   /* Skip the module if neither of above 2 cases are true */
-  if ((!dont_skip) && (g_num_tests || g_num_modules)) {
-      return ACS_STATUS_SKIP;
+  if ((!dont_skip) && (g_num_tests || g_num_modules))
+  {
+    return ACS_STATUS_SKIP;
   }
 
   return ACS_STATUS_PASS;
@@ -362,11 +357,10 @@ val_check_skip_module(char8_t *module_id)
   @param ruleid   Pointer to the TEST_RULE string.
   @return         Skip - if the user has overridden to skip the test.
  **/
-uint32_t
-val_initialize_test(char8_t *testname, char8_t *desc, uint32_t num_pe, char8_t *ruleid)
+uint32_t val_initialize_test(char8_t *testname, char8_t *desc, uint32_t num_pe, char8_t *ruleid)
 {
   uint32_t i;
-  uint32_t index = val_pe_get_index_mpid(val_pe_get_mpid());
+  uint32_t index     = val_pe_get_index_mpid(val_pe_get_mpid());
   uint32_t dont_skip = 0;
 
   g_print_in_test_context = 1;
@@ -379,35 +373,42 @@ val_initialize_test(char8_t *testname, char8_t *desc, uint32_t num_pe, char8_t *
   val_pe_initialize_default_exception_handler(val_pe_default_esr);
 
   for (i = 0; i < num_pe; i++)
-      val_set_status(i, "PENDING", 0);
+    val_set_status(i, "PENDING", 0);
 
   /* Skip the test if it one of the -skip option parameters */
-  for (i = 0 ; i < g_num_skip ; i++) {
-      if (val_memory_compare(g_skip_test_str[i], testname, val_strnlen(g_skip_test_str[i])) == 0) {
-          val_print(ACS_PRINT_ALWAYS, "\n USER OVERRIDE  - Skip Test        ", 0);
-          val_set_status(index, "SKIP", 0);
-          return ACS_STATUS_SKIP;
-      }
+  for (i = 0; i < g_num_skip; i++)
+  {
+    if (val_memory_compare(g_skip_test_str[i], testname, val_strnlen(g_skip_test_str[i])) == 0)
+    {
+      val_print(ACS_PRINT_ALWAYS, "\n USER OVERRIDE  - Skip Test        ", 0);
+      val_set_status(index, "SKIP", 0);
+      return ACS_STATUS_SKIP;
+    }
   }
 
   /* Don't skip if the test belongs to one of the modules in -m option parameters */
-  for (i = 0; i < g_num_modules; i++) {
-    if (val_memory_compare(g_execute_modules_str[i],
-                           testname, val_strnlen(g_execute_modules_str[i])) == 0)
+  for (i = 0; i < g_num_modules; i++)
+  {
+    if (val_memory_compare(g_execute_modules_str[i], testname,
+                           val_strnlen(g_execute_modules_str[i]))
+        == 0)
       dont_skip++;
   }
 
   /* Don't skip if test_num is one of the -t option parameters */
-  for (i = 0; i < g_num_tests; i++) {
-    if (val_memory_compare(testname, g_execute_tests_str[i], val_strnlen(testname)) == 0) {
-        dont_skip++;
+  for (i = 0; i < g_num_tests; i++)
+  {
+    if (val_memory_compare(testname, g_execute_tests_str[i], val_strnlen(testname)) == 0)
+    {
+      dont_skip++;
     }
   }
 
-  if ((!dont_skip) && (g_num_tests || g_num_modules)) {
-      val_set_status(index, "SKIP", 0);
-      val_print(ACS_PRINT_ALWAYS, "\n USER OVERRIDE  - Skip Test        ", 0);
-      return ACS_STATUS_SKIP;
+  if ((!dont_skip) && (g_num_tests || g_num_modules))
+  {
+    val_set_status(index, "SKIP", 0);
+    val_print(ACS_PRINT_ALWAYS, "\n USER OVERRIDE  - Skip Test        ", 0);
+    return ACS_STATUS_SKIP;
   }
 
   dont_skip = 1;
@@ -423,12 +424,10 @@ val_initialize_test(char8_t *testname, char8_t *desc, uint32_t num_pe, char8_t *
 
   @result None
 **/
-void
-val_allocate_shared_mem()
+void val_allocate_shared_mem(void)
 {
 
   pal_mem_allocate_shared(val_pe_get_num(), sizeof(VAL_SHARED_MEM_t));
-
 }
 
 /**
@@ -440,8 +439,7 @@ val_allocate_shared_mem()
 
   @result None
 **/
-void
-val_free_shared_mem()
+void val_free_shared_mem(void)
 {
 
   pal_mem_free_shared();
@@ -460,15 +458,14 @@ val_free_shared_mem()
 
   @return        None
  **/
-void
-val_set_test_data(uint32_t index, uint64_t addr, uint64_t test_data)
+void val_set_test_data(uint32_t index, uint64_t addr, uint64_t test_data)
 {
   volatile VAL_SHARED_MEM_t *mem;
 
   if (index > val_pe_get_num())
   {
-      val_print(ACS_PRINT_ERR, " Incorrect PE index = %d", index);
-      return;
+    val_print(ACS_PRINT_ERR, " Incorrect PE index = %d", index);
+    return;
   }
 
   mem = (VAL_SHARED_MEM_t *)pal_mem_get_shared_addr();
@@ -492,19 +489,18 @@ val_set_test_data(uint32_t index, uint64_t addr, uint64_t test_data)
   @return    64-bit data
  **/
 
-void
-val_get_test_data(uint32_t index, uint64_t *data0, uint64_t *data1)
+void val_get_test_data(uint32_t index, uint64_t *data0, uint64_t *data1)
 {
 
   volatile VAL_SHARED_MEM_t *mem;
 
   if (index > val_pe_get_num())
   {
-      val_print(ACS_PRINT_ERR, " Incorrect PE index = %d", index);
-      return;
+    val_print(ACS_PRINT_ERR, " Incorrect PE index = %d", index);
+    return;
   }
 
-  mem = (VAL_SHARED_MEM_t *) pal_mem_get_shared_addr();
+  mem = (VAL_SHARED_MEM_t *)pal_mem_get_shared_addr();
   mem = mem + index;
 
   val_data_cache_ops_by_va((addr_t)&mem->data0, INVALIDATE);
@@ -512,7 +508,6 @@ val_get_test_data(uint32_t index, uint64_t *data0, uint64_t *data1)
 
   *data0 = mem->data0;
   *data1 = mem->data1;
-
 }
 
 /**
@@ -527,29 +522,28 @@ val_get_test_data(uint32_t index, uint64_t *data0, uint64_t *data1)
   @return        None
  **/
 
-void
-val_wait_for_test_completion(uint32_t num_pe, uint32_t timeout)
+void val_wait_for_test_completion(uint32_t num_pe, uint32_t timeout)
 {
   uint32_t i = 0, j = 0;
 
-  //For single PE tests, there is no need to wait for the results
+  // For single PE tests, there is no need to wait for the results
   if (num_pe == 1)
-      return;
+    return;
 
   while (--timeout)
   {
-      j = 0;
-      for (i = 0; i < num_pe; i++)
-      {
-          if (val_memory_compare(val_get_status(i), "PENDING", val_strnlen(val_get_status(i))) == 0)
-              j = i+1;
-      }
-      //If None of the PE have the status as Pending, return
-      if (!j)
-          return;
+    j = 0;
+    for (i = 0; i < num_pe; i++)
+    {
+      if (val_memory_compare(val_get_status(i), "PENDING", val_strnlen(val_get_status(i))) == 0)
+        j = i + 1;
+    }
+    // If None of the PE have the status as Pending, return
+    if (!j)
+      return;
   }
-  //We are here if we timed-out, set the last index PE as failed
-  val_set_status(j-1, "FAIL", 0xF);
+  // We are here if we timed-out, set the last index PE as failed
+  val_set_status(j - 1, "FAIL", 0xF);
 }
 
 /**
@@ -563,20 +557,20 @@ val_wait_for_test_completion(uint32_t num_pe, uint32_t timeout)
 
   @return        None
  **/
-void
-val_run_test_payload(uint32_t num_pe, void (*payload)(void), uint64_t test_input)
+void val_run_test_payload(uint32_t num_pe, void (*payload)(void), uint64_t test_input)
 {
   uint32_t my_index = val_pe_get_index_mpid(val_pe_get_mpid());
   uint32_t i;
 
-  payload();  //this is test run separately on present PE
+  payload(); // this is test run separately on present PE
   if (num_pe == 1)
-      return;
+    return;
 
-  //Now run the test on all other PE
-  for (i = 0; i < num_pe; i++) {
-      if (i != my_index)
-          val_execute_on_pe(i, payload, test_input);
+  // Now run the test on all other PE
+  for (i = 0; i < num_pe; i++)
+  {
+    if (i != my_index)
+      val_execute_on_pe(i, payload, test_input);
   }
 
   val_wait_for_test_completion(num_pe, TIMEOUT_LARGE);
@@ -592,49 +586,53 @@ val_run_test_payload(uint32_t num_pe, void (*payload)(void), uint64_t test_input
                     ACS_STATUS_FAIL if any PE failed,
                     ACS_STATUS_SKIP if all were skipped
  **/
-uint32_t
-val_check_for_error(uint32_t num_pe)
+uint32_t val_check_for_error(uint32_t num_pe)
 {
   uint32_t i;
-  char8_t *status = 0;
+  char8_t *status     = 0;
   uint32_t error_flag = 0;
-  uint32_t my_index = val_pe_get_index_mpid(val_pe_get_mpid());
+  uint32_t my_index   = val_pe_get_index_mpid(val_pe_get_mpid());
 
   /* this special case is needed when the Main PE is not the first entry
      of pe_info_table but num_pe is 1 for SOC tests */
-  if (num_pe == 1) {
-      status = val_get_status(my_index);
-      val_report_status(my_index, status);
-      if (val_memory_compare(status, "PASS", val_strnlen(status)) == 0) {
-          g_rme_tests_pass++;
-          return ACS_STATUS_PASS;
-      }
-      if (val_memory_compare(status, "SKIP", val_strnlen(status)) == 0)
-          return ACS_STATUS_SKIP;
+  if (num_pe == 1)
+  {
+    status = val_get_status(my_index);
+    val_report_status(my_index, status);
+    if (val_memory_compare(status, "PASS", val_strnlen(status)) == 0)
+    {
+      g_rme_tests_pass++;
+      return ACS_STATUS_PASS;
+    }
+    if (val_memory_compare(status, "SKIP", val_strnlen(status)) == 0)
+      return ACS_STATUS_SKIP;
 
-      g_rme_tests_fail++;
-      return ACS_STATUS_FAIL;
+    g_rme_tests_fail++;
+    return ACS_STATUS_FAIL;
   }
 
-  for (i = 0; i < num_pe; i++) {
-      status = val_get_status(i);
-      if ((val_memory_compare(status, "FAIL", val_strnlen(status)) == 0) ||
-          (val_memory_compare(status, "SKIP", val_strnlen(status)) == 0)) {
-          val_report_status(i, status);
-          error_flag += 1;
-          break;
-      }
+  for (i = 0; i < num_pe; i++)
+  {
+    status = val_get_status(i);
+    if ((val_memory_compare(status, "FAIL", val_strnlen(status)) == 0)
+        || (val_memory_compare(status, "SKIP", val_strnlen(status)) == 0))
+    {
+      val_report_status(i, status);
+      error_flag += 1;
+      break;
+    }
   }
 
   if (!error_flag)
-      val_report_status(my_index, status);
+    val_report_status(my_index, status);
 
-  if (val_memory_compare(status, "PASS", val_strnlen(status)) == 0) {
-      g_rme_tests_pass++;
-      return ACS_STATUS_PASS;
+  if (val_memory_compare(status, "PASS", val_strnlen(status)) == 0)
+  {
+    g_rme_tests_pass++;
+    return ACS_STATUS_PASS;
   }
   if (val_memory_compare(status, "SKIP", val_strnlen(status)) == 0)
-      return ACS_STATUS_SKIP;
+    return ACS_STATUS_SKIP;
 
   g_rme_tests_fail++;
   return ACS_STATUS_FAIL;
@@ -644,57 +642,50 @@ val_check_for_error(uint32_t num_pe)
   @brief  Clean and Invalidate the Data cache line containing
           the input address tag
 **/
-void
-val_data_cache_ops_by_va(addr_t addr, uint32_t type)
+void val_data_cache_ops_by_va(addr_t addr, uint32_t type)
 {
   pal_pe_data_cache_ops_by_va(addr, type);
-
 }
 
 /**
   @brief  Update ELR based on the offset provided
 **/
-void
-val_pe_update_elr(void *context, uint64_t offset)
+void val_pe_update_elr(void *context, uint64_t offset)
 {
-    pal_pe_update_elr(context, offset);
+  pal_pe_update_elr(context, offset);
 }
 
 /**
   @brief  Get ESR from exception context
 **/
-uint64_t
-val_pe_get_esr(void *context)
+uint64_t val_pe_get_esr(void *context)
 {
-    return pal_pe_get_esr(context);
+  return pal_pe_get_esr(context);
 }
 
 /**
   @brief  Get ELR from exception context
 **/
-uint64_t
-val_pe_get_elr(void *context)
+uint64_t val_pe_get_elr(void *context)
 {
-    return pal_pe_get_elr(context);
+  return pal_pe_get_elr(context);
 }
 
 /**
   @brief  Get FAR from exception context
 **/
-uint64_t
-val_pe_get_far(void *context)
+uint64_t val_pe_get_far(void *context)
 {
-    return pal_pe_get_far(context);
+  return pal_pe_get_far(context);
 }
 
 /**
   @brief  Write to an address, meant for debugging purpose
 **/
-void
-val_debug_brk(uint32_t data)
+void val_debug_brk(uint32_t data)
 {
-   addr_t address = 0x9000F000; // address = pal_get_debug_address();
-   *(addr_t *)address = data;
+  addr_t address    = 0x9000F000; // address = pal_get_debug_address();
+  *(addr_t *)address = data;
 }
 
 /**
@@ -706,8 +697,7 @@ val_debug_brk(uint32_t data)
 
   @return Zero if strings are identical, else non-zero value
 **/
-uint32_t
-val_strncmp(char8_t *str1, char8_t *str2, uint32_t len)
+uint32_t val_strncmp(char8_t *str1, char8_t *str2, uint32_t len)
 {
   return pal_strncmp(str1, str2, len);
 }
@@ -722,8 +712,7 @@ val_strncmp(char8_t *str1, char8_t *str2, uint32_t len)
   @return DestinationBuffer.
 
 **/
-void*
-val_memcpy(void *dst_buffer, void *src_buffer, uint32_t len)
+void *val_memcpy(void *dst_buffer, void *src_buffer, uint32_t len)
 {
   return pal_memcpy(dst_buffer, src_buffer, len);
 }
@@ -736,29 +725,85 @@ val_memcpy(void *dst_buffer, void *src_buffer, uint32_t len)
   @return The value of MicroSeconds inputted.
 
 **/
-uint64_t
-val_time_delay_ms(uint64_t timer_ms)
+uint64_t val_time_delay_ms(uint64_t timer_ms)
 {
   return pal_time_delay_ms(timer_ms);
 }
 
-void
-val_write_reset_status(uint32_t status)
+void val_write_reset_status(uint32_t status)
 {
   pal_write_reset_status(rme_nvm_mem, status);
 }
 
-uint32_t
-val_read_reset_status()
+uint32_t val_read_reset_status(void)
 {
   return pal_read_reset_status(rme_nvm_mem);
 }
 
-uint64_t
-val_get_free_pa(uint64_t size, uint64_t alignment)
+static int Aarch64VaIsMappedForWrite(const void *Va)
+{
+  uint64_t par;
+
+  __asm__ volatile("at     s1e2w, %1\n"
+                   "isb\n"
+                   "mrs    %0, par_el1\n"
+                   : "=r"(par) // <-- changed to write-only output
+                   : "r"(Va)   // <-- input: address to check
+                   : "memory");
+
+  return ((par & 1ULL) == 0);
+}
+
+uint64_t val_get_free_pa(uint64_t size, uint64_t alignment)
 {
   uint64_t mem_base;
+  if (!Aarch64VaIsMappedForWrite((void *)free_mem_var_pa))
+  {
+    memory_region_descriptor_t mem_desc_array[2], *mem_desc;
+    pgt_descriptor_t pgt_desc;
+    uint64_t ttbr;
 
+    val_print(ACS_PRINT_ERR, "The PA is not mapped for write", 0);
+
+    /* Get translation attributes via TCR and translation table base via TTBR */
+    if (val_pe_reg_read_tcr(0 /*for TTBR0*/, &pgt_desc.tcr))
+    {
+      val_print(ACS_PRINT_ERR, " TCR read failure", 0);
+      return 1;
+    }
+
+    if (val_pe_reg_read_ttbr(0 /*for TTBR0*/, &ttbr))
+    {
+      val_print(ACS_PRINT_ERR, " TTBR0 read failure", 0);
+      return 1;
+    }
+
+    val_memory_set(mem_desc_array, sizeof(mem_desc_array), 0);
+    mem_desc = &mem_desc_array[0];
+
+    pgt_desc.pgt_base = (ttbr & AARCH64_TTBR_ADDR_MASK);
+    pgt_desc.mair     = val_pe_reg_read(MAIR_ELx);
+    pgt_desc.stage    = PGT_STAGE1;
+
+    pgt_desc.ias               = 48;
+    pgt_desc.oas               = 48;
+    mem_desc->virtual_address  = free_mem_var_pa;
+    mem_desc->physical_address = free_mem_var_pa;
+    mem_desc->length           = size;
+    mem_desc->attributes |= (PGT_STAGE1_AP_RW);
+
+    if (val_pgt_create(mem_desc, &pgt_desc))
+    {
+      val_print(ACS_PRINT_ERR, " Unable to create page table with given attributes", 0);
+      return 1;
+    }
+  }
+
+  if (!Aarch64VaIsMappedForWrite((void *)free_mem_var_pa))
+  {
+    val_print(ACS_PRINT_ERR, "The PA is still not mapped for write", 0);
+    return 1;
+  }
   mem_base = free_mem_var_pa & ~(alignment - 1);
 
   if (alignment < size)
@@ -770,56 +815,97 @@ val_get_free_pa(uint64_t size, uint64_t alignment)
   return mem_base;
 }
 
-uint64_t
-val_get_free_va(uint64_t size)
+uint64_t val_get_free_va(uint64_t size)
 {
   uint64_t mem_base;
 
+  if (!Aarch64VaIsMappedForWrite((void *)free_mem_var_va))
+  {
+    memory_region_descriptor_t mem_desc_array[2], *mem_desc;
+    pgt_descriptor_t pgt_desc;
+    uint64_t ttbr;
+
+    val_print(ACS_PRINT_ERR, "The VA is not mapped for write", 0);
+
+    /* Get translation attributes via TCR and translation table base via TTBR */
+    if (val_pe_reg_read_tcr(0 /*for TTBR0*/, &pgt_desc.tcr))
+    {
+      val_print(ACS_PRINT_ERR, " TCR read failure", 0);
+      return 1;
+    }
+
+    if (val_pe_reg_read_ttbr(0 /*for TTBR0*/, &ttbr))
+    {
+      val_print(ACS_PRINT_ERR, " TTBR0 read failure", 0);
+      return 1;
+    }
+
+    val_memory_set(mem_desc_array, sizeof(mem_desc_array), 0);
+    mem_desc = &mem_desc_array[0];
+
+    pgt_desc.pgt_base = (ttbr & AARCH64_TTBR_ADDR_MASK);
+    pgt_desc.mair     = val_pe_reg_read(MAIR_ELx);
+    pgt_desc.stage    = PGT_STAGE1;
+
+    pgt_desc.ias               = 48;
+    pgt_desc.oas               = 48;
+    mem_desc->virtual_address  = free_mem_var_va;
+    mem_desc->physical_address = free_mem_var_va;
+    mem_desc->length           = size;
+    mem_desc->attributes |= (PGT_STAGE1_AP_RW);
+
+    if (val_pgt_create(mem_desc, &pgt_desc))
+    {
+      val_print(ACS_PRINT_ERR, " Unable to create page table with given attributes", 0);
+      return 1;
+    }
+  }
+  if (!Aarch64VaIsMappedForWrite((void *)free_mem_var_va))
+  {
+    val_print(ACS_PRINT_ERR, "The VA is still not mapped for write", 0);
+    return 1;
+  }
   mem_base = free_mem_var_va;
   free_mem_var_va += size;
-  //val_print(ACS_PRINT_DEBUG, "The VA allocated = 0x%lx\n", mem_base);
+  // val_print(ACS_PRINT_DEBUG, "The VA allocated = 0x%lx\n", mem_base);
   return mem_base;
 }
 
-uint64_t
-val_get_min_tg()
+uint64_t val_get_min_tg(void)
 {
   uint64_t val, tg;
 
   val = val_pe_reg_read(ID_AA64MMFR0_EL1);
-  tg = (val & RME_MIN_TG4_MASK) >> RME_MIN_TG4_SHIFT;
+  tg  = (val & RME_MIN_TG4_MASK) >> RME_MIN_TG4_SHIFT;
   if (tg == 0)
-      return SIZE_4K;
-  else {
-      tg = (val & RME_MIN_TG16_MASK) >> RME_MIN_TG16_SHIFT;
-      if (tg == 0)
-          return SIZE_16K;
-      else
-          return SIZE_64K;
+    return SIZE_4K;
+  else
+  {
+    tg = (val & RME_MIN_TG16_MASK) >> RME_MIN_TG16_SHIFT;
+    if (tg == 0)
+      return SIZE_16K;
+    else
+      return SIZE_64K;
   }
 }
 
-void
-val_reg_update_shared_struct_msd(uint32_t reg_name, uint32_t reg_indx)
+void val_reg_update_shared_struct_msd(uint32_t reg_name, uint32_t reg_indx)
 {
-  shared_data->reg_info.reg_list[reg_indx].reg_name = reg_name;
+  shared_data->reg_info.reg_list[reg_indx].reg_name        = reg_name;
   shared_data->reg_info.reg_list[reg_indx].saved_reg_value = 0x0;
 }
 
-void
-val_save_global_test_data()
+void val_save_global_test_data(void)
 {
 
-  pal_save_global_test_data(rme_nvm_mem, g_rme_tests_total,
-                            g_rme_tests_pass, g_rme_tests_fail);
+  pal_save_global_test_data(rme_nvm_mem, g_rme_tests_total, g_rme_tests_pass, g_rme_tests_fail);
 }
 
-void
-val_restore_global_test_data()
+void val_restore_global_test_data(void)
 {
 
-  pal_restore_global_test_data(rme_nvm_mem, &g_rme_tests_total,
-                               &g_rme_tests_pass, &g_rme_tests_fail);
+  pal_restore_global_test_data(rme_nvm_mem, &g_rme_tests_total, &g_rme_tests_pass,
+                               &g_rme_tests_fail);
 }
 
 uint32_t val_configure_acs(void)
@@ -827,20 +913,12 @@ uint32_t val_configure_acs(void)
   uint64_t sp_val, smmu_root_page, smmu_base;
   uint64_t smmu_rlm_page0, smmu_rlm_page1;
   uint32_t num_smmus, attr;
-  uint64_t shared_address;
 
   sp_val = AA64ReadSP_EL0();
-  shared_address = PLAT_SHARED_ADDRESS;
-  val_print(ACS_PRINT_INFO, " SHARED_ADDRESS = 0x%llx", shared_address);
 
-  /* Map the SHARED_ADDRESS and the sp_el0 as NS in EL3 */
+  /* Base EL3 mapping attributes for subsequent mappings */
   attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(OUTER_SHAREABLE) | PGT_ENTRY_AP_RW);
-  if (val_add_mmu_entry_el3(shared_address, shared_address,
-                  (attr | LOWER_ATTRS(PAS_ATTR(NONSECURE_PAS)))))
-  {
-    val_print(ACS_PRINT_ERR, " MMU mapping failed for Shared address: 0x%llx", shared_address);
-    return 1;
-  }
+
   if (val_add_mmu_entry_el3(sp_val, sp_val, (attr | LOWER_ATTRS(PAS_ATTR(NONSECURE_PAS)))))
   {
     val_print(ACS_PRINT_ERR, " MMU mapping failed for SP address: 0x%llx", sp_val);
@@ -849,7 +927,13 @@ uint32_t val_configure_acs(void)
 
   /* Map the SMMU root, NS and realm pages as ROOT PAS */
   smmu_base = val_iovirt_get_smmu_info(SMMU_CTRL_BASE, 0);
-  smmu_root_page = smmu_base + SMMUV3_ROOT_REG_OFFSET;
+  {
+    uint64_t s3_off = val_get_smmu_root_reg_offset();
+
+    if (!s3_off)
+      s3_off = shared_data->cfg_smmu_root_reg_offset;
+    smmu_root_page = smmu_base + s3_off;
+  }
   smmu_rlm_page0 = smmu_base + SMMU_R_PAGE_0_OFFSET;
   smmu_rlm_page1 = smmu_base + SMMU_R_PAGE_1_OFFSET;
   attr |= LOWER_ATTRS(GET_ATTR_INDEX(DEV_MEM_nGnRnE));
@@ -860,20 +944,20 @@ uint32_t val_configure_acs(void)
   }
   if (val_add_mmu_entry_el3(smmu_root_page, smmu_root_page, attr | LOWER_ATTRS(PAS_ATTR(ROOT_PAS))))
   {
-    val_print(ACS_PRINT_ERR,
-      " MMU mapping failed for SMMU_ROOT_BASE address: 0x%llx", smmu_root_page);
+    val_print(ACS_PRINT_ERR, " MMU mapping failed for SMMU_ROOT_BASE address: 0x%llx",
+              smmu_root_page);
     return 1;
   }
   if (val_add_mmu_entry_el3(smmu_rlm_page0, smmu_rlm_page0, attr | LOWER_ATTRS(PAS_ATTR(ROOT_PAS))))
   {
-    val_print(ACS_PRINT_ERR,
-      " MMU mapping failed for SMMU_REALM0_BASE address: 0x%llx", smmu_rlm_page0);
+    val_print(ACS_PRINT_ERR, " MMU mapping failed for SMMU_REALM0_BASE address: 0x%llx",
+              smmu_rlm_page0);
     return 1;
   }
   if (val_add_mmu_entry_el3(smmu_rlm_page1, smmu_rlm_page1, attr | LOWER_ATTRS(PAS_ATTR(ROOT_PAS))))
   {
-    val_print(ACS_PRINT_ERR,
-      " MMU mapping failed for SMMU_REALM1_BASE address: 0x%llx", smmu_rlm_page1);
+    val_print(ACS_PRINT_ERR, " MMU mapping failed for SMMU_REALM1_BASE address: 0x%llx",
+              smmu_rlm_page1);
     return 1;
   }
   if (val_rme_install_handler_el3())
@@ -885,9 +969,10 @@ uint32_t val_configure_acs(void)
   /* Create the list of valid Pcie Device Functions, Exerciser table
    * and initialise smmu for the tests that require exerciser and smmu required
    **/
-  if (val_pcie_create_device_bdf_table()) {
-      val_print(ACS_PRINT_WARN, " Create BDF Table Failed \n", 0);
-      return ACS_STATUS_SKIP;
+  if (val_pcie_create_device_bdf_table())
+  {
+    val_print(ACS_PRINT_WARN, " Create BDF Table Failed \n", 0);
+    return ACS_STATUS_SKIP;
   }
 
   val_exerciser_create_info_table();
@@ -897,7 +982,7 @@ uint32_t val_configure_acs(void)
 
   /* Disable all SMMUs */
   for (uint32_t instance = 0; instance < num_smmus; ++instance)
-     val_smmu_disable(instance);
+    val_smmu_disable(instance);
 
   return 0;
 }
@@ -913,8 +998,40 @@ uint32_t val_generate_stream_id(void)
   /* If the number exceeds 255, reset to 1 */
   if (unique_stream_id > 255)
   {
-      unique_stream_id = 1;
+    unique_stream_id = 1;
   }
 
   return unique_stream_id;
+}
+
+void val_init_runtime_params(void)
+{
+  uint64_t shared_addr;
+  uint64_t sva, spa;
+
+  rme_nvm_mem = val_get_rme_acs_nvm_mem();
+
+  /* First, request EL3 to publish its local configuration into shared_data & map the shared_addr */
+  val_print(ACS_PRINT_DEBUG,
+            " Requesting EL3 to map shared memory & publish its local configuration", 0);
+
+  val_map_shared_mem_el3((uint64_t)&shared_addr);
+  val_print(ACS_PRINT_DEBUG, " Shared memory address = 0x%lx\n", (uint64_t)shared_addr);
+  shared_data = (struct_sh_data *)shared_addr;
+  /* Prefer EL3-provided free memory hints; fall back to platform getters. */
+  {
+    sva = val_get_free_va_test();
+    spa = val_get_free_pa_test();
+
+    if ((!sva || !spa) && shared_data)
+    {
+      if (!sva)
+        sva = shared_data->cfg_free_mem_start + 0x200000;
+      if (!spa)
+        spa = shared_data->cfg_free_mem_start + 0x300000;
+    }
+
+    free_mem_var_va = sva;
+    free_mem_var_pa = spa;
+  }
 }

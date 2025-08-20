@@ -89,7 +89,9 @@ val_rme_da_execute_tests(uint32_t num_pe)
       g_rl_smmu_init = 1;
   }
 
+  val_print(ACS_PRINT_DEBUG, "\n RME-DA : Starting tests \n", 0);
   reset_status = val_read_reset_status();
+  val_print(ACS_PRINT_DEBUG, "\n Reset status : %x \n", reset_status);
 
   if (reset_status != RESET_TST12_FLAG &&
       reset_status != RESET_TST31_FLAG &&
