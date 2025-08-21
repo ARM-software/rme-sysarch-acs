@@ -32,13 +32,13 @@
 
 
 UINT32
-incrementBusDev(UINT32 StartBdf);
+pal_increment_bus_dev(UINT32 StartBdf);
 
 UINT32
-palPcieGetBdf(UINT32 class_code, UINT32 start_busdev);
+pal_pcie_get_bdf(UINT32 class_code, UINT32 start_busdev);
 
 UINT64
-palPcieGetBase(UINT32 bdf, UINT32 bar_index);
+pal_pcie_get_base(UINT32 bdf, UINT32 bar_index);
 
 VOID *
 pal_pci_bdf_to_dev(UINT32 bdf);

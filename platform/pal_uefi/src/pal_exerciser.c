@@ -30,32 +30,6 @@
 #include "include/pal_exerciser.h"
 
 /**
-  @brief This API increments the BDF
-**/
-UINT32
-pal_increment_bus_dev(
-  UINT32 Bdf
-  )
-{
-  UINT32 Seg;
-  UINT32 Bus;
-  UINT32 Dev;
-
-  Seg = PCIE_EXTRACT_BDF_SEG(Bdf);
-  Bus = PCIE_EXTRACT_BDF_BUS(Bdf);
-  Dev = PCIE_EXTRACT_BDF_DEV(Bdf);
-
-  if (Dev != PCI_MAX_DEVICE) {
-      Dev++;
-  } else {
-      Bus++;
-      Dev = 0;
-  }
-
-  return PCIE_CREATE_BDF(Seg, Bus, Dev, 0);
-}
-
-/**
   @brief This API will return the ECSR base address of particular BAR Index
 **/
 UINT64
@@ -64,7 +38,7 @@ pal_exerciser_get_ecsr_base (
   UINT32 BarIndex
   )
 {
-  return palPcieGetBase(Bdf, BarIndex);
+  return pal_pcie_get_base(Bdf, BarIndex);
 }
 
 UINT64
