@@ -28,7 +28,7 @@
 #include "Include/IndustryStandard/SerialPortConsoleRedirectionTable.h"
 
 #include "include/pal_uefi.h"
-#include "include/rme_pcie_enum.h"
+#include "include/pal_pcie_enum.h"
 
 #define USB_CLASSCODE   0x0C0300
 #define SATA_CLASSCODE  0x010600

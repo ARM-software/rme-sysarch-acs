@@ -20,7 +20,7 @@
 
 #if TARGET_BM_BOOT
 
-#include "platform_override_fvp.h"
+#include "pal_override_fvp.h"
 
   #define VAL_TG0_4K      0x0
   #define VAL_TG0_64K     0x1
@@ -55,7 +55,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <stddef.h>
-#include "platform_override_fvp.h"
+#include "pal_override_fvp.h"
   typedef uint64_t addr_t;
   typedef char     char8_t;
   typedef uint64_t dma_addr_t;
@@ -69,7 +69,7 @@
 #define PCIE_MAX_FUNC   PLATFORM_BM_OVERRIDE_PCIE_MAX_FUNC
 
 #else
-#include "../../platform/pal_uefi/include/platform_override.h"
+#include "../../platform/pal_uefi/include/pal_override.h"
   typedef INT8   int8_t;
   typedef INT32  int32_t;
   typedef CHAR8  char8_t;

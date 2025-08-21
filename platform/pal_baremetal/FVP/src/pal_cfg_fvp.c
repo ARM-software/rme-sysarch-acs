@@ -16,7 +16,7 @@
 **/
 
 #include "../include/pal_common_support.h"
-#include "include/platform_override_struct.h"
+#include "include/pal_override_struct.h"
 
 /* Populate the skip array with the module or test names to be excluded from the run */
 char8_t *g_skip_array[] = {"da_autonomous_rootport_request_ns_pas"};
@@ -236,7 +236,7 @@ PCIE_READ_TABLE platform_pcie_device_hierarchy = {
     .device[7].behind_smmu   = PLATFORM_PCIE_DEV7_BEHIND_SMMU,
     .device[7].atc_present   = PLATFORM_PCIE_DEV7_ATC_SUPPORT,
 /** Configure more PCIe info details as per specification for more than 1 ECAM
-    Refer to platform_override_fvp.h file for an example
+    Refer to pal_override_fvp.h file for an example
 **/
 };
 

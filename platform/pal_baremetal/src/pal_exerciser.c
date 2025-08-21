@@ -17,7 +17,7 @@
 
 #include "include/pal_common_support.h"
 #include "include/pal_pcie_enum.h"
-#include "FVP/include/platform_override_struct.h"
+#include "FVP/include/pal_override_struct.h"
 
 #ifdef ENABLE_OOB
 #include  <Library/ShellCEntryLib.h>

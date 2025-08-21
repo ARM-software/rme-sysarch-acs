@@ -16,9 +16,9 @@
  **/
 
 #if TARGET_EMULATION
-#include "platform_override_fvp.h"
+#include "pal_override_fvp.h"
 #else
-#include "../../platform/pal_uefi/include/platform_override.h"
+#include "../../platform/pal_uefi/include/pal_override.h"
 #endif
 
 /* Defines related to User SMC Call services */

@@ -18,7 +18,7 @@
 #ifndef __PAL_UEFI_H__
 #define __PAL_UEFI_H__
 
-#include <include/platform_override.h>
+#include <include/pal_override.h>
 
 extern VOID* g_rme_log_file_handle;
 extern UINT32 g_print_level;

@@ -20,7 +20,7 @@
 
 #include <stdio.h>
 #include <stdint.h>
-#include <platform_override_struct.h>
+#include <pal_override_struct.h>
 
 typedef uintptr_t addr_t;
 typedef char     char8_t;

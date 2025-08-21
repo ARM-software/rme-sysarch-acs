@@ -16,7 +16,7 @@
 **/
 
 #include <stdint.h>
-#include "platform_override_fvp.h"
+#include "pal_override_fvp.h"
 
 #ifndef _PAL_UART_PL011_H_
 #define _PAL_UART_PL011_H_

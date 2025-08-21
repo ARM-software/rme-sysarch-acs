@@ -25,7 +25,7 @@
 #include  <Library/ShellLib.h>
 #include  <Library/PrintLib.h>
 #include  <Library/BaseMemoryLib.h>
-#include  <include/rme_pcie_enum.h>
+#include  <include/pal_pcie_enum.h>
 #include "include/pal_uefi.h"
 #include "include/pal_exerciser.h"
 

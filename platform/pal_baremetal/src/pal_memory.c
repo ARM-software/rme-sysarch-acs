@@ -15,8 +15,8 @@
  * limitations under the License.
 **/
 
-#include "platform_image_def.h"
-#include "platform_override_struct.h"
+#include "pal_image_def.h"
+#include "pal_override_struct.h"
 #include "pal_common_support.h"
 
 // Note that while creating a list of mem map, the size of mappings will vary across platforms.
@@ -322,7 +322,7 @@ void pal_mmu_add_mmap(void)
     // BSS region - Get the start and end addressed from linker script and map with ATTR_DATA_RW
     map_bss_region();
 
-    // Mem Pool region - Get the start and end addressed from platform_override.h
+    // Mem Pool region - Get the start and end addressed from pal_override.h
     // and map with ATTR_DATA_RW
     map_mem_pool_region();
 

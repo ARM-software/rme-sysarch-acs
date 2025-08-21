@@ -15,7 +15,7 @@
  * limitations under the License.
 **/
 
-#include "include/platform_override_struct.h"
+#include "include/pal_override_struct.h"
 
 /**
  * @brief Platform-specific register and memory region table definitions.
@@ -26,7 +26,7 @@
  * 3. MEM_REGN_INFO_TABLE (GPC) - memory region entries for GPC
  * 4. MEM_REGN_INFO_TABLE (PAS) - memory region entries for PAS filters
  *
- * All data is populated using macros from platform_override_fvp.h to ensure consistency
+ * All data is populated using macros from pal_override_fvp.h to ensure consistency
  * and maintainability. Tables are populated statically and copied into user-provided
  * buffers through dedicated pal_*_create_info_table() functions.
  */

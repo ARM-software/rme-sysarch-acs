@@ -18,8 +18,8 @@
 #ifndef __RME_ACS_LEVEL_H__
 #define __RME_ACS_LEVEL_H__
 
-#include "platform_image_def.h"
-#include "platform_override_fvp.h"
+#include "pal_image_def.h"
+#include "pal_override_fvp.h"
 
 #define SIZE_4K 0x1000
 

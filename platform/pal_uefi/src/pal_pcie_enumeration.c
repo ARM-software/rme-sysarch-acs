@@ -25,7 +25,7 @@
 #include "Include/IndustryStandard/Pci22.h"
 #include <Protocol/PciIo.h>
 
-#include "include/rme_pcie_enum.h"
+#include "include/pal_pcie_enum.h"
 #include "include/pal_uefi.h"
 
 

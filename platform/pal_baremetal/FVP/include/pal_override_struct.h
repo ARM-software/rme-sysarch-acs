@@ -21,7 +21,7 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <stdbool.h>
-#include "platform_override_fvp.h"
+#include "pal_override_fvp.h"
 
 typedef struct {
   uint32_t gic_version;
