@@ -243,6 +243,11 @@ payload(void)
 
       /* Create a buffer of size TEST_DMA_SIZE in DRAM */
       dram_buf_in_virt = val_memory_alloc_pages(TEST_DATA_NUM_PAGES);
+      if (dram_buf_in_virt == NULL) {
+          val_print(ACS_PRINT_ERR, "Failed to allocate memory for dram_buf_in_virt", 0);
+          test_fail++;
+          goto free_mem;
+      }
       dram_buf_in_phys = (uint64_t)val_memory_virt_to_phys(dram_buf_in_virt);
 
       /* Change the AccessPAS of the buffer to Realm PAS */
