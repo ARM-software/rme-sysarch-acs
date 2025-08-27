@@ -79,16 +79,24 @@ uint32_t val_gic_rme_install_isr(uint32_t interrupt_id, void (*isr)(void))
 
 void val_gic_rme_install_esr(uint32_t exception_type, void (*esr)(uint64_t, void *))
 {
-  g_esr_handler[exception_type] = (rme_fp) esr;
+  /* Bounds-check for exception_type to prevent out-of-bounds assignment */
+  if (exception_type < 4) {
+    g_esr_handler[exception_type] = (rme_fp) esr;
+  } else {
+    val_print(ACS_PRINT_ERR, " GIC_INIT: Attempt to install ESR handler out of bounds: %x", exception_type);
+  }
 }
 
 uint32_t common_exception_handler(uint32_t exception_type)
 {
   val_print(ACS_PRINT_INFO, " GIC_INIT: In Exception Handler Type : %x", exception_type);
 
-  /* Call Handler for exception, Handler would have
-   * already been installed using install_esr call
-   */
+  /* Bounds-check for exception_type to prevent out-of-bounds access */
+  if (exception_type >= 4 || g_esr_handler[exception_type] == NULL) {
+    val_print(ACS_PRINT_ERR, " GIC_INIT: Invalid or Unregistered Exception Handler for Type : %x", exception_type);
+    return 0;
+  }
+  /* Call Handler for exception, Handler would have already been installed using install_esr call */
   g_esr_handler[exception_type](exception_type, NULL);
 
   val_print(ACS_PRINT_INFO, " GIC_INIT: Common Handler, FAR = %x", rme_gic_get_far());
@@ -96,7 +104,7 @@ uint32_t common_exception_handler(uint32_t exception_type)
 
   /* If ELR is updated inside the handler then skip the elr update in assembly handler
    * Return 1 else return 0
-  */
+   */
   if (exception_type == EXCEPT_AARCH64_SYNCHRONOUS_EXCEPTIONS)
     return 1;
   else
