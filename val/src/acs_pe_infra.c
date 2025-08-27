@@ -91,6 +91,7 @@ void
 val_pe_free_info_table()
 {
   pal_mem_free((void *)g_pe_info_table);
+  g_pe_info_table = NULL;
 }
 
 /**
