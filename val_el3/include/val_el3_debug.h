@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2023, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,10 +15,12 @@
  * limitations under the License.
  **/
 
-#include <stdint.h>
-#include <stdbool.h>
+#ifndef VAL_EL3_DEBUG_H
+#define VAL_EL3_DEBUG_H
 
-void pal_enable_ns_encryption(void);
-void pal_disable_ns_encryption(void);
-void pal_prog_legacy_tz(int enable);
-void pal_pas_filter_active_mode(int enable);
+#ifndef __ASSEMBLER__
+#include "pal_el3_print.h"
+#endif
+
+#endif /* VAL_EL3_DEBUG_H */
+

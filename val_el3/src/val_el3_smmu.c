@@ -15,7 +15,70 @@
  * limitations under the License.
  **/
 
-#include "val_el3/smmuv3_el3.h"
+#include <val_el3_debug.h>
+#include <val_el3_smmu.h>
+
+
+BITFIELD_DECL(uint32_t, IDR0_ST_LEVEL, 28, 27)
+BITFIELD_DECL(uint32_t, IDR0_TTF, 3, 2)
+BITFIELD_DECL(uint32_t, IDR1_CMDQS, 25, 21)
+BITFIELD_DECL(uint32_t, IDR1_SSIDSIZE, 10, 6)
+BITFIELD_DECL(uint32_t, IDR1_SIDSIZE, 5, 0)
+BITFIELD_DECL(uint32_t, IDR5_OAS, 2, 0)
+BITFIELD_DECL(uint32_t, CR1_TABLE_SH, 11, 10)
+BITFIELD_DECL(uint32_t, CR1_TABLE_OC, 9, 8)
+BITFIELD_DECL(uint32_t, CR1_TABLE_IC, 7, 6)
+BITFIELD_DECL(uint32_t, CR1_QUEUE_SH, 5, 4)
+BITFIELD_DECL(uint32_t, CR1_QUEUE_OC, 3, 2)
+BITFIELD_DECL(uint32_t, CR1_QUEUE_IC, 1, 0)
+BITFIELD_DECL(uint64_t, STRTAB_BASE_ADDR, 51, 6)
+BITFIELD_DECL(uint32_t, STRTAB_BASE_CFG_FMT, 17, 16)
+BITFIELD_DECL(uint32_t, STRTAB_BASE_CFG_SPLIT, 10, 6)
+BITFIELD_DECL(uint32_t, STRTAB_BASE_CFG_LOG2SIZE, 5, 0)
+BITFIELD_DECL(uint64_t, QUEUE_BASE_ADDR, 51, 5)
+BITFIELD_DECL(uint64_t, QUEUE_BASE_LOG2SIZE, 4, 0)
+BITFIELD_DECL(uint64_t, STRTAB_L1_DESC_SPAN, 4, 0)
+BITFIELD_DECL(uint64_t, STRTAB_L1_DESC_L2PTR, 51, 6)
+BITFIELD_DECL(uint64_t, STRTAB_STE_0_CONFIG, 3, 1)
+BITFIELD_DECL(uint64_t, STRTAB_STE_0_S1FMT, 5, 4)
+BITFIELD_DECL(uint64_t, STRTAB_STE_0_S1CONTEXTPTR, 51, 6)
+BITFIELD_DECL(uint64_t, STRTAB_STE_0_S1CDMAX, 63, 59)
+BITFIELD_DECL(uint64_t, STRTAB_STE_1_S1DSS, 1, 0)
+BITFIELD_DECL(uint64_t, STRTAB_STE_1_S1CIR, 3, 2)
+BITFIELD_DECL(uint64_t, STRTAB_STE_1_S1COR, 5, 4)
+BITFIELD_DECL(uint64_t, STRTAB_STE_1_S1CSH, 7, 6)
+BITFIELD_DECL(uint64_t, STRTAB_STE_1_EATS, 29, 28)
+BITFIELD_DECL(uint64_t, STRTAB_STE_1_STRW, 31, 30)
+BITFIELD_DECL(uint64_t, STRTAB_STE_1_SHCFG, 45, 44)
+BITFIELD_DECL(uint64_t, STRTAB_STE_2_S2VMID, 15, 0)
+BITFIELD_DECL(uint64_t, STRTAB_STE_2_VTCR, 50, 32)
+BITFIELD_DECL(uint64_t, STRTAB_STE_2_VTCR_S2T0SZ, 5, 0)
+BITFIELD_DECL(uint64_t, STRTAB_STE_2_VTCR_S2SL0, 7, 6)
+BITFIELD_DECL(uint64_t, STRTAB_STE_2_VTCR_S2IR0, 9, 8)
+BITFIELD_DECL(uint64_t, STRTAB_STE_2_VTCR_S2OR0, 11, 10)
+BITFIELD_DECL(uint64_t, STRTAB_STE_2_VTCR_S2SH0, 13, 12)
+BITFIELD_DECL(uint64_t, STRTAB_STE_2_VTCR_S2TG, 15, 14)
+BITFIELD_DECL(uint64_t, STRTAB_STE_2_VTCR_S2PS, 18, 16)
+BITFIELD_DECL(uint64_t, CMDQ_0_OP, 7, 0)
+BITFIELD_DECL(uint64_t, CMDQ_CFGI_1_RANGE, 4, 0)
+BITFIELD_DECL(uint64_t, CDTAB_L1_DESC_L2PTR, 51, 12)
+BITFIELD_DECL(uint64_t, CDTAB_CD_0_TCR_T0SZ, 5, 0)
+BITFIELD_DECL(uint64_t, CDTAB_CD_0_TCR_TG0, 7, 6)
+BITFIELD_DECL(uint64_t, CDTAB_CD_0_TCR_IRGN0, 9, 8)
+BITFIELD_DECL(uint64_t, CDTAB_CD_0_TCR_ORGN0, 11, 10)
+BITFIELD_DECL(uint64_t, CDTAB_CD_0_TCR_SH0, 13, 12)
+BITFIELD_DECL(uint64_t, CDTAB_CD_0_TCR_IPS, 34, 32)
+BITFIELD_DECL(uint64_t, CDTAB_CD_0_ASID, 63, 48)
+BITFIELD_DECL(uint64_t, CDTAB_CD_1_TTB0, 51, 4)
+BITFIELD_DECL(uint64_t, STRTAB_STE_3_S2TTB, 51, 4)
+
+uint32_t smmu_oas[SMMU_OAS_MAX_IDX] = {32, 36, 40, 42, 44, 48, 52};
+uint32_t dpt_l0dptsz[DPT_L0SZ_MAX_IDX] = {30, 0, 0, 0, 34, 0, 36, 0, 0, 39};
+uint32_t l0dptsz_value[DPT_L0SZ_MAX_IDX] = {1, 0, 0, 0, 16, 0, 64, 0, 0, 512};
+uint32_t dpt_dptgs[DPT_GS_MAX_IDX] = {0x1000, 0x10000, 0x4000, 0};
+uint32_t dptgs_value[DPT_GS_MAX_IDX] = {4/1000000, 64/1000000, 16/1000000, 0};
+uint32_t dpt_dptps[DPT_PS_MAX_IDX] = {32, 36, 40, 42, 44, 58, 52, 0};
+uint32_t dptps_value[DPT_PS_MAX_IDX] = {4, 64, 1000, 4000, 16000, 256000, 4000000};
 
 smmu_dev_t *g_smmu;
 uint32_t g_num_smmus;
@@ -1529,3 +1592,95 @@ uint32_t val_smmu_set_rlm_ste_mecid(smmu_master_attributes_t master_attr, uint32
 }
 
 
+
+/* END: merged from smmuv3_realm.c */
+
+/* ==== Moved from ack_common.c ==== */
+
+void val_smmu_access_disable(uint64_t smmu_base)
+{
+  *(uint32_t *)(smmu_base + SMMU_ROOT_CR0) = CLEAR;
+}
+
+void val_smmu_access_enable(uint64_t smmu_base)
+{
+  *(uint32_t *)(smmu_base + SMMU_ROOT_CR0) = SET;
+}
+
+void val_smmu_root_config_service(uint64_t arg0, uint64_t arg1, uint64_t arg2)
+{
+  uint64_t data;
+  smmu_master_attributes_t smmu_attr;
+  pgt_descriptor_t pgt_attr;
+  uint64_t smmu_base;
+
+  smmu_base = arg1;
+
+  switch (arg0)
+  {
+       case SMMU_ROOT_RME_IMPL_CHK:
+         INFO("SMMU base address & offset: 0x%lx \n", (uint64_t)smmu_base + SMMU_ROOT_IDRO);
+         data = *(uint32_t *)(smmu_base + SMMU_ROOT_IDRO);
+         INFO("SMMU ROOT IDRO: 0x%lx", data);
+         shared_data->shared_data_access[0].data = data;
+         break;
+       case SMMU_RLM_PGT_INIT:
+         INFO("SMMU Realm Initialisation\n");
+         val_smmu_init_el3(arg1, (uint64_t *)arg2);
+         break;
+       case SMMU_RLM_SMMU_MAP:
+         INFO("SMMU realm page table map\n");
+         memcpy((void *)&smmu_attr, (void *)arg1, sizeof(smmu_master_attributes_t));
+         memcpy((void *)&pgt_attr, (void *)arg2, sizeof(pgt_descriptor_t));
+         if (val_smmu_rlm_map((smmu_master_attributes_t)smmu_attr, (pgt_descriptor_t)pgt_attr))
+         {
+              shared_data->status_code = 1;
+              shared_data->error_code = smmu_attr.smmu_index;
+              const char *msg = "EL3: SMMU Realm map failed";
+              int i = 0; while (msg[i] && i < sizeof(shared_data->error_msg) - 1) {
+                  shared_data->error_msg[i] = msg[i]; i++;
+              }
+              shared_data->error_msg[i] = '\0';
+         }
+         break;
+       case SMMU_RLM_ADD_DPT_ENTRY:
+          INFO("SMMU add DPT entry\n");
+          if (val_dpt_add_entry(arg1, arg2))
+          {
+              shared_data->status_code = 1;
+              shared_data->error_code = VAL_EXTRACT_BITS(arg2, 32, 63);
+              const char *msg = "EL3: SMMU DPT Add entry failed";
+              int i = 0; while (msg[i] && i < sizeof(shared_data->error_msg) - 1) {
+                  shared_data->error_msg[i] = msg[i]; i++;
+              }
+              shared_data->error_msg[i] = '\0';
+          }
+          break;
+      case SMMU_RLM_DPTI:
+          INFO("SMMU DPT Invalidate\n");
+          val_dpt_invalidate_all(arg1);
+          break;
+      case SMMU_CHECK_MEC_IMPL:
+          shared_data->shared_data_access[0].data = val_smmu_supports_mec(arg1);
+          break;
+      case SMMU_GET_MECIDW:
+          shared_data->shared_data_access[0].data = val_smmu_get_mecidw(arg1);
+          break;
+      case SMMU_CONFIG_MECID:
+          memcpy((void *)&smmu_attr, (void *)arg1, sizeof(smmu_master_attributes_t));
+          if (val_smmu_set_rlm_ste_mecid((smmu_master_attributes_t)smmu_attr, arg2))
+          {
+              shared_data->status_code = 1;
+              shared_data->error_code = smmu_attr.smmu_index;
+              const char *msg = "EL3: SMMU Realm set MECID failed";
+              int i = 0; while (msg[i] && i < sizeof(shared_data->error_msg) - 1) {
+                  shared_data->error_msg[i] = msg[i]; i++;
+              }
+              shared_data->error_msg[i] = '\0';
+          }
+          break;
+      default:
+          INFO(" Invalid SMMU ROOT register config\n");
+          break;
+  }
+}

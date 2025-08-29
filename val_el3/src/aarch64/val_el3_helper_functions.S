@@ -19,7 +19,9 @@
 #define sctlr2_el3       S3_6_C1_C0_3
 #define mecid_rl_a_el3   S3_6_C10_C10_1
 
-#include "val_el3/ack_include.h"
+#include "val_el3_helpers.h"
+#include "val_el3_memory.h"
+
         .globl read_gpccr_el3
         .globl read_gptbr_el3
         .globl read_scr_el3

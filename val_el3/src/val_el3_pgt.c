@@ -15,7 +15,9 @@
   * limitations under the License.
   **/
 
-#include <val_el3/ack_include.h>
+#include <val_el3_debug.h>
+#include <val_el3_pgt.h>
+#include <val_el3_memory.h>
 
 #define get_min(a, b) (((a) < (b))?(a):(b))
 
