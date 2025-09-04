@@ -18,18 +18,28 @@
 #include <val_el3_debug.h>
 #include <val_el3_pe.h>
 
-void val_pe_reg_read_msd(void)
+/**
+ * @brief Read and save a platform-defined list of EL3 registers.
+ *
+ * Saves values into shared_data->reg_info.reg_list[].saved_reg_value.
+ */
+void val_el3_pe_reg_read_msd(void)
 {
   int num_regs;
 
   num_regs = shared_data->reg_info.num_regs;
   for (int i = 0; i < num_regs; i++) {
     shared_data->reg_info.reg_list[i].saved_reg_value =
-            val_pe_reg_read(shared_data->reg_info.reg_list[i].reg_name);
+            val_el3_pe_reg_read(shared_data->reg_info.reg_list[i].reg_name);
   }
 }
 
-void val_pe_reg_list_cmp_msd(void)
+/**
+ * @brief Compare previously saved EL3 registers with current values.
+ *
+ * Sets shared_data->generic_flag on mismatch and populates error fields.
+ */
+void val_el3_pe_reg_list_cmp_msd(void)
 {
   uint64_t reg_val;
   int cmp_fail;
@@ -39,7 +49,7 @@ void val_pe_reg_list_cmp_msd(void)
   reg_val = 0;
   cmp_fail = 0;
   for (int i = 0; i < num_regs; i++) {
-    reg_val = val_pe_reg_read(shared_data->reg_info.reg_list[i].reg_name);
+    reg_val = val_el3_pe_reg_read(shared_data->reg_info.reg_list[i].reg_name);
     if (shared_data->reg_info.reg_list[i].saved_reg_value != reg_val) {
         ERROR("The register has not retained it's original value \n");
         cmp_fail++;
@@ -62,26 +72,32 @@ void val_pe_reg_list_cmp_msd(void)
 
 }
 
+/**
+ * @brief Read a single EL3 register by abstract register id.
+ *
+ * @param reg_id  Register identifier (GPCCR_EL3_MSD, GPTBR_EL3_MSD, etc.).
+ * @return Current 64-bit value of the requested register.
+ */
 uint64_t
-val_pe_reg_read(uint32_t reg_id)
+val_el3_pe_reg_read(uint32_t reg_id)
 {
 
   switch (reg_id)
   {
       case GPCCR_EL3_MSD:
-          return read_gpccr_el3();
+          return val_el3_read_gpccr_el3();
       case GPTBR_EL3_MSD:
-          return read_gptbr_el3();
+          return val_el3_read_gptbr_el3();
       case TCR_EL3_MSD:
-          return read_tcr_el3();
+          return val_el3_read_tcr_el3();
       case TTBR_EL3_MSD:
-          return read_ttbr_el3();
+          return val_el3_read_ttbr_el3();
       case SCR_EL3_MSD:
-          return read_scr_el3();
+          return val_el3_read_scr_el3();
       case SCTLR_EL3_MSD:
-          return read_sctlr_el3();
+          return val_el3_read_sctlr_el3();
       case SCTLR_EL2_MSD:
-          return read_sctlr_el2();
+          return val_el3_read_sctlr_el2();
       default:
           ERROR("Specify the correct register index\n");
           return 0;

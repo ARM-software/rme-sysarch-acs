@@ -37,36 +37,36 @@
 
 /* Prototypes moved from ack_common.c */
 #ifndef __ASSEMBLER__
-void val_pe_reg_read_msd(void);
-void val_pe_reg_list_cmp_msd(void);
-uint64_t val_pe_reg_read(uint32_t reg_id);
-uint64_t read_elr_el3(void);
-uint64_t read_far(void);
-uint64_t read_esr_el3(void);
-uint64_t read_sp_el0(void);
-uint64_t read_spsr_el3(void);
-uint64_t read_mair_el3(void);
-void write_mair_el3(uint64_t value);
-uint64_t read_gpccr_el3(void);
-uint64_t read_gptbr_el3(void);
-uint64_t read_scr_el3(void);
-uint64_t read_sctlr_el3(void);
-uint64_t read_sctlr_el2(void);
-uint64_t write_scr_el3(uint64_t value);
-uint64_t read_tcr_el3(void);
-uint64_t read_tcr_el2(void);
-uint64_t read_ttbr_el3(void);
-uint64_t read_ttbr_el2(void);
-uint64_t read_vtcr(void);
-uint64_t read_vttbr(void);
-void write_vttbr(uint64_t write_value);
-void write_vtcr(uint64_t write_data);
-uint64_t read_sctlr2_el3(void);
-uint64_t write_sctlr2_el3(uint64_t value);
-void write_mecid_rl_a_el3(uint64_t mecid);
-uint64_t read_mecid_rl_a_el3(void);
-uint64_t read_id_aa64mmfr3_el1(void);
-void branch_asm(uint64_t el3_handler);
+void val_el3_pe_reg_read_msd(void);
+void val_el3_pe_reg_list_cmp_msd(void);
+uint64_t val_el3_pe_reg_read(uint32_t reg_id);
+uint64_t val_el3_read_elr_el3(void);
+uint64_t val_el3_read_far(void);
+uint64_t val_el3_read_esr_el3(void);
+uint64_t val_el3_read_sp_el0(void);
+uint64_t val_el3_read_spsr_el3(void);
+uint64_t val_el3_read_mair_el3(void);
+void val_el3_write_mair_el3(uint64_t value);
+uint64_t val_el3_read_gpccr_el3(void);
+uint64_t val_el3_read_gptbr_el3(void);
+uint64_t val_el3_read_scr_el3(void);
+uint64_t val_el3_read_sctlr_el3(void);
+uint64_t val_el3_read_sctlr_el2(void);
+uint64_t val_el3_write_scr_el3(uint64_t value);
+uint64_t val_el3_read_tcr_el3(void);
+uint64_t val_el3_read_tcr_el2(void);
+uint64_t val_el3_read_ttbr_el3(void);
+uint64_t val_el3_read_ttbr_el2(void);
+uint64_t val_el3_read_vtcr(void);
+uint64_t val_el3_read_vttbr(void);
+void val_el3_write_vttbr(uint64_t write_value);
+void val_el3_write_vtcr(uint64_t write_data);
+uint64_t val_el3_read_sctlr2_el3(void);
+uint64_t val_el3_write_sctlr2_el3(uint64_t value);
+void val_el3_write_mecid_rl_a_el3(uint64_t mecid);
+uint64_t val_el3_read_mecid_rl_a_el3(void);
+uint64_t val_el3_read_id_aa64mmfr3_el1(void);
+void val_el3_branch_asm(uint64_t el3_handler);
 #endif /* __ASSEMBLER__ */
 
 #endif /* VAL_EL3_PE_H */

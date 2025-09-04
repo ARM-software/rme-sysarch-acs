@@ -54,33 +54,33 @@ typedef struct {
 
 
 /* Prototypes moved from ack_common.c */
-void val_data_cache_ops_by_va_el3(uint64_t address, uint32_t type);
-void val_memory_set_el3(void *address, uint32_t size, uint8_t value);
-void memory_pool_init(void);
-void split_block(BlockHeader *block, size_t size);
-void *val_memory_virt_to_phys_el3(void *va);
-void *val_memory_phys_to_virt(uint64_t pa);
-void *val_memory_alloc_el3(size_t size, size_t alignment);
-void val_memory_free_el3(void *ptr);
-void *val_memory_calloc_el3(size_t num, size_t size, size_t alignment);
-void cmo_cipapa(uint64_t PA);
-void tlbi_paallos(void);
-void cln_and_invldt_cache(uint64_t *desc_addr);
-void clean_cache(uint64_t *address);
-void invalidate_cache(uint64_t *address);
-void val_mmio_write_el3(uintptr_t addr, uint32_t val);
-uint32_t val_mmio_read_el3(uintptr_t addr);
-uint32_t val_mmio_read64_el3(uintptr_t addr);
-void val_mmio_write64_el3(uintptr_t addr, uint64_t val);
-void mem_barrier(void);
-void cmo_cipae(uint64_t PA);
-void acs_str(uint64_t *address, uint64_t data);
-void tlbi_vae3(uint64_t VA);
-void tlbi_alle3is(void);
-void isb(void);
-void map_shared_mem(void);
-void access_mut(void);
-void acs_ldr_pas_filter(uint64_t *address, uint64_t data);
+void val_el3_data_cache_ops_by_va(uint64_t address, uint32_t type);
+void val_el3_memory_set(void *address, uint32_t size, uint8_t value);
+void val_el3_memory_pool_init(void);
+void val_el3_split_block(BlockHeader *block, size_t size);
+void *val_el3_memory_virt_to_phys(void *va);
+void *val_el3_memory_phys_to_virt(uint64_t pa);
+void *val_el3_memory_alloc(size_t size, size_t alignment);
+void val_el3_memory_free(void *ptr);
+void *val_el3_memory_calloc(size_t num, size_t size, size_t alignment);
+void val_el3_cmo_cipapa(uint64_t PA);
+void val_el3_tlbi_paallos(void);
+void val_el3_cln_and_invldt_cache(uint64_t *desc_addr);
+void val_el3_clean_cache(uint64_t *address);
+void val_el3_invalidate_cache(uint64_t *address);
+void val_el3_mmio_write(uintptr_t addr, uint32_t val);
+uint32_t val_el3_mmio_read(uintptr_t addr);
+uint32_t val_el3_mmio_read64(uintptr_t addr);
+void val_el3_mmio_write64(uintptr_t addr, uint64_t val);
+void val_el3_mem_barrier(void);
+void val_el3_cmo_cipae(uint64_t PA);
+void val_el3_acs_str(uint64_t *address, uint64_t data);
+void val_el3_tlbi_vae3(uint64_t VA);
+void val_el3_tlbi_alle3is(void);
+void val_el3_isb(void);
+void val_el3_map_shared_mem(void);
+void val_el3_access_mut(void);
+void val_el3_acs_ldr_pas_filter(uint64_t *address, uint64_t data);
 
 #endif /* __ASSEMBLER__ */
 

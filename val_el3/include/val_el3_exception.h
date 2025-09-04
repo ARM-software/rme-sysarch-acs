@@ -27,16 +27,16 @@
 #define GPF_ESR_WRITE   0x96000068ULL
 
 #ifndef __ASSEMBLER__
-void asm_eret_smc(void);
-void update_elr_el3(uint64_t reg_value);
-void update_spsr_el3(uint64_t reg_value);
-void exception_handler_user(void);
-void rme_install_handler(void);
-void ack_handler_el3(void);
-void save_vbar_el3(uint64_t *el3_handler);
-void program_vbar_el3(void (*)(void));
-void asm_eret(void);
-void set_daif(void);
+void val_el3_asm_eret_smc(void);
+void val_el3_update_elr_el3(uint64_t reg_value);
+void val_el3_update_spsr_el3(uint64_t reg_value);
+void val_el3_exception_handler_user(void);
+void val_el3_rme_install_handler(void);
+void val_el3_ack_handler(void);
+void val_el3_save_vbar_el3(uint64_t *el3_handler);
+void val_el3_program_vbar_el3(void (*)(void));
+void val_el3_asm_eret(void);
+void val_el3_set_daif(void);
 #endif /* __ASSEMBLER__ */
 
 #endif /* VAL_EL3_EXCEPTION_H */

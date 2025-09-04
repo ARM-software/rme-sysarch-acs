@@ -21,12 +21,12 @@
 #include <val_el3_helpers.h>
 
 #ifndef __ASSEMBLER__
-unsigned int val_is_mec_supported(void);
-void val_mec_service(uint64_t arg0, uint64_t arg1, uint64_t arg2);
-void val_enable_mec(void);
-void val_disable_mec(void);
-uint32_t val_is_mec_enabled(void);
-void val_write_mecid(uint32_t mecid);
+unsigned int val_el3_is_mec_supported(void);
+void val_el3_mec_service(uint64_t arg0, uint64_t arg1, uint64_t arg2);
+void val_el3_enable_mec(void);
+void val_el3_disable_mec(void);
+uint32_t val_el3_is_mec_enabled(void);
+void val_el3_write_mecid(uint32_t mecid);
 #endif /* __ASSEMBLER__ */
 
 #endif /* VAL_EL3_MEC_H */

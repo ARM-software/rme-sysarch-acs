@@ -29,12 +29,12 @@ uint64_t *armtf_handler = (uint64_t *)(ARM_TF_SHARED_ADDRESS);
  *          1. Caller       -  Test Suite
  *  @return None
 **/
-void rme_install_handler(void)
+void val_el3_rme_install_handler(void)
 {
-  save_vbar_el3(armtf_handler);
+  val_el3_save_vbar_el3(armtf_handler);
   INFO("armtf_handler: 0x%lx\n", *(armtf_handler));
   INFO("armtf_handler address: 0x%llx\n", ARM_TF_SHARED_ADDRESS);
-  program_vbar_el3(&exception_handler_user);
+  val_el3_program_vbar_el3(&val_el3_exception_handler_user);
 }
 
 /**
@@ -44,7 +44,7 @@ void rme_install_handler(void)
  *          2. Prerequisite -  rme_install_handler()
  *  @return None
 **/
-void ack_handler_el3(void)
+void val_el3_ack_handler(void)
 {
 
   uint64_t *elr_ptr;
@@ -56,24 +56,24 @@ void ack_handler_el3(void)
 
   if (shared_data->exception_expected == SET && shared_data->access_mut == CLEAR) {
     INFO("The Fault is encountered\n");
-    if (read_esr_el3() == GPF_ESR_READ || read_esr_el3() == GPF_ESR_WRITE) {
+    if (val_el3_read_esr_el3() == GPF_ESR_READ || val_el3_read_esr_el3() == GPF_ESR_WRITE) {
         INFO("The GPF was expected, encountered and handled\n");
         shared_data->exception_generated = SET;
         shared_data->exception_expected = CLEAR;
         VERBOSE("Saved elr = %lx\n", *(elr_ptr));
         VERBOSE("Saved spsr = %lx\n", *(spsr_ptr));
-        VERBOSE("Current elr = %lx\n", read_elr_el3());
-        VERBOSE("Current spsr = %lx\n", read_spsr_el3());
-        asm_eret();
+        VERBOSE("Current elr = %lx\n", val_el3_read_elr_el3());
+        VERBOSE("Current spsr = %lx\n", val_el3_read_spsr_el3());
+        val_el3_asm_eret();
     } else {
-        VERBOSE("The fault is not GPF, ESR_EL3 = 0x%lx\n", read_esr_el3());
-        VERBOSE("FAR_EL3 = 0x%lx\n", read_far());
+        VERBOSE("The fault is not GPF, ESR_EL3 = 0x%lx\n", val_el3_read_esr_el3());
+        VERBOSE("FAR_EL3 = 0x%lx\n", val_el3_read_far());
         VERBOSE("Saved elr = %lx\n", *(elr_ptr));
         VERBOSE("Saved spsr = %lx\n", *(spsr_ptr));
-        VERBOSE("Current elr = %lx\n", read_elr_el3());
-        VERBOSE("Current spsr = %lx\n", read_spsr_el3());
+        VERBOSE("Current elr = %lx\n", val_el3_read_elr_el3());
+        VERBOSE("Current spsr = %lx\n", val_el3_read_spsr_el3());
         shared_data->exception_expected = CLEAR;
-        asm_eret();
+        val_el3_asm_eret();
     }
     //Save other parameters as per test requirement
   } else if (shared_data->access_mut == SET) {
@@ -83,26 +83,26 @@ void ack_handler_el3(void)
     shared_data->access_mut = CLEAR;
     INFO("Argument 1: 0x%lx\n", shared_data->arg1);
     //Store the elr_el3 and spsr_el3 to restore it later
-    shared_data->elr_el3 = read_elr_el3();
-    shared_data->spsr_el3 = read_spsr_el3();
+    shared_data->elr_el3 = val_el3_read_elr_el3();
+    shared_data->spsr_el3 = val_el3_read_spsr_el3();
     if (shared_data->pas_filter_flag == SET) {
-        set_daif();
-        acs_ldr_pas_filter((uint64_t *)shared_data->arg1,
+        val_el3_set_daif();
+        val_el3_acs_ldr_pas_filter((uint64_t *)shared_data->arg1,
                         shared_data->shared_data_access[0].data);
     } else if (shared_data->exception_expected == SET) {
         VERBOSE("Exception Expected\n");
         VERBOSE("Saved elr = %lx\n", *(elr_ptr));
         VERBOSE("Saved spsr = %lx\n", *(spsr_ptr));
-        acs_str((uint64_t *)shared_data->arg1, data);
+        val_el3_acs_str((uint64_t *)shared_data->arg1, data);
     } else
         data = *(uint64_t *)shared_data->arg1;
     //Now restore the contents of the registers to be used in eret
-    update_elr_el3(shared_data->elr_el3);
-    update_spsr_el3(shared_data->spsr_el3);
-    asm_eret_smc();
+    val_el3_update_elr_el3(shared_data->elr_el3);
+    val_el3_update_spsr_el3(shared_data->spsr_el3);
+    val_el3_asm_eret_smc();
 
   } else {
     INFO("Branch to arm-tf handler\n");
-    branch_asm(*(armtf_handler + 1));
+    val_el3_branch_asm(*(armtf_handler + 1));
   }
 }

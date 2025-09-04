@@ -17,28 +17,52 @@
 
 #include "pal_el3.h"
 
-void pal_enable_ns_encryption(void)
+/**
+ * @brief Enable Non-secure encryption in platform-specific manner.
+ *
+ * Partner must implement IMPLEMNTATION_DEFINED mechanism to enable NS encryption.
+ */
+void pal_el3_enable_ns_encryption(void)
 {
   //Partner shall implement their own IMPLEMNTATION_DEFINED
   //register for enabling and disabling the NS_Encryption
   return;
 }
 
-void pal_disable_ns_encryption(void)
+/**
+ * @brief Disable Non-secure encryption in platform-specific manner.
+ *
+ * Partner must implement IMPLEMNTATION_DEFINED mechanism to disable NS encryption.
+ */
+void pal_el3_disable_ns_encryption(void)
 {
   //Partner shall implement their own IMPLEMNTATION_DEFINED
   //register for enabling and disabling the NS_Encryption
   return;
 }
 
-void pal_prog_legacy_tz(int enable)
+/**
+ * @brief Program Legacy TZ enable state.
+ *
+ * @param enable  Non-zero to enable, zero to disable.
+ *
+ * Partner must implement IMPLEMNTATION_DEFINED register programming to control legacy TZ.
+ */
+void pal_el3_prog_legacy_tz(int enable)
 {
   //Partner shall implement their own IMPLEMNTATION_DEFINED
   //register for enabling the LEGACY_TZ_EN feature
   return;
 }
 
-void pal_pas_filter_active_mode(int enable)
+/**
+ * @brief Set PAS filter to Active/Inactive mode.
+ *
+ * @param enable  Non-zero to set Active mode, zero for Inactive.
+ *
+ * Partner must implement IMPLEMNTATION_DEFINED method to change PAS filter mode.
+ */
+void pal_el3_pas_filter_active_mode(int enable)
 {
   //Partner shall implement their own IMPLEMNTATION_DEFINED
   //way for changing the Active mode of pas filter

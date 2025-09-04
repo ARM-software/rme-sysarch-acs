@@ -24,11 +24,11 @@
 
 /* Prototypes moved from ack_common.c */
 #ifndef __ASSEMBLER__
-void val_enable_ns_encryption(void);
-void val_disable_ns_encryption(void);
-void val_prog_legacy_tz(int enable);
-void val_pas_filter_active_mode(int enable);
-void val_security_state_change(uint64_t attr_nse_ns);
+void val_el3_enable_ns_encryption(void);
+void val_el3_disable_ns_encryption(void);
+void val_el3_prog_legacy_tz(int enable);
+void val_el3_pas_filter_active_mode(int enable);
+void val_el3_security_state_change(uint64_t attr_nse_ns);
 #endif /* __ASSEMBLER__ */
 
 #endif /* VAL_EL3_SECURITY_H */

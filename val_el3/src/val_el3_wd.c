@@ -17,8 +17,13 @@
 #include <val_el3_debug.h>
 #include <val_el3_wd.h>
 
+/**
+ * @brief Enable the Root watchdog by programming control register.
+ *
+ * @param wdog_ctrl_base  Virtual base address of Root watchdog registers.
+ */
 void
-val_wd_enable(uint64_t wdog_ctrl_base)
+val_el3_wd_enable(uint64_t wdog_ctrl_base)
 {
     if (shared_data->generic_flag) {
       shared_data->exception_expected = SET;
@@ -27,13 +32,27 @@ val_wd_enable(uint64_t wdog_ctrl_base)
     *(uint64_t *)(wdog_ctrl_base + 0) = SET;
 }
 
+/**
+ * @brief Disable the Root watchdog by programming control register.
+ *
+ * @param wdog_ctrl_base  Virtual base address of Root watchdog registers.
+ */
 void
-val_wd_disable(uint64_t wdog_ctrl_base)
+val_el3_wd_disable(uint64_t wdog_ctrl_base)
 {
     *(uint64_t *)(wdog_ctrl_base + 0) = CLEAR;
 }
 
-void val_wd_set_ws0_el3(uint64_t VA_RT_WDOG, uint32_t timeout, uint64_t counter_freq)
+/**
+ * @brief Configure and start/stop the Root watchdog Windowed Stage 0 timer.
+ *
+ * - When timeout is zero, watchdog is disabled.
+ *
+ * @param VA_RT_WDOG     Virtual base of Root watchdog registers.
+ * @param timeout        Desired timeout (seconds or ticks per counter_freq).
+ * @param counter_freq   System counter frequency used to derive WOR values.
+ */
+void val_el3_wd_set_ws0(uint64_t VA_RT_WDOG, uint32_t timeout, uint64_t counter_freq)
 {
   uint32_t wor_l;
   uint32_t wor_h = 0;
@@ -43,7 +62,7 @@ void val_wd_set_ws0_el3(uint64_t VA_RT_WDOG, uint32_t timeout, uint64_t counter_
   ctrl_base = VA_RT_WDOG;
   if (!timeout) {
       INFO("Disabling the Root watchdog\n");
-      val_wd_disable(ctrl_base);
+      val_el3_wd_disable(ctrl_base);
       return;
   }
 
@@ -78,6 +97,6 @@ void val_wd_set_ws0_el3(uint64_t VA_RT_WDOG, uint32_t timeout, uint64_t counter_
   }
 
   INFO("Enabling the Root watchdog\n");
-  val_wd_enable(ctrl_base);
+  val_el3_wd_enable(ctrl_base);
 
 }

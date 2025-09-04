@@ -40,24 +40,35 @@ static size_t align_size(size_t size, size_t alignment)
     return (size + (alignment - 1)) & ~(alignment - 1);
 }
 
-void map_shared_mem(void)
+/**
+ * @brief Map EL3 shared memory region if required by platform.
+ *
+ * Note: Current implementation is a stub. Platform may override.
+ */
+void val_el3_map_shared_mem(void)
 {
         INFO(" Function not implemented\n");
 }
 
-void val_data_cache_ops_by_va_el3(uint64_t VA, uint32_t type)
+/**
+ * @brief Perform data cache maintenance by VA at EL3.
+ *
+ * @param VA    Virtual address for cache operation.
+ * @param type  Operation type (CLEAN, INVALIDATE, CLEAN_AND_INVALIDATE).
+ */
+void val_el3_data_cache_ops_by_va(uint64_t VA, uint32_t type)
 {
 
   switch (type)
   {
     case CLEAN_AND_INVALIDATE:
-      cln_and_invldt_cache((uint64_t *)VA);
+      val_el3_cln_and_invldt_cache((uint64_t *)VA);
       break;
     case CLEAN:
-      clean_cache((uint64_t *)VA);
+      val_el3_clean_cache((uint64_t *)VA);
       break;
     case INVALIDATE:
-      invalidate_cache((uint64_t *)VA);
+      val_el3_invalidate_cache((uint64_t *)VA);
       break;
     default:
       shared_data->status_code = 1;
@@ -72,12 +83,24 @@ void val_data_cache_ops_by_va_el3(uint64_t VA, uint32_t type)
   }
 }
 
-void val_memory_set_el3(void *address, uint32_t size, uint8_t value)
+/**
+ * @brief Set memory to a byte value at EL3.
+ *
+ * @param address  Buffer base.
+ * @param size     Number of bytes to set.
+ * @param value    Byte value to write.
+ */
+void val_el3_memory_set(void *address, uint32_t size, uint8_t value)
 {
   memset(address, value, size);
 }
 
-void val_memory_free_el3(void *ptr)
+/**
+ * @brief Free memory previously allocated from EL3 pool.
+ *
+ * @param ptr  Pointer returned by val_el3_memory_alloc/calloc.
+ */
+void val_el3_memory_free(void *ptr)
 {
     uint32_t mecid = 0;
 
@@ -85,10 +108,10 @@ void val_memory_free_el3(void *ptr)
 
    /* If MEC is enabled, the memory pool structures need to be accessed with
        VAL_GMECID */
-    if (val_is_mec_enabled())
+    if (val_el3_is_mec_enabled())
     {
-        mecid = read_mecid_rl_a_el3();
-        val_write_mecid(VAL_GMECID);
+        mecid = val_el3_read_mecid_rl_a_el3();
+        val_el3_write_mecid(VAL_GMECID);
     }
 
 
@@ -106,11 +129,14 @@ void val_memory_free_el3(void *ptr)
     }
 
     /* Restore MECID */
-    if (val_is_mec_enabled())
-        val_write_mecid(mecid);
+    if (val_el3_is_mec_enabled())
+        val_el3_write_mecid(mecid);
 }
 
-void memory_pool_init(void)
+/**
+ * @brief Initialize EL3 memory pool metadata.
+ */
+void val_el3_memory_pool_init(void)
 {
     mem_pool.free_list = (BlockHeader *)mem_pool.base;
     mem_pool.free_list->size = mem_pool.size - sizeof(BlockHeader);
@@ -118,7 +144,13 @@ void memory_pool_init(void)
     mem_pool.free_list->next = NULL;
 }
 
-void split_block(BlockHeader *block, size_t size)
+/**
+ * @brief Split a free block into an allocated block and remainder.
+ *
+ * @param block  Free block to split.
+ * @param size   Size (bytes) for the allocated portion.
+ */
+void val_el3_split_block(BlockHeader *block, size_t size)
 {
     BlockHeader *new_block = (BlockHeader *)((uint8_t *)block + sizeof(BlockHeader) + size);
     new_block->size = block->size - size - sizeof(BlockHeader);
@@ -137,7 +169,12 @@ void split_block(BlockHeader *block, size_t size)
   @param   data    - The data which is written on the address
   @return  None
 **/
-void access_mut(void)
+/**
+ * @brief Perform read/write accesses to MUT addresses as per shared_data.
+ *
+ * Iterates shared_data->shared_data_access and executes requested operations.
+ */
+void val_el3_access_mut(void)
 {
   uint8_t type, num = shared_data->num_access;
   uint64_t data;
@@ -176,10 +213,10 @@ void access_mut(void)
  * @param  num          Requested number of (buffer * size)
  * @retval ptr          pointer to allocated memory
  */
-void *val_memory_calloc_el3(size_t num, size_t size, size_t alignment)
+void *val_el3_memory_calloc(size_t num, size_t size, size_t alignment)
 {
     size_t total_size = num * size;
-    void *ptr = val_memory_alloc_el3(total_size, alignment);
+    void *ptr = val_el3_memory_alloc(total_size, alignment);
     if (ptr) {
         memset(ptr, 0, total_size);
     }
@@ -192,7 +229,7 @@ void *val_memory_calloc_el3(size_t num, size_t size, size_t alignment)
  * @param  Va  Virtual address
  * @return Va  Returns the VA because of the 1:1 memory mapping
  */
-void *val_memory_virt_to_phys_el3(void *va)
+void *val_el3_memory_virt_to_phys(void *va)
 {
   return va;
 }
@@ -203,7 +240,7 @@ void *val_memory_virt_to_phys_el3(void *va)
  * @param  pa  Physical address
  * @return pa  Returns the PA because of the 1:1 memory mapping
  */
-void *val_memory_phys_to_virt(uint64_t pa)
+void *val_el3_memory_phys_to_virt(uint64_t pa)
 {
   return (void *)pa;
 }
@@ -217,21 +254,21 @@ void *val_memory_phys_to_virt(uint64_t pa)
  * @retval if SUCCESS   pointer to allocated memory
  * @retval if FAILURE   NULL
  */
-void *val_memory_alloc_el3(size_t size, size_t alignment)
+void *val_el3_memory_alloc(size_t size, size_t alignment)
 {
     uint32_t mecid = 0;
 
     if (!mem_pool.free_list)
     {
-        memory_pool_init(); // Initialize pool on first call
+        val_el3_memory_pool_init(); // Initialize pool on first call
     }
 
     /* If MEC is enabled, the memory pool structures need to be accessed with
        VAL_GMECID */
-    if (val_is_mec_enabled())
+    if (val_el3_is_mec_enabled())
     {
-        mecid = read_mecid_rl_a_el3();
-        val_write_mecid(VAL_GMECID);
+        mecid = val_el3_read_mecid_rl_a_el3();
+        val_el3_write_mecid(VAL_GMECID);
     }
 
     size = align_size(size, alignment); // Align the requested size
@@ -245,20 +282,20 @@ void *val_memory_alloc_el3(size_t size, size_t alignment)
 
         if (current->is_free && current->size >= size + alignment_padding) {
             if (current->size > size + alignment_padding + sizeof(BlockHeader)) {
-                split_block(current, size + alignment_padding);
+                val_el3_split_block(current, size + alignment_padding);
             }
             current->is_free = 0;
             /* Restore MECID */
-            if (val_is_mec_enabled())
-                val_write_mecid(mecid);
+            if (val_el3_is_mec_enabled())
+                val_el3_write_mecid(mecid);
             return (void *)aligned_start;
         }
         current = current->next;
     }
 
     /* Restore MECID */
-    if (val_is_mec_enabled())
-        val_write_mecid(mecid);
+    if (val_el3_is_mec_enabled())
+        val_el3_write_mecid(mecid);
 
     return NULL;
 }

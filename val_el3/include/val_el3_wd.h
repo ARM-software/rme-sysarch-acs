@@ -22,9 +22,9 @@
 
 /* Prototypes moved from ack_common.c */
 #ifndef __ASSEMBLER__
-void val_wd_enable(uint64_t wdog_ctrl_base);
-void val_wd_disable(uint64_t wdog_ctrl_base);
-void val_wd_set_ws0_el3(uint64_t VA_RT_WDOG, uint32_t timeout, uint64_t counter_freq);
+void val_el3_wd_enable(uint64_t wdog_ctrl_base);
+void val_el3_wd_disable(uint64_t wdog_ctrl_base);
+void val_el3_wd_set_ws0(uint64_t VA_RT_WDOG, uint32_t timeout, uint64_t counter_freq);
 #endif /* __ASSEMBLER__ */
 
 #endif /* VAL_EL3_WD_H */

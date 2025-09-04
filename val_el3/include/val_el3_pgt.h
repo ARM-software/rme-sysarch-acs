@@ -135,22 +135,22 @@ typedef struct {
   uint64_t attributes;
 } memory_region_descriptor_t;
 
-void setup_acs_pgt_values(void);
-void add_gpt_entry(uint64_t arg0, uint64_t arg1);
-uint64_t get_gpt_index(uint64_t pa, uint8_t level, uint8_t l0gptsz,
+void val_el3_setup_acs_pgt_values(void);
+void val_el3_add_gpt_entry(uint64_t arg0, uint64_t arg1);
+uint64_t val_el3_get_gpt_index(uint64_t pa, uint8_t level, uint8_t l0gptsz,
                        uint8_t pps, uint8_t p);
-bool is_gpi_valid(uint64_t gpi);
-uint64_t modify_gpt_gpi(uint64_t entry, uint64_t pa, uint8_t level,
+bool val_el3_is_gpi_valid(uint64_t gpi);
+uint64_t val_el3_modify_gpt_gpi(uint64_t entry, uint64_t pa, uint8_t level,
                         uint8_t p, uint64_t GPI);
-uint32_t add_mmu_entry(uint64_t arg0, uint64_t arg1, uint64_t arg2);
-uint64_t modify_desc(uint64_t table_desc, uint8_t start_bit,
+uint32_t val_el3_add_mmu_entry(uint64_t arg0, uint64_t arg1, uint64_t arg2);
+uint64_t val_el3_modify_desc(uint64_t table_desc, uint8_t start_bit,
                      uint64_t value_to_set, uint8_t num_bits);
-uint32_t log2_page_size(uint64_t size);
-void val_get_tcr_info(TCR_EL3_INFO *tcr_el3);
-uint32_t val_realm_pgt_create(memory_region_descriptor_t *mem_desc,
+uint32_t val_el3_log2_page_size(uint64_t size);
+void val_el3_get_tcr_info(TCR_EL3_INFO *tcr_el3);
+uint32_t val_el3_realm_pgt_create(memory_region_descriptor_t *mem_desc,
                               pgt_descriptor_t *pgt_desc);
-void val_realm_pgt_destroy(pgt_descriptor_t *pgt_desc);
-uint64_t at_s1e3w(uint64_t VA);
+void val_el3_realm_pgt_destroy(pgt_descriptor_t *pgt_desc);
+uint64_t val_el3_at_s1e3w(uint64_t VA);
 
 #endif /* __ASSEMBLER__ */
 

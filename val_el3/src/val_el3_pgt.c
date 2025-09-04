@@ -58,7 +58,7 @@ typedef struct {
 
 static acs_pgt_t acs_pgt_info;
 
-void setup_acs_pgt_values(void)
+void val_el3_setup_acs_pgt_values(void)
 {
     acs_pgt_info.l0_index = 0;
     acs_pgt_info.l1_index = 0;
@@ -169,7 +169,7 @@ uint64_t get_block_size(uint32_t level)
   @param   arg1 - GPI encoding required for the corresponding Physical Address
   @return  None
 **/
-void add_gpt_entry(uint64_t arg0, uint64_t arg1)
+void val_el3_add_gpt_entry(uint64_t arg0, uint64_t arg1)
 {
     gpt_descriptor_t gpt_desc;
     uint64_t PA = arg0;
@@ -181,7 +181,7 @@ void add_gpt_entry(uint64_t arg0, uint64_t arg1)
     uint8_t l0gptsz, x, l0_idx_width;
 
     /* Get translation attributes via GPCCR */
-    uint64_t val = read_gpccr_el3();
+    uint64_t val = val_el3_read_gpccr_el3();
 
     gpt_desc.gpccr.pps = (val & RME_ACS_GPCCR_PPS_MASK) >> RME_ACS_GPCCR_PPS_SHIFT;
     gpt_desc.gpccr.l0gptsz = (val & RME_ACS_GPCCR_L0GPTSZ_MASK) >> RME_ACS_GPCCR_L0GPTSZ_SHIFT;
@@ -196,7 +196,7 @@ void add_gpt_entry(uint64_t arg0, uint64_t arg1)
     INFO("gpccr->irgn = %d\n", gpt_desc.gpccr.irgn);
     INFO("gpccr->sh = %d\n", gpt_desc.gpccr.sh);
         /* Get GPTBR */
-    base = read_gptbr_el3();
+    base = val_el3_read_gptbr_el3();
     INFO("GPT_base = 0x%lx\n", base);
     p = pgs[gpt_desc.gpccr.pgs];
     pps = pps_[gpt_desc.gpccr.pps];
@@ -211,7 +211,7 @@ void add_gpt_entry(uint64_t arg0, uint64_t arg1)
     VERBOSE("Level 0 Base address = 0x%lx\n", gpt_desc.gpt_base);
 
         /*    Level 0 GPT walk     */
-    index_0 = get_gpt_index(PA, 0, l0gptsz, pps, p);
+    index_0 = val_el3_get_gpt_index(PA, 0, l0gptsz, pps, p);
     VERBOSE("Index at L0 = %lu  \n", index_0);
     gpt_entry_base_0 = (uint64_t *) (gpt_desc.gpt_base);
     l0_entry = &gpt_entry_base_0[index_0];
@@ -230,8 +230,8 @@ void add_gpt_entry(uint64_t arg0, uint64_t arg1)
     } else {
         /* Block_descriptor[63:8] = RES0 */
         VERBOSE("The Block Descriptor\n");
-        *l0_entry = modify_gpt_gpi(*l0_entry, PA, 0, p, gpi);
-        cln_and_invldt_cache(l0_entry);
+        *l0_entry = val_el3_modify_gpt_gpi(*l0_entry, PA, 0, p, gpi);
+        val_el3_cln_and_invldt_cache(l0_entry);
         gpt_desc.size = p;
         gpt_desc.contig_size = l0gptsz;
         gpt_desc.level = 0;
@@ -244,7 +244,7 @@ void add_gpt_entry(uint64_t arg0, uint64_t arg1)
     }
 
         /*              Level 1 GPT walk        */
-    index_1 = get_gpt_index(PA, 1, l0gptsz, pps, p);
+    index_1 = val_el3_get_gpt_index(PA, 1, l0gptsz, pps, p);
     VERBOSE("Index at L1= %lu  \n", index_1);
     gpt_entry_base_1 = (uint64_t *) gpt_desc.gpt_base;
     VERBOSE("val_pe_gpt_map_add: gpt_entry_base_1 = %lx     \n", (uint64_t)gpt_entry_base_1);
@@ -255,8 +255,8 @@ void add_gpt_entry(uint64_t arg0, uint64_t arg1)
     {
         /* Contiguous_descriptor[63:10] = RES0 */
         VERBOSE("The Contiguous Descriptor\n");
-        *l1_entry = modify_gpt_gpi(*l1_entry, PA, 1, p, gpi);
-        cln_and_invldt_cache(l1_entry);
+        *l1_entry = val_el3_modify_gpt_gpi(*l1_entry, PA, 1, p, gpi);
+        val_el3_cln_and_invldt_cache(l1_entry);
         gpt_desc.size = p;
         gpt_desc.level = 1;
         //Contiguous_descriptor_entry[9:8] = Contiguous Region Size
@@ -271,8 +271,8 @@ void add_gpt_entry(uint64_t arg0, uint64_t arg1)
             gpt_desc.contig_size = 29;
     } else {
         VERBOSE("The Granule Descriptor\n");
-        *l1_entry = modify_gpt_gpi(*l1_entry, PA, 1, p, gpi);
-        cln_and_invldt_cache(l1_entry);
+        *l1_entry = val_el3_modify_gpt_gpi(*l1_entry, PA, 1, p, gpi);
+        val_el3_cln_and_invldt_cache(l1_entry);
         gpt_desc.size = p;
         gpt_desc.contig_size = gpt_desc.size;                       //No Contiguity
         gpt_desc.level = 1;
@@ -298,7 +298,7 @@ void add_gpt_entry(uint64_t arg0, uint64_t arg1)
   @param   p       - Physical Granule Size(PGS) that is used to get the index
   @return  idx     - Index for the entry in the table
 **/
-uint64_t get_gpt_index(uint64_t pa, uint8_t level, uint8_t l0gptsz, uint8_t pps, uint8_t p)
+uint64_t val_el3_get_gpt_index(uint64_t pa, uint8_t level, uint8_t l0gptsz, uint8_t pps, uint8_t p)
 {
 
     uint64_t idx = 0;
@@ -327,7 +327,7 @@ uint64_t get_gpt_index(uint64_t pa, uint8_t level, uint8_t l0gptsz, uint8_t pps,
   @param   gpi  -       GPI to check for validity.
   @return  True for a valid GPI, false for an invalid one.
 **/
-bool is_gpi_valid(uint64_t gpi)
+bool val_el3_is_gpi_valid(uint64_t gpi)
 {
 
     if ((gpi == GPT_NOACCESS) || (gpi == GPT_ANY) ||
@@ -348,7 +348,7 @@ bool is_gpi_valid(uint64_t gpi)
   @param   GPI   - The specified encoding to modify the Descriptor entry with
   @return  entry - Modified entry
 **/
-uint64_t modify_gpt_gpi(uint64_t entry, uint64_t pa, uint8_t level, uint8_t p, uint64_t GPI)
+uint64_t val_el3_modify_gpt_gpi(uint64_t entry, uint64_t pa, uint8_t level, uint8_t p, uint64_t GPI)
 {
 
     uint64_t gpi;
@@ -359,7 +359,7 @@ uint64_t modify_gpt_gpi(uint64_t entry, uint64_t pa, uint8_t level, uint8_t p, u
             /* Block Descriptor */
             gpi = (entry >> 4) & 0xf;           //Block_descriptor[7:4] = GPI value
             VERBOSE("val_pe_gpt_map_add: gpi  = %lx     \n", gpi);
-            if (!is_gpi_valid(gpi))             //Check if the GPI value is a valid encoding
+            if (!val_el3_is_gpi_valid(gpi))             //Check if the GPI value is a valid encoding
                 ERROR("Invalid GPI 0x%lx", gpi);
             if (gpi != GPI)
             {
@@ -374,7 +374,8 @@ uint64_t modify_gpt_gpi(uint64_t entry, uint64_t pa, uint8_t level, uint8_t p, u
                 /* Contiguous Decsriptor */
                 gpi = (entry >> 4) & 0xf;           //Contiguous_descriptor_entry[7:4] = GPI value
                 VERBOSE("val_pe_gpt_map_add: gpi  = %lx     \n", gpi);
-                if (!is_gpi_valid(gpi))             //Check if the GPI value is a valid encoding
+                //Check if the GPI value is a valid encoding
+                if (!val_el3_is_gpi_valid(gpi))
                     ERROR("Invalid GPI 0x%lx", gpi);
                 if (gpi != GPI)
                 {
@@ -389,7 +390,8 @@ uint64_t modify_gpt_gpi(uint64_t entry, uint64_t pa, uint8_t level, uint8_t p, u
                 /* Granules_descriptor[4*i + 3: 4*i] = GPI value */
                 gpi = (entry >> (4 * gpi_index)) & 0xf;
                 VERBOSE("val_pe_gpt_map_add: gpi  = %lx     \n", gpi);
-                if (!is_gpi_valid(gpi))              //Check if the GPI value is a valid encoding
+                //Check if the GPI value is a valid encoding
+                if (!val_el3_is_gpi_valid(gpi))
                     ERROR("Invalid GPI 0x%lx", gpi);
                 if (gpi != GPI)
                 {
@@ -415,7 +417,7 @@ uint64_t modify_gpt_gpi(uint64_t entry, uint64_t pa, uint8_t level, uint8_t p, u
   @param   arg2 - Access PAS for the corresponding mapping if specified or NON_SECURE by default
   @return  0 on Success and 1 on Failure
 **/
-uint32_t add_mmu_entry(uint64_t arg0, uint64_t arg1, uint64_t arg2)
+uint32_t val_el3_add_mmu_entry(uint64_t arg0, uint64_t arg1, uint64_t arg2)
 {
     uint64_t input_address = arg0, page_size;
     uint64_t output_address, attr;
@@ -432,8 +434,8 @@ uint32_t add_mmu_entry(uint64_t arg0, uint64_t arg1, uint64_t arg2)
     INFO("val_pe_mmu_map_add: Input Address = 0x%lx\n", input_address);
     INFO("val_pe_mmu_map_add: Attribute = 0x%lx\n", attr);
 
-    val_get_tcr_info(&pgt_desc.tcr);
-    pgt_desc.pgt_base = read_ttbr_el3() & AARCH64_TTBR_ADDR_MASK;
+    val_el3_get_tcr_info(&pgt_desc.tcr);
+    pgt_desc.pgt_base = val_el3_read_ttbr_el3() & AARCH64_TTBR_ADDR_MASK;
     pgt_desc.stage = PGT_STAGE1;
     pgt_desc.ias = 64 - pgt_desc.tcr.tsz;
     pgt_desc.oas = oas_bit_arr[pgt_desc.tcr.ps];
@@ -441,7 +443,7 @@ uint32_t add_mmu_entry(uint64_t arg0, uint64_t arg1, uint64_t arg2)
     VERBOSE("Output addr size in bits (oas) = %d\n", pgt_desc.oas);
 
     page_size = tg_arr[pgt_desc.tcr.tg];
-    page_size_log2 = log2_page_size(page_size);
+    page_size_log2 = val_el3_log2_page_size(page_size);
     bits_per_level = page_size_log2 - 3;
     num_pgt_levels = (pgt_desc.ias - page_size_log2 + bits_per_level - 1)/bits_per_level;
     num_pgt_levels = (num_pgt_levels > 4)?4:num_pgt_levels;
@@ -490,8 +492,9 @@ uint32_t add_mmu_entry(uint64_t arg0, uint64_t arg1, uint64_t arg2)
             *table_desc = PGT_ENTRY_TABLE_MASK | PGT_ENTRY_VALID_MASK;
             tt_base_virt = (uint64_t *)tt_base_phys;
             *table_desc |= (uint64_t)(tt_base_virt) & ~(page_size - 1);
-            if (((at_s1e3w((uint64_t)tt_base_virt)) & 0x1) == 0x1)
-                add_mmu_entry((uint64_t)tt_base_virt, (uint64_t)tt_base_virt, NONSECURE_PAS);
+            if (((val_el3_at_s1e3w((uint64_t)tt_base_virt)) & 0x1) == 0x1)
+                val_el3_add_mmu_entry((uint64_t)tt_base_virt,
+                                      (uint64_t)tt_base_virt, NONSECURE_PAS);
             VERBOSE("val_pe_mmu_map_add: table_desc = %lx     \n", *table_desc);
             ++this_level;
             bits_remaining -= bits_per_level;
@@ -512,13 +515,13 @@ uint32_t add_mmu_entry(uint64_t arg0, uint64_t arg1, uint64_t arg2)
         bits_remaining -= bits_per_level;
         bits_at_this_level = bits_per_level;
     }
-    cln_and_invldt_cache(table_desc);
+    val_el3_cln_and_invldt_cache(table_desc);
     INFO("val_pe_mmu_map_add: table_desc = %lx     \n", *table_desc);
     return 0;
 }
 
 uint64_t
-modify_desc(uint64_t table_desc, uint8_t start_bit, uint64_t value_to_set, uint8_t num_bits)
+val_el3_modify_desc(uint64_t table_desc, uint8_t start_bit, uint64_t value_to_set, uint8_t num_bits)
 {
 
     uint64_t bit_mask = 1, bin_mltpl = 2;
@@ -535,7 +538,7 @@ modify_desc(uint64_t table_desc, uint8_t start_bit, uint64_t value_to_set, uint8
 
 }
 
-uint32_t log2_page_size(uint64_t size)
+uint32_t val_el3_log2_page_size(uint64_t size)
 {
     int bit = 0;
 
@@ -556,12 +559,12 @@ uint32_t log2_page_size(uint64_t size)
   @param   *tcr_el3 - To fill the TCR information.
   @return  None
 **/
-void val_get_tcr_info(TCR_EL3_INFO *tcr_el3)
+void val_el3_get_tcr_info(TCR_EL3_INFO *tcr_el3)
 {
 
   uint64_t tcr_val;
 
-  tcr_val = read_tcr_el3();
+  tcr_val = val_el3_read_tcr_el3();
   tcr_el3->tg = (tcr_val & TCR_EL3_TG0_MASK) >> TCR_EL3_TG0_SHIFT;
   tcr_el3->ps = (tcr_val & TCR_EL3_PS_MASK) >> TCR_EL3_PS_SHIFT;
   tcr_el3->sh = (tcr_val & TCR_EL3_SH0_MASK) >> TCR_EL3_SH0_SHIFT;
@@ -592,7 +595,7 @@ static uint32_t fill_translation_table(tt_descriptor_t tt_desc,
     INFO("      tt_desc.nbits: %d\n", tt_desc.nbits);
 
     if (!is_values_init) {
-        setup_acs_pgt_values();
+        val_el3_setup_acs_pgt_values();
         is_values_init = 1;
     }
 
@@ -641,15 +644,15 @@ static uint32_t fill_translation_table(tt_descriptor_t tt_desc,
         */
         if (*table_desc == 0 || IS_PGT_ENTRY_BLOCK(*table_desc))
         {
-            tt_base_next_level = val_memory_alloc_el3(SIZE_4KB, SIZE_4KB);
+            tt_base_next_level = val_el3_memory_alloc(SIZE_4KB, SIZE_4KB);
             if (tt_base_next_level == NULL)
             {
                 ERROR("  fill_translation_table: page allocation failed\n");
                 return 1;
             }
-            val_memory_set_el3(tt_base_next_level, pg_size, 0);
+            val_el3_memory_set(tt_base_next_level, pg_size, 0);
         } else
-            tt_base_next_level = val_memory_phys_to_virt(*table_desc & pgt_addr_mask);
+            tt_base_next_level = val_el3_memory_phys_to_virt(*table_desc & pgt_addr_mask);
 
         tt_desc_next_level.tt_base    = tt_base_next_level;
         tt_desc_next_level.input_base = input_address;
@@ -671,12 +674,12 @@ static uint32_t fill_translation_table(tt_descriptor_t tt_desc,
 
         if (fill_translation_table(tt_desc_next_level, mem_desc))
         {
-            val_memory_free_el3(tt_base_next_level);
+            val_el3_memory_free(tt_base_next_level);
             return 1;
         }
 
         *table_desc = PGT_ENTRY_TABLE_MASK | PGT_ENTRY_VALID_MASK;
-        *table_desc |= (uint64_t)val_memory_virt_to_phys_el3(tt_base_next_level)
+        *table_desc |= (uint64_t)val_el3_memory_virt_to_phys(tt_base_next_level)
                                                              & ~(uint64_t)(pg_size - 1);
         INFO("      Table descriptor address = 0x%lx\n", (uint64_t) table_desc);
         INFO("      table_descriptor = 0x%lx\n", *table_desc);
@@ -691,7 +694,7 @@ static uint32_t fill_translation_table(tt_descriptor_t tt_desc,
  * @param pgt_desc    Page table configuration descriptor (input/output).
  * @return 0 on success, 1 on failure.
  */
-uint32_t val_realm_pgt_create(memory_region_descriptor_t *mem_desc, pgt_descriptor_t *pgt_desc)
+uint32_t val_el3_realm_pgt_create(memory_region_descriptor_t *mem_desc, pgt_descriptor_t *pgt_desc)
 {
     uint64_t *tt_base;
     tt_descriptor_t tt_desc;
@@ -699,7 +702,7 @@ uint32_t val_realm_pgt_create(memory_region_descriptor_t *mem_desc, pgt_descript
     memory_region_descriptor_t *mem_desc_iter;
 
     pg_size = SIZE_4KB;
-    page_size_log2 = log2_page_size(pg_size);
+    page_size_log2 = val_el3_log2_page_size(pg_size);
     bits_p_level = page_size_log2 - 3;
     num_pgt_levels = (pgt_desc->ias - page_size_log2 + bits_p_level - 1)/bits_p_level;
     num_pgt_levels = (num_pgt_levels > 4)?4:num_pgt_levels;
@@ -710,12 +713,12 @@ uint32_t val_realm_pgt_create(memory_region_descriptor_t *mem_desc, pgt_descript
        to use. If the pgt_base member is NULL allocate a page to create a new
        table, else update existing translation table */
     if (pgt_desc->pgt_base == (uint64_t) NULL) {
-        tt_base = (uint64_t *) val_memory_alloc_el3(SIZE_4KB, SIZE_4KB);
+        tt_base = (uint64_t *) val_el3_memory_alloc(SIZE_4KB, SIZE_4KB);
         if (tt_base == NULL) {
             ERROR("      val_pgt_create: page allocation failed\n");
             return 1;
         }
-        val_memory_set_el3(tt_base, pg_size, 0);
+        val_el3_memory_set(tt_base, pg_size, 0);
     }
     else
         tt_base = (uint64_t *) pgt_desc->pgt_base;
@@ -767,12 +770,12 @@ uint32_t val_realm_pgt_create(memory_region_descriptor_t *mem_desc, pgt_descript
 
         if (fill_translation_table(tt_desc, mem_desc))
         {
-            val_memory_free_el3(tt_base);
+            val_el3_memory_free(tt_base);
             return 1;
         }
     }
 
-    pgt_desc->pgt_base = (uint64_t)val_memory_virt_to_phys_el3(tt_base);
+    pgt_desc->pgt_base = (uint64_t)val_el3_memory_virt_to_phys(tt_base);
 
     return 0;
 }
@@ -799,13 +802,13 @@ static void free_translation_table(uint64_t *tt_base, uint32_t bits_at_this_leve
         {
             if (IS_PGT_ENTRY_BLOCK(tt_base[index]))
                 continue;
-            tt_base_next_virt = val_memory_phys_to_virt((tt_base[index] & pgt_addr_mask));
+            tt_base_next_virt = val_el3_memory_phys_to_virt((tt_base[index] & pgt_addr_mask));
             if (tt_base_next_virt == NULL)
                 continue;
             free_translation_table(tt_base_next_virt, bits_p_level, this_level+1);
             INFO("      free_translation_table: \
                         tt_base_next_virt = %lx\n", (uint64_t)tt_base_next_virt);
-            val_memory_free_el3(tt_base_next_virt);
+            val_el3_memory_free(tt_base_next_virt);
         }
     }
 }
@@ -817,16 +820,16 @@ static void free_translation_table(uint64_t *tt_base, uint32_t bits_at_this_leve
  *
  *  @return void
 **/
-void val_realm_pgt_destroy(pgt_descriptor_t *pgt_desc)
+void val_el3_realm_pgt_destroy(pgt_descriptor_t *pgt_desc)
 {
     uint32_t page_size_log2, num_pgt_levels;
-    uint64_t *pgt_base_virt = val_memory_phys_to_virt(pgt_desc->pgt_base);
+    uint64_t *pgt_base_virt = val_el3_memory_phys_to_virt(pgt_desc->pgt_base);
 
     if (!pgt_desc->pgt_base)
         return;
 
     INFO("      val_pgt_destroy: pgt_base = %lx\n", pgt_desc->pgt_base);
-    page_size_log2 = log2_page_size(pg_size);
+    page_size_log2 = val_el3_log2_page_size(pg_size);
     bits_p_level =  page_size_log2 - 3;
     pgt_addr_mask = ((0x1ull << (pgt_desc->ias - page_size_log2)) - 1) << page_size_log2;
     num_pgt_levels = (pgt_desc->ias - page_size_log2 + bits_p_level - 1)/bits_p_level;
@@ -834,5 +837,5 @@ void val_realm_pgt_destroy(pgt_descriptor_t *pgt_desc)
     free_translation_table(pgt_base_virt,
                            pgt_desc->ias - ((num_pgt_levels - 1) * bits_p_level + page_size_log2),
                            4 - num_pgt_levels);
-    val_memory_free_el3(pgt_base_virt);
+    val_el3_memory_free(pgt_base_virt);
 }

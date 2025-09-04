@@ -21,9 +21,9 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-void pal_enable_ns_encryption(void);
-void pal_disable_ns_encryption(void);
-void pal_prog_legacy_tz(int enable);
-void pal_pas_filter_active_mode(int enable);
+void pal_el3_enable_ns_encryption(void);
+void pal_el3_disable_ns_encryption(void);
+void pal_el3_prog_legacy_tz(int enable);
+void pal_el3_pas_filter_active_mode(int enable);
 
 #endif /* PAL_EL3_H */

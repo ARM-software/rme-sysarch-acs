@@ -17,36 +17,57 @@
 #include <val_el3_debug.h>
 #include <val_el3_security.h>
 
-void val_enable_ns_encryption(void)
+/**
+ * @brief Enable Non-secure encryption at EL3 via PAL.
+ */
+void val_el3_enable_ns_encryption(void)
 {
-  pal_enable_ns_encryption();
+  pal_el3_enable_ns_encryption();
 }
 
-void val_disable_ns_encryption(void)
+/**
+ * @brief Disable Non-secure encryption at EL3 via PAL.
+ */
+void val_el3_disable_ns_encryption(void)
 {
-  pal_disable_ns_encryption();
+  pal_el3_disable_ns_encryption();
 }
 
-void val_prog_legacy_tz(int enable)
+/**
+ * @brief Program Legacy TZ enable state at EL3 via PAL.
+ *
+ * @param enable  Non-zero to enable, zero to disable.
+ */
+void val_el3_prog_legacy_tz(int enable)
 {
-  return pal_prog_legacy_tz(enable);
+  return pal_el3_prog_legacy_tz(enable);
 }
 
-void val_security_state_change(uint64_t attr_nse_ns)
+/**
+ * @brief Change EL3 security state by updating SCR_EL3.NSE and SCR_EL3.NS.
+ *
+ * @param attr_nse_ns  Encoded NSE/NS bits (macros NSE_SET/NS_SET extract fields).
+ */
+void val_el3_security_state_change(uint64_t attr_nse_ns)
 {
   uint64_t scr_data, nse_bit, ns_bit;
 
   nse_bit = NSE_SET(attr_nse_ns);
   ns_bit = NS_SET(attr_nse_ns);
-  scr_data = read_scr_el3();
+  scr_data = val_el3_read_scr_el3();
   //The SCR_EL3.NSE and SCR_EL3.NS bits decides the security state
   scr_data &= (~SCR_NSE_MASK & ~SCR_NS_MASK);
   scr_data |= ((nse_bit << SCR_NSE_SHIFT) | (ns_bit << SCR_NS_SHIFT));
-  write_scr_el3(scr_data);
+  val_el3_write_scr_el3(scr_data);
 }
 
-void val_pas_filter_active_mode(int enable)
+/**
+ * @brief Set PAS filter to Active/Inactive mode at EL3 via PAL.
+ *
+ * @param enable  Non-zero to set Active mode, zero for Inactive.
+ */
+void val_el3_pas_filter_active_mode(int enable)
 {
   //Change the mode to Active from In-active
-  pal_pas_filter_active_mode(enable);
+  pal_el3_pas_filter_active_mode(enable);
 }
