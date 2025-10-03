@@ -57,7 +57,7 @@ For more information, see [arm RME System ACS Validation Methodology document](D
 
 - Partner needs to provide their inputs to these following files...
    - platform/pal_baremetal/FVP/include/platform_override_fvp.h -> For Bare-metal platform,
-   - platform/pal_uefi/include/platform_overrride_fvp.h -> For UEFI platform.
+   - platform/pal_uefi/include/platform_overrride.h -> For UEFI platform.
 - Any mainstream Linux based OS distribution running on a x86 or aarch64 machine.
 - git clone --branch edk2-stable202208 --depth 1 https://github.com/tianocore/edk2
 - git clone https://github.com/tianocore/edk2-libc [ Checkout SHA: 61687168fe02ac4d933a36c9145fdd242ac424d1]

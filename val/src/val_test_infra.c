@@ -740,70 +740,10 @@ uint32_t val_read_reset_status(void)
   return pal_read_reset_status(rme_nvm_mem);
 }
 
-static int Aarch64VaIsMappedForWrite(const void *Va)
-{
-  uint64_t par;
-
-  __asm__ volatile("at     s1e2w, %1\n"
-                   "isb\n"
-                   "mrs    %0, par_el1\n"
-                   : "=r"(par) // <-- changed to write-only output
-                   : "r"(Va)   // <-- input: address to check
-                   : "memory");
-
-  return ((par & 1ULL) == 0);
-}
-
 uint64_t val_get_free_pa(uint64_t size, uint64_t alignment)
 {
   uint64_t mem_base;
-  if (!Aarch64VaIsMappedForWrite((void *)free_mem_var_pa))
-  {
-    memory_region_descriptor_t mem_desc_array[2], *mem_desc;
-    pgt_descriptor_t pgt_desc;
-    uint64_t ttbr;
 
-    val_print(ACS_PRINT_ERR, "The PA is not mapped for write", 0);
-
-    /* Get translation attributes via TCR and translation table base via TTBR */
-    if (val_pe_reg_read_tcr(0 /*for TTBR0*/, &pgt_desc.tcr))
-    {
-      val_print(ACS_PRINT_ERR, " TCR read failure", 0);
-      return 1;
-    }
-
-    if (val_pe_reg_read_ttbr(0 /*for TTBR0*/, &ttbr))
-    {
-      val_print(ACS_PRINT_ERR, " TTBR0 read failure", 0);
-      return 1;
-    }
-
-    val_memory_set(mem_desc_array, sizeof(mem_desc_array), 0);
-    mem_desc = &mem_desc_array[0];
-
-    pgt_desc.pgt_base = (ttbr & AARCH64_TTBR_ADDR_MASK);
-    pgt_desc.mair     = val_pe_reg_read(MAIR_ELx);
-    pgt_desc.stage    = PGT_STAGE1;
-
-    pgt_desc.ias               = 48;
-    pgt_desc.oas               = 48;
-    mem_desc->virtual_address  = free_mem_var_pa;
-    mem_desc->physical_address = free_mem_var_pa;
-    mem_desc->length           = size;
-    mem_desc->attributes |= (PGT_STAGE1_AP_RW);
-
-    if (val_pgt_create(mem_desc, &pgt_desc))
-    {
-      val_print(ACS_PRINT_ERR, " Unable to create page table with given attributes", 0);
-      return 1;
-    }
-  }
-
-  if (!Aarch64VaIsMappedForWrite((void *)free_mem_var_pa))
-  {
-    val_print(ACS_PRINT_ERR, "The PA is still not mapped for write", 0);
-    return 1;
-  }
   mem_base = free_mem_var_pa & ~(alignment - 1);
 
   if (alignment < size)
@@ -819,52 +759,6 @@ uint64_t val_get_free_va(uint64_t size)
 {
   uint64_t mem_base;
 
-  if (!Aarch64VaIsMappedForWrite((void *)free_mem_var_va))
-  {
-    memory_region_descriptor_t mem_desc_array[2], *mem_desc;
-    pgt_descriptor_t pgt_desc;
-    uint64_t ttbr;
-
-    val_print(ACS_PRINT_ERR, "The VA is not mapped for write", 0);
-
-    /* Get translation attributes via TCR and translation table base via TTBR */
-    if (val_pe_reg_read_tcr(0 /*for TTBR0*/, &pgt_desc.tcr))
-    {
-      val_print(ACS_PRINT_ERR, " TCR read failure", 0);
-      return 1;
-    }
-
-    if (val_pe_reg_read_ttbr(0 /*for TTBR0*/, &ttbr))
-    {
-      val_print(ACS_PRINT_ERR, " TTBR0 read failure", 0);
-      return 1;
-    }
-
-    val_memory_set(mem_desc_array, sizeof(mem_desc_array), 0);
-    mem_desc = &mem_desc_array[0];
-
-    pgt_desc.pgt_base = (ttbr & AARCH64_TTBR_ADDR_MASK);
-    pgt_desc.mair     = val_pe_reg_read(MAIR_ELx);
-    pgt_desc.stage    = PGT_STAGE1;
-
-    pgt_desc.ias               = 48;
-    pgt_desc.oas               = 48;
-    mem_desc->virtual_address  = free_mem_var_va;
-    mem_desc->physical_address = free_mem_var_va;
-    mem_desc->length           = size;
-    mem_desc->attributes |= (PGT_STAGE1_AP_RW);
-
-    if (val_pgt_create(mem_desc, &pgt_desc))
-    {
-      val_print(ACS_PRINT_ERR, " Unable to create page table with given attributes", 0);
-      return 1;
-    }
-  }
-  if (!Aarch64VaIsMappedForWrite((void *)free_mem_var_va))
-  {
-    val_print(ACS_PRINT_ERR, "The VA is still not mapped for write", 0);
-    return 1;
-  }
   mem_base = free_mem_var_va;
   free_mem_var_va += size;
   // val_print(ACS_PRINT_DEBUG, "The VA allocated = 0x%lx\n", mem_base);
