@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022,2025, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,8 +16,8 @@
  **/
 
 #ifndef TARGET_EMULATION
-#include "include/rme_acs_pe.h"
-#include "sys_arch_src/gic/rme_exception.h"
+#include "include/val_pe.h"
+#include "sys_arch_src/gic/val_exception.h"
 #else
 #define EXCEPT_AARCH64_SYNCHRONOUS_EXCEPTIONS    0
 #define EXCEPT_AARCH64_IRQ                       1
@@ -43,11 +43,11 @@
        .extern  _CONCATENATE (__USER_LABEL_PREFIX__, func__)
 
 GCC_ASM_IMPORT(common_exception_handler)
-GCC_ASM_EXPORT(rme_gic_set_el2_vector_table)
-GCC_ASM_EXPORT(rme_gic_update_elr)
-GCC_ASM_EXPORT(rme_gic_get_far)
-GCC_ASM_EXPORT(rme_gic_get_esr)
-GCC_ASM_EXPORT(rme_gic_get_elr)
+GCC_ASM_EXPORT(val_gic_set_el2_vector_table)
+GCC_ASM_EXPORT(val_gic_update_elr)
+GCC_ASM_EXPORT(val_gic_get_far)
+GCC_ASM_EXPORT(val_gic_get_esr)
+GCC_ASM_EXPORT(val_gic_get_elr)
 
 
 #define CHECK_EL_1_OR_2_OR_3(REG) \
@@ -265,7 +265,7 @@ skip_elr:
 // Set Vector Table
 // ------------------------------------------------------------
 
-ASM_PFX(rme_gic_set_el2_vector_table):
+ASM_PFX(val_gic_set_el2_vector_table):
     adr x0, vector_table
     CHECK_EL_1_OR_2_OR_3(x1)
 1:  msr   vbar_el1, x0
@@ -276,7 +276,7 @@ ASM_PFX(rme_gic_set_el2_vector_table):
 4:  isb
     ret
 
-ASM_PFX(rme_gic_update_elr):
+ASM_PFX(val_gic_update_elr):
     CHECK_EL_1_OR_2_OR_3(x1)
 1:  msr   elr_el1, x0
     b     4f
@@ -286,7 +286,7 @@ ASM_PFX(rme_gic_update_elr):
 4:  isb
     ret
 
-ASM_PFX(rme_gic_get_elr):
+ASM_PFX(val_gic_get_elr):
     CHECK_EL_1_OR_2_OR_3(x1)
 1:  mrs   x0, elr_el1
     b     4f
@@ -295,7 +295,7 @@ ASM_PFX(rme_gic_get_elr):
 3:  mrs   x0, elr_el3
 4:  ret
 
-ASM_PFX(rme_gic_get_esr):
+ASM_PFX(val_gic_get_esr):
     CHECK_EL_1_OR_2_OR_3(x1)
 1:  mrs   x0, esr_el1
     b     4f
@@ -304,7 +304,7 @@ ASM_PFX(rme_gic_get_esr):
 3:  mrs   x0, esr_el3
 4:  ret
 
-ASM_PFX(rme_gic_get_far):
+ASM_PFX(val_gic_get_far):
     CHECK_EL_1_OR_2_OR_3(x1)
 1:  mrs   x0, far_el1
     b     4f

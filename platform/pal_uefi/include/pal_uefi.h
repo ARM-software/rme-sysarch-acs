@@ -18,7 +18,8 @@
 #ifndef __PAL_UEFI_H__
 #define __PAL_UEFI_H__
 
-#include <include/platform_override.h>
+// Use platform overrides; runtime values are applied in PAL at init time.
+#include <include/pal_override.h>
 
 extern VOID* g_rme_log_file_handle;
 extern UINT32 g_print_level;
@@ -29,58 +30,65 @@ extern UINT32 g_pcie_p2p;
 extern UINT32 g_pcie_cache_present;
 extern UINT32 g_print_in_test_context;
 
-#define ACS_PRINT_ALWAYS  6    /* No log-level prefix or newline. For inline/multi-part prints */
-#define ACS_PRINT_ERR   5      /* Only Errors. use this to de-clutter the terminal and focus only on specifics */
-#define ACS_PRINT_WARN  4      /* Only warnings & errors. use this to de-clutter the terminal and focus only on specifics */
-#define ACS_PRINT_TEST  3      /* Test description and result descriptions. THIS is DEFAULT */
-#define ACS_PRINT_DEBUG 2      /* For Debug statements. contains register dumps etc */
-#define ACS_PRINT_INFO  1      /* Print all statements. Do not use unless really needed */
 
-#define PCIE_SUCCESS            0x00000000  /* Operation completed successfully */
-#define PCIE_NO_MAPPING         0x10000001  /* A mapping to a Function does not exist */
-#define PCIE_CAP_NOT_FOUND      0x10000010  /* The specified capability was not found */
-#define PCIE_UNKNOWN_RESPONSE   0xFFFFFFFF  /* Function not found or UR response from completer */
+#define ACS_PRINT_ALWAYS 6 /* No log-level prefix or newline. For inline/multi-part prints */
+#define ACS_PRINT_ERR \
+  5 /* Only Errors. use this to de-clutter the terminal and focus only on specifics */
+#define ACS_PRINT_WARN \
+  4 /* Only warnings & errors. use this to de-clutter the terminal and focus only on specifics */
+#define ACS_PRINT_TEST  3 /* Test description and result descriptions. THIS is DEFAULT */
+#define ACS_PRINT_DEBUG 2 /* For Debug statements. contains register dumps etc */
+#define ACS_PRINT_INFO  1 /* Print all statements. Do not use unless really needed */
 
-#define NOT_IMPLEMENTED         0x4B1D  /* Feature or API by default unimplemented */
-#define MEM_OFFSET_SMALL        0x10    /* Memory Offset from BAR base value that can be accesed*/
+#define PCIE_SUCCESS          0x00000000 /* Operation completed successfully */
+#define PCIE_NO_MAPPING       0x10000001 /* A mapping to a Function does not exist */
+#define PCIE_CAP_NOT_FOUND    0x10000010 /* The specified capability was not found */
+#define PCIE_UNKNOWN_RESPONSE 0xFFFFFFFF /* Function not found or UR response from completer */
 
-#define TYPE0_MAX_BARS  6
-#define TYPE1_MAX_BARS  2
+#define NOT_IMPLEMENTED  0x4B1D /* Feature or API by default unimplemented */
+#define MEM_OFFSET_SMALL 0x10   /* Memory Offset from BAR base value that can be accesed*/
+
+#define TYPE0_MAX_BARS 6
+#define TYPE1_MAX_BARS 2
 
 /* BAR registrer masks */
-#define BAR_MIT_MASK    0x1
-#define BAR_MDT_MASK    0x3
-#define BAR_MT_MASK     0x1
-#define BAR_BASE_MASK   0xfffffff
+#define BAR_MIT_MASK  0x1
+#define BAR_MDT_MASK  0x3
+#define BAR_MT_MASK   0x1
+#define BAR_BASE_MASK 0xfffffff
 
 /* BAR register shifts */
-#define BAR_MIT_SHIFT   0
-#define BAR_MDT_SHIFT   1
-#define BAR_MT_SHIFT    3
-#define BAR_BASE_SHIFT  4
+#define BAR_MIT_SHIFT  0
+#define BAR_MDT_SHIFT  1
+#define BAR_MT_SHIFT   3
+#define BAR_BASE_SHIFT 4
 
-typedef struct {
+typedef struct
+{
   UINT32 type;
   UINT32 bdf;
   UINT64 address;
   UINT32 property;
 } REGISTER_INFO_TABLE;
 
-typedef enum {
-  PCIE_RP = 0,
+typedef enum
+{
+  PCIE_RP      = 0,
   INTERCONNECT = 1
 } REGISTER_TYPE;
 
-typedef enum {
+typedef enum
+{
   RMSD_WRITE_PROTECT = 0,
-  RMSD_FULL_PROTECT = 1,
-  RMSD_PROTECT = 2
+  RMSD_FULL_PROTECT  = 1,
+  RMSD_PROTECT       = 2
 } RMSD_SECURITY_PROPERTY;
 
 /**
   @brief  structure instance for region types
 **/
-typedef struct {
+typedef struct
+{
   UINT32 num_of_regn_gpc;
   UINT32 num_of_regn_pas_filter;
 } MEM_REGN_INFO_HDR;
@@ -88,133 +96,159 @@ typedef struct {
 /**
   @brief  structure instance for Region details
 **/
-typedef struct {
-  UINT32   base_addr;
-  UINT32   regn_size;
-  UINT64   resourse_pas;
+typedef struct
+{
+  UINT32 base_addr;
+  UINT32 regn_size;
+  UINT64 resourse_pas;
 } MEM_REGN_INFO_ENTRY;
 
-typedef struct {
-  MEM_REGN_INFO_HDR    header;
-  MEM_REGN_INFO_ENTRY  regn_info[];
+typedef struct
+{
+  MEM_REGN_INFO_HDR header;
+  MEM_REGN_INFO_ENTRY regn_info[];
 } MEM_REGN_INFO_TABLE;
 
-typedef struct {
+typedef struct
+{
   UINT64 rt_reg_base_addr;
   UINT64 rt_reg_size;
 } RT_REG_INFO_ENTRY;
 
-typedef struct {
+typedef struct
+{
   UINT32 num_reg;
   RT_REG_INFO_ENTRY rt_reg_info[];
 } ROOT_REGSTR_TABLE;
 
-typedef enum {
+typedef enum
+{
   MMIO = 0,
-  IO = 1
+  IO   = 1
 } BAR_MEM_INDICATOR_TYPE;
 
-typedef enum {
+typedef enum
+{
   BITS_32 = 0,
   BITS_64 = 2
 } BAR_MEM_DECODE_TYPE;
 
-typedef struct {
-  UINT64   Arg0;
-  UINT64   Arg1;
-  UINT64   Arg2;
-  UINT64   Arg3;
-  UINT64   Arg4;
-  UINT64   Arg5;
-  UINT64   Arg6;
-  UINT64   Arg7;
+typedef struct
+{
+  UINT64 Arg0;
+  UINT64 Arg1;
+  UINT64 Arg2;
+  UINT64 Arg3;
+  UINT64 Arg4;
+  UINT64 Arg5;
+  UINT64 Arg6;
+  UINT64 Arg7;
 } ARM_SMC_ARGS;
 
 #define FILENAME (__builtin_strrchr("/" __FILE__, '/') + 1)
 
-#define rme_print(verbose, string, ...)                                 \
-  do {                                                                  \
-    if ((verbose) >= g_print_level) {                                   \
-      if ((verbose) == ACS_PRINT_DEBUG) {                               \
-        if (g_print_in_test_context)                                    \
-          Print(L"\n\t\tPAL_DBG : ");                                    \
-        else                                                            \
-          Print(L"\n\tPAL_DBG : ");                                      \
-      } else if ((verbose) == ACS_PRINT_ERR) {                          \
-        if (g_print_in_test_context)                                    \
-          Print(L"\n\t\tPAL_ERR : ");                                    \
-        else                                                            \
-          Print(L"\n\tPAL_ERR : ");                                      \
-      } else if ((verbose) == ACS_PRINT_INFO) {                         \
-        if (g_print_in_test_context)                                    \
-          Print(L"\n\t\tPAL_INFO: ");                                   \
-        else                                                            \
-          Print(L"\n\tPAL_INFO: ");                                     \
-      } else if ((verbose) == ACS_PRINT_WARN) {                         \
-        if (g_print_in_test_context)                                    \
-          Print(L"\n\t\tPAL_WARN: ");                                   \
-        else                                                            \
-          Print(L"\n\tPAL_WARN: ");                                     \
-      } else if ((verbose) == ACS_PRINT_ALWAYS) {                       \
-        Print(string, ##__VA_ARGS__);                                   \
-        break;                                                          \
-      } else {                                                          \
-        Print(string, ##__VA_ARGS__);                                   \
-        break;                                                          \
-      }                                                                 \
-      Print(string, ##__VA_ARGS__);                                     \
-      /* Print file name and line number for ERR and WARN */            \
-      if (verbose == ACS_PRINT_ERR || verbose == ACS_PRINT_WARN) {          \
-          Print(L"  [FILE: %a]", (UINT64)FILENAME);                    \
-          Print(L"  [LINE: %d]", __LINE__);                              \
-      }                                                                 \
-    }                                                                   \
+#define rme_print(verbose, string, ...)                          \
+  do                                                             \
+  {                                                              \
+    if ((verbose) >= g_print_level)                              \
+    {                                                            \
+      if ((verbose) == ACS_PRINT_DEBUG)                          \
+      {                                                          \
+        if (g_print_in_test_context)                             \
+          Print(L"\n\t\tPAL_DBG : ");                            \
+        else                                                     \
+          Print(L"\n\tPAL_DBG : ");                              \
+      }                                                          \
+      else if ((verbose) == ACS_PRINT_ERR)                       \
+      {                                                          \
+        if (g_print_in_test_context)                             \
+          Print(L"\n\t\tPAL_ERR : ");                            \
+        else                                                     \
+          Print(L"\n\tPAL_ERR : ");                              \
+      }                                                          \
+      else if ((verbose) == ACS_PRINT_INFO)                      \
+      {                                                          \
+        if (g_print_in_test_context)                             \
+          Print(L"\n\t\tPAL_INFO: ");                            \
+        else                                                     \
+          Print(L"\n\tPAL_INFO: ");                              \
+      }                                                          \
+      else if ((verbose) == ACS_PRINT_WARN)                      \
+      {                                                          \
+        if (g_print_in_test_context)                             \
+          Print(L"\n\t\tPAL_WARN: ");                            \
+        else                                                     \
+          Print(L"\n\tPAL_WARN: ");                              \
+      }                                                          \
+      else if ((verbose) == ACS_PRINT_ALWAYS)                    \
+      {                                                          \
+        Print(string, ##__VA_ARGS__);                            \
+        break;                                                   \
+      }                                                          \
+      else                                                       \
+      {                                                          \
+        Print(string, ##__VA_ARGS__);                            \
+        break;                                                   \
+      }                                                          \
+      Print(string, ##__VA_ARGS__);                              \
+      /* Print file name and line number for ERR and WARN */     \
+      if (verbose == ACS_PRINT_ERR || verbose == ACS_PRINT_WARN) \
+      {                                                          \
+        Print(L"  [FILE: %a]", (UINT64)FILENAME);                \
+        Print(L"  [LINE: %d]", __LINE__);                        \
+      }                                                          \
+    }                                                            \
   } while (0)
 
-#define VAL_EXTRACT_BITS(data, start, end) ((data >> start) & ((1ul << (end-start+1))-1))
+#define VAL_EXTRACT_BITS(data, start, end) ((data >> start) & ((1ul << (end - start + 1)) - 1))
 /**
   Conduits for service calls (SMC vs HVC).
 **/
-#define CONDUIT_SMC       0
-#define CONDUIT_HVC       1
-#define CONDUIT_UNKNOWN  -1
-#define CONDUIT_NONE     -2
+#define CONDUIT_SMC     0
+#define CONDUIT_HVC     1
+#define CONDUIT_UNKNOWN -1
+#define CONDUIT_NONE    -2
 
-typedef struct {
+typedef struct
+{
   UINT32 num_of_pe;
-}PE_INFO_HDR;
+} PE_INFO_HDR;
 
 /**
   @brief  structure instance for PE entry
 **/
-typedef struct {
-  UINT32   pe_num;    ///< PE Index
-  UINT32   attr;      ///< PE attributes
-  UINT64   mpidr;     ///< PE MPIDR
-  UINT32   pmu_gsiv;  ///< PMU Interrupt ID
-}PE_INFO_ENTRY;
+typedef struct
+{
+  UINT32 pe_num;   ///< PE Index
+  UINT32 attr;     ///< PE attributes
+  UINT64 mpidr;    ///< PE MPIDR
+  UINT32 pmu_gsiv; ///< PMU Interrupt ID
+} PE_INFO_ENTRY;
 
-typedef struct {
-  PE_INFO_HDR    header;
-  PE_INFO_ENTRY  pe_info[];
-}PE_INFO_TABLE;
+typedef struct
+{
+  PE_INFO_HDR header;
+  PE_INFO_ENTRY pe_info[];
+} PE_INFO_TABLE;
 
-VOID     pal_pe_data_cache_ops_by_va(UINT64 addr, UINT32 type);
+VOID pal_pe_data_cache_ops_by_va(UINT64 addr, UINT32 type);
 
-#define CLEAN_AND_INVALIDATE  0x1
-#define CLEAN                 0x2
-#define INVALIDATE            0x3
+#define CLEAN_AND_INVALIDATE 0x1
+#define CLEAN                0x2
+#define INVALIDATE           0x3
 
-typedef struct {
-  UINT32   gic_version;
-  UINT32   num_gicd;
-  UINT32   num_gicrd;
-  UINT32   num_its;
-  UINT32   num_msi_frame;
-  UINT32   num_gich;
-}GIC_INFO_HDR;
+typedef struct
+{
+  UINT32 gic_version;
+  UINT32 num_gicd;
+  UINT32 num_gicrd;
+  UINT32 num_its;
+  UINT32 num_msi_frame;
+  UINT32 num_gich;
+} GIC_INFO_HDR;
 
-typedef enum {
+typedef enum
+{
   ENTRY_TYPE_CPUIF = 0x1000,
   ENTRY_TYPE_GICD,
   ENTRY_TYPE_GICC_GICRD,
@@ -222,38 +256,42 @@ typedef enum {
   ENTRY_TYPE_GICITS,
   ENTRY_TYPE_GIC_MSI_FRAME,
   ENTRY_TYPE_GICH
-}GIC_INFO_TYPE_e;
+} GIC_INFO_TYPE_e;
 
 /* Interrupt Trigger Type */
-typedef enum {
+typedef enum
+{
   INTR_TRIGGER_INFO_LEVEL_LOW,
   INTR_TRIGGER_INFO_LEVEL_HIGH,
   INTR_TRIGGER_INFO_EDGE_FALLING,
   INTR_TRIGGER_INFO_EDGE_RISING
-}INTR_TRIGGER_INFO_TYPE_e;
+} INTR_TRIGGER_INFO_TYPE_e;
 
 /**
   @brief  structure instance for GIC entry
 **/
-typedef struct {
+typedef struct
+{
   UINT32 type;
   UINT64 base;
-  UINT32 entry_id;  /* This entry_id is used to tell component ID */
-  UINT64 length;  /* This length is only used in case of Re-Distributor Range Address length */
+  UINT32 entry_id; /* This entry_id is used to tell component ID */
+  UINT64 length;   /* This length is only used in case of Re-Distributor Range Address length */
   UINT32 flags;
   UINT32 spi_count;
   UINT32 spi_base;
-}GIC_INFO_ENTRY;
+} GIC_INFO_ENTRY;
 
 /**
   @brief  GIC Information Table
 **/
-typedef struct {
-  GIC_INFO_HDR   header;
-  GIC_INFO_ENTRY gic_info[];  ///< Array of Information blocks - instantiated for each GIC type
-}GIC_INFO_TABLE;
+typedef struct
+{
+  GIC_INFO_HDR header;
+  GIC_INFO_ENTRY gic_info[]; ///< Array of Information blocks - instantiated for each GIC type
+} GIC_INFO_TABLE;
 
-typedef struct {
+typedef struct
+{
   UINT32 s_el1_timer_flag;
   UINT32 ns_el1_timer_flag;
   UINT32 el2_timer_flag;
@@ -267,120 +305,135 @@ typedef struct {
   UINT32 num_platform_timer;
   UINT32 num_watchdog;
   UINT32 sys_timer_status;
-}TIMER_INFO_HDR;
+} TIMER_INFO_HDR;
 
 #define TIMER_TYPE_SYS_TIMER 0x2001
 
 /**
   @brief  structure instance for TIMER entry
 **/
-typedef struct {
+typedef struct
+{
   UINT32 type;
   UINT32 timer_count;
   UINT64 block_cntl_base;
-  UINT8  frame_num[8];
+  UINT8 frame_num[8];
   UINT64 GtCntBase[8];
   UINT64 GtCntEl0Base[8];
   UINT32 gsiv[8];
   UINT32 virt_gsiv[8];
   UINT32 flags[8];
-}TIMER_INFO_GTBLOCK;
+} TIMER_INFO_GTBLOCK;
 
-typedef enum {
+typedef enum
+{
   NON_PREFETCH_MEMORY = 0x0,
-  PREFETCH_MEMORY = 0x1
-}PCIE_MEM_TYPE_INFO_e;
+  PREFETCH_MEMORY     = 0x1
+} PCIE_MEM_TYPE_INFO_e;
 
-typedef struct {
-  TIMER_INFO_HDR     header;
+typedef struct
+{
+  TIMER_INFO_HDR header;
   TIMER_INFO_GTBLOCK gt_info[];
-}TIMER_INFO_TABLE;
+} TIMER_INFO_TABLE;
 
 /**
   @brief PCI Express Info Table
 **/
-typedef struct {
-  UINT64   ecam_base;     ///< ECAM Base address
-  UINT32   segment_num;   ///< Segment number of this ECAM
-  UINT32   start_bus_num; ///< Start Bus number for this ecam space
-  UINT32   end_bus_num;   ///< Last Bus number
-}PCIE_INFO_BLOCK;
+typedef struct
+{
+  UINT64 ecam_base;     ///< ECAM Base address
+  UINT32 segment_num;   ///< Segment number of this ECAM
+  UINT32 start_bus_num; ///< Start Bus number for this ecam space
+  UINT32 end_bus_num;   ///< Last Bus number
+} PCIE_INFO_BLOCK;
 
-typedef struct {
-  UINT32          num_entries;
+typedef struct
+{
+  UINT32 num_entries;
   PCIE_INFO_BLOCK block[];
-}PCIE_INFO_TABLE;
+} PCIE_INFO_TABLE;
 
-VOID *pal_pci_bdf_to_dev(UINT32 bdf);
-VOID pal_pci_read_config_byte(UINT32 bdf, UINT8 offset, UINT8 *data);
+VOID* pal_pci_bdf_to_dev(UINT32 bdf);
+VOID pal_pci_read_config_byte(UINT32 bdf, UINT8 offset, UINT8* data);
 
 /**
   @brief  Instance of SMMU INFO block
 **/
-typedef struct {
-  UINT32 arch_major_rev;  ///< Version 1 or 2 or 3
-  UINT64 base;              ///< SMMU Controller base address
-}SMMU_INFO_BLOCK;
+typedef struct
+{
+  UINT32 arch_major_rev; ///< Version 1 or 2 or 3
+  UINT64 base;           ///< SMMU Controller base address
+} SMMU_INFO_BLOCK;
 
-typedef struct {
+typedef struct
+{
   UINT32 segment;
   UINT32 ats_attr;
-  UINT32 cca;             //Cache Coherency Attribute
+  UINT32 cca; // Cache Coherency Attribute
   UINT64 smmu_base;
-}IOVIRT_RC_INFO_BLOCK;
+} IOVIRT_RC_INFO_BLOCK;
 
-typedef struct {
+typedef struct
+{
   UINT64 base;
   UINT32 overflow_gsiv;
   UINT32 node_ref;
 } IOVIRT_PMCG_INFO_BLOCK;
 
-typedef enum {
-  IOVIRT_NODE_ITS_GROUP = 0x00,
-  IOVIRT_NODE_NAMED_COMPONENT = 0x01,
+typedef enum
+{
+  IOVIRT_NODE_ITS_GROUP        = 0x00,
+  IOVIRT_NODE_NAMED_COMPONENT  = 0x01,
   IOVIRT_NODE_PCI_ROOT_COMPLEX = 0x02,
-  IOVIRT_NODE_SMMU = 0x03,
-  IOVIRT_NODE_SMMU_V3 = 0x04,
-  IOVIRT_NODE_PMCG = 0x05
-}IOVIRT_NODE_TYPE;
+  IOVIRT_NODE_SMMU             = 0x03,
+  IOVIRT_NODE_SMMU_V3          = 0x04,
+  IOVIRT_NODE_PMCG             = 0x05
+} IOVIRT_NODE_TYPE;
 
-typedef enum {
+typedef enum
+{
   IOVIRT_FLAG_DEVID_OVERLAP_SHIFT,
   IOVIRT_FLAG_STRID_OVERLAP_SHIFT,
   IOVIRT_FLAG_SMMU_CTX_INT_SHIFT,
-}IOVIRT_FLAG_SHIFT;
+} IOVIRT_FLAG_SHIFT;
 
-typedef struct {
+typedef struct
+{
   UINT32 input_base;
   UINT32 id_count;
   UINT32 output_base;
   UINT32 output_ref;
-}ID_MAP;
+} ID_MAP;
 
-typedef union {
+typedef union
+{
   UINT32 id[4];
   ID_MAP map;
-}NODE_DATA_MAP;
+} NODE_DATA_MAP;
 
 #define MAX_NAMED_COMP_LENGTH 256
 
-typedef union {
+typedef union
+{
   CHAR8 name[MAX_NAMED_COMP_LENGTH];
   IOVIRT_RC_INFO_BLOCK rc;
   IOVIRT_PMCG_INFO_BLOCK pmcg;
   UINT32 its_count;
   SMMU_INFO_BLOCK smmu;
-}NODE_DATA;
+} NODE_DATA;
 
-typedef struct {
+typedef struct
+{
   UINT32 type;
   UINT32 num_data_map;
   NODE_DATA data;
   UINT32 flags;
   NODE_DATA_MAP data_map[];
-}IOVIRT_BLOCK;
+} IOVIRT_BLOCK;
 
-typedef struct {
+typedef struct
+{
   UINT32 num_blocks;
   UINT32 num_smmus;
   UINT32 num_pci_rcs;
@@ -388,108 +441,119 @@ typedef struct {
   UINT32 num_its_groups;
   UINT32 num_pmcgs;
   IOVIRT_BLOCK blocks[];
-}IOVIRT_INFO_TABLE;
+} IOVIRT_INFO_TABLE;
 
-#define IOVIRT_NEXT_BLOCK(b) (IOVIRT_BLOCK *)((UINT8*)(&b->data_map[0]) + b->num_data_map * sizeof(NODE_DATA_MAP))
+#define IOVIRT_NEXT_BLOCK(b) \
+  (IOVIRT_BLOCK*)((UINT8*)(&b->data_map[0]) + b->num_data_map * sizeof(NODE_DATA_MAP))
 #define IOVIRT_CCA_MASK ~((UINT32)0)
 
 /**
   @brief SMMU Info Table
 **/
-typedef struct {
-  UINT32          smmu_num_ctrl;       ///< Number of SMMU Controllers in the system
-  SMMU_INFO_BLOCK smmu_block[]; ///< Array of Information blocks - instantiated for each SMMU Controller
-}SMMU_INFO_TABLE;
+typedef struct
+{
+  UINT32 smmu_num_ctrl; ///< Number of SMMU Controllers in the system
+  SMMU_INFO_BLOCK
+  smmu_block[]; ///< Array of Information blocks - instantiated for each SMMU Controller
+} SMMU_INFO_TABLE;
 
-typedef struct {
-  UINT32    num_usb;   ///< Number of USB  Controllers
-  UINT32    num_sata;  ///< Number of SATA Controllers
-  UINT32    num_uart;  ///< Number of UART Controllers
-  UINT32    num_all;   ///< Number of all PCI Controllers
-}PERIPHERAL_INFO_HDR;
+typedef struct
+{
+  UINT32 num_usb;  ///< Number of USB  Controllers
+  UINT32 num_sata; ///< Number of SATA Controllers
+  UINT32 num_uart; ///< Number of UART Controllers
+  UINT32 num_all;  ///< Number of all PCI Controllers
+} PERIPHERAL_INFO_HDR;
 
-typedef enum {
+typedef enum
+{
   PERIPHERAL_TYPE_USB = 0x2000,
   PERIPHERAL_TYPE_SATA,
   PERIPHERAL_TYPE_UART,
   PERIPHERAL_TYPE_OTHER,
   PERIPHERAL_TYPE_NONE
-}PER_INFO_TYPE_e;
+} PER_INFO_TYPE_e;
 
 /**
   @brief  Instance of peripheral info
 **/
-typedef struct {
-  PER_INFO_TYPE_e  type;  ///< PER_INFO_TYPE
-  UINT32         bdf;   ///< Bus Device Function
-  UINT64         base0; ///< Base Address of the controller
-  UINT64         base1; ///< Base Address of the controller
-  UINT32         irq;   ///< IRQ to install an ISR
-  UINT32         flags;
-  UINT32         msi;   ///< MSI Enabled
-  UINT32         msix;  ///< MSIX Enabled
-  UINT32         max_pasids;
-}PERIPHERAL_INFO_BLOCK;
+typedef struct
+{
+  PER_INFO_TYPE_e type; ///< PER_INFO_TYPE
+  UINT32 bdf;           ///< Bus Device Function
+  UINT64 base0;         ///< Base Address of the controller
+  UINT64 base1;         ///< Base Address of the controller
+  UINT32 irq;           ///< IRQ to install an ISR
+  UINT32 flags;
+  UINT32 msi;  ///< MSI Enabled
+  UINT32 msix; ///< MSIX Enabled
+  UINT32 max_pasids;
+} PERIPHERAL_INFO_BLOCK;
 
 /**
   @brief Peripheral Info Structure
 **/
-typedef struct {
-  PERIPHERAL_INFO_HDR     header;
-  PERIPHERAL_INFO_BLOCK   info[]; ///< Array of Information blocks - instantiated for each peripheral
-}PERIPHERAL_INFO_TABLE;
+typedef struct
+{
+  PERIPHERAL_INFO_HDR header;
+  PERIPHERAL_INFO_BLOCK info[]; ///< Array of Information blocks - instantiated for each peripheral
+} PERIPHERAL_INFO_TABLE;
 
 /**
   @brief MSI(X) controllers info structure
 **/
 
-typedef struct {
-  UINT32         vector_upper_addr; ///< Bus Device Function
-  UINT32         vector_lower_addr; ///< Base Address of the controller
-  UINT32         vector_data;       ///< Base Address of the controller
-  UINT32         vector_control;    ///< IRQ to install an ISR
-  UINT32         vector_irq_base;   ///< Base IRQ for the vectors in the block
-  UINT32         vector_n_irqs;     ///< Number of irq vectors in the block
-  UINT32         vector_mapped_irq_base; ///< Mapped IRQ number base for this MSI
-}PERIPHERAL_VECTOR_BLOCK;
+typedef struct
+{
+  UINT32 vector_upper_addr;      ///< Bus Device Function
+  UINT32 vector_lower_addr;      ///< Base Address of the controller
+  UINT32 vector_data;            ///< Base Address of the controller
+  UINT32 vector_control;         ///< IRQ to install an ISR
+  UINT32 vector_irq_base;        ///< Base IRQ for the vectors in the block
+  UINT32 vector_n_irqs;          ///< Number of irq vectors in the block
+  UINT32 vector_mapped_irq_base; ///< Mapped IRQ number base for this MSI
+} PERIPHERAL_VECTOR_BLOCK;
 
 typedef struct PERIPHERAL_VECTOR_LIST_STRUCT
 {
   PERIPHERAL_VECTOR_BLOCK vector;
-  struct PERIPHERAL_VECTOR_LIST_STRUCT *next;
-}PERIPHERAL_VECTOR_LIST;
+  struct PERIPHERAL_VECTOR_LIST_STRUCT* next;
+} PERIPHERAL_VECTOR_LIST;
 
-UINT32 pal_get_msi_vectors (UINT32 seg, UINT32 bus, UINT32 dev, UINT32 fn, PERIPHERAL_VECTOR_LIST **mvector);
+UINT32 pal_get_msi_vectors(UINT32 seg, UINT32 bus, UINT32 dev, UINT32 fn,
+                           PERIPHERAL_VECTOR_LIST** mvector);
 
-#define LEGACY_PCI_IRQ_CNT 4  // Legacy PCI IRQ A, B, C. and D
-#define MAX_IRQ_CNT 0xFFFF    // This value is arbitrary and may have to be adjusted
+#define LEGACY_PCI_IRQ_CNT 4      // Legacy PCI IRQ A, B, C. and D
+#define MAX_IRQ_CNT        0xFFFF // This value is arbitrary and may have to be adjusted
 
-typedef struct {
-  UINT32  irq_list[MAX_IRQ_CNT];
-  UINT32  irq_count;
+typedef struct
+{
+  UINT32 irq_list[MAX_IRQ_CNT];
+  UINT32 irq_count;
 } PERIFERAL_IRQ_LIST;
 
-typedef struct {
-  PERIFERAL_IRQ_LIST  legacy_irq_map[LEGACY_PCI_IRQ_CNT];
+typedef struct
+{
+  PERIFERAL_IRQ_LIST legacy_irq_map[LEGACY_PCI_IRQ_CNT];
 } PERIPHERAL_IRQ_MAP;
 
-UINT32 pal_pcie_get_root_port_bdf(UINT32 *seg, UINT32 *bus, UINT32 *dev, UINT32 *func);
+UINT32 pal_pcie_get_root_port_bdf(UINT32* seg, UINT32* bus, UINT32* dev, UINT32* func);
 UINT32 pal_pcie_max_pasid_bits(UINT32 bdf);
 
 /* Memory INFO table */
 
-#define MEM_MAP_SUCCESS  0x0
-#define MEM_MAP_NO_MEM   0x1
-#define MEM_MAP_FAILURE  0x2
-#define MEM_INFO_TBL_MAX_ENTRY  500 /* Maximum entries to be added in Mem info table*/
+#define MEM_MAP_SUCCESS        0x0
+#define MEM_MAP_NO_MEM         0x1
+#define MEM_MAP_FAILURE        0x2
+#define MEM_INFO_TBL_MAX_ENTRY 500 /* Maximum entries to be added in Mem info table*/
 
-VOID    *pal_mem_alloc(UINT32 size);
-VOID    *pal_mem_calloc(UINT32 num, UINT32 size);
-VOID    *pal_mem_alloc_cacheable(UINT32 bdf, UINT32 size, VOID **pa);
-VOID    pal_mem_free_cacheable(UINT32 bdf, UINT32 size, VOID *va, VOID *pa);
-VOID    *pal_mem_virt_to_phys(VOID *va);
-VOID    *pal_mem_phys_to_virt(UINT64 pa);
-VOID pal_mem_free(VOID *buffer);
+VOID* pal_mem_alloc(UINT32 size);
+VOID* pal_mem_calloc(UINT32 num, UINT32 size);
+VOID* pal_mem_alloc_cacheable(UINT32 bdf, UINT32 size, VOID** pa);
+VOID pal_mem_free_cacheable(UINT32 bdf, UINT32 size, VOID* va, VOID* pa);
+VOID* pal_mem_virt_to_phys(VOID* va);
+VOID* pal_mem_phys_to_virt(UINT64 pa);
+VOID pal_mem_free(VOID* buffer);
 
 UINT32 pal_pe_get_num();
 #endif

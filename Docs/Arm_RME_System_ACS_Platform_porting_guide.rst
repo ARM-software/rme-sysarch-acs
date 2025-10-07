@@ -189,7 +189,79 @@ This section provides information on executing tests from the UEFI Shell applica
 
 .. code-block:: shell
 
-   Shell> rme.efi [-v <n>] [-skip <x,y,z>] [-t <test name>] [-m <module name>]
+   Shell> fsX:Rme.efi [-v <n>] [-skip <x,y,z>] [-t <test name>] [-m <module name>] [-cfg <plat>_config.ini]
+
+**Parser.efi and System configuration configuration**
+
+Partners are encouraged to run the parser application to prepare the system configuration through INI before executing the ACS:
+
+.. code-block:: shell
+
+   Shell> fsX:Parser.efi
+   # Optional: point to a specific INI
+   Shell> fsX:Parser.efi -cfg <plat>_config.ini
+
+The parser loads the INI, allows edits, and saves the file. It prints the exact command you should run, instead of launching RME directly. Example output:
+
+::
+
+   Run the ACS manually using:
+     Rme.efi -cfg <plat>_config.ini
+
+When launched with ``-cfg``, RME reads the following sections from the INI:
+
+- [RME_COMMAND_CONFIG]: Verbosity, log filename, test/module selection, skips
+- [PLATFORM_CONFIG]: Addresses, counts, platform flags, protected regions
+
+Notes:
+
+- If ``-cfg`` is present, other shell flags are ignored; the INI is authoritative. Arrays for modules/tests/skips are replaced each run (no stale state across re‑runs).
+- Legacy shell usage is still supported when ``-cfg`` is not provided.
+- At start, RME prints a concise [CFG] summary of applied settings, and a selection summary showing Modules(n)/Tests(n)/Skips(n).
+
+Runtime platform configuration (UEFI vs Baremetal)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+- UEFI: Platform values are applied at runtime by the PAL from the Parser‑installed configuration table/INI. The previous runtime macro indirection is not used. The VAL helpers ``val_get_*()`` are the supported way to consume platform values in UEFI builds; they call PAL getters which read from the INI with compile-time defaults as fallback.
+- Baremetal/Emulation: ``val_get_*()`` resolves to compile-time ``PLAT_*`` macros so behavior is identical to previous releases.
+
+Running Parser.efi will:
+
+- Load the configuration file: ``base-revc_config.ini`` (or a platform file at root like ``rdv3_config.ini``)
+- Show a summary of ``[RME_COMMAND_CONFIG]`` values and allow optional editing
+- Install a runtime configuration table (CT) that RME will consume
+- Print the exact ``Rme.efi -cfg <ini>`` command to run next (Parser no longer auto‑launches RME)
+
+EL3–UEFI coordination (authoritative values)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+- During UEFI runs, EL3 is authoritative for certain values required by EL3 services:
+  - The shared structure base (``PLAT_SHARED_ADDRESS``) is chosen by EL3. UEFI does not override this via INI.
+  - The SMMUv3 root register page offset (``SMMUV3_ROOT_REG_OFFSET``) used by EL2 to compute the root page mapping is taken from EL3 via the shared structure when available.
+  - The EL3 free-memory base used by EL3 services for dynamic allocations (``PLAT_FREE_MEM_START``); UEFI treats this as read‑only.
+  - The EL3-managed SMMU test memory pool base (``PLAT_FREE_MEM_SMMU``) and its size (``PLAT_MEMORY_POOL_SIZE``); these are advertised by EL3 and must not be overridden by UEFI configuration.
+  - The platform selector used by EL3 to choose default address sets (``PLATFORM_BASEFVP``). This is an EL3 build-time choice (e.g., Base FVP vs RDV3) and is not configurable from UEFI; UEFI should rely on the concrete values EL3 publishes.
+- The UEFI application calls an SMC early (``RME_MAP_SHARED_MEM``) to let EL3 map the canonical shared base and populate the shared structure with current values (e.g., free memory base, SMMU pool base/size, SMMU root offset).
+- Bare‑metal runs keep using compile‑time macros (``PLAT_*``, ``SMMUV3_ROOT_REG_OFFSET``) and do not invoke the UEFI SMC flow.
+
+**What to package on the FAT image**
+
+::
+
+   Rme.efi
+   Parser.efi
+   base-revc_config.ini  (or rdv3_config.ini or own platform INI)
+
+.. code-block:: shell
+
+   Shell> fsX:Rme.efi -v <level> -f <log> -m <modules> -t <tests> -skip <list>
+
+In this case, RME will consume the runtime configuration table if installed, or fall back to the INI
+file if the table is absent. You can also pass an explicit INI path to RME directly:
+
+.. code-block:: shell
+
+   Shell> fsX:Rme.efi -cfg <plat>_config.ini
 
 **Argument Descriptions**
 

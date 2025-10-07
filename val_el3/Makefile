@@ -44,6 +44,6 @@ $(ASM_OBJS): %.o : %.S
 $(C_OBJS): %.o : %.c
 	$(C_COMPILER) $(INCDIRS) $(C_FLAGS) -Wp,-MD,$*.d -MT $@ -MP -c $< -o $@
 
-.PHONEY: clean
+.PHONY: clean
 clean:
-	rm -f $(BL31_ELF) $(BL31_DUMP) $(BL31_BIN) $(ASM_OBJS) $(C_OBJS) $(LINKERFILE)
+	rm -f $(BL31_ELF) $(BL31_DUMP) $(BL31_BIN) $(ASM_OBJS) $(C_OBJS)

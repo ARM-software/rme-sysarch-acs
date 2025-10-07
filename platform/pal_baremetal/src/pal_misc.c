@@ -19,7 +19,7 @@
 #include <stdarg.h>
 #include "include/pal_pcie_enum.h"
 #include "include/pal_common_support.h"
-#include "platform_image_def.h"
+#include "pal_image_def.h"
 #include "pal_pl011_uart.h"
 
 #define __ADDR_ALIGN_MASK(a, mask)    (((a) + (mask)) & ~(mask))

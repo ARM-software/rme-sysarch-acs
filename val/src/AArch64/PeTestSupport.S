@@ -19,8 +19,8 @@
 /* Private worker functions for ASM_PFX() */
 #define _CONCATENATE(a, b)  __CONCATENATE(a, b)
 #define __CONCATENATE(a, b) a ## b
-#include "include/mem_interface.h"
-#include "include/rme_std_smc.h"
+#include "include/val_mem_interface.h"
+#include "include/val_std_smc.h"
 
 /* The __USER_LABEL_PREFIX__ macro predefined by GNUC represents
    the prefix on symbols in assembly language.*/

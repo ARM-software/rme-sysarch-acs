@@ -15,13 +15,13 @@
  * limitations under the License.
  **/
 
-#include "val/include/rme_acs_val.h"
-#include "val/include/rme_acs_pe.h"
-#include "val/include/rme_acs_common.h"
+#include "val/include/val.h"
+#include "val/include/val_pe.h"
+#include "val/include/val_common.h"
 
-#include "val/include/rme_test_entry.h"
+#include "val/include/val_test_entry.h"
 #include "val/include/val_interface.h"
-#include "val/include/rme_acs_el32.h"
+#include "val/include/val_el32.h"
 
 #define NUM_PAS 4
 #define NUM_MTE_RGN 3
@@ -39,7 +39,6 @@
 static
 void payload(void)
 {
-  struct_sh_data *shared_data = (struct_sh_data *) val_get_shared_address();
   uint32_t index = val_pe_get_index_mpid(val_pe_get_mpid()), attr;
   uint64_t pas_list[4] = {REALM_PAS, NONSECURE_PAS, SECURE_PAS, ROOT_PAS}, VA, size;
   uint64_t mte_base, mte_size, mte_mid, mte_end;

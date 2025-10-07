@@ -19,52 +19,56 @@
 #define __VAL_INTERFACE_H__
 
 #include "pal_interface.h"
+#if defined(TARGET_EMULATION) || defined(TARGET_BM_BOOT)
+#include <stdint.h>
+#endif
 
 #ifdef TARGET_EMULATION
-#define TRUE 1
+#define TRUE  1
 #define FALSE 0
-#define BIT0 (1)
-#define BIT1 (1 << 1)
-#define BIT4 (1 << 4)
-#define BIT6 (1 << 6)
+#define BIT0  (1)
+#define BIT1  (1 << 1)
+#define BIT4  (1 << 4)
+#define BIT6  (1 << 6)
 #define BIT14 (1 << 14)
 #define BIT29 (1 << 29)
 #endif
 
 /* set G_PRINT_LEVEL to one of the below values in your application entry
   to control the verbosity of the prints */
-#define ACS_PRINT_ALWAYS  6    /* No log-level prefix or newline. For inline/multi-part prints */
-#define ACS_PRINT_ERR   5      /* Only Errors. use this to de-clutter the
-                                  terminal and focus only on specifics */
-#define ACS_PRINT_WARN  4      /* Only warnings & errors. use this to de-clutter
-                                  the terminal and focus only on specifics */
-#define ACS_PRINT_TEST  3      /* Test description and result descriptions. THIS is DEFAULT */
-#define ACS_PRINT_DEBUG 2      /* For Debug statements. contains register dumps etc */
-#define ACS_PRINT_INFO  1      /* Print all statements. Do not use unless really needed */
+#define ACS_PRINT_ALWAYS 6 /* No log-level prefix or newline. For inline/multi-part prints */
+#define ACS_PRINT_ERR                          \
+  5 /* Only Errors. use this to de-clutter the \
+       terminal and focus only on specifics */
+#define ACS_PRINT_WARN                                                      \
+  4                       /* Only warnings & errors. use this to de-clutter \
+                             the terminal and focus only on specifics */
+#define ACS_PRINT_TEST  3 /* Test description and result descriptions. THIS is DEFAULT */
+#define ACS_PRINT_DEBUG 2 /* For Debug statements. contains register dumps etc */
+#define ACS_PRINT_INFO  1 /* Print all statements. Do not use unless really needed */
 
-#define ACS_STATUS_FAIL      0x90000000
-#define ACS_STATUS_ERR       0xEDCB1234  //some impropable value?
-#define ACS_STATUS_SKIP      0x10000000
-#define ACS_STATUS_PASS      0x0
-#define ACS_INVALID_INDEX    0xFFFFFFFF
+#define ACS_STATUS_FAIL   0x90000000
+#define ACS_STATUS_ERR    0xEDCB1234 // some impropable value?
+#define ACS_STATUS_SKIP   0x10000000
+#define ACS_STATUS_PASS   0x0
+#define ACS_INVALID_INDEX 0xFFFFFFFF
 
-#define NOT_IMPLEMENTED         0x4B1D  /* Feature or API not imeplemented */
+#define NOT_IMPLEMENTED 0x4B1D /* Feature or API not imeplemented */
 
-#define VAL_EXTRACT_BITS(data, start, end) ((data >> start) & ((1ul << (end-start+1))-1))
+#define VAL_EXTRACT_BITS(data, start, end) ((data >> start) & ((1ul << (end - start + 1)) - 1))
 
 #define EXECUTE_TEST_SENTINEL   "SINGLE_TEST_NONE"
 #define EXECUTE_MODULE_SENTINEL "SINGLE_MODULE_NONE"
-#define SKIP_TEST_SENTINEL         "SKIP_TEST_NONE"
+#define SKIP_TEST_SENTINEL      "SKIP_TEST_NONE"
 
-#define USER_SMC_IMM     0x100
-#define ARM_ACS_SMC_FID  0xC2000060
+#define USER_SMC_IMM    0x100
+#define ARM_ACS_SMC_FID 0xC2000060
 
-#define FILENAME (__builtin_strrchr("/" __FILE__, '/') + 1)
+#define FILENAME                       (__builtin_strrchr("/" __FILE__, '/') + 1)
 #define val_print(level, string, data) val_log_context(level, string, data, FILENAME, __LINE__)
 
 /* GENERIC VAL APIs */
-void UserCallSMC(uint64_t smc_fid, uint64_t service, uint64_t arg0,
-                     uint64_t arg1, uint64_t arg2);
+void UserCallSMC(uint64_t smc_fid, uint64_t service, uint64_t arg0, uint64_t arg1, uint64_t arg2);
 uint32_t val_configure_acs(void);
 void val_allocate_shared_mem(void);
 void val_free_shared_mem(void);
@@ -73,13 +77,13 @@ void val_log_context(uint32_t level, char8_t *string, uint64_t data, const char 
 void val_set_test_data(uint32_t index, uint64_t addr, uint64_t test_data);
 void val_get_test_data(uint32_t index, uint64_t *data0, uint64_t *data1);
 uint32_t val_strncmp(char8_t *str1, char8_t *str2, uint32_t len);
-void    *val_memcpy(void *dest_buffer, void *src_buffer, uint32_t len);
+void *val_memcpy(void *dest_buffer, void *src_buffer, uint32_t len);
 uint32_t val_generate_stream_id(void);
 uint64_t val_time_delay_ms(uint64_t time_ms);
 
 /* VAL PE APIs */
 uint32_t val_pe_create_info_table(uint64_t *pe_info_table);
-void     val_pe_free_info_table(void);
+void val_pe_free_info_table(void);
 uint32_t val_pe_get_num(void);
 uint64_t val_pe_get_mpid_index(uint32_t index);
 uint64_t val_pe_get_mpid(void);
@@ -87,15 +91,15 @@ uint32_t val_pe_get_index_mpid(uint64_t mpid);
 uint32_t val_pe_install_esr(uint32_t exception_type, void (*esr)(uint64_t, void *));
 uint64_t val_get_primary_mpidr(void);
 
-void     val_execute_on_pe(uint32_t index, void (*payload)(void), uint64_t args);
-int      val_suspend_pe(uint64_t entry, uint32_t context_id);
+void val_execute_on_pe(uint32_t index, void (*payload)(void), uint64_t args);
+int val_suspend_pe(uint64_t entry, uint32_t context_id);
 
 /* Memory Tests APIs */
-#define MEM_ALIGN_4K       0x1000
-#define MEM_ALIGN_8K       0x2000
-#define MEM_ALIGN_16K      0x4000
-#define MEM_ALIGN_32K      0x8000
-#define MEM_ALIGN_64K      0x10000
+#define MEM_ALIGN_4K  0x1000
+#define MEM_ALIGN_8K  0x2000
+#define MEM_ALIGN_16K 0x4000
+#define MEM_ALIGN_32K 0x8000
+#define MEM_ALIGN_64K 0x10000
 
 /* VAL RME APIs */
 uint32_t val_rme_execute_tests(uint32_t num_pe);
@@ -133,14 +137,17 @@ uint32_t val_smmu_rlm_get_mecidw(uint64_t smmu_base);
 uint32_t val_cmo_to_poe(uint64_t PA);
 uint32_t val_rlm_configure_mecid(uint32_t mecid);
 uint32_t val_smmu_rlm_configure_mecid(smmu_master_attributes_t *smmu_attr, uint32_t mecid);
+void val_map_shared_mem_el3(uint64_t shared_addr);
 
 /* PCIe VAL APIs */
-void     val_pcie_create_info_table(uint64_t *pcie_info_table);
+void val_pcie_create_info_table(uint64_t *pcie_info_table);
 uint32_t val_pcie_create_device_bdf_table(void);
-void     val_pcie_free_info_table(void);
+void val_pcie_free_info_table(void);
 
-//Legacy system VAL APIs
+// Legacy system VAL APIs
 uint32_t val_legacy_execute_tests(uint32_t num_pe);
+ROOT_REGSTR_TABLE *val_root_reg_info_table(void);
+void val_root_register_create_info_table(uint64_t *root_registers_cfg);
 
 /* GIC VAL APIs */
 uint32_t val_gic_create_info_table(uint64_t *gic_info_table);
@@ -161,9 +168,8 @@ typedef enum {
   GIC_INFO_NUM_MSI_FRAME
 } GIC_INFO_e;
 
-uint32_t
-val_gic_get_info(GIC_INFO_e type);
-void     val_gic_free_info_table(void);
+uint32_t val_gic_get_info(GIC_INFO_e type);
+void val_gic_free_info_table(void);
 uint32_t val_gic_execute_tests(uint32_t num_pe);
 uint32_t val_gic_install_isr(uint32_t int_id, void (*isr)(void));
 uint32_t val_gic_end_of_interrupt(uint32_t int_id);
@@ -176,62 +182,66 @@ void val_gic_free_irq(uint32_t irq_num, uint32_t mapped_irq_num);
 void val_gic_set_intr_trigger(uint32_t int_id, INTR_TRIGGER_INFO_TYPE_e trigger_type);
 uint32_t val_gic_get_intr_trigger_type(uint32_t int_id, INTR_TRIGGER_INFO_TYPE_e *trigger_type);
 uint32_t val_gic_its_configure(void);
-uint32_t val_gic_request_msi(uint32_t bdf, uint32_t device_id, uint32_t its_id,
-                             uint32_t int_id, uint32_t msi_index);
-void val_gic_free_msi(uint32_t bdf, uint32_t device_id, uint32_t its_id,
-                      uint32_t int_id, uint32_t msi_index);
+uint32_t val_gic_request_msi(uint32_t bdf, uint32_t device_id, uint32_t its_id, uint32_t int_id,
+                             uint32_t msi_index);
+void val_gic_free_msi(uint32_t bdf, uint32_t device_id, uint32_t its_id, uint32_t int_id,
+                      uint32_t msi_index);
 uint32_t val_gic_its_get_base(uint32_t its_id, uint64_t *its_base);
 
 /*TIMER VAL APIs */
-void     val_timer_create_info_table(uint64_t *timer_info_table);
-void     val_timer_free_info_table(void);
+void val_timer_create_info_table(uint64_t *timer_info_table);
+void val_timer_free_info_table(void);
 
 /* RME-DA APIs */
 uint32_t val_rme_da_execute_tests(uint32_t num_pe);
 
 /* IO-VIRT APIs */
-void     val_iovirt_create_info_table(uint64_t *iovirt_info_table);
-void     val_iovirt_free_info_table(void);
+void val_iovirt_create_info_table(uint64_t *iovirt_info_table);
+void val_iovirt_free_info_table(void);
 
 /* SMMU API */
 uint32_t val_smmu_execute_tests(uint32_t num_pe);
 
+/* Initialize runtime-dependent VAL globals (free mem, shared data, nvm). */
+void val_init_runtime_params(void);
+
 /* POWER and WAKEUP APIs */
 typedef enum {
-    RME_POWER_SEM_B = 1,
-    RME_POWER_SEM_c,
-    RME_POWER_SEM_D,
-    RME_POWER_SEM_E,
-    RME_POWER_SEM_F,
-    RME_POWER_SEM_G,
-    RME_POWER_SEM_H,
-    RME_POWER_SEM_I
+  RME_POWER_SEM_B = 1,
+  RME_POWER_SEM_c,
+  RME_POWER_SEM_D,
+  RME_POWER_SEM_E,
+  RME_POWER_SEM_F,
+  RME_POWER_SEM_G,
+  RME_POWER_SEM_H,
+  RME_POWER_SEM_I
 } RME_POWER_SEM_e;
 
 uint32_t val_power_enter_semantic(RME_POWER_SEM_e semantic);
 uint32_t val_wakeup_execute_tests(uint32_t level, uint32_t num_pe);
 
 /* Peripheral Tests APIs */
-void     val_peripheral_create_info_table(uint64_t *peripheral_info_table);
-void     val_peripheral_free_info_table(void);
+void val_peripheral_create_info_table(uint64_t *peripheral_info_table);
+void val_peripheral_free_info_table(void);
 
-#define MEM_ATTR_UNCACHED  0x2000
-#define MEM_ATTR_CACHED    0x1000
+#define MEM_ATTR_UNCACHED 0x2000
+#define MEM_ATTR_CACHED   0x1000
 
 /* Identify memory type using MAIR attribute, refer to ARM ARM VMSA for details */
 
-#define MEM_NORMAL_WB_IN_OUT(attr) (((attr & 0xcc) == 0xcc) || (((attr & 0x7) >= 5) && (((attr >> 4) & 0x7) >= 5)))
+#define MEM_NORMAL_WB_IN_OUT(attr) \
+  (((attr & 0xcc) == 0xcc) || (((attr & 0x7) >= 5) && (((attr >> 4) & 0x7) >= 5)))
 #define MEM_NORMAL_NC_IN_OUT(attr) (attr == 0x44)
-#define MEM_DEVICE(attr) ((attr & 0xf0) == 0)
-#define MEM_SH_INNER(sh) (sh == 0x3)
+#define MEM_DEVICE(attr)           ((attr & 0xf0) == 0)
+#define MEM_SH_INNER(sh)           (sh == 0x3)
 
 /* Secure mode EL3 Firmware tests */
 
 typedef struct {
-  uint64_t   test_index;
-  uint64_t   test_arg01;
-  uint64_t   test_arg02;
-  uint64_t   test_arg03;
+  uint64_t test_index;
+  uint64_t test_arg01;
+  uint64_t test_arg02;
+  uint64_t test_arg03;
 } RME_SMC_t;
 
 /**
@@ -242,17 +252,13 @@ typedef struct {
   for both input and output values.
 
 **/
-void
-ArmCallSmc(
-  ARM_SMC_ARGS  *Args,
-  int32_t      Conduit
-  );
+void ArmCallSmc(ARM_SMC_ARGS *Args, int32_t Conduit);
 
-void     val_secure_call_smc(RME_SMC_t *smc);
+void val_secure_call_smc(RME_SMC_t *smc);
 uint32_t val_secure_get_result(RME_SMC_t *smc, uint32_t timeout);
 uint32_t val_secure_execute_tests(uint32_t level, uint32_t num_pe);
 uint32_t val_secure_trusted_firmware_init(void);
-void     val_system_reset(void);
+void val_system_reset(void);
 
 /* RME-DPT APIs */
 uint32_t val_rme_dpt_execute_tests(uint32_t num_pe);
@@ -260,4 +266,61 @@ uint32_t val_rme_dpt_execute_tests(uint32_t num_pe);
 /* RME-MEC APIs */
 uint32_t val_rme_mec_execute_tests(uint32_t num_pe);
 
+/* System Configuration */
+/* System Configuration
+ * UEFI: fetch from runtime config via pal_get_*.
+ * Baremetal/Emulation: use compile-time PLAT_* macros.
+ */
+#if !defined(TARGET_EMULATION) && !defined(TARGET_BM_BOOT)
+/* UEFI prototypes use portable uint64_t (mapped in this header for UEFI). */
+uint64_t pal_get_root_smem_base(void);
+uint64_t pal_get_realm_smem_base(void);
+uint64_t pal_get_mte_protected_region_base(void);
+uint64_t pal_get_mte_protected_region_size(void);
+uint64_t pal_get_msd_save_restore_mem(void);
+uint64_t pal_get_rme_rnvs_mailbox_mem(void);
+uint64_t pal_get_rt_wdog_ctrl(void);
+uint64_t pal_get_rt_wdog_int_id(void);
+uint64_t pal_get_rme_acs_nvm_mem(void);
+uint64_t pal_get_free_mem_start(void);
+uint64_t pal_get_free_va_test(void);
+uint64_t pal_get_free_pa_test(void);
+uint64_t pal_get_free_mem_smmu(void);
+uint64_t pal_get_memory_pool_size(void);
+uint64_t pal_get_smmu_root_reg_offset(void);
+
+#define val_get_root_smem_base()            pal_get_root_smem_base()
+#define val_get_realm_smem_base()           pal_get_realm_smem_base()
+#define val_get_mte_protected_region_base() pal_get_mte_protected_region_base()
+#define val_get_mte_protected_region_size() pal_get_mte_protected_region_size()
+#define val_get_msd_save_restore_mem()      pal_get_msd_save_restore_mem()
+#define val_get_rme_rnvs_mailbox_mem()      pal_get_rme_rnvs_mailbox_mem()
+#define val_get_rt_wdog_ctrl()              pal_get_rt_wdog_ctrl()
+#define val_get_rt_wdog_int_id()            pal_get_rt_wdog_int_id()
+#define val_get_rme_acs_nvm_mem()           pal_get_rme_acs_nvm_mem()
+#define val_get_free_mem_start()            pal_get_free_mem_start()
+#define val_get_free_va_test()              pal_get_free_va_test()
+#define val_get_free_pa_test()              pal_get_free_pa_test()
+#define val_get_free_mem_smmu()             pal_get_free_mem_smmu()
+#define val_get_memory_pool_size()          pal_get_memory_pool_size()
+#define val_get_smmu_root_reg_offset()      pal_get_smmu_root_reg_offset()
+#else
+/* Baremetal/Emulation keep compile-time constants */
+#define val_get_root_smem_base()            PLAT_ROOT_SMEM_BASE
+#define val_get_realm_smem_base()           PLAT_REALM_SMEM_BASE
+#define val_get_mte_protected_region_base() PLAT_MTE_PROTECTED_REGION_BASE
+#define val_get_mte_protected_region_size() PLAT_MTE_PROTECTED_REGION_SIZE
+#define val_get_msd_save_restore_mem()      PLAT_MSD_SAVE_RESTORE_MEM
+#define val_get_rme_rnvs_mailbox_mem()      PLAT_RME_RNVS_MAILBOX_MEM
+#define val_get_rt_wdog_ctrl()              PLAT_RT_WDOG_CTRL
+#define val_get_rt_wdog_int_id()            PLAT_RT_WDOG_INT_ID
+#define val_get_rme_acs_nvm_mem()           PLAT_RME_ACS_NVM_MEM
+#define val_get_free_mem_start()            PLAT_FREE_MEM_START
+#define val_get_free_va_test()              PLAT_FREE_VA_TEST
+#define val_get_free_pa_test()              PLAT_FREE_PA_TEST
+#define val_get_free_mem_smmu()             PLAT_FREE_MEM_SMMU
+#define val_get_memory_pool_size()          PLAT_MEMORY_POOL_SIZE
+#define val_get_smmu_root_reg_offset()      SMMUV3_ROOT_REG_OFFSET
 #endif
+
+#endif /* __VAL_INTERFACE_H__ */

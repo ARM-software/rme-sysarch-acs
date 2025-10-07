@@ -16,9 +16,9 @@
 **/
 
 #include "val/include/val_interface.h"
-#include "val/include/rme_acs_pe.h"
-#include "val/include/rme_acs_val.h"
-#include "val/include/rme_acs_memory.h"
+#include "val/include/val_pe.h"
+#include "val/include/val.h"
+#include "val/include/val_memory.h"
 #include "RmeAcs.h"
 
 uint32_t  g_enable_pcie_tests;
@@ -231,6 +231,8 @@ ShellAppMainrme(
   val_print(ACS_PRINT_ALWAYS, " Version: Issue B.a ACS EAC   \n", 0);
 
   val_print(ACS_PRINT_ALWAYS, " (Print level is %2d)\n\n", g_print_level);
+  /* Initialize runtime-dependent globals (free mem, shared data, NVM). */
+  val_init_runtime_params();
 
   g_skip_test_str = g_skip_array;
 

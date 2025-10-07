@@ -16,7 +16,7 @@
 **/
 
 #include "include/pal_common_support.h"
-#include "FVP/include/platform_override_struct.h"
+#include "FVP/include/pal_override_struct.h"
 
 extern PLATFORM_OVERRIDE_GIC_INFO_TABLE platform_gic_cfg;
 

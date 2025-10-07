@@ -31,7 +31,7 @@
 #include <Protocol/PciRootBridgeIo.h>
 
 #include "include/pal_uefi.h"
-#include "include/rme_pcie_enum.h"
+#include "include/pal_pcie_enum.h"
 
 static EFI_ACPI_MEMORY_MAPPED_CONFIGURATION_BASE_ADDRESS_TABLE_HEADER *gMcfgHdr;
 

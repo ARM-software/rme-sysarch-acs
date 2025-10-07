@@ -1,5 +1,4 @@
-# Realm Management Extension System Architecture - Architecture Compliance Suite
-
+#Realm Management Extension System Architecture - Architecture Compliance Suite
 
 ## Realm Management Extension System Architecture
 **Realm Management Extension System Architecture** (RME) is an extension to the Armv9 A-profile architecture. RME adds the following features:
@@ -38,6 +37,7 @@ Most of the tests are executed from UEFI Shell by executing the RME UEFI shell a
 ## Target platforms
   Any RME enabled ARM system platform.
 
+
 ## ACS build steps - UEFI Shell application
 
 ### Prerequisites
@@ -57,7 +57,7 @@ For more information, see [arm RME System ACS Validation Methodology document](D
 
 - Partner needs to provide their inputs to these following files...
    - platform/pal_baremetal/FVP/include/platform_override_fvp.h -> For Bare-metal platform,
-   - platform/pal_uefi/include/platform_overrride_fvp.h -> For UEFI platform.
+   - platform/pal_uefi/include/platform_overrride.h -> For UEFI platform.
 - Any mainstream Linux based OS distribution running on a x86 or aarch64 machine.
 - git clone --branch edk2-stable202208 --depth 1 https://github.com/tianocore/edk2
 - git clone https://github.com/tianocore/edk2-libc [ Checkout SHA: 61687168fe02ac4d933a36c9145fdd242ac424d1]
@@ -95,6 +95,76 @@ The EFI executable file is generated at <edk2_path>/Build/Shell/DEBUG_GCC49/AARC
 The execution of the compliance suite varies depending on the test environment. These steps assume that the test suite is invoked through the ACS UEFI shell application.
 
 ##For details about the RME System ACS UEFI Shell application, see [Arm RME System ACS Porting Guide](Docs/Arm_RME_System_ACS_Platform_porting_guide.rst)
+
+### UEFI Shell (Parser.efi flow)
+
+Package an image with the three files at the FAT root (flat layout):
+
+```
+Rme.efi
+Parser.efi
+base-revc_config.ini    # or rdv3_config.ini
+```
+
+Example (loop-mount):
+
+```bash
+mkfs.vfat -C -n HD0 image.img 2097152
+
+sudo mkdir -p /mnt/rme
+sudo mount image.img /mnt/rme
+
+sudo cp <path-to>/Rme.efi                       /mnt/rme/
+sudo cp <path-to>/Parser.efi                    /mnt/rme/
+sudo cp <path-to>/base-revc_config.ini          /mnt/rme/
+# or for RDV3:
+#sudo cp < path - to> / rdv3_config.ini / mnt / rme /
+
+sudo umount /mnt/rme
+```
+
+Equivalent using mtools:
+
+```bash
+mcopy -i image.img <path-to>/Rme.efi                         ::/
+mcopy -i image.img <path-to>/Parser.efi                      ::/
+mcopy -i image.img <path-to>/base-revc_config.ini            ::/
+# or:
+#mcopy - i image.img < path - to> / rdv3_config.ini :: /
+```
+
+Run on the UEFI Shell:
+
+```
+Shell> fsX:\Parser.efi
+# Optional: point to a specific INI
+Shell> fsX:\Parser.efi -cfg \base-revc_config.ini
+# Note: Parser no longer auto-launches RME; it prints the exact command
+# you should run. Example output:
+#   Run the ACS manually using:
+#     Rme.efi -cfg \rdv3_config.ini
+```
+
+The parser loads `\base-revc_config.ini` (or the platform INI), lets you edit values, saves the file, and then prints the command to run:
+
+  Rme.efi -cfg <ini>
+
+Notes:
+- `Rme.efi -cfg <ini>` reads both [RME_COMMAND_CONFIG] (verbosity, logs, test selection) and [PLATFORM_CONFIG] (addresses, counts, flags) from the INI.
+- Partners can still run Rme.efi with full legacy command line (without `-cfg`). When `-cfg` is present, INI values take precedence and other flags are ignored. Arrays for modules/tests/skips are replaced (no stale state across re‑runs).
+
+At startup, `Rme.efi` prints a concise [CFG] summary of applied platform values and an explicit selection summary:
+- Modules(n): …
+- Tests(n): …
+- Skips(n): …
+
+Runtime platform configuration (UEFI)
+- PAL reads platform values from the Parser‑installed runtime table/INI at runtime. Compile‑time defaults remain as fallback.
+- The VAL accessors `val_get_*()` are used throughout to avoid direct use of `PLAT_*` macros in UEFI flows. These resolve to runtime getters on UEFI, and to compile-time macros on baremetal.
+- EL3 is authoritative for certain values during UEFI runs:
+  - The shared structure base (PLAT_SHARED_ADDRESS) is chosen by EL3 and is not overridden by INI.
+  - The SMMUv3 root register page offset (SMMUV3_ROOT_REG_OFFSET) used by EL2 to map the root page is taken from EL3 via the shared structure when available.
+  - UEFI calls an SMC (RME_MAP_SHARED_MEM) early to let EL3 map and populate the shared structure.
 
 ### Post-Silicon
 
@@ -145,15 +215,12 @@ Arm RME ACS test suite may run at higher privilege level. An attacker may utiliz
 ## Limitations
 
 Below tests are not qualified in model. These are expected to pass in any valid RME system.
-  - test_pool/legacy_system/test_ls001.c - Require Legacy TZ support.
-  - test_pool/legacy_system/test_ls002.c - Require Legacy TZ Support.
-  - test_pool/legacy_system/test_ls003.c - Require Legacy TZ Support.
-  - test_pool/legacy_system/test_ls004.c - Require Legacy TZ Support.
+  - test_pool/legacy_system/*.c - Require Legacy TZ support.
   - test_pool/rme/pas_filter_check_in_inactive_mode.c - Model Issue.
-  - test_pool/rme/test_rme022.c - Require NS encryption to be programmable.
-  - test_pool/rme/test_rme015.c - Model limitation.
-  - test_pool/da/test_da019.c - ImpDef RP write-protect and full-protect registers not present in Model.
-  - test_pool/da/test_da020.c - ImpDef interconnect registers not present in Model.
+  - test_pool/rme/rme_ns_encryption_is_immutable.c - Require NS encryption to be programmable.
+  - test_pool/rme/rme_data_encryption_with_different_tweak.c - Model limitation.
+  - test_pool/da/da_rootport_write_protect_full_protect_property.c - ImpDef RP write-protect and full-protect registers not present in Model.
+  - test_pool/da/da_interconnect_regs_rmsd_protected.c - ImpDef interconnect registers not present in Model.
 
 ## License
 RME System ACS is distributed under Apache v2.0 License.

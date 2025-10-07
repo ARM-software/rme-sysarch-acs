@@ -20,7 +20,7 @@ To adapt this bare-metal platform code to your own hardware:
 
 3. Port required APIs in the relevant files under the same directory.
 
-4. Update `platform_override_<platform_name>.h` with your platform-specific macro definitions.
+4. Update `pal_override_<platform_name>.h` and `pal_el3_config.h` with your platform-specific macro definitions.
 
 5. Use the macro patterns documented below to understand how to provide your hardware's configuration.
 

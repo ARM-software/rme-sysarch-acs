@@ -25,7 +25,7 @@
 #include "Include/IndustryStandard/Pci22.h"
 #include <Protocol/PciIo.h>
 
-#include "include/rme_pcie_enum.h"
+#include "include/pal_pcie_enum.h"
 #include "include/pal_uefi.h"
 
 
@@ -37,7 +37,7 @@
   @return the new incremented BDF
 **/
 UINT32
-incrementBusDev(UINT32 StartBdf)
+pal_increment_bus_dev(UINT32 StartBdf)
 {
 
   UINT32 Seg = PCIE_EXTRACT_BDF_SEG(StartBdf);
@@ -66,7 +66,7 @@ incrementBusDev(UINT32 StartBdf)
     @return  the BDF of the device matching the class code
 **/
 UINT32
-palPcieGetBdf(UINT32 ClassCode, UINT32 StartBdf)
+pal_pcie_get_bdf(UINT32 ClassCode, UINT32 StartBdf)
 {
 
   EFI_STATUS                    Status;
@@ -143,7 +143,7 @@ pal_pcie_get_bdf_wrapper (
   )
 {
 
-  return palPcieGetBdf(ClassCode, StartBdf);
+  return pal_pcie_get_bdf(ClassCode, StartBdf);
 }
 
 /**
@@ -154,7 +154,7 @@ pal_pcie_get_bdf_wrapper (
   @return the 64-bit BAR value
 */
 UINT64
-palPcieGetBase(UINT32 bdf, UINT32 bar_index)
+pal_pcie_get_base(UINT32 bdf, UINT32 bar_index)
 {
 
   EFI_STATUS                    Status;

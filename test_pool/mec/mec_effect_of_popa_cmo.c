@@ -15,11 +15,11 @@
  * limitations under the License.
  **/
 
-#include "val/include/rme_acs_val.h"
+#include "val/include/val.h"
 #include "val/include/val_interface.h"
-#include "val/include/rme_acs_el32.h"
-#include "val/include/rme_acs_pe.h"
-#include "val/include/rme_acs_mec.h"
+#include "val/include/val_el32.h"
+#include "val/include/val_pe.h"
+#include "val/include/val_mec.h"
 
 #define TEST_NAME  "mec_effect_of_popa_cmo"
 #define TEST_DESC  "Check effect of PoPA CMO                               "

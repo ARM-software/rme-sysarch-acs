@@ -14,8 +14,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  **/
-#include "val/include/rme_acs_val.h"
-#include "val/include/rme_acs_pe.h"
+#include "val/include/val.h"
+#include "val/include/val_pe.h"
 #include "val/include/val_interface.h"
 
 #define TEST_NAME  "rme_all_pe_has_feat_rng_or_rng_trap"

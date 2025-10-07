@@ -15,17 +15,17 @@
  * limitations under the License.
  **/
 
-#include "val/include/rme_acs_val.h"
+#include "val/include/val.h"
 #include "val/include/val_interface.h"
 
-#include "val/include/rme_acs_el32.h"
-#include "val/include/rme_acs_pcie.h"
-#include "val/include/rme_acs_memory.h"
-#include "val/include/rme_acs_pcie_enumeration.h"
-#include "val/include/rme_acs_exerciser.h"
+#include "val/include/val_el32.h"
+#include "val/include/val_pcie.h"
+#include "val/include/val_memory.h"
+#include "val/include/val_pcie_enumeration.h"
+#include "val/include/val_exerciser.h"
 #include "val/include/pal_interface.h"
-#include "val/include/rme_acs_pe.h"
-#include "val/include/rme_acs_da.h"
+#include "val/include/val_pe.h"
+#include "val/include/val_da.h"
 
 #define TEST_NAME "da_interconnect_regs_rmsd_protected"
 #define TEST_DESC "Check Interconnect regs are RMSD protected           "

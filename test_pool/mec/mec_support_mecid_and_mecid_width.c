@@ -14,15 +14,15 @@
  * limitations under the License.
  **/
 
-#include "val/include/rme_acs_val.h"
+#include "val/include/val.h"
 #include "val/include/val_interface.h"
 
-#include "val/include/rme_acs_iovirt.h"
-#include "val/include/rme_acs_smmu.h"
-#include "val/include/rme_acs_mec.h"
-#include "val/include/rme_acs_pe.h"
-#include "val/include/rme_acs_el32.h"
-#include "val/include/rme_acs_memory.h"
+#include "val/include/val_iovirt.h"
+#include "val/include/val_smmu.h"
+#include "val/include/val_mec.h"
+#include "val/include/val_pe.h"
+#include "val/include/val_el32.h"
+#include "val/include/val_memory.h"
 
 #define TEST_NAME  "mec_support_mecid_and_mecid_width"
 #define TEST_DESC  "Check MECID Support and MECID width of requesters      "

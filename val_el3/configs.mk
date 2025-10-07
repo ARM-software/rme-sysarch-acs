@@ -15,30 +15,101 @@
  # limitations under the License.
  ##
 
-# Compiler and linker paths
-C_COMPILER = ${RDINFRA}/tools/gcc/arm-gnu-toolchain-13.2.rel1-x86_64-aarch64-none-linux-gnu/bin/aarch64-none-linux-gnu-gcc
+################################################################################
+# Toolchain and TF-A path configuration
+################################################################################
 
-ASM_COMPILER = ${RDINFRA}/tools/gcc/arm-gnu-toolchain-13.2.rel1-x86_64-aarch64-none-linux-gnu/bin/aarch64-none-linux-gnu-gcc
+# Require TF-A source path from environment or make var (no RDINFRA fallback)
+TFA_PATH ?=
+ifeq ($(strip $(TFA_PATH)),)
+$(error TFA_PATH must be set to TF-A root, e.g. export TFA_PATH=/path/to/tf-a)
+endif
 
-CPP_COMPILER = ${RDINFRA}/tools/gcc/arm-gnu-toolchain-13.2.rel1-x86_64-aarch64-none-linux-gnu/bin/aarch64-none-linux-gnu-cpp
+# Platform/build selection similar to TF-A
+PLAT ?=
+BUILD_SLOT ?=
+BUILD_TYPE ?= debug
+# Accept lowercase overrides to mimic TF-A style CLI usage
+ifdef plat
+PLAT := $(plat)
+endif
+ifeq ($(strip $(PLAT)),)
+$(error PLAT must be set, e.g. make PLAT=rdv3)
+endif
+ifdef slot
+BUILD_SLOT := $(slot)
+endif
+ifdef type
+BUILD_TYPE := $(type)
+endif
 
-LD = ${RDINFRA}/tools/gcc/arm-gnu-toolchain-13.2.rel1-x86_64-aarch64-none-linux-gnu/bin/aarch64-none-linux-gnu-ld
+# Derived TF-A build directories
+# Support external build trees (e.g., shrinkwrap): if TFA_BUILD_DIR is provided, use it as-is.
+ifeq ($(strip $(TFA_BUILD_DIR)),)
+  # Supports with/without build slot under the TF-A source tree
+  ifeq ($(strip $(BUILD_SLOT)),)
+    TFA_BUILD_DIR := ${TFA_PATH}/build/${PLAT}/${BUILD_TYPE}
+  else
+    TFA_BUILD_DIR := ${TFA_PATH}/build/${PLAT}/${BUILD_SLOT}/${BUILD_TYPE}
+    # Fallback if slot-style layout not present
+    ifeq (,$(wildcard ${TFA_BUILD_DIR}))
+      TFA_BUILD_DIR := ${TFA_PATH}/build/${PLAT}/${BUILD_TYPE}
+    endif
+  endif
+endif
+BL31_BUILD_DIR := ${TFA_BUILD_DIR}/bl31
+TFA_LIB_DIR := ${TFA_BUILD_DIR}/lib
 
-OBJ_DUMP = ${RDINFRA}/tools/gcc/arm-gnu-toolchain-13.2.rel1-x86_64-aarch64-none-linux-gnu/bin/aarch64-none-linux-gnu-objdump
+# Compiler and linker paths (can be overridden by environment)
+ifdef CROSS_COMPILE
+C_COMPILER = $(CROSS_COMPILE)gcc
+ASM_COMPILER = $(CROSS_COMPILE)gcc
+CPP_COMPILER = $(CROSS_COMPILE)cpp
+LD = $(CROSS_COMPILE)ld
+OBJ_DUMP = $(CROSS_COMPILE)objdump
+OBJ_COPY = $(CROSS_COMPILE)objcopy
+else
+C_COMPILER = aarch64-none-linux-gnu-gcc
+ASM_COMPILER = aarch64-none-linux-gnu-gcc
+CPP_COMPILER = aarch64-none-linux-gnu-cpp
+LD = aarch64-none-linux-gnu-ld
+OBJ_DUMP = aarch64-none-linux-gnu-objdump
+OBJ_COPY = aarch64-none-linux-gnu-objcopy
+endif
 
-OBJ_COPY = ${RDINFRA}/tools/gcc/arm-gnu-toolchain-13.2.rel1-x86_64-aarch64-none-linux-gnu/bin/aarch64-none-linux-gnu-objcopy
+# Source and include variables (updated to match current layout)
+# If ACS_HOME is not set, default it to repository root (one level up from val_el3)
+ACS_HOME ?= $(abspath ..)
 
-# Source and include variables
-EXTRA_SOURCES = ${ACS_HOME}/val_el3/aarch64/ack_helper_functions.S  \
-                ${ACS_HOME}/val_el3/pgt_common.c  \
-                ${ACS_HOME}/pal_el3/acs_el3.c  \
-                ${ACS_HOME}/val_el3/plat_acs_smc_handler.c  \
-                ${ACS_HOME}/val_el3/ack_common.c \
-                ${ACS_HOME}/val_el3/smmuv3_realm.c
+# Current EL3 sources live under val_el3/src and use pal_el3 stubs
+# Auto-collect all C files and the AArch64 assembly helpers
+EL3_SRC_DIR := ${ACS_HOME}/val_el3/src
+EXTRA_SOURCES := \
+                $(wildcard $(EL3_SRC_DIR)/*.c) \
+                $(wildcard $(EL3_SRC_DIR)/aarch64/*.S) \
+                $(wildcard $(ACS_HOME)/pal_el3/src/*.c) \
 
-INCDIRS = -I ${ACS_HOME}/ -I ${RDINFRA} -I ${RDINFRA}/tf-a/include -I ${RDINFRA}/tf-a/include/arch/aarch64 -I ${RDINFRA}/tf-a/include/lib/cpus/aarch64 -I ${RDINFRA}/tf-a/include/lib/el3_runtime/aarch64 -I ${RDINFRA}/tf-a/include/plat/arm/common/aarch64 -I ${RDINFRA}/tf-a/include/plat/arm/css/common/aarch64 -I ${RDINFRA}/tf-a/plat/arm/board/neoverse_rd/platform/rdv3/include/  -I ${RDINFRA}/tf-a/include/lib/libc -I ${RDINFRA}/tf-a/include/lib/libc/aarch64  -I ${RDINFRA}/tf-a/include/lib/libfdt
+# Compute once, then append to INCDIRS
+PLAT_INC_DIRS := \
+  $(wildcard ${TFA_PATH}/plat/${PLAT}/include) \
+  $(wildcard ${TFA_PATH}/plat/arm/board/${PLAT}/include) \
+  $(wildcard ${TFA_PATH}/plat/arm/board/neoverse_rd/platform/${PLAT}/include) \
+  $(wildcard ${TFA_PATH}/include/plat/arm/common) \
+
+PLAT_INC_FLAGS := $(addprefix -I ,$(strip $(PLAT_INC_DIRS)))
+
+INCDIRS = -I ${ACS_HOME}/val/include \
+          -I ${ACS_HOME}/val_el3/include \
+          -I ${ACS_HOME}/pal_el3/include \
+          -I ${TFA_PATH}/include \
+          -I ${TFA_PATH}/include/arch/aarch64 \
+          -I ${TFA_PATH}/include/lib/libc \
+          -I ${TFA_PATH}/include/lib/libc/aarch64 \
+          -I ${TFA_PATH}/include/lib/el3_runtime/aarch64
+
+INCDIRS += ${PLAT_INC_FLAGS}
 #${RDINFRA}/tf-a/plat/arm/css/sgi/include
-LD_PATHS = -L${RDINFRA}/tf-a/build/rdv3/0/debug/lib
+LD_PATHS = -L${TFA_LIB_DIR}
 
 LD_LIBS =  -lfdt -lc -lmbedtls
 
@@ -51,12 +122,12 @@ CPP_FLAGS = -DDEBUG=1 -DENABLE_BACKTRACE=1 -DGICV3_SUPPORT_GIC600=1 -DGICV3_SUPP
 
 LD_FLAGS = --fatal-warnings -O1 --gc-sections --no-warn-rwx-segments
 
-#BL31 variables
-BL31_OBJ_DIR = ${RDINFRA}/tf-a/build/rdv3/0/debug/bl31/
+# BL31 variables
+BL31_OBJ_DIR = ${BL31_BUILD_DIR}
 
-LINKERFILE = ${RDINFRA}/tf-a/build/rdv3/0/debug/bl31/bl31.ld
-
-BL31_LINKERFILE = ${RDINFRA}/tf-a/build/rdv3/0/debug/bl31/bl31/bl31.ld
+# Local preprocessed linker script output, and its TF-A source
+LINKERFILE = ${BL31_BUILD_DIR}/bl31/bl31.ld
+BL31_LINKERFILE = ${BL31_BUILD_DIR}/bl31/bl31.ld
 
 BL_CPPFLAGS = -DIMAGE_AT_EL3 -DIMAGE_BL31
 
@@ -64,11 +135,10 @@ BL_LDFLAGS = -pie --no-dynamic-linker
 
 LINKER_FLAGS = -march=armv8-a -mgeneral-regs-only -mstrict-align -P -x assembler-with-cpp -D__LINKER__
 
-BL31_MAP = ${RDINFRA}/tf-a/build/rdv3/0/debug/bl31/bl31.map
+BL31_MAP = ${BL31_BUILD_DIR}/bl31.map
 
-BL31_ELF = ${RDINFRA}/tf-a/build/rdv3/0/debug/bl31/bl31_new.elf
+BL31_ELF = ${BL31_BUILD_DIR}/bl31_new.elf
 
-BL31_BIN = ${RDINFRA}/tf-a/build/rdv3/0/debug/bl31/bl31_new.bin
+BL31_BIN = ${BL31_BUILD_DIR}/bl31_new.bin
 
-BL31_DUMP = ${RDINFRA}/tf-a/build/rdv3/0/debug/bl31/bl31_new.dump
-
+BL31_DUMP = ${BL31_BUILD_DIR}/bl31_new.dump
