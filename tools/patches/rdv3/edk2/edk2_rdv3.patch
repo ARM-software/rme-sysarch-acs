@@ -1,0 +1,37 @@
+From 6558b1cc2f3e50033edabdd50dfb5edf710c62be Mon Sep 17 00:00:00 2001
+From: Shyamanth RH <shyamanth.rh@arm.com>
+Date: Mon, 9 Jun 2025 07:51:00 +0000
+Subject: [PATCH] edk2 patch
+
+Signed-off-by: Shyamanth RH <shyamanth.rh@arm.com>
+---
+ ArmPkg/Drivers/ArmGic/GicV3/ArmGicV3Dxe.c | 2 +-
+ ShellPkg/ShellPkg.dec                     | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/ArmPkg/Drivers/ArmGic/GicV3/ArmGicV3Dxe.c b/ArmPkg/Drivers/ArmGic/GicV3/ArmGicV3Dxe.c
+index 71f8a4211e..ba673ba9a6 100644
+--- a/ArmPkg/Drivers/ArmGic/GicV3/ArmGicV3Dxe.c
++++ b/ArmPkg/Drivers/ArmGic/GicV3/ArmGicV3Dxe.c
+@@ -382,7 +382,7 @@ GicV3DxeInitialize (
+ 
+   mGicDistributorBase    = (UINTN)PcdGet64 (PcdGicDistributorBase);
+   mGicRedistributorsBase = PcdGet64 (PcdGicRedistributorsBase);
+-  mGicNumInterrupts      = ArmGicGetMaxNumInterrupts (mGicDistributorBase);
++  mGicNumInterrupts      = 16384; 
+ 
+   // We will be driving this GIC in native v3 mode, i.e., with Affinity
+   // Routing enabled. So ensure that the ARE bit is set.
+diff --git a/ShellPkg/ShellPkg.dec b/ShellPkg/ShellPkg.dec
+index 18df262106..c1f6a1b20a 100644
+--- a/ShellPkg/ShellPkg.dec
++++ b/ShellPkg/ShellPkg.dec
+@@ -139,4 +139,4 @@
+ 
+   ## Controls the default delay the shell will offer to the user at the
+   # start to check if the user wishes to cancel the script autostart
+-  gEfiShellPkgTokenSpaceGuid.PcdShellDefaultDelay|5|UINT32|0x00000015
++  gEfiShellPkgTokenSpaceGuid.PcdShellDefaultDelay|0|UINT32|0x00000015
+-- 
+2.43.0
+

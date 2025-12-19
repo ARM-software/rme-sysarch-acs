@@ -1,0 +1,171 @@
+From 10ff42acdcce37fbfcba1a81bad0e0d62ed388d1 Mon Sep 17 00:00:00 2001
+From: Shyamanth RH <shyamanth.rh@arm.com>
+Date: Mon, 8 Sep 2025 12:44:00 +0000
+Subject: [PATCH] rme-sysarch-acs-changes
+
+Signed-off-by: Shyamanth RH <shyamanth.rh@arm.com>
+---
+ bl31/bl31.mk                              |  8 ++++++++
+ include/plat/arm/common/arm_def.h         | 13 ++++++++++---
+ plat/arm/board/fvp/fvp_common.c           |  2 ++
+ plat/arm/board/fvp/include/fvp_pas_def.h  |  4 ++--
+ plat/arm/board/fvp/include/platform_def.h |  4 ++--
+ plat/arm/board/fvp/platform.mk            |  6 ++++++
+ plat/arm/common/arm_common.mk             |  2 +-
+ plat/arm/common/arm_sip_svc.c             |  2 +-
+ 8 files changed, 32 insertions(+), 9 deletions(-)
+
+diff --git a/bl31/bl31.mk b/bl31/bl31.mk
+index e39091528..8a9cf387f 100644
+--- a/bl31/bl31.mk
++++ b/bl31/bl31.mk
+@@ -54,6 +54,14 @@ BL31_SOURCES		+=	bl31/bl31_main.c				\
+ 
+ VENDOR_EL3_SRCS		+=	services/el3/ven_el3_svc.c
+ 
++PLAT_INCLUDES += -I${ACS_HOME}/val_el3/include/ \
++                  -I${ACS_HOME}/val/include/ \
++                  -I${ACS_HOME}/pal_el3/include/
++
++BL31_SOURCES +=  $(wildcard $(ACS_HOME)/val_el3/src/*.c) \
++                 $(wildcard $(ACS_HOME)/val_el3/src/aarch64/*.S) \
++                 $(wildcard $(ACS_HOME)/pal_el3/src/*.c) \
++
+ ifeq (${ENABLE_PMF}, 1)
+ BL31_SOURCES		+=	lib/pmf/pmf_main.c				\
+ 				${VENDOR_EL3_SRCS}
+diff --git a/include/plat/arm/common/arm_def.h b/include/plat/arm/common/arm_def.h
+index cc1dcde3d..ad2a2634e 100644
+--- a/include/plat/arm/common/arm_def.h
++++ b/include/plat/arm/common/arm_def.h
+@@ -303,15 +303,22 @@ MEASURED_BOOT
+ 					ARM_SHARED_RAM_SIZE,		\
+ 					MT_DEVICE | MT_RW | EL3_PAS)
+ 
++#define ARM_DRAM2_FLAT_SIZE             ULL(0x200000)
++
++#define ARM_MAP_DRAM2_FLAT      MAP_REGION_FLAT(			\
++ 		 			ARM_DRAM2_BASE,			\
++                                      	ARM_DRAM2_FLAT_SIZE,		\
++                                       MT_MEMORY | MT_RW | MT_ROOT)
++
+ #define ARM_MAP_NS_DRAM1	MAP_REGION_FLAT(			\
+ 					ARM_NS_DRAM1_BASE,		\
+ 					ARM_NS_DRAM1_SIZE,		\
+ 					MT_MEMORY | MT_RW | MT_NS)
+ 
+ #define ARM_MAP_DRAM2		MAP_REGION_FLAT(			\
+-					ARM_DRAM2_BASE,			\
+-					ARM_DRAM2_SIZE,			\
+-					MT_MEMORY | MT_RW | MT_NS)
++					ARM_DRAM2_BASE + 0x200000,			\
++					ARM_DRAM2_SIZE - 0x200000,			\
++					MT_MEMORY | MT_RW | MT_REALM)
+ 
+ #define ARM_MAP_TSP_SEC_MEM	MAP_REGION_FLAT(			\
+ 					TSP_SEC_MEM_BASE,		\
+diff --git a/plat/arm/board/fvp/fvp_common.c b/plat/arm/board/fvp/fvp_common.c
+index 9d0463dbb..ddb187129 100644
+--- a/plat/arm/board/fvp/fvp_common.c
++++ b/plat/arm/board/fvp/fvp_common.c
+@@ -197,6 +197,8 @@ const mmap_region_t plat_arm_mmap[] = {
+ #ifdef IMAGE_BL31
+ const mmap_region_t plat_arm_mmap[] = {
+ 	ARM_MAP_SHARED_RAM,
++    ARM_MAP_DRAM2_FLAT,
++ 	ARM_MAP_DRAM2,
+ #if USE_DEBUGFS
+ 	/* Required by devfip, can be removed if devfip is not used */
+ 	V2M_MAP_FLASH0_RW,
+diff --git a/plat/arm/board/fvp/include/fvp_pas_def.h b/plat/arm/board/fvp/include/fvp_pas_def.h
+index 6b9728618..e202f0540 100644
+--- a/plat/arm/board/fvp/include/fvp_pas_def.h
++++ b/plat/arm/board/fvp/include/fvp_pas_def.h
+@@ -96,11 +96,11 @@
+ 
+ #define	ARM_PAS_KERNEL_1		GPT_MAP_REGION_GRANULE(ARM_PAS_4_BASE, \
+ 							       ARM_PAS_4_SIZE, \
+-							       GPT_GPI_NS)
++							       GPT_GPI_ANY)
+ 
+ #define ARM_PAS_PCI_MEM_1		GPT_MAP_REGION_GRANULE(PLAT_ARM_PCI_MEM_1_BASE, \
+ 							       PLAT_ARM_PCI_MEM_1_SIZE, \
+-							       GPT_GPI_NS)
++							       GPT_GPI_ANY)
+ 
+ #define	ARM_PAS_PCI_MEM_2		GPT_MAP_REGION_GRANULE(PLAT_ARM_PCI_MEM_2_BASE, \
+ 							       PLAT_ARM_PCI_MEM_2_SIZE, \
+diff --git a/plat/arm/board/fvp/include/platform_def.h b/plat/arm/board/fvp/include/platform_def.h
+index f412ec04c..22473b6fe 100644
+--- a/plat/arm/board/fvp/include/platform_def.h
++++ b/plat/arm/board/fvp/include/platform_def.h
+@@ -176,7 +176,7 @@
+ #  define PLAT_SP_IMAGE_MMAP_REGIONS	30
+ #  define PLAT_SP_IMAGE_MAX_XLAT_TABLES	10
+ # else
+-#  define PLAT_ARM_MMAP_ENTRIES		9
++#  define PLAT_ARM_MMAP_ENTRIES		11
+ #  if USE_DEBUGFS
+ #   if ENABLE_RME
+ #    define MAX_XLAT_TABLES		9
+@@ -185,7 +185,7 @@
+ #   endif
+ #  else
+ #   if ENABLE_RME
+-#    define MAX_XLAT_TABLES		8
++#    define MAX_XLAT_TABLES		11
+ #   elif DRTM_SUPPORT
+ #    define MAX_XLAT_TABLES		8
+ #   else
+diff --git a/plat/arm/board/fvp/platform.mk b/plat/arm/board/fvp/platform.mk
+index 8e8870c58..85ef6a1e0 100644
+--- a/plat/arm/board/fvp/platform.mk
++++ b/plat/arm/board/fvp/platform.mk
+@@ -37,6 +37,9 @@ else
+ FVP_TRUSTED_SRAM_SIZE		:= 256
+ endif
+ 
++# Macro to enable ACS SMC handler
++PLAT_ARM_ACS_SMC_HANDLER    :=   1
++
+ # Macro to enable helpers for running SPM tests. Disabled by default.
+ PLAT_TEST_SPM	:= 0
+ 
+@@ -573,5 +576,8 @@ ifeq (${ERRATA_ABI_SUPPORT}, 1)
+ include plat/arm/board/fvp/fvp_cpu_errata.mk
+ endif
+ 
++# Build macro necessary for branching to ACS tests
++$(eval $(call add_define,PLAT_ARM_ACS_SMC_HANDLER))
++
+ # Build macro necessary for running SPM tests on FVP platform
+ $(eval $(call add_define,PLAT_TEST_SPM))
+diff --git a/plat/arm/common/arm_common.mk b/plat/arm/common/arm_common.mk
+index 5bb381252..33e90a228 100644
+--- a/plat/arm/common/arm_common.mk
++++ b/plat/arm/common/arm_common.mk
+@@ -332,7 +332,7 @@ BL31_SOURCES		+=	plat/arm/common/aarch64/execution_state_switch.c\
+ 				plat/arm/common/plat_arm_sip_svc.c		\
+ 				${ARM_SVC_HANDLER_SRCS}
+ ifeq (${PLAT_ARM_ACS_SMC_HANDLER},1)
+-BL31_SOURCES		+=	plat/arm/common/plat_acs_smc_handler.c
++#BL31_SOURCES		+=	plat/arm/common/plat_acs_smc_handler.c
+ endif
+ 
+ else
+diff --git a/plat/arm/common/arm_sip_svc.c b/plat/arm/common/arm_sip_svc.c
+index 536ed7ca5..24fcdc259 100644
+--- a/plat/arm/common/arm_sip_svc.c
++++ b/plat/arm/common/arm_sip_svc.c
+@@ -72,7 +72,7 @@ static uintptr_t arm_sip_handler(unsigned int smc_fid,
+ 	 * Placeholder function for ACS User SMC calls
+ 	 */
+ 	if (smc_fid == ARM_SIP_ACS_SMC_HANDLER) {
+-	    return plat_arm_acs_user_smc_handler(x1, x2, x3, x4);
++	    return plat_arm_acs_smc_handler(x1, x2, x3, x4);
+ 	}
+ #endif /* PLAT_ARM_ACS_SMC_HANDLER */
+ 
+-- 
+2.43.0
+

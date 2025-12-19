@@ -34,33 +34,8 @@ On a successful build, *.bin, *.elf, *.img and debug binaries are generated at *
 
 ## Running RME ACS with Bootwrapper on Base RevC
 
-**1. Before initially building the Base RevC software stack, apply the following change:**
-
-  In <shrinkwrap_path>/config/ns-edk2-base.yaml - Mention PRELOADED_BL33_BASE parameter with NS EL2 entry address.
-
-```
---- a/config/ns-edk2-base.yaml
-+++ b/config/ns-edk2-base.yaml
-@@ -13,7 +13,8 @@ layers:
-build:
-  tfa:
-    params:
--      BL33: ${artifact:EDK2}
-+      PRELOADED_BL33_BASE: 0x88000000
-```
-
-  Proceed with building the stack following the standard setup guide.
-
-**2. Load rme.bin to PRELOADED_BL33_BASE**
-- While running the FVP, load the output binary at PRELOADED_BL33_BASE with the following parameter -
-```
-In <shrinkwrap>/work/package/cca-da-edk2.yaml
-
---data cluster0.cpu0: <absoulte path to RME ACS>/build/output/rme.bin@0x88000000
-```
-
-**Note:** The steps outlined above assume the user is running the Base FVP with the Shrinkwrap tool. If this is not the case, modify TF-A to ensure the PRELOADED_BL33_BASE option is set with the appropriate NS EL2 entry address.
-
+Follow the automated stack build and run instructions in `tools/scripts/README.md`.
+That guide covers installing prerequisites, building the software stack for Base RevC, and launching the model with the correct configuration.
 
 For more details on how to port the reference code to a specific platform and for further customisation please refer to the [Porting Guide](../../Docs/Arm_RME_System_ACS_Platform_porting_guide.rst)
 
