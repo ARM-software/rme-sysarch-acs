@@ -1,0 +1,252 @@
+From ae9ec92d0e9e2d1782911e1f25dd588532d81dac Mon Sep 17 00:00:00 2001
+From: Nandan J <Nandan.J@arm.com>
+Date: Fri, 1 Dec 2023 19:53:12 +0530
+Subject: [PATCH] feat(plat/arm): Introduce a new SiP handler for ACS
+
+In preparation to add support for the Architecture Compliance Suite
+SMC services, reserve a SMC ID and introduce a handler function.
+Currently, an empty placeholder function is added and future support
+will be introduced for the handler support.
+
+Change-Id: I2b72d40d04c64a92df6deb409dc01d29192f1ac0
+Signed-off-by: Nandan J <Nandan.J@arm.com>
+---
+ bl31/bl31.mk                                  |  8 ++++++++
+ .../plat/arm/common/plat_acs_smc_handler.h    | 18 +++++++++++++++++
+ .../common/include/nrd3/nrd_pas_def3.h        |  2 +-
+ .../common/include/nrd3/nrd_plat_arm_def3.h   | 17 ++++++++++++----
+ plat/arm/board/neoverse_rd/common/nrd_plat3.c |  1 +
+ .../platform/rdv3/include/platform_def.h      |  2 +-
+ .../neoverse_rd/platform/rdv3/platform.mk     |  8 ++++++++
+ plat/arm/common/arm_common.mk                 |  4 ++++
+ plat/arm/common/arm_sip_svc.c                 | 20 ++++++++++++-------
+ plat/arm/common/plat_acs_smc_handler.c        | 18 +++++++++++++++++
+ 10 files changed, 85 insertions(+), 13 deletions(-)
+ create mode 100644 include/plat/arm/common/plat_acs_smc_handler.h
+ create mode 100644 plat/arm/common/plat_acs_smc_handler.c
+
+diff --git a/bl31/bl31.mk b/bl31/bl31.mk
+index f7433611d..741d671e8 100644
+--- a/bl31/bl31.mk
++++ b/bl31/bl31.mk
+@@ -58,6 +58,14 @@ BL31_SOURCES		+=	bl31/bl31_main.c				\
+ 
+ VENDOR_EL3_SRCS		+=	services/el3/ven_el3_svc.c
+ 
++PLAT_INCLUDES += -I${ACS_HOME}/val_el3/include/ \
++                  -I${ACS_HOME}/val/include/ \
++                  -I${ACS_HOME}/pal_el3/include/
++
++BL31_SOURCES +=  $(wildcard $(ACS_HOME)/val_el3/src/*.c) \
++                 $(wildcard $(ACS_HOME)/val_el3/src/aarch64/*.S) \
++                 $(wildcard $(ACS_HOME)/pal_el3/src/*.c) \
++
+ ifeq (${ENABLE_PMF}, 1)
+ BL31_SOURCES		+=	lib/pmf/pmf_main.c				\
+ 				${VENDOR_EL3_SRCS}
+diff --git a/include/plat/arm/common/plat_acs_smc_handler.h b/include/plat/arm/common/plat_acs_smc_handler.h
+new file mode 100644
+index 000000000..2337a9e82
+--- /dev/null
++++ b/include/plat/arm/common/plat_acs_smc_handler.h
+@@ -0,0 +1,18 @@
++/*
++ * Copyright (c) 2023, Arm Limited and Contributors. All rights reserved.
++ *
++ * SPDX-License-Identifier: BSD-3-Clause
++ */
++
++#ifndef ACS_SMC_HANDLER_H
++#define ACS_SMC_HANDLER_H
++
++#include <lib/utils_def.h>
++
++/* ARM ACS SMC service call */
++#define ARM_SIP_ACS_SMC_HANDLER     U(0xC2000060)
++
++uintptr_t plat_arm_acs_smc_handler(uint64_t services, uint64_t arg0,
++                                   uint64_t arg1, uint64_t arg2);
++
++#endif /* ACS_SMC_HANDLER_H */
+diff --git a/plat/arm/board/neoverse_rd/common/include/nrd3/nrd_pas_def3.h b/plat/arm/board/neoverse_rd/common/include/nrd3/nrd_pas_def3.h
+index d866310d8..3a55df4eb 100644
+--- a/plat/arm/board/neoverse_rd/common/include/nrd3/nrd_pas_def3.h
++++ b/plat/arm/board/neoverse_rd/common/include/nrd3/nrd_pas_def3.h
+@@ -584,7 +584,7 @@
+ 		GPT_MAP_REGION_GRANULE(					\
+ 			NRD_MC_BASE(NRD_CSS_DRAM2_BASE, 0),		\
+ 			ARM_DRAM2_SIZE,					\
+-			GPT_GPI_NS)
++			GPT_GPI_ANY)
+ 
+ #define NRD_PAS_DRAM2_CHIP1						\
+ 		GPT_MAP_REGION_GRANULE(					\
+diff --git a/plat/arm/board/neoverse_rd/common/include/nrd3/nrd_plat_arm_def3.h b/plat/arm/board/neoverse_rd/common/include/nrd3/nrd_plat_arm_def3.h
+index 807df966b..e2471c351 100644
+--- a/plat/arm/board/neoverse_rd/common/include/nrd3/nrd_plat_arm_def3.h
++++ b/plat/arm/board/neoverse_rd/common/include/nrd3/nrd_plat_arm_def3.h
+@@ -56,8 +56,8 @@
+  * chips are accessed - secure ram, css device and soc device regions.
+  */
+ #if defined(IMAGE_BL31)
+-#  define PLAT_ARM_MMAP_ENTRIES		(14 + ((NRD_CHIP_COUNT - 1) * 3))
+-#  define MAX_XLAT_TABLES		(14 + ((NRD_CHIP_COUNT - 1) * 3))
++#  define PLAT_ARM_MMAP_ENTRIES		(15 + ((NRD_CHIP_COUNT - 1) * 3))
++#  define MAX_XLAT_TABLES		(15 + ((NRD_CHIP_COUNT - 1) * 3))
+ #elif defined(IMAGE_BL32)
+ # define PLAT_ARM_MMAP_ENTRIES		U(8)
+ # define MAX_XLAT_TABLES		U(5)
+@@ -908,10 +908,19 @@ MEASURED_BOOT
+ 
+ #define ARM_MAP_DRAM2							\
+ 		MAP_REGION_FLAT(					\
+-			ARM_DRAM2_BASE,					\
+-			ARM_DRAM2_SIZE,					\
++			ARM_DRAM2_BASE + 0x200000,					\
++			ARM_DRAM2_SIZE - 0x200000,					\
+ 			MT_MEMORY | MT_RW | MT_NS)
+ 
++#define ARM_DRAM2_FLAT_SIZE  ULL(0x200000)
++
++#define ARM_MAP_DRAM2_FLAT						\
++		MAP_REGION_FLAT(                                        \
++                        ARM_DRAM2_BASE,					\
++			ARM_DRAM2_FLAT_SIZE,				\
++			MT_MEMORY | MT_RW | MT_ROOT)
++
++
+ # if (defined(SPD_tspd) || defined(SPD_opteed) || defined(SPD_spmd)) && \
+ MEASURED_BOOT
+ #define ARM_MAP_EVENT_LOG_DRAM1						\
+diff --git a/plat/arm/board/neoverse_rd/common/nrd_plat3.c b/plat/arm/board/neoverse_rd/common/nrd_plat3.c
+index 8f7e2a281..122ea5a98 100644
+--- a/plat/arm/board/neoverse_rd/common/nrd_plat3.c
++++ b/plat/arm/board/neoverse_rd/common/nrd_plat3.c
+@@ -83,6 +83,7 @@ const mmap_region_t plat_arm_mmap[] = {
+ const mmap_region_t plat_arm_mmap[] = {
+ 	NRD_CSS_SHARED_RAM_MMAP(0),
+ 	NRD_CSS_HW_CONFIG_MMAP,
++  ARM_MAP_DRAM2_FLAT,
+ #if NRD_ERR_INJ_SUPPORT
+ 	ARM_MAP_EINJ_DRAM1,
+ #endif
+diff --git a/plat/arm/board/neoverse_rd/platform/rdv3/include/platform_def.h b/plat/arm/board/neoverse_rd/platform/rdv3/include/platform_def.h
+index 882b393f6..59a5045eb 100644
+--- a/plat/arm/board/neoverse_rd/platform/rdv3/include/platform_def.h
++++ b/plat/arm/board/neoverse_rd/platform/rdv3/include/platform_def.h
+@@ -38,7 +38,7 @@
+ #define NRD_CSS_DRAM2_SIZE		ULL(0x180000000)
+ 
+ /* Address bits */
+-#define NRD_ADDR_BITS_PER_CHIP		U(36)  /* 64GB */
++#define NRD_ADDR_BITS_PER_CHIP		U(40)  /* 64GB */
+ 
+ /*
+  * In the current implementation, the RoT Service request that requires the
+diff --git a/plat/arm/board/neoverse_rd/platform/rdv3/platform.mk b/plat/arm/board/neoverse_rd/platform/rdv3/platform.mk
+index 181aa51b1..0512bfcec 100644
+--- a/plat/arm/board/neoverse_rd/platform/rdv3/platform.mk
++++ b/plat/arm/board/neoverse_rd/platform/rdv3/platform.mk
+@@ -52,6 +52,10 @@ endif
+ # RD-V3 platform uses GIC-700 which is based on GICv4.1
+ GIC_ENABLE_V4_EXTN			:= 1
+ 
++# Macro to enable ACS SMC handler
++PLAT_ARM_ACS_SMC_HANDLER    := 1
++
++
+ # Enable GIC multichip extension only for multichip platforms
+ ifeq (${NRD_PLATFORM_VARIANT}, 2)
+ GICV3_IMPL_GIC600_MULTICHIP	:= 1
+@@ -198,6 +202,10 @@ FDT_SOURCES		+=	${BL32_CONFIG_DTS}
+ TOS_FW_CONFIG		:=	${BUILD_PLAT}/fdts/$(notdir $(basename ${BL32_CONFIG_DTS})).dtb
+ endif
+ 
++# Build macro necessary for branching to ACS tests
++$(eval $(call add_define,PLAT_ARM_ACS_SMC_HANDLER))
++
++
+ # Firmware Configuration Framework sources
+ include lib/fconf/fconf.mk
+ 
+diff --git a/plat/arm/common/arm_common.mk b/plat/arm/common/arm_common.mk
+index 085682e21..0057c4c65 100644
+--- a/plat/arm/common/arm_common.mk
++++ b/plat/arm/common/arm_common.mk
+@@ -340,6 +340,10 @@ BL31_SOURCES		+=	plat/arm/common/aarch64/execution_state_switch.c\
+ 				plat/arm/common/arm_sip_svc.c			\
+ 				plat/arm/common/plat_arm_sip_svc.c		\
+ 				${ARM_SVC_HANDLER_SRCS}
++ifeq (${PLAT_ARM_ACS_SMC_HANDLER},1)
++#BL31_SOURCES		+=	plat/arm/common/plat_acs_smc_handler.c
++endif
++
+ else
+ BL32_SOURCES		+=	plat/arm/common/arm_sip_svc.c			\
+ 				plat/arm/common/plat_arm_sip_svc.c		\
+diff --git a/plat/arm/common/arm_sip_svc.c b/plat/arm/common/arm_sip_svc.c
+index de0780d13..7dd2df7c5 100644
+--- a/plat/arm/common/arm_sip_svc.c
++++ b/plat/arm/common/arm_sip_svc.c
+@@ -14,6 +14,12 @@
+ #include <lib/einj/einj.h>
+ #include <plat/arm/common/arm_sip_svc.h>
+ #include <plat/arm/common/plat_arm.h>
++#if PLAT_ARM_ACS_SMC_HANDLER
++#include <plat/arm/common/plat_acs_smc_handler.h>
++#endif /* PLAT_ARM_ACS_SMC_HANDLER */
++#if ENABLE_SPMD_LP
++#include <services/el3_spmd_logical_sp.h>
++#endif
+ #include <tools_share/uuid.h>
+ 
+ /* ARM SiP Service UUID */
+@@ -62,14 +68,14 @@ static uintptr_t arm_sip_handler(unsigned int smc_fid,
+ {
+ 	int call_count = 0;
+ 
+-#if FAULT_INJECTION_SUPPORT
+-
+-	if (is_einj_fid(smc_fid)) {
+-		return einj_smc_handler(smc_fid, x1, x2, x3, x4, cookie,
+-				handle, flags);
++#if PLAT_ARM_ACS_SMC_HANDLER
++	/*
++	 * Placeholder function for ACS User SMC calls
++	 */
++	if (smc_fid == ARM_SIP_ACS_SMC_HANDLER) {
++	    return plat_arm_acs_smc_handler(x1, x2, x3, x4);
+ 	}
+-
+-#endif /* FAULT_INJECTION_SUPPORT */
++#endif /* PLAT_ARM_ACS_SMC_HANDLER */
+ 
+ #if ENABLE_PMF
+ 	/*
+diff --git a/plat/arm/common/plat_acs_smc_handler.c b/plat/arm/common/plat_acs_smc_handler.c
+new file mode 100644
+index 000000000..290fa6599
+--- /dev/null
++++ b/plat/arm/common/plat_acs_smc_handler.c
+@@ -0,0 +1,18 @@
++/*
++ * Copyright (c) 2023, ARM Limited and Contributors. All rights reserved.
++ *
++ * SPDX-License-Identifier: BSD-3-Clause
++ */
++#include <stdint.h>
++#include <plat/arm/common/plat_acs_smc_handler.h>
++
++#if PLAT_ARM_ACS_SMC_HANDLER
++/*
++ * Placeholder function for ACS SMC call
++ */
++uintptr_t plat_arm_acs_smc_handler(uint64_t services, uint64_t arg0,
++                 uint64_t arg1, uint64_t arg2)
++{
++	return 0;
++}
++#endif /* PLAT_ARM_ACS_SMC_HANDLER */
+-- 
+2.43.0
+

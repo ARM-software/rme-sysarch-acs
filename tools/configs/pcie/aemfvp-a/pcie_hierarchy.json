@@ -1,0 +1,104 @@
+{
+    "hostbridge/hostbridge0": {
+    },
+    "exerciser/exerciser0": {
+        "device": 31,
+        "function": 0,
+        "interrupt_pin_index": 4,
+        "express_capability_device_type": 9,
+        "uses_client_based_atc": true,
+        "ats_supported": true,
+        "max_transaction_trace_entries": 8,
+        "pasid_supported": true,
+        "aer_supported": true,
+        "msix_support": true,
+	    "doe_supported": 1,
+	    "ide_supported": 1
+    },
+    "rootport/rootport0": {
+        "device_number": 1,
+        "dpc_supported": true,
+        "aer_supported": true,
+        "acs_supported": true,
+        "msix_support": true,
+        "ide_supported": 1,
+	    "error_injection_supported": true,
+	    "tee_io_supported": 1,
+	    "rmeda_dvsec_enable": 1,
+        "__downstream__": {
+            "exerciser/exerciser2": {
+                "interrupt_pin_index": 4,
+                "device": 0,
+                "function": 0,
+                "multi_function": true,
+                "msix_support": true,
+                "uses_client_based_atc": true,
+                "ats_supported": true,
+                "pasid_supported": true,
+                "aer_supported": true,
+	        	"doe_supported": 1,
+	            "error_injection_supported": true,
+                "ide_supported": 1,
+	        	"allow_tdisp_on_spdm_vdm_without_sspdm": true,
+                "aer_supported": true
+            },
+            "exerciser/exerciser3": {
+                "device": 0,
+                "function": 1,
+                "interrupt_pin_index": 4,
+                "msix_support": true,
+                "uses_client_based_atc": true,
+                "ats_supported": true,
+                "pasid_supported": true,
+		        "doe_supported": 1,
+		        "allow_tdisp_on_spdm_vdm_without_sspdm": true,
+	            "error_injection_supported": true,
+                "ide_supported": 1,
+                "aer_supported": true
+            }
+        }
+    },
+    "rootport/rootport1": {
+        "device_number": 2,
+        "dpc_supported": true,
+        "aer_supported": true,
+        "acs_supported": true,
+        "msix_support": true,
+        "ide_supported": 1,
+	    "error_injection_supported": true,
+	    "tee_io_supported": 1,
+	    "rmeda_dvsec_enable": 1,
+        "__downstream__": {
+            "exerciser/exerciser4": {
+                "interrupt_pin_index": 4,
+                "device": 0,
+                "function": 0,
+                "multi_function": true,
+                "msix_support": true,
+		        "allow_tdisp_on_spdm_vdm_without_sspdm": true,
+                "uses_client_based_atc": true,
+                "ats_supported": true,
+                "pasid_supported": true,
+                "aer_supported": true,
+		        "doe_supported": 1,
+	            "error_injection_supported": true,
+                "ide_supported": 1,
+                "aer_supported": true
+            },
+            "exerciser/exerciser5": {
+                "device": 0,
+                "function": 1,
+                "interrupt_pin_index": 4,
+                "msix_support": true,
+                "uses_client_based_atc": true,
+                "ats_supported": true,
+		        "allow_tdisp_on_spdm_vdm_without_sspdm": true,
+                "pasid_supported": true,
+		        "doe_supported": 1,
+	            "error_injection_supported": true,
+                "ide_supported": 1,
+                "aer_supported": true
+            }
+        }
+    }
+}

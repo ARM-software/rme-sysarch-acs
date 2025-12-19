@@ -1,0 +1,111 @@
+## @file
+ # Copyright (c) 2025, Arm Limited or its affiliates. All rights reserved.
+ # SPDX-License-Identifier : Apache-2.0
+ #
+ # Licensed under the Apache License, Version 2.0 (the "License");
+ # you may not use this file except in compliance with the License.
+ # You may obtain a copy of the License at
+ #
+ #  http://www.apache.org/licenses/LICENSE-2.0
+ #
+ # Unless required by applicable law or agreed to in writing, software
+ # distributed under the License is distributed on an "AS IS" BASIS,
+ # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ # See the License for the specific language governing permissions and
+ # limitations under the License.
+ ##
+
+%YAML 1.2
+---
+description: >-
+  This config acts as a base for building software stack for RME-ACS.
+  This can be overlayed with configs to build the software stack for either
+  UEFI or baremetal platforms.
+
+layers:
+  - tfa-rme.yaml
+  - debug/rmm.yaml
+  - debug/tfa.yaml
+
+build:
+  tfa:
+    repo:
+      remote: https://git.trustedfirmware.org/TF-A/trusted-firmware-a.git
+      revision: v2.13.0
+
+    params:
+      BRANCH_PROTECTION: 0
+      ACS_HOME: ${btvar:ACS_PATH}
+      FVP_TRUSTED_SRAM_SIZE: 512
+
+    prebuild:
+      - git fetch --tags --force
+      - git checkout -f v2.13.0
+      - git clean -fdx
+      - git apply --3way ${btvar:TFA_PATCHES}/*.patch
+
+  rmm:
+    repo:
+      remote: https://git.trustedfirmware.org/TF-RMM/tf-rmm.git
+      revision: tf-rmm-v0.7.0
+
+    params:
+      -DRMM_MAX_GRANULES: 0x100900
+      -DRMM_CCA_DA: 1
+    prebuild:
+      - python3 -m venv .rmm_venv
+      - . .rmm_venv/bin/activate && python -m pip install -r requirements.txt
+    postbuild:
+      - rm -rf .rmm_venv
+
+buildex:
+  btvars:
+    ACS_PATH:
+      type: path
+      value: ''
+
+    TFA_PATCHES:
+      type: path
+      value: ''
+
+run:
+  rtvars:
+    JSON_FILE:
+      type: string
+      value: ''
+
+  params:
+    -C cluster0.rme_support_level: 2
+    -C cluster1.rme_support_level: 2
+
+    # Suppress "WARNING: MPAM_NS is deprecated when RME is in use. Should use MPAM_SP"
+    -C cluster0.output_attributes: ExtendedID[62:55]=MPAM_PMG,ExtendedID[54:39]=MPAM_PARTID,ExtendedID[38:37]=MPAM_SP
+    -C cluster1.output_attributes: ExtendedID[62:55]=MPAM_PMG,ExtendedID[54:39]=MPAM_PARTID,ExtendedID[38:37]=MPAM_SP
+
+
+    # RME ACS specific SMMU settings.
+    -C pci.pci_smmuv3.mmu.SMMU_AIDR: 3
+    -C pci.pci_smmuv3.mmu.SMMU_IDR0: 0x484616BB
+    -C pci.pci_smmuv3.mmu.SMMU_IDR1: 0x600010
+    -C pci.pci_smmuv3.mmu.SMMU_IDR3: 0xF714
+    -C pci.pci_smmuv3.mmu.SMMU_IDR5: 4294902901
+    -C pci.pci_smmuv3.mmu.SMMU_ROOT_IDR0: 0x80000D
+    -C pci.pci_smmuv3.mmu.SMMU_ROOT_IIDR: 1083
+    -C pci.pci_smmuv3.mmu.SMMU_R_IDR0: 0x1000400
+    -C pci.pci_smmuv3.mmu.SMMU_R_IDR3: 0x8000
+    -C pci.pci_smmuv3.mmu.SMMU_S_IDR0: 0x484616BB
+    -C pci.pci_smmuv3.mmu.SMMU_S_IDR1: 2684354562
+    -C pci.pci_smmuv3.mmu.SMMU_S_IDR2: 0
+    -C pci.pci_smmuv3.mmu.SMMU_S_IDR3: 0
+
+    -C pci.hierarchy_file_name: ${rtvar:JSON_FILE}
+    -C pci.ur_rao_wi: true
+
+    # Enable FEAT_CSV2_2, which is optional. But TFA 2.10 force-enables it when
+    # ENABLE_RME=1 so if it's not there we see an exception.
+    -C cluster0.restriction_on_speculative_execution: 2
+    -C cluster1.restriction_on_speculative_execution: 2
+    -C cluster0.restriction_on_speculative_execution_aarch32: 2
+    -C cluster1.restriction_on_speculative_execution_aarch32: 2
+
+    -C cache_state_modelled: 1

@@ -1,0 +1,26 @@
+From e420d18739f0791fd8a6b1d694df1ae015d96e8a Mon Sep 17 00:00:00 2001
+From: Shyamanth RH <shyamanth.rh@arm.com>
+Date: Mon, 9 Jun 2025 07:49:16 +0000
+Subject: [PATCH] build script patch
+
+Signed-off-by: Shyamanth RH <shyamanth.rh@arm.com>
+---
+ configs/rdv3/rdv3 | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/configs/rdv3/rdv3 b/configs/rdv3/rdv3
+index 21bb644..0bd29a3 100755
+--- a/configs/rdv3/rdv3
++++ b/configs/rdv3/rdv3
+@@ -100,7 +100,7 @@ fi
+ 
+ 
+ if [ "$TF_A_ENABLE_SEL2_SPMC" == "1" ]; then
+-	TF_A_BUILD_FLAGS="$TF_A_BUILD_FLAGS SPMD_SPM_AT_SEL2=1 SPD=spmd BL32=1 CTX_INCLUDE_EL2_REGS=1 CTX_INCLUDE_PAUTH_REGS=1 BRANCH_PROTECTION=1 CTX_INCLUDE_MTE_REGS=1"
++	TF_A_BUILD_FLAGS="$TF_A_BUILD_FLAGS SPMD_SPM_AT_SEL2=1 SPD=spmd BL32=1 CTX_INCLUDE_EL2_REGS=1 CTX_INCLUDE_PAUTH_REGS=1 BRANCH_PROTECTION=0 CTX_INCLUDE_MTE_REGS=1"
+ 	if [ "$TF_A_RAS_FW_FIRST" == "1" ]; then
+ 		TF_A_BUILD_FLAGS="$TF_A_BUILD_FLAGS RAS_EXTENSION=1 SDEI_SUPPORT=1 HANDLE_EA_EL3_FIRST_NS=1 "
+ 	fi
+-- 
+2.43.0
+
