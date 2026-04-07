@@ -864,8 +864,8 @@ typedef struct {
   @brief  structure instance for Region details
 **/
 typedef struct {
-  uint32_t base_addr;
-  uint32_t regn_size;
+  uint64_t base_addr;
+  uint64_t regn_size;
   uint64_t resourse_pas;
 } MEM_REGN_INFO_ENTRY;
 

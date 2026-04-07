@@ -763,8 +763,8 @@ VOID pal_mem_region_create_info_table(MEM_REGN_INFO_TABLE* gpc_table,
     UINT64 size = RmeCfgGetU64(key, def_size);
     UnicodeSPrint(key, sizeof(key), L"GPC_PROTECTED_REGION_%u_PAS", i);
     UINT64 pas                   = RmeCfgGetU64(key, def_pas);
-    pal_gpc_regs[i].base_addr    = (UINT32)base;
-    pal_gpc_regs[i].regn_size    = (UINT32)size;
+    pal_gpc_regs[i].base_addr    = base;
+    pal_gpc_regs[i].regn_size    = size;
     pal_gpc_regs[i].resourse_pas = pas;
     gpc_table->regn_info[i]      = pal_gpc_regs[i];
   }
@@ -808,8 +808,8 @@ VOID pal_mem_region_create_info_table(MEM_REGN_INFO_TABLE* gpc_table,
     UINT64 size = RmeCfgGetU64(key, def_size);
     UnicodeSPrint(key, sizeof(key), L"PAS_PROTECTED_REGION_%u_PAS", i);
     UINT64 pas                   = RmeCfgGetU64(key, def_pas);
-    pal_pas_regs[i].base_addr    = (UINT32)base;
-    pal_pas_regs[i].regn_size    = (UINT32)size;
+    pal_pas_regs[i].base_addr    = base;
+    pal_pas_regs[i].regn_size    = size;
     pal_pas_regs[i].resourse_pas = pas;
     pas_table->regn_info[i]      = pal_pas_regs[i];
   }
