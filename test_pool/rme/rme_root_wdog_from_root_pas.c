@@ -100,7 +100,8 @@ payload()
     val_gic_set_intr_trigger(int_id, INTR_TRIGGER_INFO_LEVEL_HIGH);
 
     shared_data->generic_flag = CLEAR;
-    attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(NON_SHAREABLE) | PGT_ENTRY_AP_RW);
+    attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(NON_SHAREABLE) | PGT_ENTRY_AP_RW
+                       | GET_ATTR_INDEX(DEV_MEM_nGnRnE));
     if (val_add_mmu_entry_el3(VA_RT_WDOG, rt_wdog_ctl_reg,
                                 (attr | LOWER_ATTRS(PAS_ATTR(ROOT_PAS)))))
     {

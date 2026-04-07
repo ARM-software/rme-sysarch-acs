@@ -99,7 +99,8 @@ static void payload(void)
 
   VA_RT_WDOG  = val_get_free_va(size);
   rt_wdog_ctl = val_get_rt_wdog_ctrl();
-  attr        = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(NON_SHAREABLE) | PGT_ENTRY_AP_RW);
+  attr        = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(NON_SHAREABLE) |
+                            PGT_ENTRY_AP_RW | GET_ATTR_INDEX(DEV_MEM_nGnRnE));
   if (val_add_mmu_entry_el3(VA_RT_WDOG, rt_wdog_ctl, (attr | LOWER_ATTRS(PAS_ATTR(NONSECURE_PAS)))))
   {
     val_print(ACS_PRINT_ERR, " Failed to map RT_WDOG_CTRL register in MMU", 0);
