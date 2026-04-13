@@ -22,6 +22,7 @@
 BITFIELD_DECL(uint32_t, IDR0_ST_LEVEL, 28, 27)
 BITFIELD_DECL(uint32_t, IDR0_TTF, 3, 2)
 BITFIELD_DECL(uint32_t, IDR1_CMDQS, 25, 21)
+BITFIELD_DECL(uint32_t, IDR1_EVTQS, 20, 16)
 BITFIELD_DECL(uint32_t, IDR1_SSIDSIZE, 10, 6)
 BITFIELD_DECL(uint32_t, IDR1_SIDSIZE, 5, 0)
 BITFIELD_DECL(uint32_t, IDR5_OAS, 2, 0)
@@ -119,6 +120,20 @@ static uint32_t smmu_queue_empty(smmu_queue_t *q)
            ((q->prod & wrap_mask) == (q->cons & wrap_mask));
 }
 
+static void smmu_configure_queue(smmu_dev_t *smmu, smmu_queue_type_t *queue,
+                                 uint32_t base_offset, uint32_t cons_offset,
+                                 uint32_t prod_offset)
+{
+    queue->cons_reg = (uint32_t *)(smmu->base + cons_offset);
+    queue->prod_reg = (uint32_t *)(smmu->base + prod_offset);
+    queue->queue.cons = 0;
+    queue->queue.prod = 0;
+
+    val_el3_mmio_write64(smmu->base + base_offset, queue->queue_base);
+    val_el3_mmio_write((uint64_t)queue->cons_reg, 0);
+    val_el3_mmio_write((uint64_t)queue->prod_reg, 0);
+}
+
 static int smmu_cmdq_build_cmd(uint64_t *cmd, uint8_t opcode)
 {
     val_el3_memory_set(cmd, QUEUE_DWORDS_PER_ENT << 3, 0);
@@ -152,6 +167,7 @@ static int smmu_cmdq_write_cmd(smmu_dev_t *smmu, uint64_t *cmd)
 {
     uint32_t timeout = SMMU_CMDQ_POLL_TIMEOUT;
     int ret = 0, i;
+    uint32_t hw_prod, hw_cons;
     uint64_t *cmd_dst;
     smmu_queue_type_t *cmdq = &smmu->cmd_type;
 
@@ -159,15 +175,20 @@ static int smmu_cmdq_write_cmd(smmu_dev_t *smmu, uint64_t *cmd)
                 .log2nent = cmdq->queue.log2nent,
             };
 
-    while (smmu_queue_full(&cmdq->queue) && timeout)
-        timeout--;
+    do {
+        hw_prod = val_el3_mmio_read((uint64_t)cmdq->prod_reg);
+        hw_cons = val_el3_mmio_read((uint64_t)cmdq->cons_reg);
+        queue.prod = hw_prod;
+        queue.cons = hw_cons;
+        if (!smmu_queue_full(&queue))
+            break;
+    } while (--timeout);
 
     if (!timeout) {
         ERROR("\n      SMMU CMD queue is full     ");
         return -1;
     }
 
-    queue.prod = val_el3_mmio_read((uint64_t)cmdq->prod_reg);
     cmd_dst = (uint64_t *)(cmdq->base +
               ((queue.prod & ((0x1ull << queue.log2nent) - 1)) *
               (cmdq->entry_size)));
@@ -177,6 +198,8 @@ static int smmu_cmdq_write_cmd(smmu_dev_t *smmu, uint64_t *cmd)
 
     val_el3_mem_barrier();
     val_el3_mmio_write((uint64_t)cmdq->prod_reg, queue.prod);
+    cmdq->queue.cons = hw_cons;
+    cmdq->queue.prod = queue.prod;
 
     return ret;
 }
@@ -416,10 +439,8 @@ static uint32_t smmu_event_queue_init(smmu_dev_t *smmu)
         return 0;
     }
     eventq->base_phys = (uint64_t)val_el3_memory_virt_to_phys(eventq->base_ptr);
-    eventq->base = (uint8_t *)eventq->base_ptr;
-
-    eventq->prod_reg = (uint32_t *)(smmu->base + SMMU_R_EVTQ_PROD);
-    eventq->cons_reg = (uint32_t *)(smmu->base + SMMU_R_EVTQ_CONS);
+    eventq->base_phys = align_to_size(eventq->base_phys, eventq_size);
+    eventq->base = (uint8_t *)align_to_size((uint64_t)eventq->base_ptr, eventq_size);
     eventq->entry_size = QUEUE_DWORDS_PER_ENT << 3;
 
     eventq->queue_base = QUEUE_BASE_RWA |
@@ -443,10 +464,8 @@ static uint32_t smmu_cmd_queue_init(smmu_dev_t *smmu)
     }
 
     cmdq->base_phys = (uint64_t)val_el3_memory_virt_to_phys(cmdq->base_ptr);
-    cmdq->base = (uint8_t *)cmdq->base_ptr;
-
-    cmdq->prod_reg = (uint32_t *)(smmu->base + SMMU_R_CMDQ_PROD);
-    cmdq->cons_reg = (uint32_t *)(smmu->base + SMMU_R_CMDQ_CONS);
+    cmdq->base_phys = align_to_size(cmdq->base_phys, cmdq_size);
+    cmdq->base = (uint8_t *)align_to_size((uint64_t)cmdq->base_ptr, cmdq_size);
     cmdq->entry_size = QUEUE_DWORDS_PER_ENT << 3;
 
     cmdq->queue_base = QUEUE_BASE_RWA |
@@ -641,6 +660,22 @@ static int32_t smmu_reset(smmu_dev_t *smmu)
         return ret;
     }
 
+    r_cr0 = val_el3_mmio_read(smmu->base + SMMU_R_CR0);
+    r_cr0 &= ~CR0_CMDQEN;
+    ret = smmu_reg_write_sync(smmu, r_cr0, SMMU_R_CR0, SMMU_R_CR0ACK);
+    if (ret) {
+        ERROR("\n      failed to clear SMMU_CR0.CMDQEN");
+        return ret;
+    }
+
+    r_cr0 = val_el3_mmio_read(smmu->base + SMMU_R_CR0);
+    r_cr0 &= ~CR0_EVENTQEN;
+    ret = smmu_reg_write_sync(smmu, r_cr0, SMMU_R_CR0, SMMU_R_CR0ACK);
+    if (ret) {
+        ERROR("\n      failed to clear SMMU_CR0.EVENTQEN");
+        return ret;
+    }
+
     r_cr1 = BITFIELD_SET(CR1_TABLE_SH,  SMMU_SH_ISH) | BITFIELD_SET(CR1_QUEUE_SH, SMMU_SH_ISH) |
            BITFIELD_SET(CR1_TABLE_IC, CR1_CACHE_WB) | BITFIELD_SET(CR1_QUEUE_IC, CR1_CACHE_WB) |
            BITFIELD_SET(CR1_TABLE_OC, CR1_CACHE_WB) | BITFIELD_SET(CR1_QUEUE_OC, CR1_CACHE_WB);
@@ -654,13 +689,10 @@ static int32_t smmu_reset(smmu_dev_t *smmu)
     val_el3_mmio_write(smmu->base + SMMU_R_STRTAB_BASE_CFG,
             smmu->strtab_cfg.strtab_base_cfg);
 
-    val_el3_mmio_write64(smmu->base + SMMU_R_CMDQ_BASE, smmu->cmd_type.queue_base);
-    val_el3_mmio_write(smmu->base + SMMU_R_CMDQ_PROD, smmu->cmd_type.queue.prod);
-    val_el3_mmio_write(smmu->base + SMMU_R_CMDQ_CONS, smmu->cmd_type.queue.cons);
-
-    val_el3_mmio_write64(smmu->base + SMMU_R_EVTQ_BASE, smmu->evnt_type.queue_base);
-    val_el3_mmio_write(smmu->base + SMMU_R_EVTQ_PROD, smmu->evnt_type.queue.prod);
-    val_el3_mmio_write(smmu->base + SMMU_R_EVTQ_CONS, smmu->evnt_type.queue.cons);
+    smmu_configure_queue(smmu, &smmu->cmd_type, SMMU_R_CMDQ_BASE,
+                         SMMU_R_CMDQ_CONS, SMMU_R_CMDQ_PROD);
+    smmu_configure_queue(smmu, &smmu->evnt_type, SMMU_R_EVTQ_BASE,
+                         SMMU_R_EVTQ_CONS, SMMU_R_EVTQ_PROD);
 
     if (val_el3_smmu_supports_mec(smmu->base))
         smmu_gmecid_init(smmu);
@@ -796,6 +828,7 @@ static uint32_t smmu_probe(smmu_dev_t *smmu)
     }
 
     smmu->cmd_type.queue.log2nent = BITFIELD_GET(IDR1_CMDQS, idr1);
+    smmu->evnt_type.queue.log2nent = BITFIELD_GET(IDR1_EVTQS, idr1);
 
     /* SID/SSID sizes */
     smmu->sid_bits = BITFIELD_GET(IDR1_SIDSIZE, idr1);
