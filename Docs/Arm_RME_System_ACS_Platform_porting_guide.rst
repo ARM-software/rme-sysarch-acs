@@ -486,7 +486,9 @@ requirements are met.
 - 2MB memory must be flat mapped in EL3-MMU with Root access PAS and GPI as ROOT/ALL_ACCESS, which
   is used for MMU tables in EL3.
 - 2MB Free memory which is used as PA in tests.
-- 2MB memory that is flat-mapped as Realm Access PAS which is used for Realm SMMU tables.
+- Memory region starting at ``PLAT_FREE_MEM_SMMU``, flat-mapped as Realm PAS, with
+  ``PLAT_MEMORY_POOL_SIZE`` chosen based on ``PLATFORM_OVERRIDE_SMMU_STRTAB_BITS`` plus space
+  for other EL3 SMMU allocations.
 - 4KB/16KB/64KB shared memory that is used,
   a) as a structure, shared_data_el32 to share data between EL3 and EL2 domains,
   b) to save/restore registers and sp_el3, and tf-handler entry address.

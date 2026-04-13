@@ -315,6 +315,8 @@
 #define IOVIRT_NAMED_COMPONENT_COUNT  0
 #define IOVIRT_PMCG_COUNT             0
 #define IOVIRT_SMMUV3_0_BASE_ADDRESS  0x2B400000
+/* Configured SMMU stream-table span, independent of IDR1.SIDSIZE. */
+#define PLATFORM_OVERRIDE_SMMU_STRTAB_BITS 16U
 #define IOVIRT_SMMU_CTX_INT_OFFSET    0x0
 #define IOVIRT_SMMU_CTX_INT_CNT       0x0
 #define IOVIRT_RC_PCI_SEG_NUM         0x0

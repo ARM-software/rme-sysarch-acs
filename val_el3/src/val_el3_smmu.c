@@ -81,6 +81,11 @@ uint32_t dptgs_value[DPT_GS_MAX_IDX] = {4/1000000, 64/1000000, 16/1000000, 0};
 uint32_t dpt_dptps[DPT_PS_MAX_IDX] = {32, 36, 40, 42, 44, 58, 52, 0};
 uint32_t dptps_value[DPT_PS_MAX_IDX] = {4, 64, 1000, 4000, 16000, 256000, 4000000};
 
+#define MAX_LOG2_CMD_QUEUE_SIZE 8U
+#define MAX_LOG2_EVT_QUEUE_SIZE 7U
+
+#define EVTQ_DWORDS_PER_ENT     4U
+
 smmu_dev_t *g_smmu;
 uint32_t g_num_smmus;
 uint32_t g_sid;
@@ -409,7 +414,7 @@ static uint32_t smmu_strtab_init_linear(smmu_dev_t *smmu)
     uint32_t size, i;
     smmu_strtab_config_t *cfg = &smmu->strtab_cfg;
 
-    size = (1 << smmu->sid_bits) * (STRTAB_STE_DWORDS << 3);
+    size = (1 << smmu->strtab_sid_bits) * (STRTAB_STE_DWORDS << 3);
     cfg->strtab_ptr = val_el3_memory_calloc(2, size, SIZE_4KB);
     if (!cfg->strtab_ptr) {
         ERROR("\n      Failed to allocate linear stream table.     ");
@@ -418,9 +423,9 @@ static uint32_t smmu_strtab_init_linear(smmu_dev_t *smmu)
 
     cfg->strtab_phys = align_to_size((uint64_t)val_el3_memory_virt_to_phys(cfg->strtab_ptr), size);
     cfg->strtab64 = (uint64_t *)align_to_size((uint64_t)cfg->strtab_ptr, size);
-    cfg->l1_ent_count = 1 << smmu->sid_bits;
+    cfg->l1_ent_count = 1 << smmu->strtab_sid_bits;
     cfg->strtab_base_cfg = BITFIELD_SET(STRTAB_BASE_CFG_FMT, STRTAB_BASE_CFG_FMT_LINEAR) |
-                           BITFIELD_SET(STRTAB_BASE_CFG_LOG2SIZE, smmu->sid_bits);
+                           BITFIELD_SET(STRTAB_BASE_CFG_LOG2SIZE, smmu->strtab_sid_bits);
 
     for (ste = cfg->strtab64, i = 0; i < cfg->l1_ent_count; ++i, ste += STRTAB_STE_DWORDS)
         smmu_strtab_write_ste(NULL, ste, smmu);
@@ -430,7 +435,7 @@ static uint32_t smmu_strtab_init_linear(smmu_dev_t *smmu)
 static uint32_t smmu_event_queue_init(smmu_dev_t *smmu)
 {
     smmu_queue_type_t *eventq = &smmu->evnt_type;
-    uint64_t eventq_size = ((1 << eventq->queue.log2nent) * QUEUE_DWORDS_PER_ENT) << 3;
+    uint64_t eventq_size = ((1ULL << eventq->queue.log2nent) * EVTQ_DWORDS_PER_ENT) << 3;
 
     eventq_size = (eventq_size < 32)?32:eventq_size;
     eventq->base_ptr = val_el3_memory_calloc(2, eventq_size, SIZE_4KB);
@@ -441,7 +446,7 @@ static uint32_t smmu_event_queue_init(smmu_dev_t *smmu)
     eventq->base_phys = (uint64_t)val_el3_memory_virt_to_phys(eventq->base_ptr);
     eventq->base_phys = align_to_size(eventq->base_phys, eventq_size);
     eventq->base = (uint8_t *)align_to_size((uint64_t)eventq->base_ptr, eventq_size);
-    eventq->entry_size = QUEUE_DWORDS_PER_ENT << 3;
+    eventq->entry_size = EVTQ_DWORDS_PER_ENT << 3;
 
     eventq->queue_base = QUEUE_BASE_RWA |
                        (eventq->base_phys & (QUEUE_BASE_ADDR_MASK << QUEUE_BASE_ADDR_SHIFT)) |
@@ -558,7 +563,7 @@ static int smmu_strtab_init_2level(smmu_dev_t *smmu)
     smmu_strtab_config_t *cfg = &smmu->strtab_cfg;
     int ret;
 
-    log2size = smmu->sid_bits - STRTAB_SPLIT;
+    log2size = smmu->strtab_sid_bits - STRTAB_SPLIT;
     cfg->l1_ent_count = 1 << log2size;
 
     log2size += STRTAB_SPLIT;
@@ -828,16 +833,26 @@ static uint32_t smmu_probe(smmu_dev_t *smmu)
     }
 
     smmu->cmd_type.queue.log2nent = BITFIELD_GET(IDR1_CMDQS, idr1);
+    if (smmu->cmd_type.queue.log2nent > MAX_LOG2_CMD_QUEUE_SIZE)
+        smmu->cmd_type.queue.log2nent = MAX_LOG2_CMD_QUEUE_SIZE;
+
     smmu->evnt_type.queue.log2nent = BITFIELD_GET(IDR1_EVTQS, idr1);
+    if (smmu->evnt_type.queue.log2nent > MAX_LOG2_EVT_QUEUE_SIZE)
+        smmu->evnt_type.queue.log2nent = MAX_LOG2_EVT_QUEUE_SIZE;
 
     /* SID/SSID sizes */
     smmu->sid_bits = BITFIELD_GET(IDR1_SIDSIZE, idr1);
+    smmu->strtab_sid_bits = PLATFORM_OVERRIDE_SMMU_STRTAB_BITS;
+    if (smmu->strtab_sid_bits > smmu->sid_bits)
+        smmu->strtab_sid_bits = smmu->sid_bits;
+
     smmu->ssid_bits = BITFIELD_GET(IDR1_SSIDSIZE, idr1);
 
     INFO("ssid_bits = %d", smmu->ssid_bits);
     INFO("sid_bits = %d\n", smmu->sid_bits);
+    INFO("strtab_sid_bits = %d\n", smmu->strtab_sid_bits);
 
-    if (smmu->sid_bits <= STRTAB_SPLIT)
+    if (smmu->strtab_sid_bits <= STRTAB_SPLIT)
         smmu->supported.st_level_2lvl = 0;
 
     /* IDR5 */
@@ -1137,7 +1152,14 @@ uint32_t val_el3_smmu_rlm_map(smmu_master_attributes_t master_attr, pgt_descript
 
     if (master_attr.streamid >= (0x1ul << smmu->sid_bits))
     {
-        ERROR("\n    val_smmu_map: sid %d out of range       ", master_attr.streamid);
+        ERROR("\n    val_smmu_map: sid %d unsupported by SMMU       ", master_attr.streamid);
+        return 1;
+    }
+
+    if (master_attr.streamid >= (0x1ul << smmu->strtab_sid_bits))
+    {
+        ERROR("\n    val_smmu_map: sid %d outside configured stream table       ",
+              master_attr.streamid);
         return 1;
     }
 
@@ -1244,7 +1266,10 @@ void val_el3_smmu_unmap(smmu_master_attributes_t master_attr)
     if (master_attr.streamid >= (0x1ul << master->smmu->sid_bits))
         return;
 
-    strtab = master->smmu->strtab_cfg.strtab64 + master_attr.streamid * STRTAB_STE_DWORDS;
+    if (master_attr.streamid >= (0x1ul << master->smmu->strtab_sid_bits))
+        return;
+
+    strtab = smmu_strtab_get_ste_for_sid(master->smmu, master_attr.streamid);
     smmu_strtab_write_ste(NULL, strtab, smmu);
 
     smmu_cdtab_free(master);
@@ -1664,7 +1689,14 @@ uint32_t val_el3_smmu_set_rlm_ste_mecid(smmu_master_attributes_t master_attr, ui
 
   if (master_attr.streamid >= (0x1ul << smmu->sid_bits))
   {
-      ERROR("\n    val_smmu_map: sid %d out of range       ", master_attr.streamid);
+      ERROR("\n    val_smmu_map: sid %d unsupported by SMMU       ", master_attr.streamid);
+      return 1;
+  }
+
+  if (master_attr.streamid >= (0x1ul << smmu->strtab_sid_bits))
+  {
+      ERROR("\n    val_smmu_map: sid %d outside configured stream table       ",
+            master_attr.streamid);
       return 1;
   }
 

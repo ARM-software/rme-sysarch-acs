@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022,2025, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022,2025-2026, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -109,6 +109,7 @@ typedef struct {
     uint64_t oas;
     uint32_t ssid_bits;
     uint32_t sid_bits;
+    uint32_t strtab_sid_bits;
     smmu_cmd_queue_t cmdq;
     smmu_strtab_config_t strtab_cfg;
     union {
