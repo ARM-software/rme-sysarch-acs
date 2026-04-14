@@ -25,12 +25,553 @@
 #include "include/val_exerciser.h"
 #include "include/val_smmu.h"
 #include "include/val_pgt.h"
+#include "include/val_test_entry.h"
+#include "include/val_da.h"
+#include "include/val_dpt.h"
+#include "include/val_gic.h"
+#include "include/val_legacy.h"
+#include "include/val_mec.h"
+#include "include/val_cxl.h"
+#include "include/val_cda.h"
+#include "include/val_tdisp.h"
 
+bool
+acs_is_module_enabled(const char8_t *module_id)
+{
+  /* Runtime overrides (CLI/INI/EL3) have priority */
+  if (g_num_modules)
+    return acs_list_contains((const char8_t **)g_execute_modules_str, g_num_modules, module_id);
+
+  /* No overrides: enable everything */
+  (void)module_id;
+  return true;
+}
+
+bool
+acs_list_contains(const char8_t **list, uint32_t count, const char8_t *value)
+{
+  uint32_t i;
+
+  if (list == NULL || count == 0)
+      return false;
+
+  for (i = 0; i < count; i++) {
+      if (val_memory_compare((void *)list[i], (void *)value, val_strnlen(list[i])) == 0)
+          return true;
+  }
+
+  return false;
+}
 uint64_t free_mem_var_pa;
 uint64_t free_mem_var_va;
 uint64_t rme_nvm_mem;
 
 struct_sh_data *shared_data;
+
+MODULE_TEST_DISPATCHER_s g_module_test_table[MODULE_SENTINEL] = {
+  [CDA_MODULE_ID] = {
+    .module_id = CDA_MODULE_ID,
+    .entry = {
+      [CDA_ENTRY_CDA_RJZQCP_RESET_TRANSITION_ENTRY] = {
+        .entry_fn = cda_rjzqcp_reset_transition_entry,
+        .test_text = "cda_rjzqcp_reset_transition",
+      },
+      [CDA_ENTRY_CDA_RKRCWK_HOST_SIDE_GPC_ENTRY] = {
+        .entry_fn = cda_rkrcwk_host_side_gpc_entry,
+        .test_text = "cda_rkrcwk_host_side_gpc",
+      },
+    },
+  },
+  [CXL_MODULE_ID] = {
+    .module_id = CXL_MODULE_ID,
+    .entry = {
+      [CXL_ENTRY_CXL_HOST_PORT_RMSD_WRITE_PROTECT_ENTRY] = {
+        .entry_fn = cxl_host_port_rmsd_write_protect_entry,
+        .test_text = "cxl_host_port_rmsd_write_protect",
+      },
+      [CXL_ENTRY_CXL_RBYTYV_ROOT_PORT_PAS_BEHAVIOR_ENTRY] = {
+        .entry_fn = cxl_rbytyv_root_port_pas_behavior_entry,
+        .test_text = "cxl_rbytyv_root_port_pas_behavior",
+      },
+      [CXL_ENTRY_CXL_RCNSLJ_TYPE3_NO_TSP_ENTRY] = {
+        .entry_fn = cxl_rcnslj_type3_no_tsp_entry,
+        .test_text = "cxl_rcnslj_type3_no_tsp",
+      },
+      [CXL_ENTRY_CXL_RDHWNR_LINK_STREAM_LOCK_ENTRY] = {
+        .entry_fn = cxl_rdhwnr_link_stream_lock_entry,
+        .test_text = "cxl_rdhwnr_link_stream_lock",
+      },
+      [CXL_ENTRY_CXL_RFDVZC_TDISP_DISABLE_ENTRY] = {
+        .entry_fn = cxl_rfdvzc_tdisp_disable_entry,
+        .test_text = "cxl_rfdvzc_tdisp_disable",
+      },
+      [CXL_ENTRY_CXL_RGBGQX_CTC_LINK_IDE_ENTRY] = {
+        .entry_fn = cxl_rgbgqx_ctc_link_ide_entry,
+        .test_text = "cxl_rgbgqx_ctc_link_ide",
+      },
+      [CXL_ENTRY_CXL_RGTVGZ_TDISP_ENABLE_LINK_GATE_ENTRY] = {
+        .entry_fn = cxl_rgtvgz_tdisp_enable_link_gate_entry,
+        .test_text = "cxl_rgtvgz_tdisp_enable_link_gate",
+      },
+      [CXL_ENTRY_CXL_RGVRQC_HOST_PORT_COVERAGE_ENTRY] = {
+        .entry_fn = cxl_rgvrqc_host_port_coverage_entry,
+        .test_text = "cxl_rgvrqc_host_port_coverage",
+      },
+      [CXL_ENTRY_CXL_RHCQWS_HOST_SIDE_MPE_ENTRY] = {
+        .entry_fn = cxl_rhcqws_host_side_mpe_entry,
+        .test_text = "cxl_rhcqws_host_side_mpe",
+      },
+      [CXL_ENTRY_CXL_RHHMVM_BISNP_PAS_NONSECURE_ENTRY] = {
+        .entry_fn = cxl_rhhmvm_bisnp_pas_nonsecure_entry,
+        .test_text = "cxl_rhhmvm_bisnp_pas_nonsecure",
+      },
+      [CXL_ENTRY_CXL_RHMXTF_HOST_HDM_DECODER_ENTRY] = {
+        .entry_fn = cxl_rhmxtf_host_hdm_decoder_entry,
+        .test_text = "cxl_rhmxtf_host_hdm_decoder",
+      },
+      [CXL_ENTRY_CXL_RJSDVG_LITTLE_ENDIAN_ENTRY] = {
+        .entry_fn = cxl_rjsdvg_little_endian_entry,
+        .test_text = "cxl_rjsdvg_little_endian",
+      },
+      [CXL_ENTRY_CXL_RJXPZP_PAS_CKID_MAPPING_ENTRY] = {
+        .entry_fn = cxl_rjxpzp_pas_ckid_mapping_entry,
+        .test_text = "cxl_rjxpzp_pas_ckid_mapping",
+      },
+      [CXL_ENTRY_CXL_RKJYPB_CACHE_DISABLE_ENTRY] = {
+        .entry_fn = cxl_rkjypb_cache_disable_entry,
+        .test_text = "cxl_rkjypb_cache_disable",
+      },
+      [CXL_ENTRY_CXL_RLQMCY_TYPE3_HOST_MPE_ENTRY] = {
+        .entry_fn = cxl_rlqmcy_type3_host_mpe_entry,
+        .test_text = "cxl_rlqmcy_type3_host_mpe",
+      },
+      [CXL_ENTRY_CXL_RNYCLL_TDISP_DISABLE_REJECT_ENTRY] = {
+        .entry_fn = cxl_rnycll_tdisp_disable_reject_entry,
+        .test_text = "cxl_rnycll_tdisp_disable_reject",
+      },
+      [CXL_ENTRY_CXL_RPHCGC_RMSD_FULL_PROTECT_ENTRY] = {
+        .entry_fn = cxl_rphcgc_rmsd_full_protect_entry,
+        .test_text = "cxl_rphcgc_rmsd_full_protect",
+      },
+      [CXL_ENTRY_CXL_RPHWMM_RME_CDA_TSP_ENTRY] = {
+        .entry_fn = cxl_rphwmm_rme_cda_tsp_entry,
+        .test_text = "cxl_rphwmm_rme_cda_tsp",
+      },
+      [CXL_ENTRY_CXL_RPLCMC_TYPE3_TARGET_CKID_ENTRY] = {
+        .entry_fn = cxl_rplcmc_type3_target_ckid_entry,
+        .test_text = "cxl_rplcmc_type3_target_ckid",
+      },
+      [CXL_ENTRY_CXL_RPLYKV_RDFWKW_RME_CDA_DVSEC_ENTRY] = {
+        .entry_fn = cxl_rplykv_rdfwkw_rme_cda_dvsec_entry,
+        .test_text = "cxl_rplykv_rdfwkw_rme_cda_dvsec",
+      },
+      [CXL_ENTRY_CXL_RPTGGP_CMO_TO_CXL_MEM_ENTRY] = {
+        .entry_fn = cxl_rptggp_cmo_to_cxl_mem_entry,
+        .test_text = "cxl_rptggp_cmo_to_cxl_mem",
+      },
+      [CXL_ENTRY_CXL_RWPGJB_RMSD_WRITE_PROTECT_PROPERTY_ENTRY] = {
+        .entry_fn = cxl_rwpgjb_rmsd_write_protect_property_entry,
+        .test_text = "cxl_rwpgjb_rmsd_write_protect_property",
+      },
+      [CXL_ENTRY_CXL_RWYVCQ_LINK_UNLOCK_REJECT_ENTRY] = {
+        .entry_fn = cxl_rwyvcq_link_unlock_reject_entry,
+        .test_text = "cxl_rwyvcq_link_unlock_reject",
+      },
+      [CXL_ENTRY_CXL_RXQHNG_RID_RANGE_REJECT_ENTRY] = {
+        .entry_fn = cxl_rxqhng_rid_range_reject_entry,
+        .test_text = "cxl_rxqhng_rid_range_reject",
+      },
+      [CXL_ENTRY_CXL_RXWJNN_TYPE3_LINK_IDE_ENTRY] = {
+        .entry_fn = cxl_rxwjnn_type3_link_ide_entry,
+        .test_text = "cxl_rxwjnn_type3_link_ide",
+      },
+    },
+  },
+  [DA_MODULE_ID] = {
+    .module_id = DA_MODULE_ID,
+    .entry = {
+      [DA_ENTRY_DA_ATTRIBUTE_RMEDA_CTL_REGISTERS_ENTRY] = {
+        .entry_fn = da_attribute_rmeda_ctl_registers_entry,
+        .test_text = "da_attribute_rmeda_ctl_registers",
+      },
+      [DA_ENTRY_DA_AUTONOMOUS_ROOTPORT_REQUEST_NS_PAS_ENTRY] = {
+        .entry_fn = da_autonomous_rootport_request_ns_pas_entry,
+        .test_text = "da_autonomous_rootport_request_ns_pas",
+      },
+      [DA_ENTRY_DA_CTL_REGS_RMSD_WRITE_PROTECT_PROPERTY_ENTRY] = {
+        .entry_fn = da_ctl_regs_rmsd_write_protect_property_entry,
+        .test_text = "da_ctl_regs_rmsd_write_protect_property",
+      },
+      [DA_ENTRY_DA_DVSEC_REGISTER_CONFIG_ENTRY] = {
+        .entry_fn = da_dvsec_register_config_entry,
+        .test_text = "da_dvsec_register_config",
+      },
+      [DA_ENTRY_DA_IDE_STATE_ROOTPORT_ERROR_ENTRY] = {
+        .entry_fn = da_ide_state_rootport_error_entry,
+        .test_text = "da_ide_state_rootport_error",
+      },
+      [DA_ENTRY_DA_IDE_STATE_TDISP_DISABLE_ENTRY] = {
+        .entry_fn = da_ide_state_tdisp_disable_entry,
+        .test_text = "da_ide_state_tdisp_disable",
+      },
+      [DA_ENTRY_DA_IDE_TBIT_0_FOR_ROOT_REQUEST_ENTRY] = {
+        .entry_fn = da_ide_tbit_0_for_root_request_entry,
+        .test_text = "da_ide_tbit_0_for_root_request",
+      },
+      [DA_ENTRY_DA_INCOMING_REQUEST_IDE_NON_SEC_UNLOCKED_ENTRY] = {
+        .entry_fn = da_incoming_request_ide_non_sec_unlocked_entry,
+        .test_text = "da_incoming_request_ide_non_sec_unlocked",
+      },
+      [DA_ENTRY_DA_INCOMING_REQUEST_IDE_SEC_LOCKED_ENTRY] = {
+        .entry_fn = da_incoming_request_ide_sec_locked_entry,
+        .test_text = "da_incoming_request_ide_sec_locked",
+      },
+      [DA_ENTRY_DA_INTERCONNECT_REGS_RMSD_PROTECTED_ENTRY] = {
+        .entry_fn = da_interconnect_regs_rmsd_protected_entry,
+        .test_text = "da_interconnect_regs_rmsd_protected",
+      },
+      [DA_ENTRY_DA_OUTGOING_REALM_RQST_IDE_TBIT_1_ENTRY] = {
+        .entry_fn = da_outgoing_realm_rqst_ide_tbit_1_entry,
+        .test_text = "da_outgoing_realm_rqst_ide_tbit_1",
+      },
+      [DA_ENTRY_DA_OUTGOING_REQUEST_WITH_IDE_TBIT_ENTRY] = {
+        .entry_fn = da_outgoing_request_with_ide_tbit_entry,
+        .test_text = "da_outgoing_request_with_ide_tbit",
+      },
+      [DA_ENTRY_DA_P2P_BTW_2_TDISP_DEVICES_ENTRY] = {
+        .entry_fn = da_p2p_btw_2_tdisp_devices_entry,
+        .test_text = "da_p2p_btw_2_tdisp_devices",
+      },
+      [DA_ENTRY_DA_RMSD_WRITE_DETECT_PROPERTY_ENTRY] = {
+        .entry_fn = da_rmsd_write_detect_property_entry,
+        .test_text = "da_rmsd_write_detect_property",
+      },
+      [DA_ENTRY_DA_ROOTPORT_IDE_FEATURES_ENTRY] = {
+        .entry_fn = da_rootport_ide_features_entry,
+        .test_text = "da_rootport_ide_features",
+      },
+      [DA_ENTRY_DA_ROOTPORT_TDISP_DISABLED_ENTRY] = {
+        .entry_fn = da_rootport_tdisp_disabled_entry,
+        .test_text = "da_rootport_tdisp_disabled",
+      },
+      [DA_ENTRY_DA_ROOTPORT_WRITE_PROTECT_FULL_PROTECT_PROPERTY_ENTRY] = {
+        .entry_fn = da_rootport_write_protect_full_protect_property_entry,
+        .test_text = "da_rootport_write_protect_full_protect_property",
+      },
+      [DA_ENTRY_DA_SELECTIVE_IDE_REGISTER_PROPERTY_ENTRY] = {
+        .entry_fn = da_selective_ide_register_property_entry,
+        .test_text = "da_selective_ide_register_property",
+      },
+      [DA_ENTRY_DA_SMMU_IMPLEMENTATION_ENTRY] = {
+        .entry_fn = da_smmu_implementation_entry,
+        .test_text = "da_smmu_implementation",
+      },
+      [DA_ENTRY_DA_TEE_IO_CAPABILITY_ENTRY] = {
+        .entry_fn = da_tee_io_capability_entry,
+        .test_text = "da_tee_io_capability",
+      },
+    },
+  },
+  [DPT_MODULE_ID] = {
+    .module_id = DPT_MODULE_ID,
+    .entry = {
+      [DPT_ENTRY_DPT_P2P_DIFFERENT_ROOTPORT_INVALID_ENTRY] = {
+        .entry_fn = dpt_p2p_different_rootport_invalid_entry,
+        .test_text = "dpt_p2p_different_rootport_invalid",
+      },
+      [DPT_ENTRY_DPT_P2P_DIFFERENT_ROOTPORT_VALID_ENTRY] = {
+        .entry_fn = dpt_p2p_different_rootport_valid_entry,
+        .test_text = "dpt_p2p_different_rootport_valid",
+      },
+      [DPT_ENTRY_DPT_P2P_SAME_ROOTPORT_INVALID_ENTRY] = {
+        .entry_fn = dpt_p2p_same_rootport_invalid_entry,
+        .test_text = "dpt_p2p_same_rootport_invalid",
+      },
+      [DPT_ENTRY_DPT_P2P_SAME_ROOTPORT_VALID_ENTRY] = {
+        .entry_fn = dpt_p2p_same_rootport_valid_entry,
+        .test_text = "dpt_p2p_same_rootport_valid",
+      },
+      [DPT_ENTRY_DPT_SYSTEM_RESOURCE_INVALID_ENTRY] = {
+        .entry_fn = dpt_system_resource_invalid_entry,
+        .test_text = "dpt_system_resource_invalid",
+      },
+      [DPT_ENTRY_DPT_SYSTEM_RESOURCE_VALID_WITH_DPTI_ENTRY] = {
+        .entry_fn = dpt_system_resource_valid_with_dpti_entry,
+        .test_text = "dpt_system_resource_valid_with_dpti",
+      },
+      [DPT_ENTRY_DPT_SYSTEM_RESOURCE_VALID_WITHOUT_DPTI_ENTRY] = {
+        .entry_fn = dpt_system_resource_valid_without_dpti_entry,
+        .test_text = "dpt_system_resource_valid_without_dpti",
+      },
+    },
+  },
+  [GIC_MODULE_ID] = {
+    .module_id = GIC_MODULE_ID,
+    .entry = {
+      [GIC_ENTRY_GIC_ITS_SUBJECTED_TO_GPC_CHECK_ENTRY] = {
+        .entry_fn = gic_its_subjected_to_gpc_check_entry,
+        .test_text = "gic_its_subjected_to_gpc_check",
+      },
+    },
+  },
+  [LEGACY_MODULE_ID] = {
+    .module_id = LEGACY_MODULE_ID,
+    .entry = {
+      [LEGACY_ENTRY_LEGACY_TZ_EN_DRIVES_ROOT_TO_SECURE_ENTRY] = {
+        .entry_fn = legacy_tz_en_drives_root_to_secure_entry,
+        .test_text = "legacy_tz_en_drives_root_to_secure",
+      },
+      [LEGACY_ENTRY_LEGACY_TZ_ENABLE_AFTER_RESET_ENTRY] = {
+        .entry_fn = legacy_tz_enable_after_reset_entry,
+        .test_text = "legacy_tz_enable_after_reset",
+      },
+      [LEGACY_ENTRY_LEGACY_TZ_ENABLE_BEFORE_RESETV_ENTRY] = {
+        .entry_fn = legacy_tz_enable_before_resetv_entry,
+        .test_text = "legacy_tz_enable_before_reset",
+      },
+      [LEGACY_ENTRY_LEGACY_TZ_SUPPORT_CHECK_ENTRY] = {
+        .entry_fn = legacy_tz_support_check_entry,
+        .test_text = "legacy_tz_support_check",
+      },
+    },
+  },
+  [MEC_MODULE_ID] = {
+    .module_id = MEC_MODULE_ID,
+    .entry = {
+      [MEC_ENTRY_MEC_CMO_USES_CORRECT_MECID_ENTRY] = {
+        .entry_fn = mec_cmo_uses_correct_mecid_entry,
+        .test_text = "mec_cmo_uses_correct_mecid",
+      },
+      [MEC_ENTRY_MEC_EFFECT_OF_POPA_CMO_ENTRY] = {
+        .entry_fn = mec_effect_of_popa_cmo_entry,
+        .test_text = "mec_effect_of_popa_cmo",
+      },
+      [MEC_ENTRY_MEC_MECID_ASSOSIATION_AND_ENCRYPTION_ENTRY] = {
+        .entry_fn = mec_mecid_assosiation_and_encryption_entry,
+        .test_text = "mec_mecid_assosiation_and_encryption",
+      },
+      [MEC_ENTRY_MEC_SUPPORT_MECID_AND_MECID_WIDTH_ENTRY] = {
+        .entry_fn = mec_support_mecid_and_mecid_width_entry,
+        .test_text = "mec_support_mecid_and_mecid_width",
+      },
+    },
+  },
+  [RME_MODULE_ID] = {
+    .module_id = RME_MODULE_ID,
+    .entry = {
+      [RME_ENTRY_RME_ALL_PE_HAS_FEAT_RNG_OR_RNG_TRAP_ENTRY] = {
+        .entry_fn = rme_all_pe_has_feat_rng_or_rng_trap_entry,
+        .test_text = "rme_all_pe_has_feat_rng_or_rng_trap",
+      },
+      [RME_ENTRY_RME_CMO_POPA_FOR_CACHEABILITY_SHAREABILITY_ENTRY] = {
+        .entry_fn = rme_cmo_popa_for_cacheability_shareability_entry,
+        .test_text = "rme_cmo_popa_for_cacheability_shareability",
+      },
+      [RME_ENTRY_RME_COHERENT_INTERCONNECT_SUPPORTS_CMO_POPA_ENTRY] = {
+        .entry_fn = rme_coherent_interconnect_supports_cmo_popa_entry,
+        .test_text = "rme_coherent_interconnect_supports_cmo_popa",
+      },
+      [RME_ENTRY_RME_DATA_ENCRYPTION_BEYOND_POPA_ENTRY] = {
+        .entry_fn = rme_data_encryption_beyond_popa_entry,
+        .test_text = "rme_data_encryption_beyond_popa",
+      },
+      [RME_ENTRY_RME_DATA_ENCRYPTION_WITH_DIFFERENT_TWEAK_ENTRY] = {
+        .entry_fn = rme_data_encryption_with_different_tweak_entry,
+        .test_text = "rme_data_encryption_with_different_tweak",
+      },
+      [RME_ENTRY_RME_ENCRYPTION_FOR_ALL_PAS_EXCEPT_NS_ENTRY] = {
+        .entry_fn = rme_encryption_for_all_pas_except_ns_entry,
+        .test_text = "rme_encryption_for_all_pas_except_ns",
+      },
+      [RME_ENTRY_RME_GPC_FOR_SYSTEM_RESOURCE_ENTRY] = {
+        .entry_fn = rme_gpc_for_system_resource_entry,
+        .test_text = "rme_gpc_for_system_resource",
+      },
+      [RME_ENTRY_RME_GPRS_SCRUBBED_AFTER_RESET_ENTRY] = {
+        .entry_fn = rme_gprs_scrubbed_after_reset_entry,
+        .test_text = "rme_gprs_scrubbed_after_reset",
+      },
+      [RME_ENTRY_RME_INTERCONNECT_SUPPORTS_TLBI_PA_ENTRY] = {
+        .entry_fn = rme_interconnect_supports_tlbi_pa_entry,
+        .test_text = "rme_interconnect_supports_tlbi_pa",
+      },
+      [RME_ENTRY_RME_MEMORY_ASSOCIATED_WITH_PAS_TILL_POPA_ENTRY] = {
+        .entry_fn = rme_memory_associated_with_pas_till_popa_entry,
+        .test_text = "rme_memory_associated_with_pas_till_popa",
+      },
+      [RME_ENTRY_RME_MSD_SAVE_RESTORE_MEM_IN_ROOT_PAS_ENTRY] = {
+        .entry_fn = rme_msd_save_restore_mem_in_root_pas_entry,
+        .test_text = "rme_msd_save_restore_mem_in_root_pas",
+      },
+      [RME_ENTRY_RME_MSD_SMEM_IN_ROOT_AFTER_RESET_ENTRY] = {
+        .entry_fn = rme_msd_smem_in_root_after_reset_entry,
+        .test_text = "rme_msd_smem_in_root_after_reset",
+      },
+      [RME_ENTRY_RME_MSD_SMEM_IN_ROOT_PAS_ENTRY] = {
+        .entry_fn = rme_msd_smem_in_root_pas_entry,
+        .test_text = "rme_msd_smem_in_root_pas",
+      },
+      [RME_ENTRY_RME_MTE_REGION_IN_ROOT_PAS_ENTRY] = {
+        .entry_fn = rme_mte_region_in_root_pas_entry,
+        .test_text = "rme_mte_region_in_root_pas",
+      },
+      [RME_ENTRY_RME_NS_ENCRYPTION_IS_IMMUTABLE_ENTRY] = {
+        .entry_fn = rme_ns_encryption_is_immutable_entry,
+        .test_text = "rme_ns_encryption_is_immutable",
+      },
+      [RME_ENTRY_RME_PAS_FILTER_FUNCTIONALITY_ENTRY] = {
+        .entry_fn = rme_pas_filter_functionality_entry,
+        .test_text = "rme_pas_filter_functionality",
+      },
+      [RME_ENTRY_RME_PAS_FILTER_IN_INACTIVE_MODE_ENTRY] = {
+        .entry_fn = rme_pas_filter_in_inactive_mode_entry,
+        .test_text = "rme_pas_filter_in_inactive_mode",
+      },
+      [RME_ENTRY_RME_PCIE_DEVICES_SUPPORT_GPC_ENTRY] = {
+        .entry_fn = rme_pcie_devices_support_gpc_entry,
+        .test_text = "rme_pcie_devices_support_gpc",
+      },
+      [RME_ENTRY_RME_PE_CONTEXT_AFTER_EXIT_WFI_ENTRY] = {
+        .entry_fn = rme_pe_context_after_exit_wfi_entry,
+        .test_text = "rme_pe_context_after_exit_wfi",
+      },
+      [RME_ENTRY_RME_PE_CONTEXT_AFTER_PE_SUSPEND_ENTRY] = {
+        .entry_fn = rme_pe_context_after_pe_suspend_entry,
+        .test_text = "rme_pe_context_after_pe_suspend",
+      },
+      [RME_ENTRY_RME_PE_DO_NOT_HAVE_ARCH_DIFF_ENTRY] = {
+        .entry_fn = rme_pe_do_not_have_arch_diff_entry,
+        .test_text = "rme_pe_do_not_have_arch_diff",
+      },
+      [RME_ENTRY_RME_REALM_SMEM_BEHAVIOUR_AFTER_RESET_ENTRY] = {
+        .entry_fn = rme_realm_smem_behaviour_after_reset_entry,
+        .test_text = "rme_realm_smem_behaviour_after_reset",
+      },
+      [RME_ENTRY_RME_REALM_SMEM_IN_REALM_PAS_ENTRY] = {
+        .entry_fn = rme_realm_smem_in_realm_pas_entry,
+        .test_text = "rme_realm_smem_in_realm_pas",
+      },
+      [RME_ENTRY_RME_RESOURCES_ALIGNED_TO_GRANULARITY_ENTRY] = {
+        .entry_fn = rme_resources_aligned_to_granularity_entry,
+        .test_text = "rme_resources_aligned_to_granularity",
+      },
+      [RME_ENTRY_RME_RESOURCES_ARE_NOT_PHYSICALLY_ALIASED_ENTRY] = {
+        .entry_fn = rme_resources_are_not_physically_aliased_entry,
+        .test_text = "rme_resources_are_not_physically_aliased",
+      },
+      [RME_ENTRY_RME_RNVS_IN_ROOT_PAS_ENTRY] = {
+        .entry_fn = rme_rnvs_in_root_pas_entry,
+        .test_text = "rme_rnvs_in_root_pas",
+      },
+      [RME_ENTRY_RME_ROOT_WDOG_FAILS_IN_NON_ROOT_STATE_ENTRY] = {
+        .entry_fn = rme_root_wdog_fails_in_non_root_state_entry,
+        .test_text = "rme_root_wdog_fails_in_non_root_state",
+      },
+      [RME_ENTRY_RME_ROOT_WDOG_FROM_ROOT_PAS_ENTRY] = {
+        .entry_fn = rme_root_wdog_from_root_pas_entry,
+        .test_text = "rme_root_wdog_from_root_pas",
+      },
+      [RME_ENTRY_RME_SMMU_BLOCKS_REQUEST_AT_REGISTERS_RESET_ENTRY] = {
+        .entry_fn = rme_smmu_blocks_request_at_registers_reset_entry,
+        .test_text = "rme_smmu_blocks_request_at_registers_reset",
+      },
+      [RME_ENTRY_RME_SNOOP_FILTER_CONSIDERS_PAS_ENTRY] = {
+        .entry_fn = rme_snoop_filter_considers_pas_entry,
+        .test_text = "rme_snoop_filter_considers_pas",
+      },
+      [RME_ENTRY_RME_SUPPORT_IN_PE_ENTRY] = {
+        .entry_fn = rme_support_in_pe_entry,
+        .test_text = "rme_support_in_pe",
+      },
+      [RME_ENTRY_RME_SYSTEM_RESET_PROPAGATION_TO_ALL_PE_ENTRY] = {
+        .entry_fn = rme_system_reset_propagation_to_all_pe_entry,
+        .test_text = "rme_system_reset_propagation_to_all_pe",
+      },
+    },
+  },
+  [SMMU_MODULE_ID] = {
+    .module_id = SMMU_MODULE_ID,
+    .entry = {
+      [SMMU_ENTRY_SMMU_IMPLEMENTS_RME_ENTRY] = {
+        .entry_fn = smmu_implements_rme_entry,
+        .test_text = "smmu_implements_rme",
+      },
+      [SMMU_ENTRY_SMMU_RESPONDS_TO_GPT_TLB_ENTRY] = {
+        .entry_fn = smmu_responds_to_gpt_tlb_entry,
+        .test_text = "smmu_responds_to_gpt_tlb",
+      },
+    },
+  },
+  [TDISP_MODULE_ID] = {
+    .module_id = TDISP_MODULE_ID,
+    .entry = {
+      [TDISP_ENTRY_TDISP_RFPYMV_VDM_RESPONSE_CHECK_ENTRY] = {
+        .entry_fn = tdisp_rfpymv_vdm_response_check_entry,
+        .test_text = "tdisp_rfpymv_vdm_response_check",
+      },
+    },
+  },
+};
+
+int
+val_test_is_selected(char8_t *test_text)
+{
+  uint32_t i;
+  uint32_t requested = 1;
+
+  if (g_execute_tests_str && g_num_tests) {
+    requested = 0;
+    for (i = 0; i < g_num_tests; i++) {
+      if (val_memory_compare(test_text, g_execute_tests_str[i],
+                             val_strnlen(test_text)) == 0) {
+        requested = 1;
+        break;
+      }
+    }
+  }
+
+  if (!requested)
+    return 0;
+
+  if (g_skip_test_str && g_num_skip) {
+    for (i = 0; i < g_num_skip; i++) {
+      if (val_memory_compare(test_text, g_skip_test_str[i],
+                             val_strnlen(test_text)) == 0) {
+        return 0;
+      }
+    }
+  }
+
+  return 1;
+}
+
+uint32_t
+val_execute_module_tests(MODULE_ID_e module_id,
+                         int start_enum,
+                         int end_enum,
+                         uint32_t num_pe,
+                         uint32_t status)
+{
+  int i;
+
+  for (i = start_enum + 1; i < end_enum; i++)
+  {
+    if (g_module_test_table[module_id].entry[i].entry_fn == NULL) {
+        status |= ACS_STATUS_SKIP;
+        continue;
+    }
+
+    if (!val_test_is_selected(g_module_test_table[module_id].entry[i].test_text))
+        continue;
+    if ((module_id == MEC_MODULE_ID && i == MEC_ENTRY_MEC_CMO_USES_CORRECT_MECID_ENTRY) ||
+        (module_id == RME_MODULE_ID && i == RME_ENTRY_RME_SNOOP_FILTER_CONSIDERS_PAS_ENTRY))
+        num_pe = 2;
+
+    status |= g_module_test_table[module_id].entry[i].entry_fn(num_pe);
+  }
+
+  return status;
+}
 
 /**
   @brief  This API calls PAL layer to print a formatted string
@@ -360,8 +901,6 @@ uint32_t val_check_skip_module(char8_t *module_id)
 uint32_t val_initialize_test(char8_t *testname, char8_t *desc, uint32_t num_pe, char8_t *ruleid)
 {
   uint32_t i;
-  uint32_t index     = val_pe_get_index_mpid(val_pe_get_mpid());
-  uint32_t dont_skip = 0;
 
   g_print_in_test_context = 1;
   val_print(ACS_PRINT_ALWAYS, "\n", 0);
@@ -375,43 +914,6 @@ uint32_t val_initialize_test(char8_t *testname, char8_t *desc, uint32_t num_pe, 
   for (i = 0; i < num_pe; i++)
     val_set_status(i, "PENDING", 0);
 
-  /* Skip the test if it one of the -skip option parameters */
-  for (i = 0; i < g_num_skip; i++)
-  {
-    if (val_memory_compare(g_skip_test_str[i], testname, val_strnlen(g_skip_test_str[i])) == 0)
-    {
-      val_print(ACS_PRINT_ALWAYS, "\n USER OVERRIDE  - Skip Test        ", 0);
-      val_set_status(index, "SKIP", 0);
-      return ACS_STATUS_SKIP;
-    }
-  }
-
-  /* Don't skip if the test belongs to one of the modules in -m option parameters */
-  for (i = 0; i < g_num_modules; i++)
-  {
-    if (val_memory_compare(g_execute_modules_str[i], testname,
-                           val_strnlen(g_execute_modules_str[i]))
-        == 0)
-      dont_skip++;
-  }
-
-  /* Don't skip if test_num is one of the -t option parameters */
-  for (i = 0; i < g_num_tests; i++)
-  {
-    if (val_memory_compare(testname, g_execute_tests_str[i], val_strnlen(testname)) == 0)
-    {
-      dont_skip++;
-    }
-  }
-
-  if ((!dont_skip) && (g_num_tests || g_num_modules))
-  {
-    val_set_status(index, "SKIP", 0);
-    val_print(ACS_PRINT_ALWAYS, "\n USER OVERRIDE  - Skip Test        ", 0);
-    return ACS_STATUS_SKIP;
-  }
-
-  dont_skip = 1;
   g_rme_tests_total++;
 
   return ACS_STATUS_PASS;
@@ -937,24 +1439,28 @@ uint32_t val_configure_acs(void)
   smmu_rlm_page0 = smmu_base + SMMU_R_PAGE_0_OFFSET;
   smmu_rlm_page1 = smmu_base + SMMU_R_PAGE_1_OFFSET;
   attr |= LOWER_ATTRS(GET_ATTR_INDEX(DEV_MEM_nGnRnE));
-  if (val_add_mmu_entry_el3(smmu_base, smmu_base, attr | LOWER_ATTRS(PAS_ATTR(ROOT_PAS))))
+  if (val_add_mmu_entry_el3(smmu_base, smmu_base,
+                            attr | LOWER_ATTRS(PAS_ATTR(ROOT_PAS))))
   {
     val_print(ACS_PRINT_ERR, " MMU mapping failed for SMMU_BASE address: 0x%llx", smmu_base);
     return 1;
   }
-  if (val_add_mmu_entry_el3(smmu_root_page, smmu_root_page, attr | LOWER_ATTRS(PAS_ATTR(ROOT_PAS))))
+  if (val_add_mmu_entry_el3(smmu_root_page, smmu_root_page,
+                            attr | LOWER_ATTRS(PAS_ATTR(ROOT_PAS))))
   {
     val_print(ACS_PRINT_ERR, " MMU mapping failed for SMMU_ROOT_BASE address: 0x%llx",
               smmu_root_page);
     return 1;
   }
-  if (val_add_mmu_entry_el3(smmu_rlm_page0, smmu_rlm_page0, attr | LOWER_ATTRS(PAS_ATTR(ROOT_PAS))))
+  if (val_add_mmu_entry_el3(smmu_rlm_page0, smmu_rlm_page0,
+                            attr | LOWER_ATTRS(PAS_ATTR(ROOT_PAS))))
   {
     val_print(ACS_PRINT_ERR, " MMU mapping failed for SMMU_REALM0_BASE address: 0x%llx",
               smmu_rlm_page0);
     return 1;
   }
-  if (val_add_mmu_entry_el3(smmu_rlm_page1, smmu_rlm_page1, attr | LOWER_ATTRS(PAS_ATTR(ROOT_PAS))))
+  if (val_add_mmu_entry_el3(smmu_rlm_page1, smmu_rlm_page1,
+                            attr | LOWER_ATTRS(PAS_ATTR(ROOT_PAS))))
   {
     val_print(ACS_PRINT_ERR, " MMU mapping failed for SMMU_REALM1_BASE address: 0x%llx",
               smmu_rlm_page1);
@@ -1014,7 +1520,8 @@ void val_init_runtime_params(void)
 
   rme_nvm_mem = val_get_rme_acs_nvm_mem();
 
-  /* First, request EL3 to publish its local configuration into shared_data & map the shared_addr */
+  /* First, request EL3 to publish its local configuration into shared_data &
+     map the shared_addr */
   val_print(ACS_PRINT_DEBUG,
             " Requesting EL3 to map shared memory & publish its local configuration", 0);
 

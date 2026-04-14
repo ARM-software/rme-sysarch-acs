@@ -614,9 +614,9 @@ free_mem:
 
 
 uint32_t
-dpt_p2p_different_rootport_valid_entry(void)
+dpt_p2p_different_rootport_valid_entry(uint32_t num_pe)
 {
-  uint32_t num_pe = 1;
+  num_pe = 1;
   uint32_t status = ACS_STATUS_FAIL;  //default value
 
   status = val_initialize_test(TEST_NAME, TEST_DESC, num_pe, TEST_RULE);

@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022-2025, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2026, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -63,4 +63,55 @@
 #define SCTLR_M_BIT         (1 << 0)
 #define DISABLE_MMU_BIT     (0xFFFFFFFFFFFFFFFE)
 
+
+/*
+ * MMU configuration
+ *
+ * 1 = do val_setup_mmu/val_enable_mmu
+ * 0 = skip MMU setup/enable
+ *
+ * Can be overridden from the build system, e.g.:
+ *   -DACS_ENABLE_MMU=0
+ */
+#ifndef ACS_ENABLE_MMU
+#define ACS_ENABLE_MMU   1
+#endif
+
+/*
+ * Optional compile-time default enabled module list.
+ *
+ * If the build system defines, for example:
+ *
+ *   -DACS_ENABLED_MODULE_LIST=TIMER,PCIE
+ *
+ * then ACS will treat that as a static uint32_t[] containing the module
+ * base IDs that are **enabled to run by default**.
+ *
+ * Semantics:
+ *   - All modules are still compiled into the binary.
+ *   - This list only controls which modules are enabled for execution.
+ *   - If a runtime override is provided (g_module_array / EL3 params),
+ *     it takes priority over this list.
+ *
+ * If ACS_ENABLED_MODULE_LIST is not defined, ACS falls back to:
+ *   - runtime overrides (if present), otherwise
+ *   - "all modules enabled" behaviour.
+ */
+#ifdef ACS_ENABLED_MODULE_LIST
+#define ACS_HAS_ENABLED_MODULE_LIST  1
+#else
+#define ACS_HAS_ENABLED_MODULE_LIST  0
+#endif
+
+/*
+ * EL3 convention:
+ *   X19 = ACS_EL3_PARAM_MAGIC
+ *   X20 = address of acs_el3_params in shared/shared-visible memory
+ *
+ * If X19 != ACS_EL3_PARAM_MAGIC, ACS ignores X20 and behaves as usual.
+ */
+
+/* Example magic: "ACSEL3P1" in ASCII */
+#define ACS_EL3_PARAM_MAGIC   0x414353454C335031ULL  /* 'ACSEL3P1' */
+#define ACS_EL3_PARAM_VERSION 0x3
 #endif

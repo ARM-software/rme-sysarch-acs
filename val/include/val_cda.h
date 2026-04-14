@@ -18,7 +18,7 @@
 #ifndef __RME_ACS_CDA_H__
 #define __RME_ACS_CDA_H__
 
-uint32_t cda_rjzqcp_reset_transition_entry(void);
-uint32_t cda_rkrcwk_host_side_gpc_entry(void);
+uint32_t cda_rjzqcp_reset_transition_entry(uint32_t num_pe);
+uint32_t cda_rkrcwk_host_side_gpc_entry(uint32_t num_pe);
 
 #endif

@@ -63,6 +63,7 @@
  "${VAL_DIR}/sys_arch_src/gic/its/val_gic_its.c"
 "${VAL_DIR}/sys_arch_src/gic/its/val_gic_redistributor.c"
 "${ROOT_DIR}/baremetal_app/RmeAcsMain.c"
+"${ROOT_DIR}/baremetal_app/RmeAcsCommon.c"
 
 )
 

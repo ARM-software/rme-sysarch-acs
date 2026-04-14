@@ -129,10 +129,9 @@ static void payload(void)
   }
 }
 
-uint32_t rme_root_wdog_fails_in_non_root_state_entry(void)
+uint32_t rme_root_wdog_fails_in_non_root_state_entry(uint32_t num_pe)
 {
 
-  uint32_t num_pe;
   uint32_t status = ACS_STATUS_FAIL;
 
   num_pe = 1; /*This Timer test is run on single processor*/

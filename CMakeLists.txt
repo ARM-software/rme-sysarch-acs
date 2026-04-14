@@ -67,6 +67,17 @@ else()
     message(STATUS "[ACS] : ARM_ARCH_MAJOR is set to ${ARM_ARCH_MAJOR}")
 endif()
 
+# Propagate ACS_ENABLED_MODULE_LIST into compiler definitions for all sources
+if(DEFINED ACS_ENABLED_MODULE_LIST)
+    message(STATUS "[ACS] : ACS_ENABLED_MODULE_LIST (compile defs) = ${ACS_ENABLED_MODULE_LIST}")
+    add_compile_definitions(ACS_ENABLED_MODULE_LIST=${ACS_ENABLED_MODULE_LIST})
+endif()
+
+if(DEFINED ACS_ENABLE_MMU)
+    message(STATUS "[ACS] : ACS_ENABLE_MMU (compile defs) = ${ACS_ENABLE_MMU}")
+    add_compile_definitions(ACS_ENABLE_MMU=${ACS_ENABLE_MMU})
+endif()
+
 # Check for ARM_ARCH_MINOR
 if(NOT DEFINED ARM_ARCH_MINOR)
     set(ARM_ARCH_MINOR "${ARM_ARCH_MINOR_DFLT}" CACHE INTERNAL "Default ARM_ARCH_MINOR value" FORCE)

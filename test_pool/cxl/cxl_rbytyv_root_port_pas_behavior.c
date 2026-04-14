@@ -992,9 +992,9 @@ payload(void)
 }
 
 uint32_t
-cxl_rbytyv_root_port_pas_behavior_entry(void)
+cxl_rbytyv_root_port_pas_behavior_entry(uint32_t num_pe)
 {
-  uint32_t num_pe = 1;
+  num_pe = 1;
   uint32_t status;
 
   status = val_initialize_test(TEST_NAME, TEST_DESC, num_pe, TEST_RULE);

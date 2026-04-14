@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2025, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2025-2026, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,6 +21,10 @@
     .extern val_inv_dcache_range
     .extern val_inv_icache_range
     .extern g_primary_mpidr
+
+/* EL3 -> ACS param globals (defined in RmeAcsMain.c) */
+    .extern g_el3_param_magic
+    .extern g_el3_param_addr
 
     .cfi_sections .debug_frame
     .globl    rme_acs_entry
@@ -78,6 +82,21 @@ exit_loop_\op:
 .endm
 
 rme_acs_entry:
+   /* ------------------------------------------------------------------
+    * Save EL3 parameter magic and pointer *before* we clobber x19/x20.
+    *
+    * EL3 convention:
+    *   x19 = ACS_EL3_PARAM_MAGIC (or anything else => no override)
+    *   x20 = address of acs_el3_params (in shared-visible memory)
+    * ------------------------------------------------------------------ */
+    adrp x16, g_el3_param_magic
+    add  x16, x16, :lo12:g_el3_param_magic
+    str  x19, [x16]
+
+    adrp x17, g_el3_param_addr
+    add  x17, x17, :lo12:g_el3_param_addr
+    str  x20, [x17]
+
    /* Install vector table */
     adr x0, vector_table
     msr  vbar_el2, x0

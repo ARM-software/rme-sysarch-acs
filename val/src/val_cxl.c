@@ -3386,24 +3386,6 @@ val_rme_cxl_execute_tests(uint32_t num_pe)
   uint64_t *smmu_base_arr = NULL;
   uint64_t pgt_attr_el3;
   uint32_t smmu_cnt;
-  (void)num_pe;
-
-  for (uint32_t i = 0; i < g_num_skip; i++)
-  {
-    if (val_memory_compare(g_skip_test_str[i], CXL_MODULE,
-                           val_strnlen(g_skip_test_str[i])) == 0)
-    {
-      val_print(ACS_PRINT_ALWAYS, "\n USER Override - Skipping all CXL tests \n", 0);
-      return ACS_STATUS_SKIP;
-    }
-  }
-
-  status = val_check_skip_module(CXL_MODULE);
-  if (status)
-  {
-    val_print(ACS_PRINT_ALWAYS, "\n USER Override - Skipping all CXL tests \n", 0);
-    return ACS_STATUS_SKIP;
-  }
 
   g_curr_module = 1 << CXL_MODULE_ID;
 
@@ -3446,31 +3428,11 @@ val_rme_cxl_execute_tests(uint32_t num_pe)
   }
 
   val_print(ACS_PRINT_ALWAYS, "\n\n*******************************************************\n", 0);
-  status = cxl_rjsdvg_little_endian_entry();
-  status |= cxl_rplykv_rdfwkw_rme_cda_dvsec_entry();
-  status |= cxl_rgvrqc_host_port_coverage_entry();
-  status |= cxl_host_port_rmsd_write_protect_entry();
-  status |= cxl_rwpgjb_rmsd_write_protect_property_entry();
-  status |= cxl_rphcgc_rmsd_full_protect_entry();
-  status |= cxl_rlqmcy_type3_host_mpe_entry();
-  status |= cxl_rdhwnr_link_stream_lock_entry();
-  status |= cxl_rwyvcq_link_unlock_reject_entry();
-  status |= cxl_rxqhng_rid_range_reject_entry();
-  status |= cxl_rkjypb_cache_disable_entry();
-  status |= cxl_rphwmm_rme_cda_tsp_entry();
-  status |= cxl_rjxpzp_pas_ckid_mapping_entry();
-  status |= cxl_rplcmc_type3_target_ckid_entry();
-  status |= cxl_rcnslj_type3_no_tsp_entry();
-  status |= cxl_rhcqws_host_side_mpe_entry();
-  status |= cxl_rptggp_cmo_to_cxl_mem_entry();
-  status |= cxl_rhhmvm_bisnp_pas_nonsecure_entry();
-  status |= cxl_rbytyv_root_port_pas_behavior_entry();
-  status |= cxl_rnycll_tdisp_disable_reject_entry();
-  status |= cxl_rgtvgz_tdisp_enable_link_gate_entry();
-  status |= cxl_rhmxtf_host_hdm_decoder_entry();
-  status |= cxl_rgbgqx_ctc_link_ide_entry();
-  status |= cxl_rxwjnn_type3_link_ide_entry();
-  status |= cxl_rfdvzc_tdisp_disable_entry();
+  status = val_execute_module_tests(CXL_MODULE_ID,
+                                    CXL_MODULE_START,
+                                    CXL_MODULE_END,
+                                    num_pe,
+                                    status);
 
   return status;
 }

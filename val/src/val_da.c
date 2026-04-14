@@ -248,24 +248,9 @@ val_is_coherent_da_supported(void)
 uint32_t
 val_rme_da_execute_tests(uint32_t num_pe)
 {
-  (void) num_pe;
-  uint32_t status = ACS_STATUS_SKIP, i, reset_status, smmu_cnt;
+  uint32_t status = ACS_STATUS_SKIP, reset_status, smmu_cnt;
   uint64_t num_smmus = val_smmu_get_info(SMMU_NUM_CTRL, 0);
   uint64_t smmu_base_arr[num_smmus], pgt_attr_el3;
-
-  for (i = 0 ; i < g_num_skip ; i++) {
-      if (val_memory_compare(g_skip_test_str[i], DA_MODULE, val_strnlen(g_skip_test_str[i])) == 0) {
-          val_print(ACS_PRINT_ALWAYS, "\n USER Override - Skipping all RME-DA tests \n", 0);
-          return ACS_STATUS_SKIP;
-      }
-  }
-
-  /* Check if there are any tests to be executed in current module with user override options*/
-  status = val_check_skip_module(DA_MODULE);
-  if (status) {
-    val_print(ACS_PRINT_ALWAYS, "\n USER Override - Skipping all RME-DA tests \n", 0);
-    return ACS_STATUS_SKIP;
-  }
 
   g_curr_module = 1 << DA_MODULE_ID;
 
@@ -308,26 +293,11 @@ val_rme_da_execute_tests(uint32_t num_pe)
       /* DA-ACS tests */
       val_print(ACS_PRINT_ALWAYS,
                 "\n\n*******************************************************\n", 0);
-      status = da_dvsec_register_config_entry();
-      status |= da_smmu_implementation_entry();
-      status |= da_tee_io_capability_entry();
-      status |= da_rootport_ide_features_entry();
-      status |= da_attribute_rmeda_ctl_registers_entry();
-      status |= da_p2p_btw_2_tdisp_devices_entry();
-      status |= da_outgoing_request_with_ide_tbit_entry();
-      status |= da_incoming_request_ide_sec_locked_entry();
-      status |= da_ctl_regs_rmsd_write_protect_property_entry();
-      status |= da_ide_state_rootport_error_entry();
-      status |= da_ide_state_tdisp_disable_entry();
-      status |= da_selective_ide_register_property_entry();
-      status |= da_rootport_tdisp_disabled_entry();
-      status |= da_autonomous_rootport_request_ns_pas_entry();
-      status |= da_incoming_request_ide_non_sec_unlocked_entry();
-      status |= da_outgoing_realm_rqst_ide_tbit_1_entry();
-      status |= da_ide_tbit_0_for_root_request_entry();
-      status |= da_rmsd_write_detect_property_entry();
-      status |= da_rootport_write_protect_full_protect_property_entry();
-      status |= da_interconnect_regs_rmsd_protected_entry();
+      status = val_execute_module_tests(DA_MODULE_ID,
+                                        DA_MODULE_START,
+                                        DA_MODULE_END,
+                                        num_pe,
+                                        status);
 
   }
 
