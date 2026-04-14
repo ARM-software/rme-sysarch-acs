@@ -78,6 +78,18 @@ if(DEFINED ACS_ENABLE_MMU)
     add_compile_definitions(ACS_ENABLE_MMU=${ACS_ENABLE_MMU})
 endif()
 
+# Enable fast-path optimizations for simulation/emulation builds.
+# Use:
+#   cmake -DTARGET_SIMULATION=ON ...
+
+option(TARGET_SIMULATION "Enable simulation/emulation optimizations (defines TARGET_SIMULATION)" OFF)
+if(TARGET_SIMULATION)
+    message(STATUS "[ACS] : TARGET_SIMULATION is enabled (defining TARGET_SIMULATION)")
+    add_compile_definitions(TARGET_SIMULATION)
+ else()
+    message(STATUS "[ACS] : TARGET_SIMULATION is disabled")
+ endif()
+
 # Check for ARM_ARCH_MINOR
 if(NOT DEFINED ARM_ARCH_MINOR)
     set(ARM_ARCH_MINOR "${ARM_ARCH_MINOR_DFLT}" CACHE INTERNAL "Default ARM_ARCH_MINOR value" FORCE)
