@@ -70,6 +70,8 @@
 #define FILENAME                       (__builtin_strrchr("/" __FILE__, '/') + 1)
 #define val_print(level, string, data) val_log_context(level, string, data, FILENAME, __LINE__)
 
+extern uint32_t g_primary_pe_index;
+
 /* GENERIC VAL APIs */
 void UserCallSMC(uint64_t smc_fid, uint64_t service, uint64_t arg0, uint64_t arg1, uint64_t arg2);
 uint32_t val_configure_acs(void);
@@ -93,6 +95,11 @@ uint64_t val_pe_get_mpid(void);
 uint32_t val_pe_get_index_mpid(uint64_t mpid);
 uint32_t val_pe_install_esr(uint32_t exception_type, void (*esr)(uint64_t, void *));
 uint64_t val_get_primary_mpidr(void);
+
+static inline __attribute__((always_inline)) uint32_t val_get_primary_pe_index(void)
+{
+    return g_primary_pe_index;
+}
 
 void val_execute_on_pe(uint32_t index, void (*payload)(void), uint64_t args);
 int val_suspend_pe(uint64_t entry, uint32_t context_id);

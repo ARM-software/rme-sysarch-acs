@@ -1017,7 +1017,7 @@ void val_wait_for_test_completion(uint32_t num_pe, uint32_t timeout)
  **/
 void val_run_test_payload(uint32_t num_pe, void (*payload)(void), uint64_t test_input)
 {
-  uint32_t my_index = val_pe_get_index_mpid(val_pe_get_mpid());
+  uint32_t my_index = val_get_primary_pe_index();
   uint32_t i;
 
   payload(); // this is test run separately on present PE
@@ -1049,7 +1049,7 @@ uint32_t val_check_for_error(uint32_t num_pe)
   uint32_t i;
   char8_t *status     = 0;
   uint32_t error_flag = 0;
-  uint32_t my_index   = val_pe_get_index_mpid(val_pe_get_mpid());
+  uint32_t my_index   = val_get_primary_pe_index();
 
   /* this special case is needed when the Main PE is not the first entry
      of pe_info_table but num_pe is 1 for SOC tests */
