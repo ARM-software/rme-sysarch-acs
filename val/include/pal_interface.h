@@ -716,7 +716,8 @@ typedef enum {
   EXERCISER_CXL_CMD_OP   = 0x11,
   EXERCISER_CXL_CMD_ADDR = 0x12,
   EXERCISER_CXL_CMD_DATA0 = 0x13,
-  EXERCISER_SEC_SID = 0x14
+  EXERCISER_CXL_CMD_CTRL = 0x14,
+  EXERCISER_SEC_SID = 0x15
 } EXERCISER_PARAM_TYPE;
 
 typedef enum {
@@ -758,9 +759,11 @@ typedef enum {
   CXL_CMD_START        = 0x10
 } EXERCISER_OPS;
 
-#define CXL_CMD_OP_BACKDOOR_READ64 0x1u
-#define CXL_CMD_OP_BISNP           0x2u
-#define CXL_CMD_OP_BACKDOOR_WRITE64 0x3u
+#define CXL_CMD_OP_BACKDOOR_READ64           0x1u
+#define CXL_CMD_OP_BISNP                     0x2u
+#define CXL_CMD_OP_BACKDOOR_WRITE64          0x3u
+#define CXL_CMD_OP_DCM_SET_REALM_ASSIGNMENT  0x6u
+#define CXL_CMD_CTRL_PAS_REALM               (1u << 8)
 
 typedef enum {
   ACCESS_TYPE_RD = 0x0,

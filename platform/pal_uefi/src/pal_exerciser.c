@@ -296,6 +296,10 @@ UINT32 pal_exerciser_set_param (
         pal_mmio_write(Base + CXL_CMD_DATA0_HI, (UINT32)(Value1 >> 32));
         return 0;
 
+    case EXERCISER_CXL_CMD_CTRL:
+        pal_mmio_write(Base + CXL_CMD_CTRL, (UINT32)Value1);
+        return 0;
+
     case EXERCISER_SEC_SID:
         pal_mmio_write(Base + SEC_SID_CTL, (UINT32)(Value1 & 0x3u));
         return 0;
@@ -358,6 +362,9 @@ pal_exerciser_get_param (
       case EXERCISER_CXL_CMD_DATA0:
           *Value1 = (UINT64)pal_mmio_read(Base + CXL_CMD_DATA0_LO);
           *Value1 |= ((UINT64)pal_mmio_read(Base + CXL_CMD_DATA0_HI)) << 32;
+          return 0;
+      case EXERCISER_CXL_CMD_CTRL:
+          *Value1 = pal_mmio_read(Base + CXL_CMD_CTRL);
           return 0;
       case CFG_TXN_ATTRIBUTES:
       case TRANSACTION_TYPE:
@@ -537,19 +544,21 @@ pal_exerciser_ops (
         return 0;
 
     case CXL_CMD_START:
+        UINT32 cmd_ctrl;
         UINT32 prev_status;
 
         prev_status = pal_mmio_read(Base + CXL_CMD_STATUS);
         rme_print(ACS_PRINT_DEBUG, L" CXL_CMD_START prev status 0x%x", prev_status);
-        pal_mmio_write(Base + CXL_CMD_CTRL, CXL_CMD_CTRL_GO);
-        rme_print(ACS_PRINT_DEBUG, L" CXL_CMD_CTRL write GO 0x%x", CXL_CMD_CTRL_GO);
+        cmd_ctrl = pal_mmio_read(Base + CXL_CMD_CTRL) & ~CXL_CMD_CTRL_GO;
+        pal_mmio_write(Base + CXL_CMD_CTRL, cmd_ctrl | CXL_CMD_CTRL_GO);
+        rme_print(ACS_PRINT_DEBUG, L" CXL_CMD_CTRL write 0x%x", cmd_ctrl | CXL_CMD_CTRL_GO);
         for (UINT32 idx = 0u; idx < 10000u; ++idx)
         {
             data = pal_mmio_read(Base + CXL_CMD_STATUS);
-            if ((data & CXL_CMD_STATUS_DONE) != 0u)
-                return 0;
             if ((data & CXL_CMD_STATUS_ERR) != 0u)
                 return 1;
+            if ((data & CXL_CMD_STATUS_DONE) != 0u)
+                return 0;
         }
         return 1;
 

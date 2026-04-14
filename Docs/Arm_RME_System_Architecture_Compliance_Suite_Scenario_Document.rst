@@ -1420,6 +1420,23 @@ Testcase checklist
 
   * -
 
+      `cda_rwwbpm_internal_dcm_run_gate <../test_pool/cda/cda_rwwbpm_internal_dcm_run_gate.c>`_
+
+    -
+
+      RWWBPM: An RME-CDA coherent device must not permit an internal access to DCM to specify PAS==Realm unless the access is from a TDI in the RUN TDISP state.
+
+    -
+
+      1. Select a CHI-C2C-capable CXL root port and a downstream CHI-C2C exerciser endpoint, then choose a device-local DCM location for the internal access path.
+      2. Enable RMECDA_CTL1.TDISP_EN and RMECDA_CTL1.LINK_STR_LOCK, and transition the endpoint TDI to RUN.
+      3. Assign the selected device-local DCM location to Realm.
+      4. Seed that Realm-assigned DCM location with a known baseline value, then issue an internal device access that specifies PAS==Realm and verify the DCM contents change.
+      5. Transition the TDI out of RUN with STOP_INTERFACE, restore a known baseline value at the same Realm-assigned DCM location, and re-issue the same internal PAS==Realm access.
+      6. Verify that the non-RUN internal PAS==Realm access is rejected or leaves the Realm-assigned DCM contents unchanged.
+
+  * -
+
       `cxl_rwyvcq_link_unlock_reject <../test_pool/cxl/cxl_rwyvcq_link_unlock_reject.c>`_
 
     -

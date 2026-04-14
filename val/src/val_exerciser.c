@@ -360,6 +360,85 @@ val_exerciser_ops_by_bdf(EXERCISER_OPS ops, uint64_t param, uint32_t bdf)
     return pal_exerciser_ops(ops, param, bdf);
 }
 
+uint32_t
+val_cxl_exerciser_execute_cmd_with_ctrl(uint32_t bdf, uint32_t opcode,
+                                        uint32_t ctrl,
+                                        uint64_t address, uint64_t data,
+                                        uint64_t *readback)
+{
+    if (val_exerciser_set_param_by_bdf(EXERCISER_CXL_CMD_CTRL,
+                                       ctrl,
+                                       0u,
+                                       bdf) != 0u)
+        return ACS_STATUS_FAIL;
+
+    if (val_exerciser_set_param_by_bdf(EXERCISER_CXL_CMD_OP,
+                                       opcode,
+                                       0u,
+                                       bdf) != 0u)
+        return ACS_STATUS_FAIL;
+
+    if (val_exerciser_set_param_by_bdf(EXERCISER_CXL_CMD_ADDR,
+                                       address,
+                                       0u,
+                                       bdf) != 0u)
+        return ACS_STATUS_FAIL;
+
+    if ((opcode != CXL_CMD_OP_BACKDOOR_READ64) &&
+        (val_exerciser_set_param_by_bdf(EXERCISER_CXL_CMD_DATA0,
+                                        data,
+                                        0u,
+                                        bdf) != 0u))
+        return ACS_STATUS_FAIL;
+
+    if (val_exerciser_ops_by_bdf(CXL_CMD_START, 0u, bdf) != 0u)
+        return ACS_STATUS_FAIL;
+
+    if ((readback != NULL) &&
+        (val_exerciser_get_param_by_bdf(EXERCISER_CXL_CMD_DATA0,
+                                        readback,
+                                        NULL,
+                                        bdf) != 0u))
+        return ACS_STATUS_FAIL;
+
+    return ACS_STATUS_PASS;
+}
+
+uint32_t
+val_cxl_exerciser_execute_cmd(uint32_t bdf, uint32_t opcode,
+                              uint64_t address, uint64_t data,
+                              uint64_t *readback)
+{
+    return val_cxl_exerciser_execute_cmd_with_ctrl(bdf,
+                                                   opcode,
+                                                   0u,
+                                                   address,
+                                                   data,
+                                                   readback);
+}
+
+uint32_t
+val_cxl_exerciser_read64(uint32_t bdf, uint64_t address, uint64_t *readback)
+{
+    return val_cxl_exerciser_execute_cmd_with_ctrl(bdf,
+                                                   CXL_CMD_OP_BACKDOOR_READ64,
+                                                   0u,
+                                                   address,
+                                                   0u,
+                                                   readback);
+}
+
+uint32_t
+val_cxl_exerciser_write64(uint32_t bdf, uint64_t address, uint64_t data)
+{
+    return val_cxl_exerciser_execute_cmd_with_ctrl(bdf,
+                                                   CXL_CMD_OP_BACKDOOR_WRITE64,
+                                                   0u,
+                                                   address,
+                                                   data,
+                                                   NULL);
+}
+
 /**
   @brief   This API returns test specific data from the PCIe stimulus generation hardware
   @param   type         - data type for which the data needs to be returned

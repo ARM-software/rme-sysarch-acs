@@ -56,6 +56,7 @@
   ../test_pool/cxl/cxl_rcnslj_type3_no_tsp.c
   ../test_pool/cxl/cxl_rxqhng_rid_range_reject.c
   ../test_pool/cxl/cxl_rkjypb_cache_disable.c
+  ../test_pool/cda/cda_rwwbpm_internal_dcm_run_gate.c
   ../test_pool/cda/cda_rjzqcp_reset_transition.c
   ../test_pool/cda/cda_rkrcwk_host_side_gpc.c
   ../test_pool/da/da_attribute_rmeda_ctl_registers.c

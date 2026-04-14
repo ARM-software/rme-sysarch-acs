@@ -20,5 +20,6 @@
 
 uint32_t cda_rjzqcp_reset_transition_entry(void);
 uint32_t cda_rkrcwk_host_side_gpc_entry(void);
+uint32_t cda_rwwbpm_internal_dcm_run_gate_entry(void);
 
 #endif

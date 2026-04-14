@@ -143,6 +143,14 @@
 #define PLAT_FREE_PA_TEST_CT   0x0
 #define PLAT_FREE_MEM_SMMU_CT  0x0
 
+/* CXL platform lists */
+#define CXL_RP_NOT_SUBJECT_TO_HOST_GPC_CNT_CT   0x1
+#define CXL_RP_NOT_SUBJECT_TO_HOST_GPC_0_BDF_CT 0x00000400
+
+#define CXL_CHI_C2C_SUPPORTED_CNT_CT   0x2
+#define CXL_CHI_C2C_SUPPORTED_0_BDF_CT 0x00000500
+#define CXL_CHI_C2C_SUPPORTED_1_BDF_CT 0x00050000
+
 /* ===== Aliases and helpers (non-_CT) ===== */
 
 /* PLATFORM_BASEFVP macro not required; variants resolved via includes. */

@@ -310,7 +310,6 @@ val_cxl_get_or_create_component(uint32_t bdf)
   entry->device_reg_length    = 0;
   entry->hdm_decoder_count    = 0;
   entry->chi_c2c_supported    = 0;
-  entry->chi_c2c_dvsec_offset = 0;
 
   return entry;
 }
@@ -741,8 +740,6 @@ val_cxl_get_component_info(CXL_COMPONENT_INFO_e type, uint32_t index)
     return entry->hdm_decoder_count;
   case CXL_COMPONENT_INFO_CHI_C2C_SUPPORTED:
     return entry->chi_c2c_supported;
-  case CXL_COMPONENT_INFO_CHI_C2C_DVSEC_OFFSET:
-    return entry->chi_c2c_dvsec_offset;
   default:
     val_print(ACS_PRINT_ERR, " GET_CXL_COMPONENT_INFO: Unsupported type %u", type);
     break;
@@ -2796,6 +2793,7 @@ val_cxl_component_add(uint32_t bdf)
   uint32_t next_cap_offset;
   uint32_t prev_off;
   uint32_t hdr0;
+  uint32_t vendor_id;
   uint32_t dp_type;
   uint32_t found = 0;
 
@@ -2836,15 +2834,17 @@ val_cxl_component_add(uint32_t bdf)
     if (val_pcie_read_cfg(bdf, next_cap_offset + CXL_DVSEC_HDR1_OFFSET, &hdr1))
       return ACS_STATUS_ERR;
 
-    if ((hdr1 & CXL_DVSEC_HDR1_VENDOR_ID_MASK) != CXL_DVSEC_VENDOR_ID) {
+    if (val_pcie_read_cfg(bdf, next_cap_offset + CXL_DVSEC_HDR2_OFFSET, &hdr2))
+      return ACS_STATUS_ERR;
+
+    vendor_id = (hdr1 & CXL_DVSEC_HDR1_VENDOR_ID_MASK);
+    dvsec_id = (uint16_t)(hdr2 & CXL_DVSEC_HDR2_ID_MASK);
+
+    if (vendor_id != CXL_DVSEC_VENDOR_ID) {
       next_cap_offset = next_ptr;
       continue;
     }
 
-    if (val_pcie_read_cfg(bdf, next_cap_offset + CXL_DVSEC_HDR2_OFFSET, &hdr2))
-      return ACS_STATUS_ERR;
-
-    dvsec_id = (uint16_t)(hdr2 & CXL_DVSEC_HDR2_ID_MASK);
     found = 1;
 
     if (val_cxl_get_or_create_component(bdf) == NULL)
@@ -2871,11 +2871,16 @@ val_cxl_component_add(uint32_t bdf)
   if (!found)
     return ACS_STATUS_SKIP;
 
+  /*
+   * CHI-C2C classification is platform knowledge.  Do not infer it by parsing
+   * unpublished implementation-specific DVSECs here; rely on the PAL override.
+   */
   if (pal_cxl_is_chi_c2c_supported(bdf) != 0u) {
     CXL_COMPONENT_ENTRY *component = val_cxl_get_or_create_component(bdf);
     if (component == NULL)
       return ACS_STATUS_ERR;
 
+    /* Preserve the PAL-provided CHI-C2C classification on the component entry. */
     component->chi_c2c_supported = 1u;
     val_cxl_assign_component_role(component, dp_type);
   }

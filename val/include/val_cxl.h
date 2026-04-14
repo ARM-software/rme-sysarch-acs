@@ -105,7 +105,6 @@ typedef struct {
   uint32_t device_reg_length;
   uint32_t hdm_decoder_count;
   uint32_t chi_c2c_supported;
-  uint32_t chi_c2c_dvsec_offset;
 } CXL_COMPONENT_ENTRY;
 
 typedef struct {
@@ -126,8 +125,7 @@ typedef enum {
   CXL_COMPONENT_INFO_COMPONENT_BASE,
   CXL_COMPONENT_INFO_COMPONENT_LENGTH,
   CXL_COMPONENT_INFO_HDM_COUNT,
-  CXL_COMPONENT_INFO_CHI_C2C_SUPPORTED,
-  CXL_COMPONENT_INFO_CHI_C2C_DVSEC_OFFSET
+  CXL_COMPONENT_INFO_CHI_C2C_SUPPORTED
 } CXL_COMPONENT_INFO_e;
 
 

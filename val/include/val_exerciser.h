@@ -141,4 +141,16 @@ uint32_t val_cxl_exerciser_get_bdf(uint32_t instance);
 uint32_t val_cxl_exerciser_get_instance_by_bdf(uint32_t bdf, uint32_t *instance);
 uint32_t val_exerciser_init_by_bdf(uint32_t bdf);
 uint32_t val_get_exerciser_err_info(EXERCISER_ERROR_CODE type);
+uint32_t val_cxl_exerciser_execute_cmd_with_ctrl(uint32_t bdf, uint32_t opcode,
+                                                 uint32_t ctrl,
+                                                 uint64_t address,
+                                                 uint64_t data,
+                                                 uint64_t *readback);
+uint32_t val_cxl_exerciser_execute_cmd(uint32_t bdf, uint32_t opcode,
+                                       uint64_t address, uint64_t data,
+                                       uint64_t *readback);
+uint32_t val_cxl_exerciser_read64(uint32_t bdf, uint64_t address,
+                                  uint64_t *readback);
+uint32_t val_cxl_exerciser_write64(uint32_t bdf, uint64_t address,
+                                   uint64_t data);
 #endif
