@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2023,2025, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2023-2026, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -46,8 +46,6 @@
 
 
 #ifndef __ASSEMBLER__
-
-#include <cdefs.h>
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -118,4 +116,3 @@ extern void tf_log_set_max_level(unsigned int log_level);
 
 #endif /* __ASSEMBLER__ */
 #endif /* PAL_EL3_PRINT_H */
-

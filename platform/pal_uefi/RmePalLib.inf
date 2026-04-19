@@ -36,7 +36,6 @@
   src/pal_pcie.c
   src/pal_iovirt.c
   src/pal_pcie_enumeration.c
-  src/pal_peripherals.c
   src/pal_exerciser.c
   src/pal_smmu.c
   src/pal_tdisp_spdm.c
