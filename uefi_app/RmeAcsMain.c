@@ -472,26 +472,6 @@ createCxlInfoTable()
   return Status;
 }
 
-EFI_STATUS
-createPeripheralInfoTable()
-{
-  UINT64* PeripheralInfoTable;
-
-  EFI_STATUS Status;
-
-  Status = gBS->AllocatePool(EfiBootServicesData, PERIPHERAL_INFO_TBL_SZ,
-                             (VOID**)&PeripheralInfoTable);
-
-  if (EFI_ERROR(Status))
-  {
-    Print(L"\nAllocate Pool failed %x ", Status);
-    return Status;
-  }
-  val_peripheral_create_info_table(PeripheralInfoTable);
-
-  return Status;
-}
-
 VOID freeRmeAcsMem()
 {
 
@@ -501,7 +481,6 @@ VOID freeRmeAcsMem()
   val_pcie_free_info_table();
   val_cxl_free_info_table();
   val_iovirt_free_info_table();
-  val_peripheral_free_info_table();
   val_free_shared_mem();
 }
 
@@ -964,7 +943,6 @@ INTN EFIAPI ShellAppMainrme(IN UINTN Argc, IN CHAR16** Argv)
     return Status;
 
   createTimerInfoTable();
-  createPeripheralInfoTable();
   createCxlInfoTable();
   createPcieVirtInfoTable();
 
