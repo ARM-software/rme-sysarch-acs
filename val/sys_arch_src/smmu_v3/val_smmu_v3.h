@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022,2025-2026, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022, 2025-2026, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -51,6 +51,17 @@ typedef struct {
     uint32_t *prod_reg;
     uint32_t *cons_reg;
 } smmu_cmd_queue_t;
+
+typedef struct {
+    smmu_queue_t queue;
+    void    *base_ptr;
+    uint8_t *base;
+    uint64_t base_phys;
+    uint64_t queue_base;
+    uint64_t entry_size;
+    uint32_t *prod_reg;
+    uint32_t *cons_reg;
+} smmu_evnt_queue_t;
 
 typedef struct {
     uint8_t  span;
@@ -105,12 +116,14 @@ typedef struct {
 
 typedef struct {
     uint64_t base;
+    uint64_t page1_base;
     uint64_t ias;
     uint64_t oas;
     uint32_t ssid_bits;
     uint32_t sid_bits;
     uint32_t strtab_sid_bits;
     smmu_cmd_queue_t cmdq;
+    smmu_evnt_queue_t evntq;
     smmu_strtab_config_t strtab_cfg;
     union {
         struct {

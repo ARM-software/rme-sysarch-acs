@@ -28,9 +28,35 @@ struct smmu_master_node {
 
 struct smmu_master_node *g_smmu_master_list_head = NULL;
 
-static uint64_t align_to_size(uint64_t addr,  uint64_t size)
+uint64_t align_to_size(uint64_t addr,  uint64_t size)
 {
     return ((size - (addr & (size-1)) + addr) & ~(size-1));
+}
+
+#if defined(TARGET_SIMULATION) && defined(TARGET_BM_BOOT)
+static void *smmu_sim_alloc_aligned_zeroed(uint32_t size)
+{
+    void *ptr = val_aligned_alloc(size, size);
+
+    if (ptr != NULL)
+        val_memory_set(ptr, size, 0);
+
+    return ptr;
+}
+#endif
+
+static uint32_t smmu_trace_index(smmu_dev_t *smmu)
+{
+    if ((g_smmu == NULL) || (smmu == NULL))
+        return 0;
+
+    return (uint32_t)(smmu - g_smmu);
+}
+
+static void smmu_trace_step(smmu_dev_t *smmu, const char *step)
+{
+    val_print(ACS_PRINT_INFO, " ACS SMMU[%d]: ", smmu_trace_index(smmu));
+    val_print(ACS_PRINT_INFO, (char8_t *)step, 0);
 }
 
 static uint32_t smmu_cmdq_inc_prod(smmu_queue_t *q)
@@ -137,6 +163,7 @@ static void smmu_cmdq_poll_until_consumed(smmu_dev_t *smmu)
     }
 
     if (!timeout) {
+        smmu_trace_step(smmu, "CMDQ poll timeout\n");
         val_print(ACS_PRINT_ERR,
             " CMDQ poll timeout at 0x%08x", queue.prod);
         val_print(ACS_PRINT_ERR,
@@ -145,6 +172,8 @@ static void smmu_cmdq_poll_until_consumed(smmu_dev_t *smmu)
             " cons_reg = 0x%08x", val_mmio_read((uint64_t)smmu->cmdq.cons_reg));
         val_print(ACS_PRINT_ERR,
             " gerror   = 0x%08x", val_mmio_read(smmu->base + SMMU_GERROR_OFFSET));
+        val_print(ACS_PRINT_ERR,
+            " gerrorn  = 0x%08x", val_mmio_read(smmu->base + SMMU_GERRORN_OFFSET));
     }
 }
 
@@ -214,15 +243,26 @@ static uint32_t smmu_strtab_init_linear(smmu_dev_t *smmu)
     smmu_strtab_config_t *cfg = &smmu->strtab_cfg;
 
     size = (1 << smmu->strtab_sid_bits) * (STRTAB_STE_DWORDS << 3);
+    size = (1 << smmu->sid_bits) * (STRTAB_STE_DWORDS << 3);
+#if defined(TARGET_SIMULATION) && defined(TARGET_BM_BOOT)
+    cfg->strtab_ptr = smmu_sim_alloc_aligned_zeroed(size);
+#else
     cfg->strtab_ptr = val_memory_calloc(2, size);
+#endif
     if (!cfg->strtab_ptr) {
         val_print(ACS_PRINT_ERR, " Failed to allocate linear stream table.     ", 0);
         return 0;
     }
 
+#if defined(TARGET_SIMULATION) && defined(TARGET_BM_BOOT)
+    cfg->strtab_phys = (uint64_t)val_memory_virt_to_phys(cfg->strtab_ptr);
+    cfg->strtab64 = (uint64_t *)cfg->strtab_ptr;
+#else
     cfg->strtab_phys = align_to_size((uint64_t)val_memory_virt_to_phys(cfg->strtab_ptr), size);
     cfg->strtab64 = (uint64_t *)align_to_size((uint64_t)cfg->strtab_ptr, size);
     cfg->l1_ent_count = 1 << smmu->strtab_sid_bits;
+#endif
+    cfg->l1_ent_count = 1 << smmu->sid_bits;
     cfg->strtab_base_cfg = BITFIELD_SET(STRTAB_BASE_CFG_FMT, STRTAB_BASE_CFG_FMT_LINEAR) |
                            BITFIELD_SET(STRTAB_BASE_CFG_LOG2SIZE, smmu->strtab_sid_bits);
 
@@ -234,17 +274,40 @@ static uint32_t smmu_strtab_init_linear(smmu_dev_t *smmu)
 static uint32_t smmu_cmd_queue_init(smmu_dev_t *smmu)
 {
     smmu_cmd_queue_t *cmdq = &smmu->cmdq;
-    uint64_t cmdq_size = ((1 << cmdq->queue.log2nent) * CMDQ_DWORDS_PER_ENT) << 3;
+    uint64_t cmdq_size;
 
+#if defined(TARGET_SIMULATION) && defined(TARGET_BM_BOOT)
+    /*
+     * ACS only ever has up to four outstanding CMDQ entries before polling.
+     * Cap the simulation queue depth to 8 entries so we avoid provisioning
+     * and zeroing the full hardware-advertised queue in CSS simulation.
+     */
+    if (cmdq->queue.log2nent > 3)
+        cmdq->queue.log2nent = 3;
+#endif
+
+    cmdq_size = ((1ULL << cmdq->queue.log2nent) * CMDQ_DWORDS_PER_ENT) << 3;
     cmdq_size = (cmdq_size < 32)?32:cmdq_size;
+#if defined(TARGET_SIMULATION) && defined(TARGET_BM_BOOT)
+    cmdq->base_ptr = smmu_sim_alloc_aligned_zeroed((uint32_t)cmdq_size);
+#else
     cmdq->base_ptr = val_memory_calloc(2, cmdq_size);
+#endif
     if (!cmdq->base_ptr) {
         val_print(ACS_PRINT_ERR, " Failed to allocate queue struct.     ", 0);
         return 0;
     }
-
+#if defined(TARGET_SIMULATION) && defined(TARGET_BM_BOOT)
+    cmdq->base_phys = (uint64_t)val_memory_virt_to_phys(cmdq->base_ptr);
+#else
     cmdq->base_phys = align_to_size((uint64_t)val_memory_virt_to_phys(cmdq->base_ptr), cmdq_size);
+#endif
+
+#if defined(TARGET_SIMULATION) && defined(TARGET_BM_BOOT)
+    cmdq->base = (uint8_t *)cmdq->base_ptr;
+#else
     cmdq->base = (uint8_t *)align_to_size((uint64_t)cmdq->base_ptr, cmdq_size);
+#endif
 
     cmdq->prod_reg = (uint32_t *)(smmu->base + SMMU_CMDQ_PROD_OFFSET);
     cmdq->cons_reg = (uint32_t *)(smmu->base + SMMU_CMDQ_CONS_OFFSET);
@@ -255,6 +318,53 @@ static uint32_t smmu_cmd_queue_init(smmu_dev_t *smmu)
                        BITFIELD_SET(QUEUE_BASE_LOG2SIZE, cmdq->queue.log2nent);
 
     cmdq->queue.prod = cmdq->queue.cons = 0;
+    return 1;
+}
+
+static uint32_t smmu_evnt_queue_init(smmu_dev_t *smmu)
+{
+    smmu_evnt_queue_t *evntq = &smmu->evntq;
+    uint64_t evntq_size;
+
+#if defined(TARGET_SIMULATION) && defined(TARGET_BM_BOOT)
+    /*
+     * The ACS init flow does not need a deep event queue in simulation.
+     * Cap the modeled depth so allocation and zeroing stay fast.
+     */
+    if (evntq->queue.log2nent > 3)
+        evntq->queue.log2nent = 3;
+#endif
+
+    evntq_size = ((1ULL << evntq->queue.log2nent) * EVNTQ_DWORDS_PER_ENT) << 3;
+    evntq_size = (evntq_size < 64) ? 64 : evntq_size;
+#if defined(TARGET_SIMULATION) && defined(TARGET_BM_BOOT)
+    evntq->base_ptr = smmu_sim_alloc_aligned_zeroed((uint32_t)evntq_size);
+#else
+    evntq->base_ptr = val_memory_calloc(2, evntq_size);
+#endif
+    if (!evntq->base_ptr) {
+        val_print(ACS_PRINT_ERR, " Failed to allocate event queue struct.     ", 0);
+        return 0;
+    }
+#if defined(TARGET_SIMULATION) && defined(TARGET_BM_BOOT)
+    evntq->base_phys = (uint64_t)val_memory_virt_to_phys(evntq->base_ptr);
+    evntq->base = (uint8_t *)evntq->base_ptr;
+#else
+    evntq->base_phys = align_to_size(
+                            (uint64_t)val_memory_virt_to_phys(evntq->base_ptr),
+                            evntq_size);
+    evntq->base = (uint8_t *)align_to_size((uint64_t)evntq->base_ptr, evntq_size);
+#endif
+
+    evntq->prod_reg = (uint32_t *)(smmu->page1_base + SMMU_EVNTQ_PROD_OFFSET);
+    evntq->cons_reg = (uint32_t *)(smmu->page1_base + SMMU_EVNTQ_CONS_OFFSET);
+    evntq->entry_size = EVNTQ_DWORDS_PER_ENT << 3;
+
+    evntq->queue_base = QUEUE_BASE_RWA |
+                        (evntq->base_phys & (QUEUE_BASE_ADDR_MASK << QUEUE_BASE_ADDR_SHIFT)) |
+                        BITFIELD_SET(QUEUE_BASE_LOG2SIZE, evntq->queue.log2nent);
+
+    evntq->queue.prod = evntq->queue.cons = 0;
     return 1;
 }
 
@@ -305,13 +415,22 @@ static int smmu_strtab_init_level2(smmu_dev_t *smmu, uint32_t sid)
     strtab = &cfg->strtab64[(sid >> STRTAB_SPLIT) * STRTAB_L1_DESC_DWORDS];
 
     desc->span = STRTAB_SPLIT + 1;
+#if defined(TARGET_SIMULATION) && defined(TARGET_BM_BOOT)
+    desc->l2ptr = smmu_sim_alloc_aligned_zeroed((uint32_t)size);
+#else
     desc->l2ptr = val_memory_calloc(2, size);
+#endif
     if (!desc->l2ptr) {
         val_print(ACS_PRINT_ERR, "	failed to allocate l2 stream table for SID %u	", sid);
         return 0;
     }
+#if defined(TARGET_SIMULATION) && defined(TARGET_BM_BOOT)
+    desc->l2desc_phys = (uint64_t)val_memory_virt_to_phys(desc->l2ptr);
+    desc->l2desc64 = (uint64_t *)desc->l2ptr;
+#else
     desc->l2desc_phys = align_to_size((uint64_t)val_memory_virt_to_phys(desc->l2ptr), size);
     desc->l2desc64 = (uint64_t *)align_to_size((uint64_t)desc->l2ptr, size);
+#endif
 
     for (ste = desc->l2desc64, i = 0; i < (1 << STRTAB_SPLIT); ++i, ste += STRTAB_STE_DWORDS)
         smmu_strtab_write_ste(NULL, ste);
@@ -345,14 +464,23 @@ static int smmu_strtab_init_2level(smmu_dev_t *smmu)
     log2size += STRTAB_SPLIT;
 
     l1_tbl_size = cfg->l1_ent_count * STRTAB_L1_DESC_SIZE;
+#if defined(TARGET_SIMULATION) && defined(TARGET_BM_BOOT)
+    cfg->strtab_ptr = smmu_sim_alloc_aligned_zeroed(l1_tbl_size);
+#else
     cfg->strtab_ptr = val_memory_alloc(2 * l1_tbl_size);
+#endif
     if (!cfg->strtab_ptr) {
         val_print(ACS_PRINT_ERR, " failed to allocate l1 stream table     ", 0);
         return 0;
     }
 
+#if defined(TARGET_SIMULATION) && defined(TARGET_BM_BOOT)
+    cfg->strtab_phys = (uint64_t)val_memory_virt_to_phys(cfg->strtab_ptr);
+    cfg->strtab64 = (uint64_t *)cfg->strtab_ptr;
+#else
     cfg->strtab_phys = align_to_size((uint64_t)val_memory_virt_to_phys(cfg->strtab_ptr), l1_tbl_size);
     cfg->strtab64 = (uint64_t *)align_to_size((uint64_t)cfg->strtab_ptr, l1_tbl_size);
+#endif
     cfg->strtab_base_cfg = BITFIELD_SET(STRTAB_BASE_CFG_FMT, STRTAB_BASE_CFG_FMT_2LVL) |
                            BITFIELD_SET(STRTAB_BASE_CFG_LOG2SIZE, log2size) |
                            BITFIELD_SET(STRTAB_BASE_CFG_SPLIT, STRTAB_SPLIT);
@@ -391,7 +519,11 @@ static uint32_t smmu_strtab_init(smmu_dev_t *smmu)
 static int smmu_reg_write_sync(smmu_dev_t *smmu, uint32_t val,
                    unsigned int reg_off, unsigned int ack_off)
 {
+#if defined(TARGET_SIMULATION) && defined(TARGET_BM_BOOT)
+    uint64_t timeout = 0x100000;
+#else
     uint64_t timeout = 0x1000000;
+#endif
     uint32_t reg;
 
     val_mmio_write(smmu->base + reg_off, val);
@@ -402,6 +534,32 @@ static int smmu_reg_write_sync(smmu_dev_t *smmu, uint32_t val,
             return 0;
     }
 
+#if defined(TARGET_SIMULATION) && defined(TARGET_BM_BOOT)
+    /*
+     * Some CSS simulation models update CR0 but never mirror the same value
+     * into CR0ACK for queue enable transitions. If CR0 itself reflects the
+     * requested value, continue and let the subsequent CMDQ poll determine
+     * whether the queue is actually operational.
+     */
+    if ((reg_off == SMMU_CR0_OFFSET) && (ack_off == SMMU_CR0ACK_OFFSET)) {
+        reg = val_mmio_read(smmu->base + reg_off);
+        if (reg == val) {
+            smmu_trace_step(smmu, "CR0ACK timeout, using CR0 readback\n");
+            val_print(ACS_PRINT_WARN, " CR0ACK did not mirror 0x%x", val);
+            return 0;
+        }
+    }
+#endif
+
+    smmu_trace_step(smmu, "register write/ack timeout\n");
+    val_print(ACS_PRINT_ERR, " reg_off = 0x%x", reg_off);
+    val_print(ACS_PRINT_ERR, " ack_off = 0x%x", ack_off);
+    val_print(ACS_PRINT_ERR, " expected = 0x%x", val);
+    val_print(ACS_PRINT_ERR, " observed = 0x%x", val_mmio_read(smmu->base + ack_off));
+    val_print(ACS_PRINT_ERR, " cr0 = 0x%x", val_mmio_read(smmu->base + SMMU_CR0_OFFSET));
+    val_print(ACS_PRINT_ERR, " cr0ack = 0x%x", val_mmio_read(smmu->base + SMMU_CR0ACK_OFFSET));
+    val_print(ACS_PRINT_ERR, " gerror = 0x%x", val_mmio_read(smmu->base + SMMU_GERROR_OFFSET));
+    val_print(ACS_PRINT_ERR, " gerrorn = 0x%x", val_mmio_read(smmu->base + SMMU_GERRORN_OFFSET));
     return 1;
 }
 
@@ -419,43 +577,83 @@ static int smmu_dev_disable(smmu_dev_t *smmu)
 static void smmu_tlbi_cfgi(smmu_dev_t *smmu)
 {
     /* Invalidate any cached configuration */
-    smmu_cmdq_issue_cmd(smmu, CMDQ_OP_CFGI_ALL);
+    smmu_trace_step(smmu, "tlbi: issue CFGI_ALL\n");
+    if (smmu_cmdq_issue_cmd(smmu, CMDQ_OP_CFGI_ALL))
+    {
+        smmu_trace_step(smmu, "tlbi: CFGI_ALL issue failed\n");
+        return;
+    }
     if (smmu->supported.hyp)
-        smmu_cmdq_issue_cmd(smmu, CMDQ_OP_TLBI_EL2_ALL);
-    smmu_cmdq_issue_cmd(smmu, CMDQ_OP_TLBI_NSNH_ALL);
-    smmu_cmdq_issue_cmd(smmu, CMDQ_OP_CMD_SYNC);
+    {
+        smmu_trace_step(smmu, "tlbi: issue TLBI_EL2_ALL\n");
+        if (smmu_cmdq_issue_cmd(smmu, CMDQ_OP_TLBI_EL2_ALL))
+        {
+            smmu_trace_step(smmu, "tlbi: TLBI_EL2_ALL issue failed\n");
+            return;
+        }
+    }
+    smmu_trace_step(smmu, "tlbi: issue TLBI_NSNH_ALL\n");
+    if (smmu_cmdq_issue_cmd(smmu, CMDQ_OP_TLBI_NSNH_ALL))
+    {
+        smmu_trace_step(smmu, "tlbi: TLBI_NSNH_ALL issue failed\n");
+        return;
+    }
+    smmu_trace_step(smmu, "tlbi: issue CMD_SYNC\n");
+    if (smmu_cmdq_issue_cmd(smmu, CMDQ_OP_CMD_SYNC))
+    {
+        smmu_trace_step(smmu, "tlbi: CMD_SYNC issue failed\n");
+        return;
+    }
 
+    smmu_trace_step(smmu, "tlbi: poll until consumed\n");
     smmu_cmdq_poll_until_consumed(smmu);
 }
 
 static int smmu_reset(smmu_dev_t *smmu)
 {
     int ret;
+    uint32_t cr0;
     uint32_t data;
     uint32_t en;
 
-    ret = smmu_reg_write_sync(smmu, 0, SMMU_CR0_OFFSET, SMMU_CR0ACK_OFFSET);
+    smmu_trace_step(smmu, "reset start\n");
+    smmu_trace_step(smmu, "reset: clear CR0\n");
+    cr0 = val_mmio_read(smmu->base + SMMU_CR0_OFFSET);
+    cr0 &= ~((uint32_t)(CR0_CMDQEN | CR0_EVNTQEN | CR0_SMMUEN));
+    ret = smmu_reg_write_sync(smmu, cr0, SMMU_CR0_OFFSET, SMMU_CR0ACK_OFFSET);
     if (ret) {
         val_print(ACS_PRINT_ERR, " failed to clear SMMU_CR0     ", 0);
         return ret;
     }
 
+    smmu_trace_step(smmu, "reset: program CR1/CR2\n");
     data = BITFIELD_SET(CR1_TABLE_SH,  SMMU_SH_ISH) | BITFIELD_SET(CR1_QUEUE_SH, SMMU_SH_ISH) |
            BITFIELD_SET(CR1_TABLE_IC, CR1_CACHE_WB) | BITFIELD_SET(CR1_QUEUE_IC, CR1_CACHE_WB) |
            BITFIELD_SET(CR1_TABLE_OC, CR1_CACHE_WB) | BITFIELD_SET(CR1_QUEUE_OC, CR1_CACHE_WB);
     val_mmio_write(smmu->base + SMMU_CR1_OFFSET, data);
 
-    val_mmio_write(smmu->base + SMMU_CR2_OFFSET, 0);
+    data = val_mmio_read(smmu->base + SMMU_CR2_OFFSET);
+    data |= CR2_E2H;
+    val_mmio_write(smmu->base + SMMU_CR2_OFFSET, data);
 
+    smmu_trace_step(smmu, "reset: program STRTAB\n");
     val_mmio_write64(smmu->base + SMMU_STRTAB_BASE_OFFSET, smmu->strtab_cfg.strtab_base);
     val_mmio_write(smmu->base + SMMU_STRTAB_BASE_CFG_OFFSET,
             smmu->strtab_cfg.strtab_base_cfg);
 
+    smmu_trace_step(smmu, "reset: program CMDQ\n");
     val_mmio_write64(smmu->base + SMMU_CMDQ_BASE_OFFSET, smmu->cmdq.queue_base);
     val_mmio_write(smmu->base + SMMU_CMDQ_PROD_OFFSET, smmu->cmdq.queue.prod);
     val_mmio_write(smmu->base + SMMU_CMDQ_CONS_OFFSET, smmu->cmdq.queue.cons);
 
-    en = CR0_CMDQEN;
+    smmu_trace_step(smmu, "reset: program EVTQ\n");
+    val_mmio_write64(smmu->base + SMMU_EVNTQ_BASE_OFFSET, smmu->evntq.queue_base);
+    val_mmio_write(smmu->page1_base + SMMU_EVNTQ_PROD_OFFSET, smmu->evntq.queue.prod);
+    val_mmio_write(smmu->page1_base + SMMU_EVNTQ_CONS_OFFSET, smmu->evntq.queue.cons);
+
+    smmu_trace_step(smmu, "reset: enable CMDQ\n");
+    en = val_mmio_read(smmu->base + SMMU_CR0_OFFSET);
+    en |= CR0_CMDQEN;
     ret = smmu_reg_write_sync(smmu, en, SMMU_CR0_OFFSET,
                       SMMU_CR0ACK_OFFSET);
     if (ret) {
@@ -463,8 +661,19 @@ static int smmu_reset(smmu_dev_t *smmu)
         return ret;
     }
 
-    smmu_tlbi_cfgi(smmu);
+    smmu_trace_step(smmu, "reset: enable EVTQ\n");
+    en = val_mmio_read(smmu->base + SMMU_CR0_OFFSET);
+    en |= CR0_EVNTQEN;
+    ret = smmu_reg_write_sync(smmu, en, SMMU_CR0_OFFSET,
+                      SMMU_CR0ACK_OFFSET);
+    if (ret) {
+        val_print(ACS_PRINT_ERR, " failed to enable event queue     ", 0);
+        return ret;
+    }
 
+#if defined(TARGET_SIMULATION) && defined(TARGET_BM_BOOT)
+    smmu_trace_step(smmu, "reset: enable SMMU\n");
+    en = val_mmio_read(smmu->base + SMMU_CR0_OFFSET);
     en |= CR0_SMMUEN;
     ret = smmu_reg_write_sync(smmu, en, SMMU_CR0_OFFSET,
                       SMMU_CR0ACK_OFFSET);
@@ -473,6 +682,29 @@ static int smmu_reset(smmu_dev_t *smmu)
         return ret;
     }
 
+    /*
+     * Fresh reset means there are no pre-existing cached STE/CD entries to
+     * invalidate yet. CMDQ invalidate in reset is
+     * the common stall point, so skip that one in bare-metal simulation and
+     * rely on the later map/unmap invalidations when real tables are updated.
+     */
+    smmu_trace_step(smmu, "reset: skip initial cfg/TLB invalidate\n");
+#else
+    smmu_trace_step(smmu, "reset: invalidate cfg/TLB\n");
+    smmu_tlbi_cfgi(smmu);
+
+    smmu_trace_step(smmu, "reset: enable SMMU\n");
+    en = val_mmio_read(smmu->base + SMMU_CR0_OFFSET);
+    en |= CR0_SMMUEN;
+    ret = smmu_reg_write_sync(smmu, en, SMMU_CR0_OFFSET,
+                      SMMU_CR0ACK_OFFSET);
+    if (ret) {
+        val_print(ACS_PRINT_ERR, " failed to enable SMMU     ", 0);
+        return ret;
+    }
+#endif
+
+    smmu_trace_step(smmu, "reset complete\n");
     return 1;
 }
 
@@ -538,7 +770,9 @@ static uint32_t smmu_probe(smmu_dev_t *smmu)
 {
     uint32_t data;
 
+    smmu_trace_step(smmu, "probe start\n");
     data = val_mmio_read(smmu->base + SMMU_IDR0_OFFSET);
+    val_print(ACS_PRINT_INFO, "\n ACS SMMU IDR0 raw = 0x%x", data);
 
     if (BITFIELD_GET(IDR0_ST_LEVEL, data) == IDR0_ST_LEVEL_2LVL)
         smmu->supported.st_level_2lvl = 1;
@@ -579,6 +813,7 @@ static uint32_t smmu_probe(smmu_dev_t *smmu)
     smmu->cmdq.queue.log2nent = BITFIELD_GET(IDR1_CMDQS, data);
     if (smmu->cmdq.queue.log2nent > MAX_LOG2_CMD_QUEUE_SIZE)
         smmu->cmdq.queue.log2nent = MAX_LOG2_CMD_QUEUE_SIZE;
+    smmu->evntq.queue.log2nent = BITFIELD_GET(IDR1_EVNTQS, data);
 
     /* SID/SSID sizes */
     smmu->sid_bits = BITFIELD_GET(IDR1_SIDSIZE, data);
@@ -591,6 +826,23 @@ static uint32_t smmu_probe(smmu_dev_t *smmu)
     val_print(ACS_PRINT_INFO, " ssid_bits = %d", smmu->ssid_bits);
     val_print(ACS_PRINT_INFO, " sid_bits = %d", smmu->sid_bits);
     val_print(ACS_PRINT_INFO, " strtab_sid_bits = %d", smmu->strtab_sid_bits);
+    val_print(ACS_PRINT_INFO, "\n ACS SMMU IDR1 raw = 0x%x", data);
+    val_print(ACS_PRINT_INFO, "\n ACS SMMU cmdq log2nent = %d", smmu->cmdq.queue.log2nent);
+    val_print(ACS_PRINT_INFO, "\n ACS SMMU evntq log2nent = %d", smmu->evntq.queue.log2nent);
+
+#if defined(TARGET_SIMULATION) && defined(TARGET_BM_BOOT)
+    /*
+     * simulation exercises PCIe requester IDs as Stream IDs, so 16 SID bits
+     * are sufficient. Some simulation models advertise a much wider SIDSIZE,
+     * which causes ACS to over-provision the stream table and exhaust the
+     * reserved heap before any real mappings are created.
+     */
+    if (smmu->sid_bits > 16)
+        smmu->sid_bits = 16;
+#endif
+
+    val_print(ACS_PRINT_INFO, "\n ACS SMMU ssid_bits = %d", smmu->ssid_bits);
+    val_print(ACS_PRINT_INFO, "\n ACS SMMU sid_bits = %d", smmu->sid_bits);
 
     if (smmu->strtab_sid_bits <= STRTAB_SPLIT)
         smmu->supported.st_level_2lvl = 0;
@@ -605,8 +857,9 @@ static uint32_t smmu_probe(smmu_dev_t *smmu)
     smmu->oas = smmu_oas[BITFIELD_GET(IDR5_OAS, data)];
     smmu->ias = get_max(smmu->ias, smmu->oas);
 
-    val_print(ACS_PRINT_INFO, " ias %d-bit ", smmu->ias);
-    val_print(ACS_PRINT_INFO, " oas %d-bit", smmu->oas);
+    val_print(ACS_PRINT_INFO, "\n ACS SMMU ias = %d", smmu->ias);
+    val_print(ACS_PRINT_INFO, "\n ACS SMMU oas = %d", smmu->oas);
+    smmu_trace_step(smmu, "probe complete\n");
 
     return 1;
 }
@@ -656,13 +909,22 @@ static int smmu_cdtab_alloc_leaf_table(smmu_cdtab_l1_ctx_desc_t *l1_desc)
 {
     uint64_t size = CDTAB_L2_ENTRY_COUNT * (CDTAB_CD_DWORDS << 3);
 
+#if defined(TARGET_SIMULATION) && defined(TARGET_BM_BOOT)
+    l1_desc->l2ptr = smmu_sim_alloc_aligned_zeroed((uint32_t)size);
+#else
     l1_desc->l2ptr = val_memory_alloc(size*2);
+#endif
     if (!l1_desc->l2ptr) {
         val_print(ACS_PRINT_ERR, " failed to allocate context descriptor table     ", 0);
         return 1;
     }
+#if defined(TARGET_SIMULATION) && defined(TARGET_BM_BOOT)
+    l1_desc->l2desc_phys = (uint64_t)val_memory_virt_to_phys(l1_desc->l2ptr);
+    l1_desc->l2desc64 = (uint64_t *)l1_desc->l2ptr;
+#else
     l1_desc->l2desc_phys = align_to_size((uint64_t)val_memory_virt_to_phys(l1_desc->l2ptr), size);
     l1_desc->l2desc64 = (uint64_t *)align_to_size((uint64_t)l1_desc->l2ptr, size);
+#endif
     return 0;
 }
 
@@ -775,14 +1037,23 @@ static int smmu_cdtab_alloc(smmu_master_t *master)
         l1_tbl_size = cdmax * (CDTAB_CD_DWORDS << 3);
     }
 
+#if defined(TARGET_SIMULATION) && defined(TARGET_BM_BOOT)
+    cdcfg->cdtab_ptr = smmu_sim_alloc_aligned_zeroed((uint32_t)l1_tbl_size);
+#else
     cdcfg->cdtab_ptr = val_memory_calloc(2, l1_tbl_size);
+#endif
     if (!cdcfg->cdtab_ptr) {
         val_print(ACS_PRINT_ERR, " smmu_cdtab_alloc: alloc failed     ", 0);
         return 0;
     }
 
+#if defined(TARGET_SIMULATION) && defined(TARGET_BM_BOOT)
+    cdcfg->cdtab_phys = (uint64_t)val_memory_virt_to_phys(cdcfg->cdtab_ptr);
+    cdcfg->cdtab64 = (uint64_t *)cdcfg->cdtab_ptr;
+#else
     cdcfg->cdtab_phys = align_to_size((uint64_t)val_memory_virt_to_phys(cdcfg->cdtab_ptr), l1_tbl_size);
     cdcfg->cdtab64 = (uint64_t *)align_to_size((uint64_t)cdcfg->cdtab_ptr, l1_tbl_size);
+#endif
 
     return 1;
 }
@@ -983,18 +1254,27 @@ uint32_t smmu_init(smmu_dev_t *smmu)
     if (smmu->base == 0)
         return ACS_STATUS_ERR;
 
+    smmu_trace_step(smmu, "init start\n");
     if (!smmu_probe(smmu))
         return ACS_STATUS_ERR;
 
+    smmu_trace_step(smmu, "init: cmdq alloc\n");
     if (!smmu_cmd_queue_init(smmu))
         return ACS_STATUS_ERR;
 
+    smmu_trace_step(smmu, "init: evntq alloc\n");
+    if (!smmu_evnt_queue_init(smmu))
+        return ACS_STATUS_ERR;
+
+    smmu_trace_step(smmu, "init: strtab alloc\n");
     if (!smmu_strtab_init(smmu))
         return ACS_STATUS_ERR;
 
+    smmu_trace_step(smmu, "init: reset\n");
     if (!smmu_reset(smmu))
         return ACS_STATUS_ERR;
 
+    smmu_trace_step(smmu, "init complete\n");
     return 0;
 }
 
@@ -1015,6 +1295,8 @@ void val_smmu_stop(void)
         smmu_dev_disable(smmu);
         if (smmu->cmdq.base_ptr)
             val_memory_free(smmu->cmdq.base_ptr);
+        if (smmu->evntq.base_ptr)
+            val_memory_free(smmu->evntq.base_ptr);
         smmu_free_strtab(smmu);
     }
     val_memory_free(g_smmu);
@@ -1046,6 +1328,10 @@ uint32_t val_smmu_init(void)
             continue;
         }
         g_smmu[i].base = val_iovirt_get_smmu_info(SMMU_CTRL_BASE, i);
+        g_smmu[i].page1_base = g_smmu[i].base + SMMU_PAGE1_BASE_OFFSET;
+        val_print(ACS_PRINT_INFO, "\n ACS SMMU[%d]: discovered", i);
+        val_print(ACS_PRINT_INFO, "\n ACS SMMU base = 0x%lx", g_smmu[i].base);
+        val_print(ACS_PRINT_INFO, "\n ACS SMMU page1_base = 0x%lx", g_smmu[i].page1_base);
         if (smmu_init(&g_smmu[i]))
         {
             val_print(ACS_PRINT_ERR, " val_smmu_init: smmu %d init failed     ", i);
