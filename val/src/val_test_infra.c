@@ -589,7 +589,6 @@ val_execute_module_tests(MODULE_ID_e module_id,
  **/
 void val_log_context(uint32_t level, char8_t *string, uint64_t data, const char *file, int line)
 {
-#ifndef TARGET_BM_BOOT
   if (level >= g_print_level)
   {
     if (level == ACS_PRINT_DEBUG)
@@ -636,50 +635,7 @@ void val_log_context(uint32_t level, char8_t *string, uint64_t data, const char 
       pal_print("  [LINE: %d]", line);
     }
   }
-#else
-  if (level >= g_print_level) {
-    if (level == ACS_PRINT_DEBUG)
-    {
-      if (g_print_in_test_context)
-        pal_uart_print(level, "\n\t\tDBG: ", 0);
-      else
-        pal_uart_print(level, "\n\tDBG: ", 0);
-    } else if (level == ACS_PRINT_ERR)
-    {
-      if (g_print_in_test_context)
-        pal_uart_print(level, "\n\t\tERR: ", 0);
-      else
-        pal_uart_print(level, "\n\tERR: ", 0);
-    } else if (level == ACS_PRINT_INFO)
-    {
-      if (g_print_in_test_context)
-        pal_uart_print(level, "\n\t\tINFO: ", 0);
-      else
-        pal_uart_print(level, "\n\tINFO", 0);
-    } else if (level == ACS_PRINT_WARN)
-    {
-      if (g_print_in_test_context)
-        pal_uart_print(level, "\n\t\tWARN: ", 0);
-      else
-        pal_uart_print(level, "\n\tWARN: ", 0);
-    } else if (level == ACS_PRINT_ALWAYS)
-    {
-      // Do not print prefix or newline
-      pal_uart_print(level, string, data);
-      return;
-    } else
-    {
-      pal_uart_print(level, "\n  Check %d : ", ++g_print_test_check_id);
-    }
-    pal_uart_print(level, string, data);
-    /* Print file name and line number for ERR and WARN */
-    if (level == ACS_PRINT_ERR || level == ACS_PRINT_WARN)
-    {
-      pal_uart_print(level, "  [FILE: %a]", (uint64_t)file);
-      pal_uart_print(level, "  [LINE: %d]", line);
-    }
-  }
-#endif
+
 }
 
 /**

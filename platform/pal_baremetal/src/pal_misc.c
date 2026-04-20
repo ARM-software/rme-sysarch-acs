@@ -243,27 +243,6 @@ pal_mmio_write(uint64_t addr, uint32_t data)
 }
 
 /**
-  @brief  Sends a formatted string to the output console
-
-  @param  string  An ASCII string
-  @param  data    data for the formatted output
-
-  @return None
-**/
-void
-pal_print(char *string, uint64_t data)
-{
-  #ifdef ENABLE_OOB
-  /* Below code is not applicable for Bare-metal
-   * Only for FVP OOB experience
-   */
-    AsciiPrint(string, data);
-  #endif
-  (void) string;
-  (void) data;
-}
-
-/**
   @brief  Sends a string to the output console without using Baremetal print function
           This function will get COMM port address and directly writes to the addr char-by-char
 
@@ -1504,4 +1483,22 @@ pal_mbedtls_calloc(size_t count, size_t size)
   if (ptr != NULL)
     pal_mem_set(ptr, total, 0);
   return ptr;
+}
+
+/**
+  @brief  Sends a formatted string to the output console
+
+  @param  string  An ASCII string
+  @param  data    data for the formatted output
+
+  @return None
+**/
+void
+pal_print(char8_t *string, ...)
+{
+  va_list args;
+
+  va_start(args, string);
+  pal_platform_print(string, args);
+  va_end(args);
 }

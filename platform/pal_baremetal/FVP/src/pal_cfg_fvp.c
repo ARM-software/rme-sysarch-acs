@@ -320,3 +320,15 @@ DMA_INFO_TABLE platform_dma_cfg = {
     .info[0].flags = FLAGS,
     .info[0].type = TYPE**/
 };
+
+void
+pal_platform_print(char8_t *string, va_list args)
+{
+    char buffer[256];
+    int len;
+
+    len = vsnprintf(buffer, sizeof(buffer), string, args);
+    if (len > 0) {
+        pal_uart_print(ACS_PRINT_ALWAYS, "%s", buffer);
+    }
+}
