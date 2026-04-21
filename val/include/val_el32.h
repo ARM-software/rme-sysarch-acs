@@ -121,10 +121,10 @@
 #define EXTRACT_ATTR_IND(x)   ((MAIR_REG_VAL_EL3 >> (x * 8)) & 0xFF)
 #define GET_ATTR_INDEX(x)           \
   ({                                \
-    int index;                      \
+    int index = 0;                  \
     for (int i = 0; i < 8; ++i)     \
     {                               \
-      if (EXTRACT_ATTR_IND(i) == x) \
+      if (EXTRACT_ATTR_IND(i) == (x)) \
       {                             \
         index = i;                  \
         break;                      \

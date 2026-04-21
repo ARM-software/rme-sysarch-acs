@@ -3019,6 +3019,8 @@ val_pcie_get_bar_index(uint32_t bdf, uint64_t bar_address, uint32_t *bar_index)
     uint64_t base_address;
 
     while (index < TYPE0_MAX_BARS) {
+        base_address = 0u;
+
         /* Read the base address register at loop index */
         val_pcie_read_cfg(bdf, TYPE01_BAR + index * 4, &bar_low32bits);
 
@@ -3026,6 +3028,9 @@ val_pcie_get_bar_index(uint32_t bdf, uint64_t bar_address, uint32_t *bar_index)
         if (((bar_low32bits >> BAR_MIT_SHIFT) & BAR_MIT_MASK) == MMIO) {
             /* Check if the BAR is 64-bit decodable */
             if (((bar_low32bits >> BAR_MDT_SHIFT) & BAR_MDT_MASK) == BITS_64) {
+                if ((index + 1u) >= TYPE0_MAX_BARS)
+                    return 1;
+
                 /* Read the second sequential BAR at next index */
                 val_pcie_read_cfg(bdf, TYPE01_BAR + (index + 1) * 4, &bar_high32bits);
 
@@ -3039,6 +3044,9 @@ val_pcie_get_bar_index(uint32_t bdf, uint64_t bar_address, uint32_t *bar_index)
             } else if (((bar_low32bits >> BAR_MDT_SHIFT) & BAR_MDT_MASK) == BITS_32) {
                 /* Use only lower 32-bits for 32-bit BAR */
                 base_address = ((bar_low32bits) & (BAR_BASE_MASK << BAR_BASE_SHIFT));
+            } else {
+                index++;
+                continue;
             }
 
             /* Check if the given BAR address matches this base address */

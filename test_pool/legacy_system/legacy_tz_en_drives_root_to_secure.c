@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2023-2025, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2023-2026, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -41,10 +41,10 @@ void
 payload()
 {
 
-  uint64_t rd_data;
+  uint64_t rd_data = 0u;
   uint32_t index = val_pe_get_index_mpid(val_pe_get_mpid());
-  uint32_t status_fail_cnt, attr;
-  uint64_t VA, PA, size, num_reg;
+  uint32_t status_fail_cnt = 0u, attr;
+  uint64_t VA = 0u, PA = 0u, size, num_reg;
   ROOT_REGSTR_TABLE *root_registers_cfg;
 
   size = val_get_min_tg();
@@ -54,11 +54,11 @@ payload()
   num_reg = root_registers_cfg->num_reg;
   attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(NON_SHAREABLE) | PGT_ENTRY_AP_RW);
   for (uint64_t reg_cnt = 0; reg_cnt < num_reg; ++reg_cnt) {
+    VA = val_get_free_va(size);
+    PA = root_registers_cfg->rt_reg_info[reg_cnt].rt_reg_base_addr;
 
     val_print(ACS_PRINT_TEST, " Checking for the region: 0x%llx", PA);
 
-    VA = val_get_free_va(size);
-    PA = root_registers_cfg->rt_reg_info[reg_cnt].rt_reg_base_addr;
     /* Use the register addresses as PAs to map them with secure access PAS */
     if (val_add_mmu_entry_el3(VA, PA, (attr | LOWER_ATTRS(PAS_ATTR(SECURE_PAS)))))
     {
@@ -118,5 +118,4 @@ legacy_tz_en_drives_root_to_secure_entry(uint32_t num_pe)
 
   return  status;
 }
-
 

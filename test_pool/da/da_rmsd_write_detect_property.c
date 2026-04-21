@@ -51,6 +51,7 @@ payload(void)
   uint32_t status;
   uint32_t table_entries;
   uint32_t rp_bdf, ep_index, ep_bdf, index;
+  uint32_t ep_found;
   pcie_cfgreg_bitfield_entry *bf_entry;
   uint32_t ep_locked = 0;
 
@@ -97,6 +98,7 @@ payload(void)
       }
 
       ep_index = 0;
+      ep_found = 0;
       while (ep_index < bdf_tbl_ptr->num_entries)
       {
           ep_bdf = bdf_tbl_ptr->device[ep_index++].bdf;
@@ -106,7 +108,16 @@ payload(void)
 
           val_pcie_get_rootport(ep_bdf, &rp_bdf);
           if (bdf == rp_bdf)
+          {
+              ep_found = 1;
               break;
+          }
+      }
+
+      if (!ep_found)
+      {
+          val_print(ACS_PRINT_WARN, " No endpoint found for RP BDF: 0x%x", bdf);
+          continue;
       }
 
       test_skip = 0;

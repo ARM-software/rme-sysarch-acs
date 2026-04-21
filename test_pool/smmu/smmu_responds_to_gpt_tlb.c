@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2023-2024, 2025, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2023-2024, 2025-2026, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -53,41 +53,46 @@ void
 payload(void)
 {
   uint32_t pe_index;
-  uint32_t dma_len, attr;
-  uint32_t instance;
-  uint32_t e_bdf;
-  uint32_t cap_base;
-  void *dram_buf_in_virt;
-  void *dram_buf_out_virt;
-  uint64_t dram_buf_in_phys;
-  uint64_t dram_buf_out_phys;
-  uint64_t dram_buf_in_iova;
-  uint64_t dram_buf_out_iova;
+  uint32_t dma_len = 0, attr = 0;
+  uint32_t instance = 0;
+  uint32_t e_bdf = 0;
+  uint32_t cap_base = 0;
+  void *dram_buf_in_virt = NULL;
+  void *dram_buf_out_virt = NULL;
+  uint64_t dram_buf_in_phys = 0;
+  uint64_t dram_buf_out_phys = 0;
+  uint64_t dram_buf_in_iova = 0;
+  uint64_t dram_buf_out_iova = 0;
   uint32_t num_smmus;
   uint32_t device_id, its_id;
   uint32_t page_size = val_memory_page_size();
   memory_region_descriptor_t mem_desc_array[2], *mem_desc;
-  pgt_descriptor_t pgt_desc;
+  pgt_descriptor_t cpu_pgt_desc;
+  pgt_descriptor_t smmu_pgt_desc;
   smmu_master_attributes_t master;
-  uint64_t ttbr;
+  uint64_t ttbr = 0;
   uint32_t test_data_blk_size = page_size * TEST_DATA_NUM_PAGES;
   uint32_t reg_value = 0;
   uint64_t size;
+  uint32_t exerciser_ready = 0;
+  uint32_t smmu_mapped = 0;
 
   /* Enable all SMMUs */
   num_smmus = val_iovirt_get_smmu_info(SMMU_NUM_CTRL, 0);
 
   /* Initialize DMA master and memory descriptors */
   val_memory_set(&master, sizeof(master), 0);
+  master.smmu_index = ACS_INVALID_INDEX;
   val_memory_set(mem_desc_array, sizeof(mem_desc_array), 0);
+  val_memory_set(&cpu_pgt_desc, sizeof(cpu_pgt_desc), 0);
+  val_memory_set(&smmu_pgt_desc, sizeof(smmu_pgt_desc), 0);
   mem_desc = &mem_desc_array[0];
-  dram_buf_in_phys = 0;
 
   pe_index = val_pe_get_index_mpid(val_pe_get_mpid());
 
   /* Get translation attributes via TCR and translation table base via TTBR */
   if (val_pe_reg_read_tcr(0 /*for TTBR0*/,
-                          &pgt_desc.tcr)) {
+                          &cpu_pgt_desc.tcr)) {
     val_print(ACS_PRINT_ERR, " TCR read failure", 0);
     goto test_fail;
   }
@@ -106,6 +111,7 @@ payload(void)
   /* if init fail moves to next exerciser */
   if (val_exerciser_init(instance))
         goto test_fail;
+  exerciser_ready = 1;
 
   /* Get exerciser bdf */
   e_bdf = val_exerciser_get_bdf(instance);
@@ -143,17 +149,17 @@ payload(void)
   reg_value |= ATS_CACHING_EN;
   val_pcie_write_cfg(e_bdf, cap_base + ATS_CTRL, reg_value);
 
-  pgt_desc.pgt_base = (ttbr & AARCH64_TTBR_ADDR_MASK);
-  pgt_desc.mair = val_pe_reg_read(MAIR_ELx);
-  pgt_desc.stage = PGT_STAGE1;
-  pgt_desc.ias = 48;
-  pgt_desc.oas = 48;
+  cpu_pgt_desc.pgt_base = (ttbr & AARCH64_TTBR_ADDR_MASK);
+  cpu_pgt_desc.mair = val_pe_reg_read(MAIR_ELx);
+  cpu_pgt_desc.stage = PGT_STAGE1;
+  cpu_pgt_desc.ias = 48;
+  cpu_pgt_desc.oas = 48;
   mem_desc->virtual_address = (uint64_t)dram_buf_in_virt;
   mem_desc->physical_address = dram_buf_in_phys;
   mem_desc->length = test_data_blk_size;
   mem_desc->attributes |= (PGT_STAGE1_AP_RW);
 
-  if (val_pgt_create(mem_desc, &pgt_desc)) {
+  if (val_pgt_create(mem_desc, &cpu_pgt_desc)) {
         val_print(ACS_PRINT_ERR,
                       " Unable to create page table with given attributes", 0);
             goto test_fail;
@@ -163,7 +169,7 @@ payload(void)
   /* Get memory attributes of the test buffer, we'll use the same attibutes to create
    * our own page table later.
    */
-  if (val_pgt_get_attributes(pgt_desc, (uint64_t)dram_buf_in_virt, &mem_desc->attributes)) {
+  if (val_pgt_get_attributes(cpu_pgt_desc, (uint64_t)dram_buf_in_virt, &mem_desc->attributes)) {
         val_print(ACS_PRINT_ERR, " Unable to get memory attributes of the test buffer", 0);
         goto test_fail;
   }
@@ -206,24 +212,24 @@ payload(void)
       val_data_cache_ops_by_va((uint64_t)dram_buf_in_virt, CLEAN_AND_INVALIDATE);
 
       /* Need to know input and output address sizes before creating page table */
-      pgt_desc.ias = val_smmu_get_info(SMMU_IN_ADDR_SIZE, master.smmu_index);
-      if ((pgt_desc.ias) == 0) {
+      smmu_pgt_desc = cpu_pgt_desc;
+      smmu_pgt_desc.ias = val_smmu_get_info(SMMU_IN_ADDR_SIZE, master.smmu_index);
+      if ((smmu_pgt_desc.ias) == 0) {
             val_print(ACS_PRINT_ERR,
                           " Input address size of SMMU %d is 0", master.smmu_index);
             goto test_fail;
       }
 
-      pgt_desc.oas = val_smmu_get_info(SMMU_OUT_ADDR_SIZE, master.smmu_index);
-      if ((pgt_desc.oas) == 0) {
+      smmu_pgt_desc.oas = val_smmu_get_info(SMMU_OUT_ADDR_SIZE, master.smmu_index);
+      if ((smmu_pgt_desc.oas) == 0) {
             val_print(ACS_PRINT_ERR,
                           " Output address size of SMMU %d is 0", master.smmu_index);
             goto test_fail;
       }
 
-      /* set pgt_desc.pgt_base to NULL to create new translation table, val_pgt_create
-         will update pgt_desc.pgt_base to point to created translation table */
-      pgt_desc.pgt_base = (uint64_t) NULL;
-      if (val_pgt_create(mem_desc, &pgt_desc)) {
+      /* set pgt_base to NULL to create a new translation table for the SMMU */
+      smmu_pgt_desc.pgt_base = (uint64_t) NULL;
+      if (val_pgt_create(mem_desc, &smmu_pgt_desc)) {
             val_print(ACS_PRINT_ERR,
                       " Unable to create page table with given attributes", 0);
             goto test_fail;
@@ -231,11 +237,12 @@ payload(void)
 
       /* Configure the SMMU tables for this exerciser to use this page table
          for VA to PA translations*/
-      if (val_smmu_map(master, pgt_desc))
+      if (val_smmu_map(master, smmu_pgt_desc))
       {
             val_print(ACS_PRINT_ERR, " SMMU mapping failed (%x)     ", e_bdf);
             goto test_fail;
       }
+      smmu_mapped = 1;
 
       dram_buf_in_iova = mem_desc->virtual_address;
       dram_buf_out_iova = dram_buf_in_iova + (test_data_blk_size / 2);
@@ -310,14 +317,15 @@ test_fail:
   val_set_status(pe_index, "FAIL", 01);
 
 test_clean:
-  if (val_add_gpt_entry_el3(dram_buf_in_phys, GPT_ANY))
+  if ((dram_buf_in_phys != 0u) && val_add_gpt_entry_el3(dram_buf_in_phys, GPT_ANY))
   {
       val_print(ACS_PRINT_ERR,
                   " test_clean: Failed to clear GPT entry for PA 0x%llx", dram_buf_in_phys);
       val_set_status(pe_index, "FAIL", 02);
   }
 
-  if (val_add_mmu_entry_el3((uint64_t)dram_buf_in_virt, dram_buf_in_phys,
+  if ((dram_buf_in_virt != NULL) && (dram_buf_in_phys != 0u) &&
+      val_add_mmu_entry_el3((uint64_t)dram_buf_in_virt, dram_buf_in_phys,
                   (attr | LOWER_ATTRS(PAS_ATTR(NONSECURE_PAS)))))
   {
       val_print(ACS_PRINT_ERR,
@@ -326,29 +334,28 @@ test_clean:
   }
 
   //Clear the memory
-  if (val_memory_set_el3((uint64_t *)dram_buf_in_virt, dma_len/2, 0))
+  if ((dram_buf_in_virt != NULL) && (dma_len != 0u) &&
+      val_memory_set_el3((uint64_t *)dram_buf_in_virt, dma_len/2, 0))
   {
       val_print(ACS_PRINT_ERR, " test_clean: Failed to set memory to 0 ", 0);
       val_set_status(pe_index, "FAIL", 04);
   }
   //Clean and invalidate the memory
-  if (val_data_cache_ops_by_va_el3((uint64_t)dram_buf_in_virt, CLEAN_AND_INVALIDATE))
+  if ((dram_buf_in_virt != NULL) &&
+      val_data_cache_ops_by_va_el3((uint64_t)dram_buf_in_virt, CLEAN_AND_INVALIDATE))
   {
       val_print(ACS_PRINT_ERR, " test_clean: Failed to clean and invalidate dram_buf_in", 0);
       val_set_status(pe_index, "FAIL", 05);
   }
 
-  /* Remove all address mappings for this exerciser */
-  e_bdf = val_exerciser_get_bdf(instance);
-  master.smmu_index = val_iovirt_get_rc_smmu_index(PCIE_EXTRACT_BDF_SEG(e_bdf),
-                                                   PCIE_CREATE_BDF_PACKED(e_bdf));
+  if (smmu_mapped)
+      val_smmu_unmap(master);
 
-  val_smmu_unmap(master);
+  if (smmu_pgt_desc.pgt_base != (uint64_t) NULL)
+      val_pgt_destroy(smmu_pgt_desc);
 
-  if (pgt_desc.pgt_base != (uint64_t) NULL)
-      val_pgt_destroy(pgt_desc);
-
-  if (val_pcie_find_capability(e_bdf, PCIE_ECAP, ECID_ATS, &cap_base) == PCIE_SUCCESS)
+  if (exerciser_ready &&
+      (val_pcie_find_capability(e_bdf, PCIE_ECAP, ECID_ATS, &cap_base) == PCIE_SUCCESS))
   {
         val_pcie_read_cfg(e_bdf, cap_base + ATS_CTRL, &reg_value);
         reg_value &= ATS_CACHING_DIS;
@@ -378,4 +385,3 @@ smmu_responds_to_gpt_tlb_entry(void)
 
   return status;
 }
-

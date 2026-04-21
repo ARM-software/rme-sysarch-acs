@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022-2023, 2025, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2023, 2025-2026, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -825,23 +825,23 @@ pal_pcie_get_bdf_wrapper(uint32_t class_code, uint32_t start_bdf)
 void *
 pal_pci_bdf_to_dev(uint32_t bdf)
 {
+  static uint32_t device_id;
 
   uint32_t seg;
   uint32_t bus;
   uint32_t dev;
   uint32_t func;
-  uint32_t vendor_id, *device_id;
+  uint32_t cfg_data;
 
   seg  = PCIE_EXTRACT_BDF_SEG(bdf);
   bus  = PCIE_EXTRACT_BDF_BUS(bdf);
   dev  = PCIE_EXTRACT_BDF_DEV(bdf);
   func = PCIE_EXTRACT_BDF_FUNC(bdf);
 
-  pal_pci_cfg_read(seg, bus, dev, func, 0, &vendor_id);
-  vendor_id = vendor_id >> DEVICE_ID_OFFSET;
-  device_id = &vendor_id;
+  pal_pci_cfg_read(seg, bus, dev, func, 0, &cfg_data);
+  device_id = cfg_data >> DEVICE_ID_OFFSET;
 
-  return (void *)device_id;
+  return (void *)&device_id;
 
 }
 

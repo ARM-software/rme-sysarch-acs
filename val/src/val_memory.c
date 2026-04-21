@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022-2023, 2025, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2023, 2025-2026, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,6 +21,7 @@
 #include "include/val_memory.h"
 #include "include/val_pgt.h"
 #include "include/val_interface.h"
+#include "include/val_pe.h"
 #include "include/val_el32.h"
 
 void *
@@ -232,7 +233,7 @@ uint32_t val_setup_mmu(void)
 **/
 uint32_t val_enable_mmu(void)
 {
-    uint64_t tcr;
+    uint64_t tcr = val_pe_reg_read(TCR_ELx);
     uint32_t currentEL;
     currentEL = (val_read_current_el() & 0xc) >> 2;
 
@@ -334,4 +335,3 @@ val_strnlen(const char8_t *str)
     len++;
   return len;
 }
-
