@@ -1372,7 +1372,8 @@ uint32_t val_configure_acs(void)
   uint64_t smmu_rlm_page0, smmu_rlm_page1;
   uint32_t num_smmus, attr;
 
-  sp_val = AA64ReadSP_EL0();
+  /* EL2 startup runs on the active SP, which is not guaranteed to be SP_EL0. */
+  sp_val = AA64ReadSp();
 
   /* Base EL3 mapping attributes for subsequent mappings */
   attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(OUTER_SHAREABLE) | PGT_ENTRY_AP_RW);
