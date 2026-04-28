@@ -55,6 +55,7 @@ val_rme_cda_execute_tests(uint32_t num_pe)
   val_print(ACS_PRINT_ALWAYS, "\n\n*******************************************************\n", 0);
   status = cda_rjzqcp_reset_transition_entry();
   status |= cda_rkrcwk_host_side_gpc_entry();
+  status |= cda_rfzbmw_external_dcm_ide_gate_entry();
   status |= cda_rwwbpm_internal_dcm_run_gate_entry();
 
   return status;
