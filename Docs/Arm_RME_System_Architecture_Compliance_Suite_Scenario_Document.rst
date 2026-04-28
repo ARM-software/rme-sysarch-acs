@@ -1461,6 +1461,48 @@ Testcase checklist
 
   * -
 
+      `tdisp_rpxlfy_get_version_req <../test_pool/tdisp/tdisp_rpxlfy_get_version_req.c>`_
+
+    -
+
+      RPXLFY: The TDISP VDM request GET_VERSION_REQ is used for querying the
+      Arm-specified protocol versions supported by the device. The request does
+      not apply to a specific INTERFACE_ID and the field is ignored by the
+      device.
+
+    -
+
+      1. Select CHI-C2C-capable Root Ports from the CXL component table.
+      2. For each Root Port, locate a downstream endpoint and skip if none.
+      3. Verify RME-CDA DVSEC on the Root Port and enable RMECDA_CTL1.TDISP_EN.
+      4. Establish an SPDM session to the downstream endpoint.
+      5. Send Arm VDM GET_VERSION twice, varying INTERFACE_ID in the request.
+      6. Confirm both requests succeed and return a GET_VERSION_RESP message.
+      7. Close the SPDM session and disable TDISP on the Root Port.
+
+  * -
+
+      `tdisp_rwfwlf_get_version_resp_format <../test_pool/tdisp/tdisp_rwfwlf_get_version_resp_format.c>`_
+
+    -
+
+      RWFWLF: The TDISP VDM response GET_VERSION_RESP has the specified format,
+      including VERSION_COUNT followed by a list of version entries in ascending
+      order (major/minor).
+
+    -
+
+      1. Select CHI-C2C-capable Root Ports from the CXL component table.
+      2. For each Root Port, locate a downstream endpoint and skip if none.
+      3. Verify RME-CDA DVSEC on the Root Port and enable RMECDA_CTL1.TDISP_EN.
+      4. Establish an SPDM session to the downstream endpoint.
+      5. Send Arm VDM GET_VERSION and parse GET_VERSION_RESP.
+      6. Validate VERSION_COUNT bounds the response length.
+      7. Validate the version list is in ascending order (major/minor).
+      8. Close the SPDM session and disable TDISP on the Root Port.
+
+  * -
+
       `tdisp_rgrpdp_get_dev_prop_req <../test_pool/tdisp/tdisp_rgrpdp_get_dev_prop_req.c>`_
 
     -

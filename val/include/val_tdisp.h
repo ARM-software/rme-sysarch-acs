@@ -163,6 +163,12 @@ uint32_t
 tdisp_rfpymv_vdm_response_check_entry(uint32_t num_pe);
 
 uint32_t
+tdisp_rpxlfy_get_version_req_entry(void);
+
+uint32_t
+tdisp_rwfwlf_get_version_resp_format_entry(void);
+
+uint32_t
 tdisp_rgrpdp_get_dev_prop_req_entry(void);
 
 uint32_t
