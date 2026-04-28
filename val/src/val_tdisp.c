@@ -380,11 +380,9 @@ val_rme_tdisp_execute_tests(uint32_t num_pe)
   g_curr_module = 1 << TDISP_MODULE_ID;
 
   val_print(ACS_PRINT_ALWAYS, "\n\n*******************************************************\n", 0);
-  status = val_execute_module_tests(TDISP_MODULE_ID,
-                                    TDISP_MODULE_START,
-                                    TDISP_MODULE_END,
-                                    num_pe,
-                                    status);
+  status = tdisp_rgrpdp_get_dev_prop_req_entry();
+  status |= tdisp_rghdcb_get_dev_prop_resp_format_entry();
+  status |= tdisp_rfpymv_vdm_response_check_entry();
 
   return status;
 }
