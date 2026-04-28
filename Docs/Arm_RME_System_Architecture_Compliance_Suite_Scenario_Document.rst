@@ -1461,6 +1461,47 @@ Testcase checklist
 
   * -
 
+      `tdisp_rgrpdp_get_dev_prop_req <../test_pool/tdisp/tdisp_rgrpdp_get_dev_prop_req.c>`_
+
+    -
+
+      RGRPDP: The TDISP VDM request GET_DEV_PROP_REQ is used for querying
+      properties of the device. The request does not apply to a specific
+      INTERFACE_ID and the field is ignored by the device.
+
+    -
+
+      1. Select CHI-C2C-capable Root Ports from the CXL component table.
+      2. For each Root Port, locate a downstream endpoint and skip if none.
+      3. Verify RME-CDA DVSEC on the Root Port and enable RMECDA_CTL1.TDISP_EN.
+      4. Establish an SPDM session to the downstream endpoint.
+      5. Send Arm VDM GET_DEV_PROP twice, varying INTERFACE_ID in the request.
+      6. Confirm both requests succeed and return a GET_DEV_PROP_RESP message.
+      7. Close the SPDM session and disable TDISP on the Root Port.
+
+  * -
+
+      `tdisp_rghdcb_get_dev_prop_resp_format <../test_pool/tdisp/tdisp_rghdcb_get_dev_prop_resp_format.c>`_
+
+    -
+
+      RGHDCB: The TDISP VDM response GET_DEV_PROP_RESP has the specified format.
+      Validate the PROPERTIES field encoding (PAS_CHECK, MEC, MECID_BITWIDTH,
+      RES0) and tolerate an implementation-defined register list.
+
+    -
+
+      1. Select CHI-C2C-capable Root Ports from the CXL component table.
+      2. For each Root Port, locate a downstream endpoint and skip if none.
+      3. Verify RME-CDA DVSEC on the Root Port and enable RMECDA_CTL1.TDISP_EN.
+      4. Establish an SPDM session to the downstream endpoint.
+      5. Send Arm VDM GET_DEV_PROP and parse GET_DEV_PROP_RESP.
+      6. Validate PROPERTIES reserved bits are RES0 and MECID_BITWIDTH is
+         non-zero when MEC==1.
+      7. Close the SPDM session and disable TDISP on the Root Port.
+
+  * -
+
       `tdisp_rfpymv_vdm_response_check <../test_pool/tdisp/tdisp_rfpymv_vdm_response_check.c>`_
 
     -

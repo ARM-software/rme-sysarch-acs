@@ -77,6 +77,8 @@
   ../test_pool/da/da_rootport_write_protect_full_protect_property.c
   ../test_pool/da/da_selective_ide_register_property.c
   ../test_pool/tdisp/tdisp_rfpymv_vdm_response_check.c
+  ../test_pool/tdisp/tdisp_rgrpdp_get_dev_prop_req.c
+  ../test_pool/tdisp/tdisp_rghdcb_get_dev_prop_resp_format.c
   ../test_pool/da/da_smmu_implementation.c
   ../test_pool/da/da_tee_io_capability.c
   ../test_pool/dpt/dpt_p2p_different_rootport_invalid.c
