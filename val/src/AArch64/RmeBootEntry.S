@@ -85,7 +85,8 @@ rme_acs_entry:
    /* Set x19 = 1 for primary cpu
     * Set x19 = 0 for secondary cpu
     */
-    adr x18, g_primary_mpidr
+    adrp x18, g_primary_mpidr
+    add  x18, x18, :lo12:g_primary_mpidr    
     ldr x0, [x18]
     mov   x2, #INVALID_MPIDR
     cmp   x2, x0
@@ -129,7 +130,8 @@ primary_cpu_entry:
     isb
 
     /* Save the primary cpu mpidr */
-    adr x18, g_primary_mpidr
+    adrp x18, g_primary_mpidr
+    add  x18, x18, :lo12:g_primary_mpidr 
     mrs x0, mpidr_el1
     str x0, [x18]
 
