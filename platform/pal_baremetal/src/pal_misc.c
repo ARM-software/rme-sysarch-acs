@@ -771,16 +771,56 @@ pal_mem_compare(void *Src, void *Dest, uint32_t Len)
 void
 pal_mem_set(void *buf, uint32_t size, uint8_t value)
 {
-    unsigned char *ptr = buf;
+    uintptr_t addr;
+    uint8_t *ptr8;
 
-    while (size--)
+    if (buf == NULL || size == 0)
+        return;
+
+    addr = (uintptr_t)buf;
+    ptr8 = (uint8_t *)buf;
+
+    // Align to 8 bytes
+    while (size && (addr & (sizeof(uint64_t) - 1u)))
     {
-        *ptr++ = (unsigned char)value;
+        *ptr8++ = value;
+        addr++;
+        size--;
     }
 
-    return (void) buf;
-}
+    // Prepare 64-bit writes
+    if (size >= sizeof(uint64_t)) {
+        uint64_t *ptr64 = (uint64_t *)ptr8;
 
+        if (value == 0) {
+            while (size >= sizeof(uint64_t)) {
+                *ptr64++ = 0;
+                size -= sizeof(uint64_t);
+            }
+        } else {
+            uint64_t pattern = value;
+            pattern |= pattern << 8;
+            pattern |= pattern << 16;
+            pattern |= pattern << 32;
+
+            while (size >= sizeof(uint64_t)) {
+                *ptr64++ = pattern;
+                size -= sizeof(uint64_t);
+            }
+        }
+
+        ptr8 = (uint8_t *)ptr64;
+    }
+
+    // Remaining bytes
+    while (size--)
+    {
+        *ptr8++ = value;
+    }
+
+    /* Ensure writes are observed before proceeding */
+    __asm__ volatile ("dsb sy" ::: "memory");
+}
 /**
  @brief Writes the reset status on Non-Volatile memory.
 
