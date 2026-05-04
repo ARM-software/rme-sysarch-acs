@@ -576,8 +576,9 @@ static int smmu_strtab_init_2level(smmu_dev_t *smmu)
         return 0;
     }
 
-    cfg->strtab_phys = (uint64_t)val_el3_memory_virt_to_phys(cfg->strtab_ptr);
-    cfg->strtab64 = (uint64_t *)cfg->strtab_ptr;
+    cfg->strtab_phys = align_to_size((uint64_t)val_el3_memory_virt_to_phys(cfg->strtab_ptr),
+                                     l1_tbl_size);
+    cfg->strtab64 = (uint64_t *)align_to_size((uint64_t)cfg->strtab_ptr, l1_tbl_size);
     cfg->strtab_base_cfg = BITFIELD_SET(STRTAB_BASE_CFG_FMT, STRTAB_BASE_CFG_FMT_2LVL) |
                            BITFIELD_SET(STRTAB_BASE_CFG_LOG2SIZE, log2size) |
                            BITFIELD_SET(STRTAB_BASE_CFG_SPLIT, STRTAB_SPLIT);

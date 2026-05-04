@@ -768,6 +768,8 @@ uint32_t val_el3_realm_pgt_create(memory_region_descriptor_t *mem_desc, pgt_desc
         tt_desc.level = 4 - num_pgt_levels;
         tt_desc.size_log2 = (num_pgt_levels - 1) * bits_p_level + page_size_log2;
         tt_desc.nbits = pgt_desc->ias - tt_desc.size_log2;
+        if (tt_desc.nbits > bits_p_level)
+            tt_desc.nbits = bits_p_level;
 
         if (fill_translation_table(tt_desc, mem_desc_iter))
         {
@@ -823,7 +825,7 @@ static void free_translation_table(uint64_t *tt_base, uint32_t bits_at_this_leve
 **/
 void val_el3_realm_pgt_destroy(pgt_descriptor_t *pgt_desc)
 {
-    uint32_t page_size_log2, num_pgt_levels;
+    uint32_t page_size_log2, num_pgt_levels, bits_at_root_level;
     uint64_t *pgt_base_virt = val_el3_memory_phys_to_virt(pgt_desc->pgt_base);
 
     if (!pgt_desc->pgt_base)
@@ -834,9 +836,12 @@ void val_el3_realm_pgt_destroy(pgt_descriptor_t *pgt_desc)
     bits_p_level =  page_size_log2 - 3;
     pgt_addr_mask = ((0x1ull << (pgt_desc->ias - page_size_log2)) - 1) << page_size_log2;
     num_pgt_levels = (pgt_desc->ias - page_size_log2 + bits_p_level - 1)/bits_p_level;
+    num_pgt_levels = (num_pgt_levels > 4)?4:num_pgt_levels;
+    bits_at_root_level =
+        pgt_desc->ias - ((num_pgt_levels - 1) * bits_p_level + page_size_log2);
+    if (bits_at_root_level > bits_p_level)
+        bits_at_root_level = bits_p_level;
 
-    free_translation_table(pgt_base_virt,
-                           pgt_desc->ias - ((num_pgt_levels - 1) * bits_p_level + page_size_log2),
-                           4 - num_pgt_levels);
+    free_translation_table(pgt_base_virt, bits_at_root_level, 4 - num_pgt_levels);
     val_el3_memory_free(pgt_base_virt);
 }
