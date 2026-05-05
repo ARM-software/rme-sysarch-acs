@@ -320,6 +320,7 @@ uint64_t pal_get_free_pa_test(void);
 uint64_t pal_get_free_mem_smmu(void);
 uint64_t pal_get_memory_pool_size(void);
 uint64_t pal_get_smmu_root_reg_offset(void);
+uint64_t pal_get_smmu_strtab_bits(void);
 
 #define val_get_root_smem_base()            pal_get_root_smem_base()
 #define val_get_realm_smem_base()           pal_get_realm_smem_base()
@@ -336,6 +337,7 @@ uint64_t pal_get_smmu_root_reg_offset(void);
 #define val_get_free_mem_smmu()             pal_get_free_mem_smmu()
 #define val_get_memory_pool_size()          pal_get_memory_pool_size()
 #define val_get_smmu_root_reg_offset()      pal_get_smmu_root_reg_offset()
+#define val_get_smmu_strtab_bits()          pal_get_smmu_strtab_bits()
 #else
 /* Baremetal/Emulation keep compile-time constants */
 #define val_get_root_smem_base()            PLAT_ROOT_SMEM_BASE
@@ -353,6 +355,8 @@ uint64_t pal_get_smmu_root_reg_offset(void);
 #define val_get_free_mem_smmu()             PLAT_FREE_MEM_SMMU
 #define val_get_memory_pool_size()          PLAT_MEMORY_POOL_SIZE
 #define val_get_smmu_root_reg_offset()      SMMUV3_ROOT_REG_OFFSET
+/* Baremetal has no runtime config parser; use the platform override macro. */
+#define val_get_smmu_strtab_bits()          PLATFORM_OVERRIDE_SMMU_STRTAB_BITS
 #endif
 
 #endif /* __VAL_INTERFACE_H__ */

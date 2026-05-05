@@ -58,8 +58,8 @@ payload(void)
   uint32_t test_fail = 0, test_skip = 1;
   uint32_t sel_str_lock_bit;
   uint32_t stream_id;
-  uint32_t pgt_attr_el3;
-  uint32_t cfg_addr;
+  uint64_t pgt_attr_el3;
+  uint64_t cfg_addr;
   uint32_t str_index;
   uint32_t device_id, its_id;
   uint32_t page_size = val_memory_page_size();
@@ -195,6 +195,7 @@ payload(void)
       /* Map the configuration address before writing from root as ROOT PAS */
       va1 = val_get_free_va(val_get_min_tg());
       cfg_addr = val_pcie_get_bdf_config_addr(rp_bdf);
+      val_print(ACS_PRINT_DEBUG, " Config addr %lx\n", cfg_addr);
       pgt_attr_el3 = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(OUTER_SHAREABLE)
                           | GET_ATTR_INDEX(DEV_MEM_nGnRnE) | PGT_ENTRY_AP_RW | PAS_ATTR(ROOT_PAS));
       if (val_add_mmu_entry_el3(va1, cfg_addr, pgt_attr_el3))
@@ -244,6 +245,9 @@ payload(void)
       /* Create a buffer of size TEST_DMA_SIZE in DRAM */
       dram_buf_in_virt = val_memory_alloc_pages(TEST_DATA_NUM_PAGES);
       dram_buf_in_phys = (uint64_t)val_memory_virt_to_phys(dram_buf_in_virt);
+
+      val_print(ACS_PRINT_DEBUG, "VA: %lx", (uint64_t)dram_buf_in_virt);
+      val_print(ACS_PRINT_DEBUG, "PA: %lx", (uint64_t)dram_buf_in_phys);
 
       /* Change the AccessPAS of the buffer to Realm PAS */
       if (val_add_gpt_entry_el3(dram_buf_in_phys, GPT_ANY))

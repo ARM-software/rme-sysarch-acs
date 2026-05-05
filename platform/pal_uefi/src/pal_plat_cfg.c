@@ -559,6 +559,12 @@ UINT64 pal_get_smmu_root_reg_offset(void)
   return off;
 }
 
+UINT64 pal_get_smmu_strtab_bits(void)
+{
+  return RmeCfgGetU64(L"PLATFORM_OVERRIDE_SMMU_STRTAB_BITS",
+                      PLATFORM_OVERRIDE_SMMU_STRTAB_BITS_CT);
+}
+
 UINT64
 RmeCfgGetU64(CONST CHAR16* Key, UINT64 DefaultVal)
 {
@@ -924,6 +930,7 @@ VOID pal_dump_platform_config(void)
   UINT64 smmu_base = RmeCfgGetU64(L"PLATFORM_OVERRIDE_SMMU_BASE", PLATFORM_OVERRIDE_SMMU_BASE_CT);
   UINT64 smmu_arch
       = RmeCfgGetU64(L"PLATFORM_OVERRIDE_SMMU_ARCH_MAJOR", PLATFORM_OVERRIDE_SMMU_ARCH_MAJOR_CT);
+  UINT64 smmu_strtab_bits = pal_get_smmu_strtab_bits();
   UINT64 rt_cnt  = RmeCfgGetU64(L"RT_REG_CNT", RT_REG_CNT_CT);
   UINT64 gpc_cnt = RmeCfgGetU64(L"GPC_PROTECTED_REGION_CNT", GPC_PROTECTED_REGION_CNT_CT);
   UINT64 pas_cnt = RmeCfgGetU64(L"PAS_PROTECTED_REGION_CNT", PAS_PROTECTED_REGION_CNT_CT);
@@ -939,8 +946,9 @@ VOID pal_dump_platform_config(void)
   rme_print(ACS_PRINT_INFO,
             L"[CFG] PCIe: ECAM=0x%lx START_BUS=%lu MAX_BUS=%lu MAX_DEV=%lu MAX_FUNC=%lu\n", ecam,
             sbus, mbus, mdev, mfunc);
-  rme_print(ACS_PRINT_INFO, L"[CFG] SMMU: BASE=0x%lx ARCH_MAJOR=%lu ROOT_REG_OFF=0x%lx\n",
-            smmu_base, smmu_arch, s3_off);
+  rme_print(ACS_PRINT_INFO,
+            L"[CFG] SMMU: BASE=0x%lx ARCH_MAJOR=%lu ROOT_REG_OFF=0x%lx STRTAB_BITS=%lu\n",
+            smmu_base, smmu_arch, s3_off, smmu_strtab_bits);
   rme_print(ACS_PRINT_INFO, L"[CFG] RT_REG_CNT=%lu, GPC_CNT=%lu, PAS_CNT=%lu\n", rt_cnt, gpc_cnt,
             pas_cnt);
 

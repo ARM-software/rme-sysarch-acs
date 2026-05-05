@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022-2023, 2025, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2023, 2025-2026, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,6 +15,8 @@
  * limitations under the License.
  **/
 #include "val_smmu_v3.h"
+
+#define MAX_LOG2_CMD_QUEUE_SIZE 8U
 
 smmu_dev_t *g_smmu;
 extern uint32_t g_num_smmus;
@@ -211,7 +213,7 @@ static uint32_t smmu_strtab_init_linear(smmu_dev_t *smmu)
     uint32_t size, i;
     smmu_strtab_config_t *cfg = &smmu->strtab_cfg;
 
-    size = (1 << smmu->sid_bits) * (STRTAB_STE_DWORDS << 3);
+    size = (1 << smmu->strtab_sid_bits) * (STRTAB_STE_DWORDS << 3);
     cfg->strtab_ptr = val_memory_calloc(2, size);
     if (!cfg->strtab_ptr) {
         val_print(ACS_PRINT_ERR, " Failed to allocate linear stream table.     ", 0);
@@ -220,9 +222,9 @@ static uint32_t smmu_strtab_init_linear(smmu_dev_t *smmu)
 
     cfg->strtab_phys = align_to_size((uint64_t)val_memory_virt_to_phys(cfg->strtab_ptr), size);
     cfg->strtab64 = (uint64_t *)align_to_size((uint64_t)cfg->strtab_ptr, size);
-    cfg->l1_ent_count = 1 << smmu->sid_bits;
+    cfg->l1_ent_count = 1 << smmu->strtab_sid_bits;
     cfg->strtab_base_cfg = BITFIELD_SET(STRTAB_BASE_CFG_FMT, STRTAB_BASE_CFG_FMT_LINEAR) |
-                           BITFIELD_SET(STRTAB_BASE_CFG_LOG2SIZE, smmu->sid_bits);
+                           BITFIELD_SET(STRTAB_BASE_CFG_LOG2SIZE, smmu->strtab_sid_bits);
 
     for (ste = cfg->strtab64, i = 0; i < cfg->l1_ent_count; ++i, ste += STRTAB_STE_DWORDS)
         smmu_strtab_write_ste(NULL, ste);
@@ -337,7 +339,7 @@ static int smmu_strtab_init_2level(smmu_dev_t *smmu)
     smmu_strtab_config_t *cfg = &smmu->strtab_cfg;
     int ret;
 
-    log2size = smmu->sid_bits - STRTAB_SPLIT;
+    log2size = smmu->strtab_sid_bits - STRTAB_SPLIT;
     cfg->l1_ent_count = 1 << log2size;
 
     log2size += STRTAB_SPLIT;
@@ -575,15 +577,22 @@ static uint32_t smmu_probe(smmu_dev_t *smmu)
     }
 
     smmu->cmdq.queue.log2nent = BITFIELD_GET(IDR1_CMDQS, data);
+    if (smmu->cmdq.queue.log2nent > MAX_LOG2_CMD_QUEUE_SIZE)
+        smmu->cmdq.queue.log2nent = MAX_LOG2_CMD_QUEUE_SIZE;
 
     /* SID/SSID sizes */
     smmu->sid_bits = BITFIELD_GET(IDR1_SIDSIZE, data);
+    smmu->strtab_sid_bits = (uint32_t)val_get_smmu_strtab_bits();
+    if (smmu->strtab_sid_bits > smmu->sid_bits)
+        smmu->strtab_sid_bits = smmu->sid_bits;
+
     smmu->ssid_bits = BITFIELD_GET(IDR1_SSIDSIZE, data);
 
     val_print(ACS_PRINT_INFO, " ssid_bits = %d", smmu->ssid_bits);
     val_print(ACS_PRINT_INFO, " sid_bits = %d", smmu->sid_bits);
+    val_print(ACS_PRINT_INFO, " strtab_sid_bits = %d", smmu->strtab_sid_bits);
 
-    if (smmu->sid_bits <= STRTAB_SPLIT)
+    if (smmu->strtab_sid_bits <= STRTAB_SPLIT)
         smmu->supported.st_level_2lvl = 0;
 
     /* IDR5 */
@@ -869,7 +878,15 @@ uint32_t val_smmu_map(smmu_master_attributes_t master_attr, pgt_descriptor_t pgt
 
     if (master_attr.streamid >= (0x1ul << smmu->sid_bits))
     {
-        val_print(ACS_PRINT_ERR, " val_smmu_map: sid %d out of range       ", master_attr.streamid);
+        val_print(ACS_PRINT_ERR, " val_smmu_map: sid %d unsupported by SMMU       ",
+                  master_attr.streamid);
+        return 1;
+    }
+
+    if (master_attr.streamid >= (0x1ul << smmu->strtab_sid_bits))
+    {
+        val_print(ACS_PRINT_ERR, " val_smmu_map: sid %d outside configured stream table       ",
+                  master_attr.streamid);
         return 1;
     }
 
@@ -950,7 +967,10 @@ void val_smmu_unmap(smmu_master_attributes_t master_attr)
     if (master_attr.streamid >= (0x1ul << master->smmu->sid_bits))
         return;
 
-    strtab = master->smmu->strtab_cfg.strtab64 + master_attr.streamid * STRTAB_STE_DWORDS;
+    if (master_attr.streamid >= (0x1ul << master->smmu->strtab_sid_bits))
+        return;
+
+    strtab = smmu_strtab_get_ste_for_sid(master->smmu, master_attr.streamid);
     smmu_strtab_write_ste(NULL, strtab);
 
     smmu_cdtab_free(master);
