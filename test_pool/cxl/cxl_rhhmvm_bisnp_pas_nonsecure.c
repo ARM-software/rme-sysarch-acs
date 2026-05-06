@@ -680,9 +680,9 @@ cleanup:
 }
 
 uint32_t
-cxl_rhhmvm_bisnp_pas_nonsecure_entry(void)
+cxl_rhhmvm_bisnp_pas_nonsecure_entry(uint32_t num_pe)
 {
-  uint32_t num_pe = 1;
+  num_pe = 1;
   uint32_t status;
 
   status = val_initialize_test(TEST_NAME, TEST_DESC, num_pe, TEST_RULE);

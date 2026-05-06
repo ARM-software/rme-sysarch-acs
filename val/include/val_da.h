@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2024-2025, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2024-2026, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -80,25 +80,25 @@ val_rmsd_write_protect_check(uint64_t pa,
                              uint32_t new_value,
                              uint32_t original_value);
 
-uint32_t da_dvsec_register_config_entry(void);
-uint32_t da_smmu_implementation_entry(void);
-uint32_t da_tee_io_capability_entry(void);
-uint32_t da_rootport_ide_features_entry(void);
-uint32_t da_attribute_rmeda_ctl_registers_entry(void);
-uint32_t da_p2p_btw_2_tdisp_devices_entry(void);
-uint32_t da_outgoing_request_with_ide_tbit_entry(void);
-uint32_t da_incoming_request_ide_sec_locked_entry(void);
-uint32_t da_ctl_regs_rmsd_write_protect_property_entry(void);
-uint32_t da_ide_state_rootport_error_entry(void);
-uint32_t da_ide_state_tdisp_disable_entry(void);
-uint32_t da_selective_ide_register_property_entry(void);
-uint32_t da_rootport_tdisp_disabled_entry(void);
-uint32_t da_autonomous_rootport_request_ns_pas_entry(void);
-uint32_t da_incoming_request_ide_non_sec_unlocked_entry(void);
-uint32_t da_outgoing_realm_rqst_ide_tbit_1_entry(void);
-uint32_t da_ide_tbit_0_for_root_request_entry(void);
-uint32_t da_rmsd_write_detect_property_entry(void);
-uint32_t da_rootport_write_protect_full_protect_property_entry(void);
-uint32_t da_interconnect_regs_rmsd_protected_entry(void);
+uint32_t da_dvsec_register_config_entry(uint32_t num_pe);
+uint32_t da_smmu_implementation_entry(uint32_t num_pe);
+uint32_t da_tee_io_capability_entry(uint32_t num_pe);
+uint32_t da_rootport_ide_features_entry(uint32_t num_pe);
+uint32_t da_attribute_rmeda_ctl_registers_entry(uint32_t num_pe);
+uint32_t da_p2p_btw_2_tdisp_devices_entry(uint32_t num_pe);
+uint32_t da_outgoing_request_with_ide_tbit_entry(uint32_t num_pe);
+uint32_t da_incoming_request_ide_sec_locked_entry(uint32_t num_pe);
+uint32_t da_ctl_regs_rmsd_write_protect_property_entry(uint32_t num_pe);
+uint32_t da_ide_state_rootport_error_entry(uint32_t num_pe);
+uint32_t da_ide_state_tdisp_disable_entry(uint32_t num_pe);
+uint32_t da_selective_ide_register_property_entry(uint32_t num_pe);
+uint32_t da_rootport_tdisp_disabled_entry(uint32_t num_pe);
+uint32_t da_autonomous_rootport_request_ns_pas_entry(uint32_t num_pe);
+uint32_t da_incoming_request_ide_non_sec_unlocked_entry(uint32_t num_pe);
+uint32_t da_outgoing_realm_rqst_ide_tbit_1_entry(uint32_t num_pe);
+uint32_t da_ide_tbit_0_for_root_request_entry(uint32_t num_pe);
+uint32_t da_rmsd_write_detect_property_entry(uint32_t num_pe);
+uint32_t da_rootport_write_protect_full_protect_property_entry(uint32_t num_pe);
+uint32_t da_interconnect_regs_rmsd_protected_entry(uint32_t num_pe);
 
 #endif

@@ -459,8 +459,19 @@ static uint32_t smmu_event_queue_init(smmu_dev_t *smmu)
 static uint32_t smmu_cmd_queue_init(smmu_dev_t *smmu)
 {
     smmu_queue_type_t *cmdq = &smmu->cmd_type;
-    uint64_t cmdq_size = ((1 << cmdq->queue.log2nent) * QUEUE_DWORDS_PER_ENT) << 3;
+    uint64_t cmdq_size;
 
+#if defined(TARGET_SIMULATION) && defined(TARGET_BM_BOOT)
+    /*
+     * EL3 ACS also only issues a small number of synchronous CMDQ commands at
+     * a time, so there is no value in provisioning the full model-advertised
+     * queue depth in CSS simulation.
+     */
+    if (cmdq->queue.log2nent > 3)
+        cmdq->queue.log2nent = 3;
+#endif
+
+    cmdq_size = ((1ULL << cmdq->queue.log2nent) * QUEUE_DWORDS_PER_ENT) << 3;
     cmdq_size = (cmdq_size < 32)?32:cmdq_size;
     cmdq->base_ptr = val_el3_memory_calloc(2, cmdq_size, SIZE_4KB);
     if (!cmdq->base_ptr) {
@@ -848,6 +859,16 @@ static uint32_t smmu_probe(smmu_dev_t *smmu)
         smmu->strtab_sid_bits = smmu->sid_bits;
 
     smmu->ssid_bits = BITFIELD_GET(IDR1_SSIDSIZE, idr1);
+
+#if defined(TARGET_SIMULATION) && defined(TARGET_BM_BOOT)
+    /*
+     * system uses PCIe requester IDs as Stream IDs, so 16 SID bits are
+     * sufficient. Some simulation models report a wider value here, which
+     * causes ACS to size stream-table allocations far beyond what system needs.
+     */
+    if (smmu->sid_bits > 16)
+        smmu->sid_bits = 16;
+#endif
 
     INFO("ssid_bits = %d", smmu->ssid_bits);
     INFO("sid_bits = %d\n", smmu->sid_bits);

@@ -302,9 +302,9 @@ payload(void)
 }
 
 uint32_t
-cda_rjzqcp_reset_transition_entry(void)
+cda_rjzqcp_reset_transition_entry(uint32_t num_pe)
 {
-  uint32_t num_pe = 1;
+  num_pe = 1;
   uint32_t status;
 
   status = val_initialize_test(TEST_NAME, TEST_DESC, num_pe, TEST_RULE);

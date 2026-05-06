@@ -20,6 +20,7 @@
 
 #include <stdio.h>
 #include <stdint.h>
+#include <stdarg.h>
 #include <pal_override_struct.h>
 
 typedef uintptr_t addr_t;
@@ -56,6 +57,8 @@ extern uint32_t g_print_in_test_context;
 #define PCIE_MAX_FUNC  8
 
 void pal_uart_print(int log, const char *fmt, ...);
+void pal_print(char8_t *string, ...);
+void pal_platform_print(char8_t *string, va_list args);
 void *mem_alloc(size_t alignment, size_t size);
 #define FILENAME (__builtin_strrchr("/" __FILE__, '/') + 1)
 #define print(level, string, ...)                                       \
@@ -63,36 +66,36 @@ void *mem_alloc(size_t alignment, size_t size);
     if ((level) >= g_print_level) {                                     \
       if ((level) == ACS_PRINT_DEBUG) {                                 \
         if (g_print_in_test_context)                                    \
-          pal_uart_print(level, "\n\t\tPAL_DBG : ");                     \
+          pal_print("\n\t\tPAL_DBG : ", 0);                              \
         else                                                            \
-          pal_uart_print(level, "\n\tPAL_DBG : ");                       \
+          pal_print("\n\tPAL_DBG : ", 0);                                \
       } else if ((level) == ACS_PRINT_ERR) {                            \
         if (g_print_in_test_context)                                    \
-          pal_uart_print(level, "\n\t\tPAL_ERR : ");                     \
+          pal_print("\n\t\tPAL_ERR : ", 0);                              \
         else                                                            \
-          pal_uart_print(level, "\n\tPAL_ERR : ");                       \
+          pal_print("\n\tPAL_ERR : ", 0);                                \
       } else if ((level) == ACS_PRINT_INFO) {                           \
         if (g_print_in_test_context)                                    \
-          pal_uart_print(level, "\n\t\tPAL_INFO: ");                    \
+          pal_print("\n\t\tPAL_INFO: ", 0);                              \
         else                                                            \
-          pal_uart_print(level, "\n\tPAL_INFO: ");                      \
+          pal_print("\n\tPAL_INFO: ", 0);                                \
       } else if ((level) == ACS_PRINT_WARN) {                           \
         if (g_print_in_test_context)                                    \
-          pal_uart_print(level, "\n\t\tPAL_WARN: ");                    \
+          pal_print("\n\t\tPAL_WARN: ", 0);                              \
         else                                                            \
-          pal_uart_print(level, "\n\tPAL_WARN: ");                      \
+          pal_print("\n\tPAL_WARN: ", 0);                                \
       } else if ((level) == ACS_PRINT_ALWAYS) {                         \
-        pal_uart_print(level, string, ##__VA_ARGS__);                   \
+        pal_print(string, ##__VA_ARGS__);                               \
         break;                                                          \
       } else {                                                          \
-        pal_uart_print(level, string, ##__VA_ARGS__);                   \
+        pal_print(string, ##__VA_ARGS__);                               \
         break;                                                          \
       }                                                                 \
-      pal_uart_print(level, string, ##__VA_ARGS__);                     \
+      pal_print(string, ##__VA_ARGS__);                                 \
       /* Print file name and line number for ERR and WARN */            \
       if (level == ACS_PRINT_ERR || level == ACS_PRINT_WARN) {          \
-          pal_uart_print(level, "\n  [FILE: %s]", (uint64_t)FILENAME);           \
-          pal_uart_print(level, "  [LINE: %d]", __LINE__);                     \
+          pal_print("\n  [FILE: %s]", (uint64_t)FILENAME);              \
+          pal_print("  [LINE: %d]", __LINE__);                          \
       }                                                                 \
     }                                                                   \
   } while (0)

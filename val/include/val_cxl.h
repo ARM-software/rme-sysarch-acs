@@ -220,31 +220,31 @@ uint32_t val_cxl_ide_get_status(uint32_t component_index,
 uint32_t val_cxl_ide_get_error_status(uint32_t component_index,
                                        uint32_t *error_status);
 
-uint32_t cxl_rjsdvg_little_endian_entry(void);
-uint32_t cxl_rplykv_rdfwkw_rme_cda_dvsec_entry(void);
-uint32_t cxl_rgvrqc_host_port_coverage_entry(void);
-uint32_t cxl_host_port_rmsd_write_protect_entry(void);
-uint32_t cxl_rwpgjb_rmsd_write_protect_property_entry(void);
-uint32_t cxl_rphcgc_rmsd_full_protect_entry(void);
-uint32_t cxl_rphwmm_rme_cda_tsp_entry(void);
-uint32_t cxl_rjxpzp_pas_ckid_mapping_entry(void);
-uint32_t cxl_rhmxtf_host_hdm_decoder_entry(void);
-uint32_t cxl_rdhwnr_link_stream_lock_entry(void);
-uint32_t cxl_rwyvcq_link_unlock_reject_entry(void);
-uint32_t cxl_rxqhng_rid_range_reject_entry(void);
-uint32_t cxl_rkjypb_cache_disable_entry(void);
-uint32_t cxl_rplcmc_type3_target_ckid_entry(void);
-uint32_t cxl_rlqmcy_type3_host_mpe_entry(void);
-uint32_t cxl_rhcqws_host_side_mpe_entry(void);
-uint32_t cxl_rptggp_cmo_to_cxl_mem_entry(void);
-uint32_t cxl_rhhmvm_bisnp_pas_nonsecure_entry(void);
-uint32_t cxl_rgbgqx_ctc_link_ide_entry(void);
-uint32_t cxl_rxwjnn_type3_link_ide_entry(void);
-uint32_t cxl_rcnslj_type3_no_tsp_entry(void);
-uint32_t cxl_rfdvzc_tdisp_disable_entry(void);
-uint32_t cxl_rbytyv_root_port_pas_behavior_entry(void);
-uint32_t cxl_rnycll_tdisp_disable_reject_entry(void);
-uint32_t cxl_rgtvgz_tdisp_enable_link_gate_entry(void);
+uint32_t cxl_rjsdvg_little_endian_entry(uint32_t num_pe);
+uint32_t cxl_rplykv_rdfwkw_rme_cda_dvsec_entry(uint32_t num_pe);
+uint32_t cxl_rgvrqc_host_port_coverage_entry(uint32_t num_pe);
+uint32_t cxl_host_port_rmsd_write_protect_entry(uint32_t num_pe);
+uint32_t cxl_rwpgjb_rmsd_write_protect_property_entry(uint32_t num_pe);
+uint32_t cxl_rphcgc_rmsd_full_protect_entry(uint32_t num_pe);
+uint32_t cxl_rphwmm_rme_cda_tsp_entry(uint32_t num_pe);
+uint32_t cxl_rjxpzp_pas_ckid_mapping_entry(uint32_t num_pe);
+uint32_t cxl_rhmxtf_host_hdm_decoder_entry(uint32_t num_pe);
+uint32_t cxl_rdhwnr_link_stream_lock_entry(uint32_t num_pe);
+uint32_t cxl_rwyvcq_link_unlock_reject_entry(uint32_t num_pe);
+uint32_t cxl_rxqhng_rid_range_reject_entry(uint32_t num_pe);
+uint32_t cxl_rkjypb_cache_disable_entry(uint32_t num_pe);
+uint32_t cxl_rplcmc_type3_target_ckid_entry(uint32_t num_pe);
+uint32_t cxl_rlqmcy_type3_host_mpe_entry(uint32_t num_pe);
+uint32_t cxl_rhcqws_host_side_mpe_entry(uint32_t num_pe);
+uint32_t cxl_rptggp_cmo_to_cxl_mem_entry(uint32_t num_pe);
+uint32_t cxl_rhhmvm_bisnp_pas_nonsecure_entry(uint32_t num_pe);
+uint32_t cxl_rgbgqx_ctc_link_ide_entry(uint32_t num_pe);
+uint32_t cxl_rxwjnn_type3_link_ide_entry(uint32_t num_pe);
+uint32_t cxl_rcnslj_type3_no_tsp_entry(uint32_t num_pe);
+uint32_t cxl_rfdvzc_tdisp_disable_entry(uint32_t num_pe);
+uint32_t cxl_rbytyv_root_port_pas_behavior_entry(uint32_t num_pe);
+uint32_t cxl_rnycll_tdisp_disable_reject_entry(uint32_t num_pe);
+uint32_t cxl_rgtvgz_tdisp_enable_link_gate_entry(uint32_t num_pe);
 uint32_t val_cxl_root_port_ide_program_and_enable(uint32_t rp_bdf,
                                                   uint8_t stream_id,
                                                   uint8_t key_slot,

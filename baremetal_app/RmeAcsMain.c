@@ -19,6 +19,7 @@
 #include "val/include/val_pe.h"
 #include "val/include/val.h"
 #include "val/include/val_memory.h"
+#include "val/include/acs_el3_param.h"
 #include "RmeAcs.h"
 
 uint32_t  g_enable_pcie_tests;
@@ -46,6 +47,8 @@ extern char8_t *g_test_array[];
 extern uint32_t g_num_tests;
 extern char8_t *g_module_array[];
 extern uint32_t g_num_modules;
+uint64_t  g_el3_param_magic = 0;
+uint64_t  g_el3_param_addr  = 0;
 
 uint32_t
 createPeInfoTable(
@@ -128,11 +131,10 @@ createTimerInfoTable(
 }
 
 void
-createPcieVirtInfoTable(
+createPcieInfoTable(
 )
 {
   uint64_t   *PcieInfoTable;
-  uint64_t   *IoVirtInfoTable;
   uint64_t   *RegisterInfoTable;
 
   PcieInfoTable = val_aligned_alloc(SIZE_4K, sizeof(PCIE_INFO_TABLE)
@@ -145,6 +147,13 @@ createPcieVirtInfoTable(
 
   val_register_create_info_table(RegisterInfoTable);
 
+}
+
+void
+createIovirtInfoTable(
+)
+{
+  uint64_t   *IoVirtInfoTable;
   IoVirtInfoTable = val_aligned_alloc(SIZE_4K, sizeof(IOVIRT_INFO_TABLE)
                     + ((NUM_ITS_COUNT + IOVIRT_SMMUV3_COUNT + IOVIRT_RC_COUNT
                     + IOVIRT_SMMUV2_COUNT + IOVIRT_NAMED_COMPONENT_COUNT + IOVIRT_PMCG_COUNT)
@@ -218,7 +227,7 @@ ShellAppMainrme(
       g_print_level = ACS_PRINT_ERR;
   }
 
-#ifdef TARGET_BM_BOOT
+  #if ACS_ENABLE_MMU
   /* Write page tables */
   if (val_setup_mmu())
       return ACS_STATUS_FAIL;
@@ -226,6 +235,8 @@ ShellAppMainrme(
   /* Enable Stage-1 MMU */
   if (val_enable_mmu())
       return ACS_STATUS_FAIL;
+#else
+  val_print(g_print_level, "Skipping MMU setup/enable (ACS_ENABLE_MMU=0)\n", 0);
 #endif
 
   g_print_mmio = FALSE;
@@ -258,6 +269,8 @@ ShellAppMainrme(
   if (g_num_modules) {
       g_execute_modules_str = g_module_array;
   }
+  acs_apply_compile_params();
+  acs_apply_el3_params();
 
   val_print(ACS_PRINT_ALWAYS, " Creating Platform Information Tables \n", 0);
   Status = createPeInfoTable();
@@ -269,8 +282,8 @@ ShellAppMainrme(
  createTimerInfoTable();
  createPeripheralInfoTable();
  createCxlInfoTable();
- createPcieVirtInfoTable();
-
+ createPcieInfoTable();
+ createIovirtInfoTable();
  val_allocate_shared_mem();
 
   /* Initialise exception vector, so any unexpected exception gets handled
@@ -294,25 +307,35 @@ ShellAppMainrme(
   if (Status)
     return Status;
 
-  Status |= val_rme_execute_tests(val_pe_get_num());
+  if (acs_is_module_enabled(RME_MODULE))
+    Status |= val_rme_execute_tests(val_pe_get_num());
 
-  Status |= val_legacy_execute_tests(val_pe_get_num());
+  if (acs_is_module_enabled(LEGACY_MODULE))
+    Status |= val_legacy_execute_tests(val_pe_get_num());
 
-  Status |= val_gic_execute_tests(val_pe_get_num());
+  if (acs_is_module_enabled(GIC_MODULE))
+    Status |= val_gic_execute_tests(val_pe_get_num());
 
-  Status |= val_smmu_execute_tests(val_pe_get_num());
+  if (acs_is_module_enabled(SMMU_MODULE))
+    Status |= val_smmu_execute_tests(val_pe_get_num());
 
-  Status |= val_rme_da_execute_tests(val_pe_get_num());
+  if (acs_is_module_enabled(DA_MODULE))
+    Status |= val_rme_da_execute_tests(val_pe_get_num());
 
-  Status |= val_rme_dpt_execute_tests(val_pe_get_num());
+  if (acs_is_module_enabled(DPT_MODULE))
+    Status |= val_rme_dpt_execute_tests(val_pe_get_num());
 
-  Status |= val_rme_mec_execute_tests(val_pe_get_num());
+  if (acs_is_module_enabled(MEC_MODULE))
+    Status |= val_rme_mec_execute_tests(val_pe_get_num());
 
-  Status |= val_rme_cxl_execute_tests(val_pe_get_num());
+  if (acs_is_module_enabled(CXL_MODULE))
+    Status |= val_rme_cxl_execute_tests(val_pe_get_num());
 
-  Status |= val_rme_cda_execute_tests(val_pe_get_num());
+  if (acs_is_module_enabled(CDA_MODULE))
+    Status |= val_rme_cda_execute_tests(val_pe_get_num());
 
-  Status |= val_rme_tdisp_execute_tests(val_pe_get_num());
+  if (acs_is_module_enabled(TDISP_MODULE))
+    Status |= val_rme_tdisp_execute_tests(val_pe_get_num());
 
 print_test_status:
   val_print(ACS_PRINT_ALWAYS,

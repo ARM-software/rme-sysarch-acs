@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2023-2025, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2023-2026, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,14 +15,14 @@
  * limitations under the License.
  **/
 
-#ifndef __RME_TEST_ENTRY_H__
-#define __RME_TEST_ENTRY_H__
+#ifndef __VAL_LEGACY_H__
+#define __VAL_LEGACY_H__
 
 #include "val_pe.h"
 
-uint32_t legacy_tz_support_check_entry(void);
-uint32_t legacy_tz_en_drives_root_to_secure_entry(void);
-uint32_t legacy_tz_enable_before_resetv_entry(void);
-uint32_t legacy_tz_enable_after_reset_entry(void);
+uint32_t legacy_tz_support_check_entry(uint32_t num_pe);
+uint32_t legacy_tz_en_drives_root_to_secure_entry(uint32_t num_pe);
+uint32_t legacy_tz_enable_before_resetv_entry(uint32_t num_pe);
+uint32_t legacy_tz_enable_after_reset_entry(uint32_t num_pe);
 
-#endif /*__RME_TEST_ENTRY_H__*/
+#endif /* __VAL_LEGACY_H__ */

@@ -369,9 +369,9 @@ cleanup:
 }
 
 uint32_t
-cxl_rhmxtf_host_hdm_decoder_entry(void)
+cxl_rhmxtf_host_hdm_decoder_entry(uint32_t num_pe)
 {
-  uint32_t num_pe = 1;
+  num_pe = 1;
   uint32_t status = ACS_STATUS_FAIL;
 
   status = val_initialize_test(TEST_NAME, TEST_DESC, num_pe, TEST_RULE);

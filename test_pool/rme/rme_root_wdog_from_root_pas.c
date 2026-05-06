@@ -129,10 +129,9 @@ payload()
 }
 
 uint32_t
-rme_root_wdog_from_root_pas_entry(void)
+rme_root_wdog_from_root_pas_entry(uint32_t num_pe)
 {
 
-    uint32_t num_pe;
     uint32_t status = ACS_STATUS_FAIL;
 
     num_pe = 1;  /*This Timer test is run on single processor*/

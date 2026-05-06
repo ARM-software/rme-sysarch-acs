@@ -990,25 +990,35 @@ INTN EFIAPI ShellAppMainrme(IN UINTN Argc, IN CHAR16** Argv)
   if (Status)
     return Status;
 
-  Status |= val_rme_execute_tests(val_pe_get_num());
+  if (acs_is_module_enabled(RME_MODULE))
+    Status |= val_rme_execute_tests(val_pe_get_num());
 
-  Status |= val_legacy_execute_tests(val_pe_get_num());
+  if (acs_is_module_enabled(LEGACY_MODULE))
+    Status |= val_legacy_execute_tests(val_pe_get_num());
 
-  Status |= val_gic_execute_tests(val_pe_get_num());
+  if (acs_is_module_enabled(GIC_MODULE))
+    Status |= val_gic_execute_tests(val_pe_get_num());
 
-  Status |= val_smmu_execute_tests(val_pe_get_num());
+  if (acs_is_module_enabled(SMMU_MODULE))
+    Status |= val_smmu_execute_tests(val_pe_get_num());
 
-  Status |= val_rme_da_execute_tests(val_pe_get_num());
+  if (acs_is_module_enabled(DA_MODULE))
+    Status |= val_rme_da_execute_tests(val_pe_get_num());
 
-  Status |= val_rme_dpt_execute_tests(val_pe_get_num());
+  if (acs_is_module_enabled(DPT_MODULE))
+    Status |= val_rme_dpt_execute_tests(val_pe_get_num());
 
-  Status |= val_rme_mec_execute_tests(val_pe_get_num());
+  if (acs_is_module_enabled(MEC_MODULE))
+    Status |= val_rme_mec_execute_tests(val_pe_get_num());
 
-  Status |= val_rme_cxl_execute_tests(val_pe_get_num());
+  if (acs_is_module_enabled(CXL_MODULE))
+    Status |= val_rme_cxl_execute_tests(val_pe_get_num());
 
-  Status |= val_rme_cda_execute_tests(val_pe_get_num());
+  if (acs_is_module_enabled(CDA_MODULE))
+    Status |= val_rme_cda_execute_tests(val_pe_get_num());
 
-  Status |= val_rme_tdisp_execute_tests(val_pe_get_num());
+  if (acs_is_module_enabled(TDISP_MODULE))
+    Status |= val_rme_tdisp_execute_tests(val_pe_get_num());
 
 
 print_test_status:

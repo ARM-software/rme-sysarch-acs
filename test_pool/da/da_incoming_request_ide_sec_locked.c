@@ -405,10 +405,10 @@ free_mem:
 
 
 uint32_t
-da_incoming_request_ide_sec_locked_entry(void)
+da_incoming_request_ide_sec_locked_entry(uint32_t num_pe)
 {
 
-  uint32_t num_pe = 1;
+  num_pe = 1;
   uint32_t status = ACS_STATUS_FAIL;  //default value
 
   status = val_initialize_test(TEST_NAME, TEST_DESC, num_pe, TEST_RULE);

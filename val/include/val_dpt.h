@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2025, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2025-2026, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -23,23 +23,23 @@
 #define DPT_RDWR_ACCESS_ENTRY      17
 
 uint32_t
-dpt_system_resource_valid_without_dpti_entry(void);
+dpt_system_resource_valid_without_dpti_entry(uint32_t num_pe);
 
 uint32_t
-dpt_system_resource_valid_with_dpti_entry(void);
+dpt_system_resource_valid_with_dpti_entry(uint32_t num_pe);
 
 uint32_t
-dpt_system_resource_invalid_entry(void);
+dpt_system_resource_invalid_entry(uint32_t num_pe);
 
 uint32_t
-dpt_p2p_different_rootport_valid_entry(void);
+dpt_p2p_different_rootport_valid_entry(uint32_t num_pe);
 
 uint32_t
-dpt_p2p_different_rootport_invalid_entry(void);
+dpt_p2p_different_rootport_invalid_entry(uint32_t num_pe);
 
 uint32_t
-dpt_p2p_same_rootport_valid_entry(void);
+dpt_p2p_same_rootport_valid_entry(uint32_t num_pe);
 
 uint32_t
-dpt_p2p_same_rootport_invalid_entry(void);
+dpt_p2p_same_rootport_invalid_entry(uint32_t num_pe);
 #endif
