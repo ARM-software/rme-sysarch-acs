@@ -1384,45 +1384,55 @@ uint32_t val_configure_acs(void)
     return 1;
   }
 
-  /* Map the SMMU root, NS and realm pages as ROOT PAS */
-  smmu_base = val_iovirt_get_smmu_info(SMMU_CTRL_BASE, 0);
+  num_smmus = val_iovirt_get_smmu_info(SMMU_NUM_CTRL, 0);
+  if (num_smmus != 0)
   {
-    uint64_t s3_off = val_get_smmu_root_reg_offset();
+    /* Map the SMMU root, NS and realm pages as ROOT PAS */
+    smmu_base = val_iovirt_get_smmu_info(SMMU_CTRL_BASE, 0);
+    {
+      uint64_t s3_off = val_get_smmu_root_reg_offset();
 
-    if (!s3_off)
-      s3_off = shared_data->cfg_smmu_root_reg_offset;
-    smmu_root_page = smmu_base + s3_off;
+      if (!s3_off)
+        s3_off = shared_data->cfg_smmu_root_reg_offset;
+      smmu_root_page = smmu_base + s3_off;
+    }
+
+    smmu_rlm_page0 = smmu_base + SMMU_R_PAGE_0_OFFSET;
+    smmu_rlm_page1 = smmu_base + SMMU_R_PAGE_1_OFFSET;
+    attr |= LOWER_ATTRS(GET_ATTR_INDEX(DEV_MEM_nGnRnE));
+    if (val_add_mmu_entry_el3(smmu_base, smmu_base, attr
+        | LOWER_ATTRS(PAS_ATTR(ROOT_PAS))))
+    {
+      val_print(ACS_PRINT_ERR, " MMU mapping failed for SMMU_BASE address: 0x%llx", smmu_base);
+      return 1;
+    }
+
+    if (val_add_mmu_entry_el3(smmu_root_page, smmu_root_page, attr
+        | LOWER_ATTRS(PAS_ATTR(ROOT_PAS))))
+    {
+      val_print(ACS_PRINT_ERR, " MMU mapping failed for SMMU_ROOT_BASE address: 0x%llx",
+                smmu_root_page);
+      return 1;
+    }
+
+    if (val_add_mmu_entry_el3(smmu_rlm_page0, smmu_rlm_page0, attr
+        | LOWER_ATTRS(PAS_ATTR(ROOT_PAS))))
+    {
+      val_print(ACS_PRINT_ERR, " MMU mapping failed for SMMU_REALM0_BASE address: 0x%llx",
+                smmu_rlm_page0);
+      return 1;
+    }
+
+    if (val_add_mmu_entry_el3(smmu_rlm_page1, smmu_rlm_page1, attr
+        | LOWER_ATTRS(PAS_ATTR(ROOT_PAS))))
+    {
+      val_print(ACS_PRINT_ERR, " MMU mapping failed for SMMU_REALM1_BASE address: 0x%llx",
+                smmu_rlm_page1);
+      return 1;
+    }
+
   }
-  smmu_rlm_page0 = smmu_base + SMMU_R_PAGE_0_OFFSET;
-  smmu_rlm_page1 = smmu_base + SMMU_R_PAGE_1_OFFSET;
-  attr |= LOWER_ATTRS(GET_ATTR_INDEX(DEV_MEM_nGnRnE));
-  if (val_add_mmu_entry_el3(smmu_base, smmu_base,
-                            attr | LOWER_ATTRS(PAS_ATTR(ROOT_PAS))))
-  {
-    val_print(ACS_PRINT_ERR, " MMU mapping failed for SMMU_BASE address: 0x%llx", smmu_base);
-    return 1;
-  }
-  if (val_add_mmu_entry_el3(smmu_root_page, smmu_root_page,
-                            attr | LOWER_ATTRS(PAS_ATTR(ROOT_PAS))))
-  {
-    val_print(ACS_PRINT_ERR, " MMU mapping failed for SMMU_ROOT_BASE address: 0x%llx",
-              smmu_root_page);
-    return 1;
-  }
-  if (val_add_mmu_entry_el3(smmu_rlm_page0, smmu_rlm_page0,
-                            attr | LOWER_ATTRS(PAS_ATTR(ROOT_PAS))))
-  {
-    val_print(ACS_PRINT_ERR, " MMU mapping failed for SMMU_REALM0_BASE address: 0x%llx",
-              smmu_rlm_page0);
-    return 1;
-  }
-  if (val_add_mmu_entry_el3(smmu_rlm_page1, smmu_rlm_page1,
-                            attr | LOWER_ATTRS(PAS_ATTR(ROOT_PAS))))
-  {
-    val_print(ACS_PRINT_ERR, " MMU mapping failed for SMMU_REALM1_BASE address: 0x%llx",
-              smmu_rlm_page1);
-    return 1;
-  }
+
   if (val_rme_install_handler_el3())
   {
     val_print(ACS_PRINT_ERR, " Failed to install the RME handler in EL3", 0);
@@ -1435,7 +1445,6 @@ uint32_t val_configure_acs(void)
   if (val_pcie_create_device_bdf_table())
   {
     val_print(ACS_PRINT_WARN, " Create BDF Table Failed \n", 0);
-    return ACS_STATUS_SKIP;
   }
 
   /* Print CXL support summary once after PCIe BDF table is built */
@@ -1443,8 +1452,6 @@ uint32_t val_configure_acs(void)
 
   val_exerciser_create_info_table();
   val_smmu_init();
-
-  num_smmus = val_iovirt_get_smmu_info(SMMU_NUM_CTRL, 0);
 
   /* Disable all SMMUs */
   for (uint32_t instance = 0; instance < num_smmus; ++instance)
