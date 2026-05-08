@@ -154,10 +154,16 @@ createIovirtInfoTable(
 )
 {
   uint64_t   *IoVirtInfoTable;
+  uint32_t iovirt_block_count = NUM_ITS_COUNT + IOVIRT_SMMUV3_COUNT + IOVIRT_RC_COUNT
+                               + IOVIRT_SMMUV2_COUNT + IOVIRT_NAMED_COMPONENT_COUNT
+                               + IOVIRT_PMCG_COUNT;
+  /* ITS groups store identifiers in NODE_DATA_MAP slots as well. */
+  uint32_t iovirt_map_count = IOVIRT_MAX_NUM_MAP
+                             + (NUM_ITS_COUNT * ((IOVIRT_ITS_COUNT + 3U) / 4U));
+
   IoVirtInfoTable = val_aligned_alloc(SIZE_4K, sizeof(IOVIRT_INFO_TABLE)
-                    + ((NUM_ITS_COUNT + IOVIRT_SMMUV3_COUNT + IOVIRT_RC_COUNT
-                    + IOVIRT_SMMUV2_COUNT + IOVIRT_NAMED_COMPONENT_COUNT + IOVIRT_PMCG_COUNT)
-                    * sizeof(IOVIRT_BLOCK)) + (IOVIRT_MAX_NUM_MAP * sizeof(ID_MAP)));
+                    + (iovirt_block_count * sizeof(IOVIRT_BLOCK))
+                    + (iovirt_map_count * sizeof(NODE_DATA_MAP)));
 
   val_iovirt_create_info_table(IoVirtInfoTable);
 }
@@ -174,16 +180,6 @@ createCxlInfoTable(
   val_cxl_create_info_table(CxlInfoTable);
 }
 
-void
-createPeripheralInfoTable(
-)
-{
-  uint64_t   *PeripheralInfoTable;
-
-  PeripheralInfoTable = val_aligned_alloc(SIZE_4K, sizeof(PERIPHERAL_INFO_TABLE)
-                        + (PLATFORM_OVERRIDE_PERIPHERAL_COUNT * sizeof(PERIPHERAL_INFO_BLOCK)));
-  val_peripheral_create_info_table(PeripheralInfoTable);
-}
 
 void
 freeRmeAcsMem()
@@ -195,7 +191,6 @@ freeRmeAcsMem()
   val_pcie_free_info_table();
   val_cxl_free_info_table();
   val_iovirt_free_info_table();
-  val_peripheral_free_info_table();
   val_free_shared_mem();
 }
 
@@ -280,7 +275,6 @@ ShellAppMainrme(
   if (Status)
     return Status;
  createTimerInfoTable();
- createPeripheralInfoTable();
  createCxlInfoTable();
  createPcieInfoTable();
  createIovirtInfoTable();

@@ -39,6 +39,11 @@ build:
     repo:
       revision: 8cc9da9dc8431d1f0dfab28d92b3941e2c19aeb8
 
+buildex:
+  btvars:
+    EDK2_BUILD:
+      value: DEBUG
+
 run:
   rtvars:
     BL1:
