@@ -563,10 +563,6 @@ val_execute_module_tests(MODULE_ID_e module_id,
 
     if (!val_test_is_selected(g_module_test_table[module_id].entry[i].test_text))
         continue;
-    if ((module_id == MEC_MODULE_ID && i == MEC_ENTRY_MEC_CMO_USES_CORRECT_MECID_ENTRY) ||
-        (module_id == RME_MODULE_ID && i == RME_ENTRY_RME_SNOOP_FILTER_CONSIDERS_PAS_ENTRY))
-        num_pe = 2;
-
     status |= g_module_test_table[module_id].entry[i].entry_fn(num_pe);
   }
 
