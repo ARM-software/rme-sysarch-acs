@@ -1,0 +1,21 @@
+*.o
+*.d
+*.o*
+
+# Ignore build directories
+build/
+BUILD/
+
+# Ignore precommit check directory
+pre_commit_data/
+
+# Ignore miscellaneous files
+cscope.*
+*.swp
+*~
+.project
+.cproject
+.vscode/*
+tags
+log.*
+AGENTS.md
