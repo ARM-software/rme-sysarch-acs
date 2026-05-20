@@ -67,7 +67,7 @@ payload(void)
   uint32_t pgt_attr_el3;
   uint32_t sel_str_lock_bit;
   uint64_t va;
-  uint32_t cfg_addr;
+  uint64_t cfg_addr;
   uint32_t da_cap_base;
   uint32_t stream_id;
   uint32_t str_index;

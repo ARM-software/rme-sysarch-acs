@@ -49,7 +49,7 @@ payload(void)
   uint32_t sel_str_lock_bit;
   uint32_t stream_id;
   uint32_t pgt_attr_el3;
-  uint32_t cfg_addr;
+  uint64_t cfg_addr;
   uint32_t str_index;
   uint32_t device_id, its_id;
   uint32_t page_size = val_memory_page_size();
