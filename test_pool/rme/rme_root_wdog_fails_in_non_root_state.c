@@ -125,6 +125,9 @@ static void payload(void)
   if (IS_RESULT_PENDING(val_get_status(index)))
   {
     val_print(ACS_PRINT_DEBUG, " WS0 Interrupt not received on %d", int_id);
+    shared_data->generic_flag = CLEAR;
+    shared_data->exception_expected = CLEAR;
+    shared_data->exception_generated = CLEAR;
     val_set_status(index, "PASS", 3);
     return;
   }
