@@ -52,7 +52,7 @@ payload()
   uint32_t reg_value, write_val, ide_reg_value;
   uint32_t original_reg_val;
   uint64_t va;
-  uint32_t cfg_addr;
+  uint64_t cfg_addr;
   uint32_t pgt_attr_el3;
   uint32_t pe_index = val_pe_get_index_mpid(val_pe_get_mpid());
   uint32_t test_fails = 0;
