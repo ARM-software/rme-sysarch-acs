@@ -47,7 +47,7 @@ payload(void)
   uint32_t instance, num_exercisers;
   uint32_t bdf, rp_bdf, da_cap_base;
   uint32_t dma_len, test_data_blk_size;
-  uint32_t status, reg_value;
+  uint32_t status;
   uint32_t count;
   void *dram_buf_in_virt, *dram_buf_in_virt2;
   uint64_t dram_buf_in_phys;
@@ -59,6 +59,7 @@ payload(void)
   uint64_t cfg_addr;
   uint32_t str_index;
   uint32_t device_id, its_id;
+  uint32_t smmu_enabled, smmu_mapped;
   uint32_t page_size = val_memory_page_size();
   smmu_master_attributes_t master;
   memory_region_descriptor_t mem_desc_array[2], *mem_desc;
@@ -102,6 +103,18 @@ payload(void)
 
   for (instance = 0; instance < num_exercisers; ++instance)
   {
+      va1 = 0;
+      va2 = 0;
+      bar_base = 0;
+      cfg_addr = 0;
+      count = 0;
+      dram_buf_in_virt = NULL;
+      dram_buf_in_virt2 = NULL;
+      dram_buf_in_phys = 0;
+      smmu_enabled = 0;
+      smmu_mapped = 0;
+      val_memory_set(&pgt_desc, sizeof(pgt_desc), 0);
+
       /* if init fail moves to next exerciser */
       if (val_exerciser_init(instance))
           continue;
@@ -141,25 +154,19 @@ payload(void)
       {
           val_print(ACS_PRINT_ERR, " Failed to establish stream for bdf: 0x%x", bdf);
           test_fail++;
-          continue;
+          goto cleanup_instance;
       }
-
       status = val_ide_establish_stream(rp_bdf, count, stream_id,
                                      PCIE_CREATE_BDF_PACKED(bdf));
       if (status)
       {
           val_print(ACS_PRINT_ERR, " Failed to establish stream for RP bdf: 0x%x", rp_bdf);
           test_fail++;
-          continue;
+          goto cleanup_instance;
       }
-
-      val_pcie_read_cfg(rp_bdf, da_cap_base + RMEDA_CTL2, &reg_value);
-      val_print(ACS_PRINT_DEBUG, " RMEDA_CTL2 before write = 0x%llx", reg_value);
-
       /* Lock the corresponding Selective IDE register block in RMEDA_CTL2 register */
       str_index = count - 1;
       sel_str_lock_bit = 1 << (str_index % 32);
-      val_print(ACS_PRINT_DEBUG, " Sel steam lock bit: 0x%lx", sel_str_lock_bit);
 
       /* Map the configuration address before writing from root as ROOT PAS */
       va1 = val_get_free_va(val_get_min_tg());
@@ -170,7 +177,7 @@ payload(void)
       {
           val_print(ACS_PRINT_ERR, " Failed to add MMU entry for cfg_addr: 0x%lx", cfg_addr);
           test_fail++;
-          continue;
+          goto cleanup_instance;
       }
 
       shared_data->num_access = 1;
@@ -182,16 +189,12 @@ payload(void)
           val_print(ACS_PRINT_ERR,
             " Failed to write RMEDA_CTL2 with sel_str_lock_bit: 0x%lx", sel_str_lock_bit);
           test_fail++;
-          continue;
+          goto cleanup_instance;
       }
-
-      val_pcie_read_cfg(rp_bdf, da_cap_base + RMEDA_CTL2, &reg_value);
-      val_print(ACS_PRINT_DEBUG, " RMEDA_CTL2 after write = 0x%llx", reg_value);
-
       /* Map the MMIO bar to REALM PAS */
       val_pcie_get_mmio_bar(bdf, &bar_base);
       if (bar_base == 0)
-          continue;
+          goto cleanup_instance;
 
       va2 = val_get_free_va(val_get_min_tg());
       pgt_attr_el3 = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(OUTER_SHAREABLE)
@@ -200,18 +203,15 @@ payload(void)
       {
         val_print(ACS_PRINT_ERR, " MMU mapping failed for bar_base: 0x%lx", bar_base);
         test_fail++;
-        continue;
+        goto cleanup_instance;
       }
 
       if (val_device_lock(bdf))
       {
           val_print(ACS_PRINT_ERR, " Failed to lock the device: 0x%lx", bdf);
           test_fail++;
-          /* TDISP was enabled just before; disable it before moving on. */
-          val_pcie_disable_tdisp(rp_bdf);
-          continue;
+          goto cleanup_instance;
       }
-
       /* Create a buffer of size TEST_DMA_SIZE in DRAM */
       dram_buf_in_virt = val_memory_alloc_pages(TEST_DATA_NUM_PAGES);
       dram_buf_in_phys = (uint64_t)val_memory_virt_to_phys(dram_buf_in_virt);
@@ -222,7 +222,7 @@ payload(void)
           val_print(ACS_PRINT_ERR,
             " Failed to add GPT entry for PA 0x%llx", dram_buf_in_phys);
           test_fail++;
-          continue;
+          goto cleanup_instance;
       }
       pgt_attr_el3 = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(OUTER_SHAREABLE)
                         | GET_ATTR_INDEX(DEV_MEM_nGnRnE) | PGT_ENTRY_AP_RW | PAS_ATTR(REALM_PAS));
@@ -233,14 +233,14 @@ payload(void)
           val_print(ACS_PRINT_ERR, " Failed to add MMU entry for dram_buf_in_virt: 0x%llx",
                     (uint64_t)dram_buf_in_virt);
           test_fail++;
-          continue;
+          goto cleanup_instance;
       }
       /* Set the buffer to value 0 */
       if (val_memory_set_el3(dram_buf_in_virt, test_data_blk_size, 0))
       {
           val_print(ACS_PRINT_ERR, " Failed to set memory to 0 for instance %4x", instance);
           test_fail++;
-          continue;
+          goto cleanup_instance;
       }
 
       val_pe_cache_clean_invalidate_range((uint64_t)dram_buf_in_virt,
@@ -252,7 +252,7 @@ payload(void)
       {
           val_print(ACS_PRINT_ERR, " Failed to set memory to 0 for instance %4x", instance);
           test_fail++;
-          continue;
+          goto cleanup_instance;
       }
 
       val_pe_cache_clean_invalidate_range((uint64_t)dram_buf_in_virt, (uint64_t)(dma_len));
@@ -274,8 +274,9 @@ payload(void)
                 val_print(ACS_PRINT_ERR, " Exerciser %x smmu disable error", instance);
                 val_set_status(pe_index, "FAIL", 04);
                 test_fail++;
-                continue;
+                goto cleanup_instance;
           }
+          smmu_enabled = 1;
       }
 
       val_iovirt_get_device_info(PCIE_CREATE_BDF_PACKED(bdf),
@@ -288,7 +289,7 @@ payload(void)
           val_print(ACS_PRINT_ERR, " Failed to invalidate SMMU GPT cache for stream 0x%lx",
                     master.streamid);
           test_fail++;
-          goto free_mem;
+          goto cleanup_instance;
       }
 
       /* Get the VTTBR_EL2 and VTCR_EL2, populate them if they aren't already */
@@ -296,7 +297,7 @@ payload(void)
       {
           val_print(ACS_PRINT_ERR, " Failed to get the VTCR", 0);
           test_fail++;
-          goto free_mem;
+          goto cleanup_instance;
       }
 
       /* Need to know input and output address sizes before creating page table */
@@ -305,7 +306,7 @@ payload(void)
           val_print(ACS_PRINT_ERR,
                           " Input address size of SMMU %d is 0", master.smmu_index);
           test_fail++;
-          goto free_mem;
+          goto cleanup_instance;
       }
 
       pgt_desc.oas = val_smmu_get_info(SMMU_OUT_ADDR_SIZE, master.smmu_index);
@@ -313,7 +314,7 @@ payload(void)
           val_print(ACS_PRINT_ERR,
                           " Output address size of SMMU %d is 0", master.smmu_index);
           test_fail++;
-          goto free_mem;;
+          goto cleanup_instance;;
       }
 
       /* set pgt_desc.pgt_base to NULL to create new translation table, val_realm_pgt_create
@@ -324,7 +325,7 @@ payload(void)
           val_print(ACS_PRINT_ERR,
                     " Failed to create page table for instance %4x", instance);
           test_fail++;
-          goto free_mem;
+          goto cleanup_instance;
       }
       /* Write pgt_base to the VTTBR register so that EL3 can update while programming STE */
       val_pe_reg_write(VTTBR, pgt_desc.pgt_base);
@@ -336,14 +337,15 @@ payload(void)
       {
           val_print(ACS_PRINT_ERR, " Failed to map SMMU for instance %4x", instance);
           test_fail++;
-          goto free_mem;
+          goto cleanup_instance;
       }
+      smmu_mapped = 1;
       val_exerciser_set_param(DMA_ATTRIBUTES, (uint64_t)dram_buf_in_virt, dma_len, instance);
       if (val_exerciser_ops(START_DMA, EDMA_TO_DEVICE, instance))
       {
           val_print(ACS_PRINT_ERR, " DMA write failure to exerciser %4x", instance);
           test_fail++;
-          goto free_mem;
+          goto cleanup_instance;
       }
 
       val_exerciser_set_param(DMA_ATTRIBUTES, (uint64_t)dram_buf_in_virt2, dma_len, instance);
@@ -351,7 +353,7 @@ payload(void)
       {
           val_print(ACS_PRINT_ERR, " DMA write failure from exerciser %4x", instance);
           test_fail++;
-          goto free_mem;
+          goto cleanup_instance;
       }
 
       if (val_memory_compare(dram_buf_in_virt, dram_buf_in_virt2, dma_len))
@@ -359,36 +361,45 @@ payload(void)
           val_print(ACS_PRINT_ERR,
                     " Incoming request is rejected when TDISP_EN=1 for instance %4x", instance);
           test_fail++;
-          goto free_mem;
+          goto cleanup_instance;
       }
 
-free_mem:
+cleanup_instance:
+      if (smmu_mapped)
+          val_smmu_unmap(master);
+
+      if (smmu_enabled)
+          (void)val_smmu_disable(master.smmu_index);
+
       pgt_attr_el3 = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(OUTER_SHAREABLE)
                      | GET_ATTR_INDEX(DEV_MEM_nGnRnE) | PGT_ENTRY_AP_RW | PAS_ATTR(NONSECURE_PAS));
 
-      //Clear the memory and it's protection by making it NS
-      if (val_add_mmu_entry_el3((uint64_t)dram_buf_in_virt, dram_buf_in_phys, pgt_attr_el3))
+      if (dram_buf_in_virt)
       {
-        val_print(ACS_PRINT_ERR,
-            " Free_mem: Failed to clear the memory protection for instance %4x", instance);
-        test_fail++;
+          /* Clear the memory and its protection by making it NS. */
+          if (val_add_mmu_entry_el3((uint64_t)dram_buf_in_virt, dram_buf_in_phys, pgt_attr_el3))
+          {
+            val_print(ACS_PRINT_ERR,
+                " Free_mem: Failed to clear the memory protection for instance %4x", instance);
+            test_fail++;
+          }
+
+          if (val_memory_set_el3((uint64_t *)dram_buf_in_virt, test_data_blk_size, 0))
+          {
+            val_print(ACS_PRINT_ERR,
+                      " Free_mem: Failed to set memory to 0 for instance %4x", instance);
+            test_fail++;
+          }
+
+          val_pe_cache_clean_invalidate_range((uint64_t)dram_buf_in_virt,
+                                              (uint64_t)(test_data_blk_size));
+
+          /* Return the buffer to the heap manager. */
+          val_memory_free_pages(dram_buf_in_virt, TEST_DATA_NUM_PAGES);
       }
-
-      if (val_memory_set_el3((uint64_t *)dram_buf_in_virt, test_data_blk_size, 0))
-      {
-        val_print(ACS_PRINT_ERR, " Free_mem: Failed to set memory to 0 for instance %4x", instance);
-        test_fail++;
-      }
-
-      val_pe_cache_clean_invalidate_range((uint64_t)dram_buf_in_virt,
-                                          (uint64_t)(test_data_blk_size));
-
-      /* Return the buffer to the heap manager */
-      val_memory_free_pages(dram_buf_in_virt, TEST_DATA_NUM_PAGES);
 
       /* Per-instance cleanup: unlock device and disable TDISP */
       val_device_unlock(bdf);
-      val_print(ACS_PRINT_DEBUG, " Disabling TDISP for RP: 0x%x", rp_bdf);
       val_pcie_disable_tdisp(rp_bdf);
   }
 
