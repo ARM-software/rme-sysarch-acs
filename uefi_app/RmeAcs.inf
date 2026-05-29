@@ -81,6 +81,7 @@
   ../test_pool/tdisp/tdisp_rwfwlf_get_version_resp_format.c
   ../test_pool/tdisp/tdisp_rgrpdp_get_dev_prop_req.c
   ../test_pool/tdisp/tdisp_rghdcb_get_dev_prop_resp_format.c
+  ../test_pool/tdisp/tdisp_rwfpxr_tdisp_error_allowed.c
   ../test_pool/tdisp/tdisp_rxdkdt_set_interface_req_semantics.c
   ../test_pool/tdisp/tdisp_rfmhst_set_interface_resp_format.c
   ../test_pool/da/da_smmu_implementation.c
