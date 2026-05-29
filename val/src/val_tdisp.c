@@ -385,6 +385,8 @@ val_rme_tdisp_execute_tests(uint32_t num_pe)
   status |= tdisp_rgrpdp_get_dev_prop_req_entry();
   status |= tdisp_rghdcb_get_dev_prop_resp_format_entry();
   status |= tdisp_rfpymv_vdm_response_check_entry();
+  status |= tdisp_rxdkdt_set_interface_req_semantics_entry();
+  status |= tdisp_rfmhst_set_interface_resp_format_entry();
 
   return status;
 }
