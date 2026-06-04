@@ -62,7 +62,6 @@ void plat_arm_acs_smc_handler(uint64_t services, uint64_t arg0, uint64_t arg1, u
     case RME_ADD_MMU_ENTRY:
       INFO("RME MMU mapping service \n");
       if (val_el3_add_mmu_entry(arg0, arg1, arg2) == 0) {
-          val_el3_tlbi_vae3(arg0);
           shared_data->status_code = 0;
           shared_data->error_code = 0;
           shared_data->error_msg[0] = '\0';
