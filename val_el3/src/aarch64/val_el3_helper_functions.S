@@ -187,6 +187,8 @@ val_el3_acs_ldr_pas_filter:
  * @return None
  */
 val_el3_tlbi_vae3:
+       /* TLBI VAE3 takes VA[55:12] in Xt, not the raw byte address. */
+       lsr    x0, x0, #12
        tlbi vae3, x0
        dsb    sy
        isb

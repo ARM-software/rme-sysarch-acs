@@ -32,6 +32,84 @@
 
 uint64_t free_pa = PLAT_FREE_MEM_START;
 
+/**
+  @brief Return the descriptor output-address mask for the configured translation granule.
+
+  @param page_size_log2 Log2 value of the translation granule size.
+
+  @return Address mask for extracting the output address from a descriptor.
+**/
+static uint64_t val_el3_pgt_desc_addr_mask(uint32_t page_size_log2)
+{
+    return (((0x1ull << (48 - page_size_log2)) - 1) << page_size_log2);
+}
+
+/**
+  @brief Clean every descriptor in a newly populated translation table.
+
+  @param table       Pointer to the translation table to clean.
+  @param num_entries Number of descriptors in the translation table.
+
+  @return None.
+**/
+static void val_el3_clean_pgt_table(uint64_t *table, uint32_t num_entries)
+{
+    uint32_t i;
+
+    for (i = 0; i < num_entries; i++)
+        val_el3_clean_cache(&table[i]);
+}
+
+/**
+  @brief Clear a new translation table before it is linked from a parent descriptor.
+
+  @param table       Pointer to the translation table to clear.
+  @param num_entries Number of descriptors in the translation table.
+
+  @return None.
+**/
+static void val_el3_clear_pgt_table(uint64_t *table, uint32_t num_entries)
+{
+    uint32_t i;
+
+    for (i = 0; i < num_entries; i++)
+        table[i] = 0;
+}
+
+/**
+  @brief Split an existing block descriptor into equivalent child descriptors.
+
+  @param block_desc         Block descriptor to split.
+  @param new_table          Pointer to the child translation table to populate.
+  @param num_entries        Number of descriptors in the child translation table.
+  @param page_size_log2     Log2 value of the translation granule size.
+  @param bits_remaining     Number of address bits mapped at the current level and below.
+  @param bits_per_level     Number of address bits consumed by each translation level.
+  @param next_level_is_leaf Indicates whether child descriptors should be page descriptors.
+
+  @return None.
+**/
+static void val_el3_split_block_desc(uint64_t block_desc, uint64_t *new_table,
+                                     uint32_t num_entries, uint32_t page_size_log2,
+                                     uint32_t bits_remaining, uint32_t bits_per_level,
+                                     uint32_t next_level_is_leaf)
+{
+    uint32_t i;
+    uint64_t desc_addr_mask = val_el3_pgt_desc_addr_mask(page_size_log2);
+    uint64_t old_pa_base = block_desc & desc_addr_mask;
+    uint64_t child_size = 1ull << (bits_remaining - bits_per_level);
+    uint64_t child_type = next_level_is_leaf ? PGT_ENTRY_PAGE_MASK : PGT_ENTRY_BLOCK_MASK;
+    uint64_t child_attrs = block_desc & ~desc_addr_mask;
+
+    /* Keep the old attributes, but replace the descriptor type bits. */
+    child_attrs &= ~0x3ull;
+    child_attrs |= PGT_ENTRY_VALID_MASK | child_type;
+
+    /* Preserve the original block mapping by covering it with child entries. */
+    for (i = 0; i < num_entries; i++)
+        new_table[i] = child_attrs | ((old_pa_base + (i * child_size)) & desc_addr_mask);
+}
+
 static uint32_t pg_size;
 static uint32_t bits_p_level;
 static uint64_t pgt_addr_mask;
@@ -423,9 +501,11 @@ uint32_t val_el3_add_mmu_entry(uint64_t arg0, uint64_t arg1, uint64_t arg2)
     uint64_t input_address = arg0, page_size;
     uint64_t output_address, attr;
     uint64_t *table_desc, tt_base_phys, *tt_base_virt;
+    uint64_t old_desc;
     uint32_t num_pgt_levels, page_size_log2, index;
     uint32_t this_level, bits_remaining, bits_at_this_level, bits_per_level;
     pgt_descriptor_t pgt_desc;
+    uint32_t replace_block_desc, num_entries;
     uint32_t oas_bit_arr[8] = {32, 36, 40, 42, 44, 48, 52, 56}; /* Physical address sizes */
     uint32_t tg_arr[3] = {SIZE_4KB, SIZE_16KB, SIZE_64KB}; /* Translation Granule Size */
 
@@ -487,16 +567,45 @@ uint32_t val_el3_add_mmu_entry(uint64_t arg0, uint64_t arg1, uint64_t arg2)
          */
         if (*table_desc == 0 || IS_PGT_ENTRY_BLOCK(*table_desc) || (*table_desc & 0xf) == 0xf)
         {
-
+            old_desc = *table_desc;
+            replace_block_desc = (old_desc != 0) &&
+                                 IS_PGT_ENTRY_BLOCK(old_desc) &&
+                                 ((old_desc & 0xf) != 0xf);
             tt_base_phys = free_pa;
-            free_pa = free_pa + SIZE_4KB;
-            *table_desc = PGT_ENTRY_TABLE_MASK | PGT_ENTRY_VALID_MASK;
+            free_pa = free_pa + page_size;
             tt_base_virt = (uint64_t *)tt_base_phys;
-            *table_desc |= (uint64_t)(tt_base_virt) & ~(page_size - 1);
             if (((val_el3_at_s1e3w((uint64_t)tt_base_virt)) & 0x1) == 0x1)
                 val_el3_add_mmu_entry((uint64_t)tt_base_virt,
                                       (uint64_t)tt_base_virt, NONSECURE_PAS);
-            VERBOSE("val_pe_mmu_map_add: table_desc = %lx     \n", *table_desc);
+
+            num_entries = page_size / sizeof(uint64_t);
+            if (replace_block_desc)
+                val_el3_split_block_desc(old_desc, tt_base_virt, num_entries,
+                                         page_size_log2, bits_remaining, bits_per_level,
+                                         (this_level + 1) == (num_pgt_levels - 1));
+            else
+                val_el3_clear_pgt_table(tt_base_virt, num_entries);
+
+            val_el3_clean_pgt_table(tt_base_virt, num_entries);
+            val_el3_mem_barrier();
+
+            if (replace_block_desc) {
+                /* Break-before-make is required when replacing a live block
+                 * with a table. The replacement table is pre-populated with
+                 * equivalent child descriptors before invalidating the block so
+                 * the old mapping is preserved while the target entry is split.
+                 */
+                *table_desc = 0;
+                val_el3_clean_cache(table_desc);
+                val_el3_mem_barrier();
+                val_el3_tlbi_alle3is();
+            }
+
+            *table_desc = PGT_ENTRY_TABLE_MASK | PGT_ENTRY_VALID_MASK;
+            *table_desc |= (uint64_t)(tt_base_virt) & ~(page_size - 1);
+            INFO("val_pe_mmu_map_add: table_desc = %lx     \n", *table_desc);
+            val_el3_clean_cache(table_desc);
+            val_el3_mem_barrier();
             ++this_level;
             bits_remaining -= bits_per_level;
             bits_at_this_level = bits_per_level;
@@ -510,13 +619,15 @@ uint32_t val_el3_add_mmu_entry(uint64_t arg0, uint64_t arg1, uint64_t arg2)
             break;
         }
 
-        tt_base_phys = *table_desc & (((0x1ull << (48 - page_size_log2)) - 1) << page_size_log2);
+        tt_base_phys = *table_desc & val_el3_pgt_desc_addr_mask(page_size_log2);
         tt_base_virt = (uint64_t *)tt_base_phys;
         ++this_level;
         bits_remaining -= bits_per_level;
         bits_at_this_level = bits_per_level;
     }
-    val_el3_cln_and_invldt_cache(table_desc);
+    val_el3_clean_cache(table_desc);
+    val_el3_mem_barrier();
+    val_el3_tlbi_vae3(input_address);
     INFO("val_pe_mmu_map_add: table_desc = %lx     \n", *table_desc);
     return 0;
 }
