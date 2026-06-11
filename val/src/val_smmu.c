@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022-2025, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2026, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -52,24 +52,8 @@ val_smmu_read_cfg(uint32_t offset, uint32_t index)
 uint32_t
 val_smmu_execute_tests(uint32_t num_pe)
 {
-  uint32_t status = ACS_STATUS_SKIP, i;
+  uint32_t status = ACS_STATUS_SKIP;
   uint32_t num_smmu;
-
-  for (i = 0; i < g_num_skip; i++) {
-      if (val_memory_compare((char8_t *)g_skip_test_str[i], SMMU_MODULE,
-                             val_strnlen(g_skip_test_str[i])) == 0)
-      {
-          val_print(ACS_PRINT_ALWAYS, "\n USER Override - Skipping all SMMU tests \n", 0);
-          return ACS_STATUS_SKIP;
-      }
-  }
-
-  /* Check if there are any tests to be executed in current module with user override options*/
-  status = val_check_skip_module(SMMU_MODULE);
-  if (status) {
-    val_print(ACS_PRINT_ALWAYS, "\n USER Override - Skipping all SMMU tests \n", 0);
-    return ACS_STATUS_SKIP;
-  }
 
   num_smmu = val_iovirt_get_smmu_info(SMMU_NUM_CTRL, 0);
   if (num_smmu == 0) {
@@ -80,8 +64,11 @@ val_smmu_execute_tests(uint32_t num_pe)
   g_curr_module = 1 << SMMU_MODULE_ID;
 
   val_print(ACS_PRINT_ALWAYS, "\n\n******************************************************* \n", 0);
-  status |= smmu_implements_rme_entry(num_pe);
-  status |= smmu_responds_to_gpt_tlb_entry();
+  status = val_execute_module_tests(SMMU_MODULE_ID,
+                                    SMMU_MODULE_START,
+                                    SMMU_MODULE_END,
+                                    num_pe,
+                                    status);
 
   return status;
 }

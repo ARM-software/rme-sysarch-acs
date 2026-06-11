@@ -124,7 +124,7 @@ payload(void)
   uint32_t sel_str_lock_bit;
   uint32_t stream_id;
   uint32_t pgt_attr_el3;
-  uint32_t cfg_addr;
+  uint64_t cfg_addr;
   uint32_t str_index;
   uint32_t device_id, its_id;
   uint32_t page_size = val_memory_page_size();
@@ -614,9 +614,9 @@ free_mem:
 
 
 uint32_t
-dpt_p2p_different_rootport_valid_entry(void)
+dpt_p2p_different_rootport_valid_entry(uint32_t num_pe)
 {
-  uint32_t num_pe = 1;
+  num_pe = 1;
   uint32_t status = ACS_STATUS_FAIL;  //default value
 
   status = val_initialize_test(TEST_NAME, TEST_DESC, num_pe, TEST_RULE);

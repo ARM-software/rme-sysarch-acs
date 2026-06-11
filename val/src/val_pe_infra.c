@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022-2023, 2025, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2023, 2025-2026, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -25,6 +25,8 @@ int32_t gPsciConduit;
 
 /* Global variable to store mpidr of primary cpu */
 uint64_t g_primary_mpidr = PAL_INVALID_MPID;
+/* Cached primary PE index to avoid repeated MPIDR reads */
+uint32_t g_primary_pe_index = ACS_INVALID_INDEX;
 
 /**
   @brief   Pointer to the memory location of the PE Information table
@@ -76,6 +78,13 @@ val_pe_create_info_table(uint64_t *pe_info_table)
   if (val_pe_get_num() == 0) {
       val_print(ACS_PRINT_ERR, " *** CRITICAL ERROR: Num PE is 0x0 ***", 0);
       return ACS_STATUS_ERR;
+  }
+
+  /* Cache the primary PE index once to avoid repeated MPIDR reads on the fast path */
+  if (g_primary_pe_index == ACS_INVALID_INDEX) {
+      uint64_t primary_mpid = (g_primary_mpidr == PAL_INVALID_MPID) ?
+                              val_pe_get_mpid() : g_primary_mpidr;
+      g_primary_pe_index = val_pe_get_index_mpid(primary_mpid);
   }
   return ACS_STATUS_PASS;
 }
@@ -439,6 +448,7 @@ uint64_t val_get_primary_mpidr(void)
 {
     return g_primary_mpidr;
 }
+
 /**
  *   @brief    Convert mpidr to logical cpu number
  *   @param    mpidr    - mpidr value

@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2023-2024, 2025, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2023-2026, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,6 +21,7 @@
 
 #include "val/include/val_wd.h"
 #include "val/include/val_timer.h"
+#include "val/include/val_timer_support.h"
 #include "val/include/val_el32.h"
 
 #define TEST_NAME  "rme_root_wdog_from_root_pas"
@@ -65,7 +66,8 @@ payload()
 {
 
     uint64_t timer_expire_ticks = 1;
-    uint32_t index = val_pe_get_index_mpid(val_pe_get_mpid()), timeout, attr;
+    uint64_t timeout_ticks, start_cnt;
+    uint32_t index = val_pe_get_index_mpid(val_pe_get_mpid()), attr;
     uint64_t size, rt_wdog_ctl_reg;
     uint64_t rt_wdog_ctl_available = val_get_rt_wdog_ctrl();
 
@@ -83,9 +85,9 @@ payload()
 
     VA_RT_WDOG = val_get_free_va(size);
 
-    timeout = val_get_counter_frequency() * 2;
+    timeout_ticks = val_get_counter_frequency() * 2;
     counter_freq = val_get_counter_frequency();
-    val_print(ACS_PRINT_DEBUG, " Timer value = 0x%lx  ", timeout);
+    val_print(ACS_PRINT_DEBUG, " Timer value = 0x%lx  ", timeout_ticks);
     val_print(ACS_PRINT_DEBUG, " Root watchdog Interrupt id  %d", int_id);
 
     if (val_gic_install_isr(int_id, isr)) {
@@ -98,7 +100,8 @@ payload()
     val_gic_set_intr_trigger(int_id, INTR_TRIGGER_INFO_LEVEL_HIGH);
 
     shared_data->generic_flag = CLEAR;
-    attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(NON_SHAREABLE) | PGT_ENTRY_AP_RW);
+    attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(NON_SHAREABLE) | PGT_ENTRY_AP_RW
+                       | GET_ATTR_INDEX(DEV_MEM_nGnRnE));
     if (val_add_mmu_entry_el3(VA_RT_WDOG, rt_wdog_ctl_reg,
                                 (attr | LOWER_ATTRS(PAS_ATTR(ROOT_PAS)))))
     {
@@ -115,9 +118,11 @@ payload()
         return;
     }
 
-    while ((--timeout > 0) && (IS_RESULT_PENDING(val_get_status(index))));
+    start_cnt = val_timer_ArmArchTimerReadReg(CntPct);
+    while (((val_timer_ArmArchTimerReadReg(CntPct) - start_cnt) < timeout_ticks) &&
+           (IS_RESULT_PENDING(val_get_status(index))));
 
-    if (timeout == 0) {
+    if (IS_RESULT_PENDING(val_get_status(index))) {
             val_print(ACS_PRINT_ERR, " WS0 Interrupt not received on %d", int_id);
             val_set_status(index, "FAIL", 05);
             return;
@@ -125,10 +130,9 @@ payload()
 }
 
 uint32_t
-rme_root_wdog_from_root_pas_entry(void)
+rme_root_wdog_from_root_pas_entry(uint32_t num_pe)
 {
 
-    uint32_t num_pe;
     uint32_t status = ACS_STATUS_FAIL;
 
     num_pe = 1;  /*This Timer test is run on single processor*/

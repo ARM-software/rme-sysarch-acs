@@ -59,8 +59,10 @@ void val_el3_map_shared_mem(uint64_t shared_addr)
   val_el3_add_mmu_entry((uint64_t)shared_data, (uint64_t)shared_data, pgt_attr_el3);
 
   // Store base address in shared_addr pointer which will be used by NS world
-  val_el3_add_mmu_entry(shared_addr, shared_addr, pgt_attr_el3);
-  *(uint64_t *)shared_addr = (uint64_t)shared_data;
+  if (shared_addr != 0) {
+    val_el3_add_mmu_entry(shared_addr, shared_addr, pgt_attr_el3);
+    *(uint64_t *)shared_addr = (uint64_t)shared_data;
+  }
 
   struct_sh_data *sd = (struct_sh_data *)shared_data;
   /* EL3 cfg populated for NS consumption */
@@ -68,6 +70,9 @@ void val_el3_map_shared_mem(uint64_t shared_addr)
   sd->cfg_free_mem_smmu        = PLAT_FREE_MEM_SMMU;
   sd->cfg_memory_pool_size     = PLAT_MEMORY_POOL_SIZE;
   sd->cfg_smmu_root_reg_offset = SMMUV3_ROOT_REG_OFFSET;
+  sd->status_code              = 0;
+  sd->error_code               = 0;
+  sd->error_msg[0]             = '\0';
 
 }
 

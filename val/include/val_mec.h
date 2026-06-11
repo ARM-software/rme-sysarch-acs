@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2025, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2025-2026, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -25,9 +25,9 @@
 uint32_t
 mec_support_mecid_and_mecid_width_entry(uint32_t num_pe);
 uint32_t
-mec_mecid_assosiation_and_encryption_entry(void);
+mec_mecid_assosiation_and_encryption_entry(uint32_t num_pe);
 uint32_t
-mec_effect_of_popa_cmo_entry(void);
+mec_effect_of_popa_cmo_entry(uint32_t num_pe);
 uint32_t
 mec_cmo_uses_correct_mecid_entry(uint32_t num_pe);
 

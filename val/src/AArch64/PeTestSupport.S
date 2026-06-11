@@ -1,5 +1,5 @@
 #/** @file
-# Copyright (c) 2022-2023, 2025, Arm Limited or its affiliates. All rights reserved.
+# Copyright (c) 2022-2023, 2026, Arm Limited or its affiliates. All rights reserved.
 # SPDX-License-Identifier : Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -102,9 +102,19 @@ ASM_PFX(set_daif):
   ret
 
 ASM_PFX(UserCallSMC):
-  stp x29, x30, [sp, #-0x10]!
+  stp x19, x20, [sp, #-0x60]!
+  stp x21, x22, [sp, #0x10]
+  stp x23, x24, [sp, #0x20]
+  stp x25, x26, [sp, #0x30]
+  stp x27, x28, [sp, #0x40]
+  stp x29, x30, [sp, #0x50]
   smc #0
-  ldp x29,x30, [sp] ,#0x10
+  ldp x19, x20, [sp], #0x10
+  ldp x21, x22, [sp], #0x10
+  ldp x23, x24, [sp], #0x10
+  ldp x25, x26, [sp], #0x10
+  ldp x27, x28, [sp], #0x10
+  ldp x29, x30, [sp], #0x10
   ret
 
 ASM_PFX(ArmCallWFI):

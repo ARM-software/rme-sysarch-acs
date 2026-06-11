@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2025, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2025-2026, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -57,7 +57,9 @@ static
 void
 payload2(void)
 {
-  uint32_t num_smmu, smmu_base, *smmu_mecidw;
+  uint32_t num_smmu, *smmu_mecidw;
+
+  uint64_t smmu_base;
   uint32_t pe_index = val_pe_get_index_mpid(val_pe_get_mpid());
   uint32_t i, common_mecidw = INVALID_MECIDW, max_mecid;
   uint32_t test_fail = 0;

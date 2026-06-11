@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2023-2025, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2023-2026, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -25,57 +25,28 @@
 
 ROOT_REGSTR_TABLE *g_root_reg_info_table;
 
-/**
-  @brief   This API will execute all Legacy system related tests designated.
-           1. Caller       -  Application layer.
-           2. Prerequisite -  val_pe_create_info_table, val_allocate_shared_mem
-  @param   num_pe - the number of PE to run these tests on.
-  @return  Consolidated status of all the tests run.
-**/
-uint32_t
-val_legacy_execute_tests(uint32_t num_pe)
+static uint32_t
+legacy_run_if_selected(uint32_t num_pe, uint32_t status, uint32_t reset_status)
 {
-  uint32_t status = ACS_STATUS_SKIP, i, reset_status;
-  (void) num_pe;
 
-  for (i = 0 ; i < g_num_skip ; i++) {
-      if (val_memory_compare((char8_t *)g_skip_test_str[i], LEGACY_MODULE,
-          val_strnlen(g_skip_test_str[i])) == 0) {
-          val_print(ACS_PRINT_ALWAYS, "\n USER Override - Skipping all Legacy tests \n", 0);
-          return ACS_STATUS_SKIP;
-      }
-  }
-
-  /* Check if there are any tests to be executed in current module with user override options*/
-  status = val_check_skip_module(LEGACY_MODULE);
-  if (status) {
-    val_print(ACS_PRINT_ALWAYS, "\n USER Override - Skipping all Legacy system tests \n", 0);
-    return ACS_STATUS_SKIP;
-  }
-  if (!pal_is_legacy_tz_enabled()) {
-    val_print(ACS_PRINT_ALWAYS, "\n******************************************************* \n", 0);
-    val_print(ACS_PRINT_ALWAYS, "\n Skipping Legacy system tests since the system doesn't \
-support the feature \n", 0);
-    val_print(ACS_PRINT_ALWAYS, "\n******************************************************* \n", 0);
-    return ACS_STATUS_SKIP;
-  }
-
-  g_curr_module = 1 << LEGACY_MODULE_ID;
-
-  reset_status = val_read_reset_status();
-  if (reset_status == RESET_LS_TEST3_FLAG)
+   if (reset_status == RESET_LS_TEST3_FLAG)
           goto reset_done_ls3;
 
   else if (reset_status == RESET_LS_DISBL_FLAG)
           goto reset_done_ls_dis;
 
-  val_print(ACS_PRINT_ALWAYS, "\n\n******************************************************* \n", 0);
-  status = legacy_tz_support_check_entry();
-  status |= legacy_tz_en_drives_root_to_secure_entry();
+  status = val_execute_module_tests(LEGACY_MODULE_ID,
+                                    LEGACY_ENTRY_LEGACY_TZ_SUPPORT_CHECK_ENTRY - 1,
+                                    LEGACY_ENTRY_LEGACY_TZ_ENABLE_BEFORE_RESETV_ENTRY + 1,
+                                    num_pe,
+                                    status);
 
-  status |= legacy_tz_enable_before_resetv_entry();
 reset_done_ls3:
-  status = legacy_tz_enable_before_resetv_entry();
+  status = val_execute_module_tests(LEGACY_MODULE_ID,
+                                    LEGACY_ENTRY_LEGACY_TZ_ENABLE_BEFORE_RESETV_ENTRY - 1,
+                                    LEGACY_ENTRY_LEGACY_TZ_ENABLE_BEFORE_RESETV_ENTRY + 1,
+                                    num_pe,
+                                    status);
 
   //Disablie the legacy tie-off before moving on to the next tests
   if (val_prog_legacy_tz(CLEAR))
@@ -87,7 +58,40 @@ reset_done_ls3:
   val_system_reset();
 
 reset_done_ls_dis:
-  status |= legacy_tz_enable_after_reset_entry();
+  status = val_execute_module_tests(LEGACY_MODULE_ID,
+                                    LEGACY_ENTRY_LEGACY_TZ_ENABLE_AFTER_RESET_ENTRY - 1,
+                                    LEGACY_ENTRY_LEGACY_TZ_ENABLE_AFTER_RESET_ENTRY + 1,
+                                    num_pe,
+                                    status);
+  return status;
+}
+
+/**
+  @brief   This API will execute all Legacy system related tests designated.
+           1. Caller       -  Application layer.
+           2. Prerequisite -  val_pe_create_info_table, val_allocate_shared_mem
+  @param   num_pe - the number of PE to run these tests on.
+  @return  Consolidated status of all the tests run.
+**/
+uint32_t
+val_legacy_execute_tests(uint32_t num_pe)
+{
+  uint32_t status = ACS_STATUS_SKIP, reset_status;
+
+  if (!pal_is_legacy_tz_enabled()) {
+    val_print(ACS_PRINT_ALWAYS, "\n******************************************************* \n", 0);
+    val_print(ACS_PRINT_ALWAYS, "\n Skipping Legacy system tests since the system doesn't \
+support the feature \n", 0);
+    val_print(ACS_PRINT_ALWAYS, "\n******************************************************* \n", 0);
+    return ACS_STATUS_SKIP;
+  }
+
+  g_curr_module = 1 << LEGACY_MODULE_ID;
+
+  reset_status = val_read_reset_status();
+
+  val_print(ACS_PRINT_ALWAYS, "\n\n******************************************************* \n", 0);
+  status = legacy_run_if_selected(num_pe, status, reset_status);
 
   return status;
 

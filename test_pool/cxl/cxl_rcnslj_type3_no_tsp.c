@@ -375,9 +375,9 @@ payload(void)
 #endif
 
 uint32_t
-cxl_rcnslj_type3_no_tsp_entry(void)
+cxl_rcnslj_type3_no_tsp_entry(uint32_t num_pe)
 {
-  uint32_t num_pe = 1;
+  num_pe = 1;
   uint32_t status;
 
   status = val_initialize_test(TEST_NAME, TEST_DESC, num_pe, TEST_RULE);

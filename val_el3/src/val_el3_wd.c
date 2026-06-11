@@ -1,5 +1,5 @@
 /** @file
-  * Copyright (c) 2025, Arm Limited or its affiliates. All rights reserved.
+  * Copyright (c) 2025-2026, Arm Limited or its affiliates. All rights reserved.
   * SPDX-License-Identifier : Apache-2.0
 
   * Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,6 +15,7 @@
   * limitations under the License.
   **/
 #include <val_el3_debug.h>
+#include <val_el3_memory.h>
 #include <val_el3_wd.h>
 
 /**
@@ -29,7 +30,7 @@ val_el3_wd_enable(uint64_t wdog_ctrl_base)
       shared_data->exception_expected = SET;
       shared_data->access_mut = CLEAR;
     }
-    *(uint64_t *)(wdog_ctrl_base + 0) = SET;
+    val_el3_mmio_write(wdog_ctrl_base + 0, SET);
 }
 
 /**
@@ -40,7 +41,7 @@ val_el3_wd_enable(uint64_t wdog_ctrl_base)
 void
 val_el3_wd_disable(uint64_t wdog_ctrl_base)
 {
-    *(uint64_t *)(wdog_ctrl_base + 0) = CLEAR;
+    val_el3_mmio_write(wdog_ctrl_base + 0, CLEAR);
 }
 
 /**
@@ -66,7 +67,7 @@ void val_el3_wd_set_ws0(uint64_t VA_RT_WDOG, uint32_t timeout, uint64_t counter_
       return;
   }
 
-  data = VAL_EXTRACT_BITS(*(uint64_t *)(ctrl_base + WD_IIDR_OFFSET), 16, 19);
+  data = VAL_EXTRACT_BITS(val_el3_mmio_read(ctrl_base + WD_IIDR_OFFSET), 16, 19);
 
   /* Option to override system counter frequency value */
   /* Check if the timeout value exceeds */
@@ -85,7 +86,7 @@ void val_el3_wd_set_ws0(uint64_t VA_RT_WDOG, uint32_t timeout, uint64_t counter_
     shared_data->exception_expected = SET;
     shared_data->access_mut = CLEAR;
   }
-  *(uint64_t *)(ctrl_base + 8) =  wor_l;
+  val_el3_mmio_write(ctrl_base + 8, wor_l);
 
   /* Upper bits are applicable only for WDog Version 1 */
   if (data == 1) {
@@ -93,7 +94,7 @@ void val_el3_wd_set_ws0(uint64_t VA_RT_WDOG, uint32_t timeout, uint64_t counter_
         shared_data->exception_expected = SET;
         shared_data->access_mut = CLEAR;
       }
-      *(uint64_t *)(ctrl_base + 12) = wor_h;
+      val_el3_mmio_write(ctrl_base + 12, wor_h);
   }
 
   INFO("Enabling the Root watchdog\n");

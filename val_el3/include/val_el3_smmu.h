@@ -365,6 +365,7 @@ typedef struct {
     uint64_t oas;
     uint32_t ssid_bits;
     uint32_t sid_bits;
+    uint32_t strtab_sid_bits;
     smmu_queue_type_t cmd_type;
     smmu_queue_type_t evnt_type;
     smmu_strtab_config_t strtab_cfg;

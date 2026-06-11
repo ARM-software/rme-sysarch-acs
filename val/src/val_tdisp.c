@@ -374,36 +374,17 @@ uint32_t
 val_rme_tdisp_execute_tests(uint32_t num_pe)
 {
   uint32_t status;
-  uint32_t i;
 
-  (void)num_pe;
   status = ACS_STATUS_SKIP;
-
-  for (i = 0; i < g_num_skip; i++)
-  {
-    if (val_memory_compare(g_skip_test_str[i], TDISP_MODULE,
-                           val_strnlen(g_skip_test_str[i])) == 0)
-    {
-      val_print(ACS_PRINT_ALWAYS,
-                "\n USER Override - Skipping all TDISP tests \n",
-                0);
-      return ACS_STATUS_SKIP;
-    }
-  }
-
-  status = val_check_skip_module(TDISP_MODULE);
-  if (status)
-  {
-    val_print(ACS_PRINT_ALWAYS,
-              "\n USER Override - Skipping all TDISP tests \n",
-              0);
-    return ACS_STATUS_SKIP;
-  }
 
   g_curr_module = 1 << TDISP_MODULE_ID;
 
   val_print(ACS_PRINT_ALWAYS, "\n\n*******************************************************\n", 0);
-  status = tdisp_rfpymv_vdm_response_check_entry();
+  status = val_execute_module_tests(TDISP_MODULE_ID,
+                                    TDISP_MODULE_START,
+                                    TDISP_MODULE_END,
+                                    num_pe,
+                                    status);
 
   return status;
 }

@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2024-2025, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2024-2026, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -417,6 +417,15 @@ mec_cmo_uses_correct_mecid_entry(uint32_t num_pe)
   char8_t *test_status = NULL;
 
   status = val_initialize_test(TEST_NAME, TEST_DESC, num_pe, TEST_RULE);
+
+  if (num_pe < 2) {
+      if (status != ACS_STATUS_SKIP)
+          val_print(ACS_PRINT_WARN, " Skipping the test as Number of PEs is less than required", 0);
+      val_set_status(val_get_primary_pe_index(), "SKIP", 01);
+      status = ACS_STATUS_SKIP;
+  } else {
+      num_pe = 2;
+  }
 
   /* This check is when user is forcing us to skip this test */
   if (status != ACS_STATUS_SKIP)

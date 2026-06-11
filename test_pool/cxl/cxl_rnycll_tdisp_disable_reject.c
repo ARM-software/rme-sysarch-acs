@@ -174,6 +174,46 @@ map_window_alias(uint64_t phys,
 }
 
 static uint32_t
+map_el3_data_structure(uint64_t va, uint32_t size, uint32_t pas)
+{
+  uint32_t attr;
+  uint64_t pa;
+  uint64_t page_size;
+  uint64_t page_mask;
+  uint64_t map_va;
+  uint64_t end_va;
+
+  if ((va == 0u) || (size == 0u))
+    return ACS_STATUS_ERR;
+
+  page_size = val_memory_page_size();
+  if ((page_size == 0u) || ((page_size & (page_size - 1u)) != 0u))
+    return ACS_STATUS_ERR;
+
+  page_mask = ~(page_size - 1u);
+  attr = LOWER_ATTRS(PGT_ENTRY_ACCESS |
+                     SHAREABLE_ATTR(OUTER_SHAREABLE) |
+                     PGT_ENTRY_AP_RW |
+                     PAS_ATTR(pas));
+
+  map_va = va & page_mask;
+  end_va = (va + size - 1u) & page_mask;
+  while (map_va <= end_va)
+  {
+    pa = (uint64_t)val_memory_virt_to_phys((void *)map_va);
+    if (pa == 0u)
+      return ACS_STATUS_ERR;
+
+    if (val_add_mmu_entry_el3(map_va, pa & page_mask, attr))
+      return ACS_STATUS_ERR;
+
+    map_va += page_size;
+  }
+
+  return ACS_STATUS_PASS;
+}
+
+static uint32_t
 map_dma_buffers_el3(uint8_t *buffer_va,
                     uint64_t buffer_pa,
                     uint32_t length,
@@ -602,6 +642,31 @@ check_device_to_host_dma(uint32_t endpoint_bdf,
   pgt_desc_rlm.oas = pgt_desc_ns.oas;
   pgt_desc_rlm.pgt_base = (uint64_t)NULL;
   mem_desc[0].attributes = PGT_STAGE2_AP_RW;
+
+  if (map_el3_data_structure((uint64_t)mem_desc,
+                             sizeof(mem_desc),
+                             NONSECURE_PAS) != ACS_STATUS_PASS)
+  {
+    val_print(ACS_PRINT_ERR, " RNYCLL: EL3 map failed for mem_desc", 0);
+    result = ACS_STATUS_ERR;
+    goto cleanup;
+  }
+  if (map_el3_data_structure((uint64_t)&pgt_desc_rlm,
+                             sizeof(pgt_desc_rlm),
+                             NONSECURE_PAS) != ACS_STATUS_PASS)
+  {
+    val_print(ACS_PRINT_ERR, " RNYCLL: EL3 map failed for pgt_desc_rlm", 0);
+    result = ACS_STATUS_ERR;
+    goto cleanup;
+  }
+  if (map_el3_data_structure((uint64_t)&master,
+                             sizeof(master),
+                             NONSECURE_PAS) != ACS_STATUS_PASS)
+  {
+    val_print(ACS_PRINT_ERR, " RNYCLL: EL3 map failed for smmu master", 0);
+    result = ACS_STATUS_ERR;
+    goto cleanup;
+  }
 
   if (val_rlm_pgt_create(mem_desc, &pgt_desc_rlm))
   {
@@ -1258,9 +1323,9 @@ payload(void)
 }
 
 uint32_t
-cxl_rnycll_tdisp_disable_reject_entry(void)
+cxl_rnycll_tdisp_disable_reject_entry(uint32_t num_pe)
 {
-  uint32_t num_pe = 1;
+  num_pe = 1;
   uint32_t status;
 
   status = val_initialize_test(TEST_NAME, TEST_DESC, num_pe, TEST_RULE);

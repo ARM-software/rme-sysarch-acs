@@ -494,9 +494,8 @@ cleanup:
 }
 
 uint32_t
-tdisp_rfpymv_vdm_response_check_entry(void)
+tdisp_rfpymv_vdm_response_check_entry(uint32_t num_pe)
 {
-  uint32_t num_pe;
   uint32_t status;
 
   num_pe = 1;

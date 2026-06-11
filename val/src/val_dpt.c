@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2025, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2025-2026, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -40,26 +40,9 @@
 uint32_t
 val_rme_dpt_execute_tests(uint32_t num_pe)
 {
-  uint32_t status = ACS_STATUS_SKIP, i, reset_status, smmu_cnt;
+  uint32_t status = ACS_STATUS_SKIP, reset_status, smmu_cnt;
   uint64_t num_smmus = val_smmu_get_info(SMMU_NUM_CTRL, 0);
   uint64_t smmu_base_arr[num_smmus], pgt_attr_el3;
-  (void)num_pe;
-
-  for (i = 0 ; i < g_num_skip ; i++) {
-      if (val_memory_compare((char8_t *)g_skip_test_str[i], DPT_MODULE,
-                              val_strnlen(g_skip_test_str[i])) == 0)
-      {
-          val_print(ACS_PRINT_ALWAYS, "\n USER Override - Skipping all RME-DPT tests \n", 0);
-          return ACS_STATUS_SKIP;
-      }
-  }
-
-  /* Check if there are any tests to be executed in current module with user override options*/
-  status = val_check_skip_module(DPT_MODULE);
-  if (status) {
-    val_print(ACS_PRINT_ALWAYS, "\n USER Override - Skipping all RME-DPT tests \n", 0);
-    return ACS_STATUS_SKIP;
-  }
 
   g_curr_module = 1 << DPT_MODULE_ID;
 
@@ -98,13 +81,11 @@ val_rme_dpt_execute_tests(uint32_t num_pe)
       reset_status != RESET_LS_TEST3_FLAG)
   {
     val_print(ACS_PRINT_ALWAYS, "\n\n*******************************************************\n", 0);
-    status = dpt_system_resource_valid_without_dpti_entry();
-    status |= dpt_system_resource_valid_with_dpti_entry();
-    status |= dpt_system_resource_invalid_entry();
-    status |= dpt_p2p_different_rootport_valid_entry();
-    status |= dpt_p2p_different_rootport_invalid_entry();
-    status |= dpt_p2p_same_rootport_valid_entry();
-    status |= dpt_p2p_same_rootport_invalid_entry();
+    status = val_execute_module_tests(DPT_MODULE_ID,
+                                      DPT_MODULE_START,
+                                      DPT_MODULE_END,
+                                      num_pe,
+                                      status);
   }
 
   return status;

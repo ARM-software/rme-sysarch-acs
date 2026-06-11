@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022, 2025, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022, 2025-2026, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -137,9 +137,24 @@ WakeUpRD(void)
   if ((tmp >> 1) & 0x01)
       val_mmio_write(cpuRd_base + GICR_WAKER, tmp & ~0x02);
 
-  do {
+#if defined(TARGET_SIMULATION)
+  {
+    uint32_t timeout = TIMEOUT_SMALL;
+    uint32_t spin = 0;
+    do {
       tmp = (val_mmio_read(cpuRd_base + GICR_WAKER) >> 2) & 0x01;
+      if (!tmp) break;
+      if ((++spin & 0x3FFU) == 0) {
+        /* Give sim time to advance without hammering MMIO */
+        val_time_delay_ms(1);
+      }
+    } while (--timeout);
+  }
+#else
+  do {
+    tmp = (val_mmio_read(cpuRd_base + GICR_WAKER) >> 2) & 0x01;
   } while (tmp);
+#endif
 }
 
 /**
@@ -247,7 +262,53 @@ val_gic_v3_EnableInterruptSource(uint32_t int_id)
                    1 << regShift);
   }
 }
+#if defined(TARGET_SIMULATION)
+/*
+ * Fast simulation helpers:
+ * - Avoid per-interrupt MMIO and RMW sequences.
+ * - Use register granularity (ICENABLER: 32 IRQs, IPRIORITYR: 4 IRQs).
+ */
+static void v3_DisableAllInterrupts_fast(uint32_t max_num_interrupts)
+{
+  uint64_t gicd_base = val_gic_get_gicd_base();
+  uint64_t gicr_base = val_gic_v3_get_pe_gicr_base();
+  uint32_t reg;
 
+  /* Disable SGI/PPI (0..31) for current PE */
+  if (gicr_base) {
+    val_mmio_write(gicr_base + GICR_CTLR_FRAME_SIZE + GICR_ICENABLER, 0xFFFFFFFFU);
+  }
+
+  /* Disable SPIs (32..max-1) in 32-IRQ chunks: start at reg index 1 (ID 32) */
+  for (reg = 1; (reg * 32U) < max_num_interrupts; reg++) {
+    val_mmio_write(gicd_base + GICD_ICENABLER + (4U * reg), 0xFFFFFFFFU);
+  }
+}
+
+static void v3_SetDefaultPriority_fast(uint32_t max_num_interrupts, uint8_t prio)
+{
+  uint64_t gicd_base = val_gic_get_gicd_base();
+  uint64_t gicr_base = val_gic_v3_get_pe_gicr_base();
+  uint32_t words, w;
+  uint32_t prio_word = (uint32_t)prio;
+
+  prio_word |= (prio_word << 8);
+  prio_word |= (prio_word << 16);
+
+  /* SGI/PPI priorities (0..31) for current PE: 32 IRQs => 8 words */
+  if (gicr_base) {
+    for (w = 0; w < (32U / 4U); w++) {
+      val_mmio_write(gicr_base + GICR_IPRIORITYR + (4U * w), prio_word);
+    }
+  }
+
+  /* SPI priorities (32..max-1). We can just program all supported IDs in distributor. */
+  words = (max_num_interrupts + 3U) / 4U;
+  for (w = 0; w < words; w++) {
+    val_mmio_write(gicd_base + GICD_IPRIORITYR + (4U * w), prio_word);
+  }
+}
+#else
 /**
   @brief  Sets interrupt priority
   @param  interrupt id
@@ -286,7 +347,7 @@ v3_SetInterruptPriority(uint32_t int_id, uint32_t priority)
                    ~(0xff << regShift)) | priority << regShift);
   }
 }
-
+#endif
 
 /**
   @brief  Initializes the GIC v3
@@ -301,7 +362,9 @@ val_gic_v3_Init(void)
   uint64_t   gicd_base;
   uint64_t   cpuTarget;
   uint64_t   Mpidr;
-
+#if defined(TARGET_SIMULATION)
+  uint32_t   route_max;
+#endif
   if (val_gic_espi_support() || val_gic_eppi_support())
     val_gic_v3_extended_init();
 
@@ -314,9 +377,14 @@ val_gic_v3_Init(void)
   val_print(ACS_PRINT_DEBUG, " GIC_INIT: D base %llx", gicd_base);
   val_print(ACS_PRINT_DEBUG, " GIC_INIT: Interrupts %d", max_num_interrupts);
 
+#if defined(TARGET_SIMULATION)
+  /* Fast-sim: disable in register chunks (32 IRQs per write) */
+  v3_DisableAllInterrupts_fast(max_num_interrupts);
+#else
   /* Disable all interrupt */
   for (index = 0; index < max_num_interrupts; index++)
     val_gic_v3_DisableInterruptSource(index);
+#endif
 
   /* Set vector table */
   val_gic_vector_table_init();
@@ -328,9 +396,7 @@ val_gic_v3_Init(void)
 
   GicClearDaif();
 
-  /* Set default priority */
-  for (index = 0; index < max_num_interrupts; index++)
-    v3_SetInterruptPriority(index, GIC_DEFAULT_PRIORITY);
+  WakeUpRD();
 
   /* Set ARI bits for v3 mode */
   val_mmio_write(gicd_base + GICD_CTLR, val_mmio_read(gicd_base + GICD_CTLR) | GIC_ARE_ENABLE);
@@ -338,19 +404,33 @@ val_gic_v3_Init(void)
   val_print(ACS_PRINT_DEBUG, " GIC_INIT: GICD_CTLR value 0x%08x\n",
                              val_mmio_read(gicd_base + GICD_CTLR));
 
-  WakeUpRD();
-
+#if defined(TARGET_SIMULATION)
+  /* Fast-sim: program priorities in 4-IRQ chunks (no per-ID RMW) */
+  v3_SetDefaultPriority_fast(max_num_interrupts, (uint8_t)GIC_DEFAULT_PRIORITY);
+#else
   /* Set default priority */
   for (index = 0; index < max_num_interrupts; index++)
     v3_SetInterruptPriority(index, GIC_DEFAULT_PRIORITY);
+#endif
 
   Mpidr = ArmReadMpidr();
   cpuTarget = Mpidr & (PE_AFF0 | PE_AFF1 | PE_AFF2 | PE_AFF3);
 
+#if defined(TARGET_SIMULATION)
+  /*
+   * Fast-sim: routing every SPI can be very slow.
+   * Cap to the first 256 SPIs (IDs 32..287) unless max is smaller.
+   */
+  route_max = max_num_interrupts;
+  if (route_max > (32U + 256U)) route_max = (32U + 256U);
+  for (index = 0; index < (route_max - 32U); index++) {
+    val_mmio_write64(gicd_base + GICD_IROUTERn + (index * 8U), cpuTarget);
+  }
+#else
   /* Route SPI to primary PE */
   for (index = 0; index < (max_num_interrupts - 32); index++)
       val_mmio_write64(gicd_base + GICD_IROUTERn + (index * 8), cpuTarget);
-
+#endif
   /* Initialize cpu interface */
   val_gic_cpuif_init();
 }

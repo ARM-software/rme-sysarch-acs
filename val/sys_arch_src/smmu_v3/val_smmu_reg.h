@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2020,2025, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2020, 2025-2026, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -44,6 +44,7 @@ BITFIELD_DECL(uint32_t, IDR0_TTF, 3, 2)
 #define IDR1_QUEUES_PRESET (1 << 29)
 #define IDR1_REL (1 << 28)
 BITFIELD_DECL(uint32_t, IDR1_CMDQS, 25, 21)
+BITFIELD_DECL(uint32_t, IDR1_EVNTQS, 20, 16)
 BITFIELD_DECL(uint32_t, IDR1_SSIDSIZE, 10, 6)
 BITFIELD_DECL(uint32_t, IDR1_SIDSIZE, 5, 0)
 
@@ -55,6 +56,7 @@ uint32_t smmu_oas[SMMU_OAS_MAX_IDX] = {32, 36, 40, 42, 44, 48, 52};
 
 #define SMMU_CR0_OFFSET 0x20
 #define CR0_CMDQEN (1 << 3)
+#define CR0_EVNTQEN (1 << 2)
 #define CR0_SMMUEN (1 << 0)
 
 #define SMMU_CR0ACK_OFFSET 0x24
@@ -71,7 +73,9 @@ BITFIELD_DECL(uint32_t, CR1_QUEUE_IC, 1, 0)
 #define CR1_CACHE_WT 2
 
 #define SMMU_CR2_OFFSET 0x2c
+#define CR2_E2H (1 << 0)
 #define SMMU_GERROR_OFFSET 0x60
+#define SMMU_GERRORN_OFFSET 0x64
 
 #define SMMU_STRTAB_BASE_OFFSET 0x80
 #define STRTAB_BASE_RA (1UL << 62)
@@ -87,6 +91,10 @@ BITFIELD_DECL(uint32_t, STRTAB_BASE_CFG_LOG2SIZE, 5, 0)
 #define SMMU_CMDQ_BASE_OFFSET 0x90
 #define SMMU_CMDQ_PROD_OFFSET 0x98
 #define SMMU_CMDQ_CONS_OFFSET 0x9c
+#define SMMU_EVNTQ_BASE_OFFSET 0xa0
+#define SMMU_EVNTQ_PROD_OFFSET 0xa8
+#define SMMU_EVNTQ_CONS_OFFSET 0xac
+#define SMMU_PAGE1_BASE_OFFSET 0x10000
 
 #define SMMU_SH_NSH 0
 #define SMMU_SH_OSH 2
@@ -151,6 +159,7 @@ BITFIELD_DECL(uint64_t, STRTAB_STE_2_VTCR_S2PS, 18, 16)
 BITFIELD_DECL(uint64_t, STRTAB_STE_3_S2TTB, 51, 4)
 
 #define CMDQ_DWORDS_PER_ENT 2
+#define EVNTQ_DWORDS_PER_ENT 4
 BITFIELD_DECL(uint64_t, CMDQ_0_OP, 7, 0)
 BITFIELD_DECL(uint64_t, CMDQ_CFGI_1_RANGE, 4, 0)
 #define CMDQ_CFGI_1_ALL_STES 31

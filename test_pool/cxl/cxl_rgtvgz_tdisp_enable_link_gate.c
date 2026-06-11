@@ -1010,9 +1010,9 @@ payload(void)
 }
 
 uint32_t
-cxl_rgtvgz_tdisp_enable_link_gate_entry(void)
+cxl_rgtvgz_tdisp_enable_link_gate_entry(uint32_t num_pe)
 {
-  uint32_t num_pe = 1;
+  num_pe = 1;
   uint32_t status;
 
   status = val_initialize_test(TEST_NAME, TEST_DESC, num_pe, TEST_RULE);

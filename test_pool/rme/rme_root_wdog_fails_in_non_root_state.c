@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2023-2024, 2025, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2023-2026, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,6 +21,7 @@
 
 #include "val/include/val_wd.h"
 #include "val/include/val_timer.h"
+#include "val/include/val_timer_support.h"
 #include "val/include/val_el32.h"
 #include "val/include/val_pgt.h"
 #include "val/include/val_memory.h"
@@ -61,7 +62,7 @@ static void isr(void)
 static void payload(void)
 {
 
-  uint32_t timeout;
+  uint64_t timeout_ticks, start_cnt;
   uint64_t timer_expire_ticks = 1;
   uint64_t size, rt_wdog_ctl;
   uint32_t index                 = val_pe_get_index_mpid(val_pe_get_mpid()), attr;
@@ -79,10 +80,12 @@ static void payload(void)
     return;
   }
 
-  timeout      = val_get_counter_frequency() * 2;
+  timeout_ticks = val_get_counter_frequency() * 2;
   counter_freq = val_get_counter_frequency();
 
   val_print(ACS_PRINT_DEBUG, " Root watchdog Interrupt id  %d", int_id);
+  val_print(ACS_PRINT_DEBUG, " timeout  %lx", timeout_ticks);
+  val_print(ACS_PRINT_DEBUG, " counter_freq  %d", counter_freq);
 
   if (val_gic_install_isr(int_id, isr))
   {
@@ -96,7 +99,8 @@ static void payload(void)
 
   VA_RT_WDOG  = val_get_free_va(size);
   rt_wdog_ctl = val_get_rt_wdog_ctrl();
-  attr        = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(NON_SHAREABLE) | PGT_ENTRY_AP_RW);
+  attr        = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(NON_SHAREABLE) |
+                            PGT_ENTRY_AP_RW | GET_ATTR_INDEX(DEV_MEM_nGnRnE));
   if (val_add_mmu_entry_el3(VA_RT_WDOG, rt_wdog_ctl, (attr | LOWER_ATTRS(PAS_ATTR(NONSECURE_PAS)))))
   {
     val_print(ACS_PRINT_ERR, " Failed to map RT_WDOG_CTRL register in MMU", 0);
@@ -113,21 +117,25 @@ static void payload(void)
     return;
   }
 
-  while ((--timeout > 0) && (IS_RESULT_PENDING(val_get_status(index))))
-    ;
+  val_print(ACS_PRINT_DEBUG, " Waiting at NS-EL2 for interrupt", 0);
+  start_cnt = val_timer_ArmArchTimerReadReg(CntPct);
+  while (((val_timer_ArmArchTimerReadReg(CntPct) - start_cnt) < timeout_ticks) &&
+         (IS_RESULT_PENDING(val_get_status(index))));
 
-  if (timeout == 0)
+  if (IS_RESULT_PENDING(val_get_status(index)))
   {
-    val_print(ACS_PRINT_ERR, " WS0 Interrupt not received on %d", int_id);
+    val_print(ACS_PRINT_DEBUG, " WS0 Interrupt not received on %d", int_id);
+    shared_data->generic_flag = CLEAR;
+    shared_data->exception_expected = CLEAR;
+    shared_data->exception_generated = CLEAR;
     val_set_status(index, "PASS", 3);
     return;
   }
 }
 
-uint32_t rme_root_wdog_fails_in_non_root_state_entry(void)
+uint32_t rme_root_wdog_fails_in_non_root_state_entry(uint32_t num_pe)
 {
 
-  uint32_t num_pe;
   uint32_t status = ACS_STATUS_FAIL;
 
   num_pe = 1; /*This Timer test is run on single processor*/

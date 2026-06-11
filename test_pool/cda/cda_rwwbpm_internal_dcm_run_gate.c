@@ -56,7 +56,6 @@ typedef struct {
   uint32_t rmecda_ctl1_orig;
   uint32_t rmecda_ctl1_valid;
   uint32_t rmecda_cap_base;
-  uint64_t rmecda_cfg_va;
 } TEST_CONTEXT;
 
 static void
@@ -153,58 +152,33 @@ find_downstream_chi_c2c_exerciser_endpoint(uint32_t root_bdf,
 }
 
 static uint32_t
-read_from_root(uint64_t address, uint32_t *value)
-{
-  if (value == NULL)
-    return ACS_STATUS_ERR;
-
-  shared_data->num_access = 1;
-  shared_data->shared_data_access[0].addr = address;
-  shared_data->shared_data_access[0].access_type = READ_DATA;
-
-  if (val_pe_access_mut_el3())
-  {
-    val_print(ACS_PRINT_ERR, " RWWBPM: MUT read failed for 0x%llx", address);
-    return ACS_STATUS_ERR;
-  }
-
-  *value = (uint32_t)shared_data->shared_data_access[0].data;
-  return ACS_STATUS_PASS;
-}
-
-static uint32_t
-write_from_root(uint64_t address, uint32_t value)
-{
-  shared_data->num_access = 1;
-  shared_data->shared_data_access[0].addr = address;
-  shared_data->shared_data_access[0].data = value;
-  shared_data->shared_data_access[0].access_type = WRITE_DATA;
-
-  if (val_pe_access_mut_el3())
-  {
-    val_print(ACS_PRINT_ERR, " RWWBPM: MUT write failed for 0x%llx", address);
-    return ACS_STATUS_ERR;
-  }
-
-  return ACS_STATUS_PASS;
-}
-
-static uint32_t
 restore_context_state(const TEST_CONTEXT *context)
 {
   uint32_t restore_status;
+  uint32_t readback;
 
   if (context == NULL)
     return ACS_STATUS_ERR;
 
   restore_status = ACS_STATUS_PASS;
+  readback = 0u;
 
-  if ((context->rmecda_ctl1_valid != 0u) && (context->rmecda_cfg_va != 0u) &&
-      (write_from_root(context->rmecda_cfg_va + context->rmecda_cap_base +
-                       RMECDA_CTL1_OFFSET,
-                       context->rmecda_ctl1_orig) != ACS_STATUS_PASS))
+  if (context->rmecda_ctl1_valid != 0u)
   {
-    restore_status = ACS_STATUS_ERR;
+    val_pcie_write_cfg(context->root_bdf,
+                       context->rmecda_cap_base + RMECDA_CTL1_OFFSET,
+                       context->rmecda_ctl1_orig);
+
+    if ((val_pcie_read_cfg(context->root_bdf,
+                           context->rmecda_cap_base + RMECDA_CTL1_OFFSET,
+                           &readback) != PCIE_SUCCESS) ||
+        (readback != context->rmecda_ctl1_orig))
+    {
+      val_print(ACS_PRINT_WARN,
+                " RWWBPM: RMECDA_CTL1 restore readback 0x%x",
+                (uint64_t)readback);
+      restore_status = ACS_STATUS_ERR;
+    }
   }
 
   return restore_status;
@@ -268,9 +242,6 @@ prepare_context(TEST_CONTEXT *context)
     const CXL_COMPONENT_ENTRY *endpoint;
     uint32_t endpoint_bdf;
     uint32_t status;
-    uint64_t cfg_addr;
-    uint64_t tg;
-    uint32_t attr;
     uint32_t ctl1_programmed;
     uint32_t ctl1_readback;
 
@@ -378,36 +349,9 @@ prepare_context(TEST_CONTEXT *context)
       continue;
     }
 
-    cfg_addr = val_pcie_get_bdf_config_addr(root_port->bdf);
-    tg = val_get_min_tg();
-    if ((cfg_addr == 0u) || (tg == 0u))
-    {
-      if (restore_context_state(&candidate) != ACS_STATUS_PASS)
-        return ACS_STATUS_ERR;
-      continue;
-    }
-
-    candidate.rmecda_cfg_va = val_get_free_va(tg);
-    if (candidate.rmecda_cfg_va == 0u)
-    {
-      if (restore_context_state(&candidate) != ACS_STATUS_PASS)
-        return ACS_STATUS_ERR;
-      continue;
-    }
-
-    attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(OUTER_SHAREABLE) |
-                       GET_ATTR_INDEX(DEV_MEM_nGnRnE) | PGT_ENTRY_AP_RW |
-                       PAS_ATTR(ROOT_PAS));
-    if (val_add_mmu_entry_el3(candidate.rmecda_cfg_va, cfg_addr, attr))
-    {
-      if (restore_context_state(&candidate) != ACS_STATUS_PASS)
-        return ACS_STATUS_ERR;
-      continue;
-    }
-
-    if (read_from_root(candidate.rmecda_cfg_va + candidate.rmecda_cap_base +
-                       RMECDA_CTL1_OFFSET,
-                       &candidate.rmecda_ctl1_orig) != ACS_STATUS_PASS)
+    if (val_pcie_read_cfg(candidate.root_bdf,
+                          candidate.rmecda_cap_base + RMECDA_CTL1_OFFSET,
+                          &candidate.rmecda_ctl1_orig) != PCIE_SUCCESS)
     {
       if (restore_context_state(&candidate) != ACS_STATUS_PASS)
         return ACS_STATUS_ERR;
@@ -418,35 +362,54 @@ prepare_context(TEST_CONTEXT *context)
                       RMECDA_CTL1_TDISP_EN_MASK |
                       RMECDA_CTL1_LINK_STR_LOCK_MASK;
 
-    /* Ensure the Root Port is in the configuration required by the rule. */
-    if (write_from_root(candidate.rmecda_cfg_va + candidate.rmecda_cap_base +
-                        RMECDA_CTL1_OFFSET,
-                        ctl1_programmed) != ACS_STATUS_PASS)
-    {
-      if (restore_context_state(&candidate) != ACS_STATUS_PASS)
-        return ACS_STATUS_ERR;
-      continue;
-    }
+    val_print(ACS_PRINT_DEBUG,
+              " RWWBPM: RMECDA_CTL1 initial readback 0x%x",
+              (uint64_t)candidate.rmecda_ctl1_orig);
 
-    if (read_from_root(candidate.rmecda_cfg_va + candidate.rmecda_cap_base +
-                       RMECDA_CTL1_OFFSET,
-                       &ctl1_readback) != ACS_STATUS_PASS)
+    if ((candidate.rmecda_ctl1_orig &
+         (RMECDA_CTL1_TDISP_EN_MASK | RMECDA_CTL1_LINK_STR_LOCK_MASK)) ==
+        (RMECDA_CTL1_TDISP_EN_MASK | RMECDA_CTL1_LINK_STR_LOCK_MASK))
     {
-      if (restore_context_state(&candidate) != ACS_STATUS_PASS)
-        return ACS_STATUS_ERR;
-      continue;
+      ctl1_readback = candidate.rmecda_ctl1_orig;
+    }
+    else
+    {
+      /*
+       * Avoid EL3-mediated config-space writes here.  The previous CDA rule can
+       * legitimately end with a terminal reject path, after which another EL3
+       * MMU/MUT config access is not a safe setup dependency for this test.
+       */
+      val_pcie_write_cfg(candidate.root_bdf,
+                         candidate.rmecda_cap_base + RMECDA_CTL1_OFFSET,
+                         ctl1_programmed);
+
+      if (val_pcie_read_cfg(candidate.root_bdf,
+                            candidate.rmecda_cap_base + RMECDA_CTL1_OFFSET,
+                            &ctl1_readback) != PCIE_SUCCESS)
+      {
+        if (restore_context_state(&candidate) != ACS_STATUS_PASS)
+          return ACS_STATUS_ERR;
+        continue;
+      }
+
+      candidate.rmecda_ctl1_valid = 1u;
+      val_print(ACS_PRINT_DEBUG,
+                " RWWBPM: RMECDA_CTL1 config-write readback 0x%x",
+                (uint64_t)ctl1_readback);
     }
 
     if ((ctl1_readback &
          (RMECDA_CTL1_TDISP_EN_MASK | RMECDA_CTL1_LINK_STR_LOCK_MASK)) !=
         (RMECDA_CTL1_TDISP_EN_MASK | RMECDA_CTL1_LINK_STR_LOCK_MASK))
     {
+      val_print(ACS_PRINT_DEBUG,
+                " RWWBPM: RMECDA_CTL1 cannot enable required bits via config",
+                0);
       if (restore_context_state(&candidate) != ACS_STATUS_PASS)
         return ACS_STATUS_ERR;
       continue;
     }
 
-    candidate.rmecda_ctl1_valid = 1u;
     val_print(ACS_PRINT_INFO,
               " RWWBPM: using RP 0x%x for CHI-C2C CDA check",
               (uint64_t)candidate.root_bdf);
@@ -757,11 +720,11 @@ payload(void)
 #endif
 
 uint32_t
-cda_rwwbpm_internal_dcm_run_gate_entry(void)
+cda_rwwbpm_internal_dcm_run_gate_entry(uint32_t num_pe)
 {
-  uint32_t num_pe = 1;
   uint32_t status;
 
+  num_pe = 1;
   status = val_initialize_test(TEST_NAME, TEST_DESC, num_pe, TEST_RULE);
 
   if (status != ACS_STATUS_SKIP)

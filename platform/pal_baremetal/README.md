@@ -29,8 +29,10 @@ CMake Command Line Options:
  -DARM_ARCH_MINOR = Arch minor version. Default value is 0.
  -DCROSS_COMPILE  = Cross compiler path
  -DTARGET         = Target platform. Should be same as folder under pal_baremetal. Defaults to "FVP".
+ -DTARGET_SIMULATION=ON to enable simulation/emulation helpers (defines TARGET_SIMULATION). Speeds up GIC init and other tight loops for fast models; leave OFF for real hardware.
  -DENABLE_SPDM    = Build with libspdm and DOE/CXL requester helpers (ON/OFF). Default OFF.
  -DACS_PRINT_LEVEL= ACS print verbosity (1..5). Default 3. 3 prints TEST/ALWAYS/WARN/ERR; 2 also enables DEBUG; 1 also enables INFO.
+ -DACS_ENABLED_MODULE_LIST=<comma-separated module IDs> sets which modules are enabled to run by default (all modules are still built). Runtime overrides still take priority. Example: -DACS_ENABLED_MODULE_LIST="RME_MODULE,GIC_MODULE,SMMU_MODULE". Valid IDs: RME_MODULE, LEGACY_MODULE, GIC_MODULE, SMMU_MODULE, DA_MODULE, DPT_MODULE, MEC_MODULE, CXL_MODULE, CDA_MODULE, TDISP_MODULE.
 ```
 
 On a successful build, *.bin, *.elf, *.img and debug binaries are generated at *build/output* directory. The output library files will be generated at *build/tools/cmake/* of the rme-acs directory.

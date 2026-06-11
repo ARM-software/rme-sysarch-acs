@@ -41,6 +41,9 @@
 #define PLAT_FREE_MEM_SMMU      0x880400000ULL
 #define PLAT_MEMORY_POOL_SIZE   (2 * 1024 * 1024)
 
+/* Configured SMMU stream-table span, independent of IDR1.SIDSIZE. */
+#define PLATFORM_OVERRIDE_SMMU_STRTAB_BITS 16U
+
 #else
 
 #define SMMUV3_ROOT_REG_OFFSET  (0xA0000)
@@ -50,7 +53,10 @@
 #define PLAT_SHARED_ADDRESS     0x0080000000ULL
 
 #define PLAT_FREE_MEM_SMMU      0x8080400000ULL
-#define PLAT_MEMORY_POOL_SIZE   (2 * 1024 * 1024)
+#define PLAT_MEMORY_POOL_SIZE   (130 * 1024 * 1024)
+
+/* Configured SMMU stream-table span, independent of IDR1.SIDSIZE. */
+#define PLATFORM_OVERRIDE_SMMU_STRTAB_BITS 20U
 
 #endif
 

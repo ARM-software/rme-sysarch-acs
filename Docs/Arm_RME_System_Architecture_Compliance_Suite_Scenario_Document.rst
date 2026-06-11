@@ -1420,6 +1420,23 @@ Testcase checklist
 
   * -
 
+      `cda_rfzbmw_external_dcm_ide_gate <../test_pool/cda/cda_rfzbmw_external_dcm_ide_gate.c>`_
+
+    -
+
+      RFZBMW: An RME-CDA coherent device must not permit an external access to DCM to specify PAS==Realm unless the TDI is in the RUN TDISP state and the coherent link IDE stream is active.
+
+    -
+
+      1. Select a CHI-C2C-capable CXL root port that exposes the RME-CDA DVSEC and a downstream CHI-C2C exerciser endpoint, then program host and endpoint decoders for a CXL.mem window.
+      2. Establish an SPDM session, transition the endpoint TDI to RUN, establish CXL IDE, and enable RMECDA_CTL1.TDISP_EN and RMECDA_CTL1.LINK_STR_LOCK.
+      3. Assign a selected DCM page to Realm and seed it with a known baseline value.
+      4. Issue an external access that specifies PAS==Realm while IDE is active and verify the Realm-assigned DCM contents change.
+      5. Disable the IDE stream while keeping the TDI in RUN, restore a known baseline value at the same Realm-assigned DCM page, and re-issue the same external PAS==Realm access.
+      6. Verify that the IDE-disabled external PAS==Realm access is rejected or leaves the Realm-assigned DCM contents unchanged, then stop the TDISP session before cleanup.
+
+  * -
+
       `cda_rwwbpm_internal_dcm_run_gate <../test_pool/cda/cda_rwwbpm_internal_dcm_run_gate.c>`_
 
     -
@@ -1429,7 +1446,7 @@ Testcase checklist
     -
 
       1. Select a CHI-C2C-capable CXL root port and a downstream CHI-C2C exerciser endpoint, then choose a device-local DCM location for the internal access path.
-      2. Enable RMECDA_CTL1.TDISP_EN and RMECDA_CTL1.LINK_STR_LOCK, and transition the endpoint TDI to RUN.
+      2. Verify RMECDA_CTL1.TDISP_EN and RMECDA_CTL1.LINK_STR_LOCK are set, enabling them through normal config access with readback if required, and transition the endpoint TDI to RUN.
       3. Assign the selected device-local DCM location to Realm.
       4. Seed that Realm-assigned DCM location with a known baseline value, then issue an internal device access that specifies PAS==Realm and verify the DCM contents change.
       5. Transition the TDI out of RUN with STOP_INTERFACE, restore a known baseline value at the same Realm-assigned DCM location, and re-issue the same internal PAS==Realm access.

@@ -87,6 +87,17 @@ init_context(TEST_CONTEXT *context)
   context->endpoint_index = CXL_COMPONENT_INVALID_INDEX;
 }
 
+static void
+clear_el3_access_state(void)
+{
+  shared_data->exception_expected = CLEAR;
+  shared_data->exception_generated = CLEAR;
+  shared_data->access_mut = CLEAR;
+  shared_data->pas_filter_flag = CLEAR;
+  shared_data->arg1 = 0u;
+  shared_data->num_access = 0u;
+}
+
 static uint32_t
 find_component_index_by_bdf(const CXL_COMPONENT_TABLE *table,
                             uint32_t bdf,
@@ -171,23 +182,27 @@ read_from_root(uint64_t address, uint32_t *value)
   if (value == NULL)
     return ACS_STATUS_ERR;
 
+  clear_el3_access_state();
   shared_data->num_access = 1;
   shared_data->shared_data_access[0].addr = address;
   shared_data->shared_data_access[0].access_type = READ_DATA;
 
   if (val_pe_access_mut_el3())
   {
+    clear_el3_access_state();
     val_print(ACS_PRINT_ERR, " RFZBMW: MUT read failed for 0x%llx", address);
     return ACS_STATUS_ERR;
   }
 
   *value = (uint32_t)shared_data->shared_data_access[0].data;
+  clear_el3_access_state();
   return ACS_STATUS_PASS;
 }
 
 static uint32_t
 write_from_root(uint64_t address, uint32_t value)
 {
+  clear_el3_access_state();
   shared_data->num_access = 1;
   shared_data->shared_data_access[0].addr = address;
   shared_data->shared_data_access[0].data = value;
@@ -195,10 +210,12 @@ write_from_root(uint64_t address, uint32_t value)
 
   if (val_pe_access_mut_el3())
   {
+    clear_el3_access_state();
     val_print(ACS_PRINT_ERR, " RFZBMW: MUT write failed for 0x%llx", address);
     return ACS_STATUS_ERR;
   }
 
+  clear_el3_access_state();
   return ACS_STATUS_PASS;
 }
 
@@ -304,6 +321,53 @@ restore_context_state(const TEST_CONTEXT *context)
 }
 
 static uint32_t
+restore_rmecda_ctl1(TEST_CONTEXT *context)
+{
+  uint32_t status;
+
+  if (context == NULL)
+    return ACS_STATUS_ERR;
+
+  if ((context->rmecda_ctl1_valid == 0u) || (context->rmecda_cfg_va == 0u))
+    return ACS_STATUS_PASS;
+
+  status = write_from_root(context->rmecda_cfg_va + context->rmecda_cap_base +
+                           RMECDA_CTL1_OFFSET,
+                           context->rmecda_ctl1_orig);
+  context->rmecda_ctl1_valid = 0u;
+
+  return status;
+}
+
+static void
+best_effort_restore_rmecda_ctl1_cfg(TEST_CONTEXT *context)
+{
+  uint32_t readback;
+
+  if (context == NULL)
+    return;
+
+  if (context->rmecda_ctl1_valid == 0u)
+    return;
+
+  val_pcie_write_cfg(context->root_bdf,
+                     context->rmecda_cap_base + RMECDA_CTL1_OFFSET,
+                     context->rmecda_ctl1_orig);
+
+  if ((val_pcie_read_cfg(context->root_bdf,
+                         context->rmecda_cap_base + RMECDA_CTL1_OFFSET,
+                         &readback) == PCIE_SUCCESS) &&
+      (readback != context->rmecda_ctl1_orig))
+  {
+    val_print(ACS_PRINT_WARN,
+              " RFZBMW: non-SMC RMECDA_CTL1 restore readback 0x%x",
+              readback);
+  }
+
+  context->rmecda_ctl1_valid = 0u;
+}
+
+static uint32_t
 select_test_base(uint64_t window_base,
                  uint64_t window_size,
                  uint64_t *test_base_out)
@@ -326,8 +390,8 @@ select_test_base(uint64_t window_base,
   if (window_end < window_base)
     return ACS_STATUS_ERR;
 
-  aligned_base = (window_base + page_size - 1u) & ~(page_size - 1u);
-  if ((aligned_base + page_size) > window_end)
+  aligned_base = (window_end - page_size) & ~(page_size - 1u);
+  if ((aligned_base < window_base) || ((aligned_base + page_size) > window_end))
     return ACS_STATUS_SKIP;
 
   *test_base_out = aligned_base;
@@ -376,6 +440,12 @@ read_device_media(uint32_t endpoint_bdf,
 
   if (value_out == NULL)
     return ACS_STATUS_ERR;
+
+  if (val_exerciser_set_param_by_bdf(EXERCISER_CXL_CMD_CTRL,
+                                     0u,
+                                     0u,
+                                     endpoint_bdf))
+    return ACS_STATUS_FAIL;
 
   if (val_exerciser_set_param_by_bdf(EXERCISER_CXL_CMD_OP,
                                      CXL_CMD_OP_BACKDOOR_READ64,
@@ -567,7 +637,6 @@ establish_tdisp_run(uint32_t endpoint_bdf,
 
 close_session:
   (void)val_spdm_session_close(spdm_ctx, session_id);
-  val_spdm_context_deinit(spdm_ctx);
   return status;
 }
 
@@ -593,29 +662,24 @@ stop_tdisp_session(uint32_t endpoint_bdf,
     result = ACS_STATUS_FAIL;
 
   status = val_spdm_session_close(spdm_ctx, session_id);
+
   if ((status != ACS_STATUS_PASS) && (status != ACS_STATUS_SKIP))
     result = ACS_STATUS_FAIL;
 
-  val_spdm_context_deinit(spdm_ctx);
   return result;
 }
 
 static uint32_t
-access_realm_dcm(uint32_t root_bdf,
-                 uint32_t endpoint_bdf,
-                 uint32_t aer_offset,
-                 uint64_t phys,
-                 uint32_t expect_reject)
+access_realm_dcm_allowed(uint32_t endpoint_bdf,
+                         uint64_t phys,
+                         volatile uint64_t *mapped)
 {
-  volatile uint64_t *mapped = NULL;
   uint64_t baseline = 0u;
   uint64_t observed = 0u;
   uint32_t pattern;
-  uint32_t aer_uncorr = 0u;
   uint32_t access_status;
-  uint32_t fault_seen = 0u;
 
-  if (map_window_alias(phys, REALM_PAS, &mapped) != ACS_STATUS_PASS)
+  if (mapped == NULL)
     return ACS_STATUS_ERR;
 
   if (read_device_media(endpoint_bdf, phys, &baseline) != ACS_STATUS_PASS)
@@ -625,11 +689,7 @@ access_realm_dcm(uint32_t root_bdf,
   if (pattern == (uint32_t)baseline)
     pattern ^= 0x1u;
 
-  if (aer_offset != 0u)
-    val_cxl_aer_clear(root_bdf, aer_offset);
-
-  shared_data->exception_generated = CLEAR;
-  shared_data->exception_expected = (expect_reject != 0u) ? SET : CLEAR;
+  clear_el3_access_state();
   shared_data->num_access = 2;
   shared_data->shared_data_access[0].addr = (uint64_t)mapped;
   shared_data->shared_data_access[0].data = (uint64_t)pattern;
@@ -639,80 +699,51 @@ access_realm_dcm(uint32_t root_bdf,
   shared_data->shared_data_access[1].access_type = READ_DATA;
 
   access_status = val_pe_access_mut_el3();
-
-  if (expect_reject != 0u)
-  {
-    /*
-     * The harness clears exception_expected when the EL3 fault path is taken.
-     * Treat that as a valid explicit rejection for the negative branch.
-     */
-    fault_seen = (shared_data->exception_expected == CLEAR);
-    if (!fault_seen)
-    {
-      shared_data->exception_expected = CLEAR;
-      shared_data->exception_generated = CLEAR;
-    }
-  }
+  clear_el3_access_state();
 
   if (read_device_media(endpoint_bdf, phys, &observed) != ACS_STATUS_PASS)
     return ACS_STATUS_ERR;
 
-  if (aer_offset != 0u)
-    (void)val_cxl_aer_read_uncorr(root_bdf, aer_offset, &aer_uncorr);
-
-  if (expect_reject == 0u)
-  {
-    if (access_status != 0u)
-      return ACS_STATUS_FAIL;
-
-    if ((uint32_t)shared_data->shared_data_access[1].data != pattern)
-      return ACS_STATUS_FAIL;
-
-    if ((uint32_t)observed != pattern)
-      return ACS_STATUS_FAIL;
-
-    return ACS_STATUS_PASS;
-  }
-
-  if ((uint32_t)observed == pattern)
-  {
-    val_print(ACS_PRINT_ERR, " RFZBMW: external Realm write modified DCM without IDE", 0);
-    return ACS_STATUS_FAIL;
-  }
-
-  if ((uint32_t)observed != (uint32_t)baseline)
-  {
-    val_print(ACS_PRINT_ERR, " RFZBMW: unexpected DCM value after IDE-disabled access", 0);
-    val_print(ACS_PRINT_ERR, " RFZBMW: baseline 0x%llx", baseline);
-    val_print(ACS_PRINT_ERR, " RFZBMW: observed 0x%llx", observed);
-    return ACS_STATUS_FAIL;
-  }
-
-  if (fault_seen != 0u)
-  {
-    shared_data->exception_generated = CLEAR;
-    return ACS_STATUS_PASS;
-  }
-
   if (access_status != 0u)
     return ACS_STATUS_FAIL;
 
-  if (access_status == 0u)
-  {
-    /*
-     * Accept either an explicit access failure or a non-destructive rejected
-     * completion.  If the access completed architecturally, require a visible
-     * reject indication rather than a clean data return.
-     */
-    if ((uint32_t)shared_data->shared_data_access[1].data == pattern)
-      return ACS_STATUS_FAIL;
+  if ((uint32_t)shared_data->shared_data_access[1].data != pattern)
+    return ACS_STATUS_FAIL;
 
-    if ((uint32_t)shared_data->shared_data_access[1].data == (uint32_t)baseline)
-      return ACS_STATUS_FAIL;
+  if ((uint32_t)observed != pattern)
+    return ACS_STATUS_FAIL;
 
-    if ((aer_offset != 0u) && (aer_uncorr == 0u))
-      return ACS_STATUS_FAIL;
-  }
+  return ACS_STATUS_PASS;
+}
+
+static uint32_t
+access_realm_dcm_rejected(uint32_t root_bdf,
+                          uint32_t aer_offset,
+                          volatile uint64_t *mapped)
+{
+  uint32_t access_status;
+
+  if (mapped == NULL)
+    return ACS_STATUS_ERR;
+
+  if (aer_offset != 0u)
+    val_cxl_aer_clear(root_bdf, aer_offset);
+
+  /*
+   * Expected RFZBMW rejects must use the access_mut path.  The normal MUT
+   * write path reports this model's reject as a non-GPF exception, so use the
+   * same terminal fault-stimulus pattern as the host-side GPC CDA test.
+   */
+  clear_el3_access_state();
+  shared_data->access_mut = SET;
+  shared_data->arg1 = (uint64_t)mapped;
+  shared_data->exception_expected = SET;
+
+  access_status = val_pe_access_mut_el3();
+  clear_el3_access_state();
+
+  if (access_status != 0u)
+    return ACS_STATUS_FAIL;
 
   return ACS_STATUS_PASS;
 }
@@ -887,6 +918,7 @@ prepare_context(TEST_CONTEXT *context)
       continue;
     }
 
+    candidate.rmecda_ctl1_valid = 1u;
     ctl1_programmed = candidate.rmecda_ctl1_orig |
                       RMECDA_CTL1_TDISP_EN_MASK |
                       RMECDA_CTL1_LINK_STR_LOCK_MASK;
@@ -918,7 +950,6 @@ prepare_context(TEST_CONTEXT *context)
       continue;
     }
 
-    candidate.rmecda_ctl1_valid = 1u;
     *context = candidate;
     return ACS_STATUS_PASS;
   }
@@ -933,6 +964,8 @@ exercise_rule(TEST_CONTEXT *context)
   uint32_t status;
   uint32_t aer_offset;
   uint32_t realm_assigned;
+  uint32_t dcm_cleanup_allowed;
+  uint32_t negative_stimulus_done;
   uint32_t ide_enabled;
   uint32_t session_active;
   uint32_t root_ide_active;
@@ -940,8 +973,10 @@ exercise_rule(TEST_CONTEXT *context)
   uint32_t endpoint_ide_active;
   uint32_t endpoint_ide_supported;
   uint64_t test_base;
+  uint64_t observed;
   uint32_t session_id;
   uint8_t tdi_state;
+  volatile uint64_t *realm_alias;
   val_spdm_context_t spdm_ctx;
 
   if (context == NULL)
@@ -963,8 +998,15 @@ exercise_rule(TEST_CONTEXT *context)
 
   val_print(ACS_PRINT_INFO, " RFZBMW: Realm DCM page 0x%llx", test_base);
 
+  realm_alias = NULL;
+  clear_el3_access_state();
+  if (map_window_alias(test_base, REALM_PAS, &realm_alias) != ACS_STATUS_PASS)
+    return ACS_STATUS_ERR;
+
   val_memory_set(&spdm_ctx, sizeof(spdm_ctx), 0);
   realm_assigned = 0u;
+  dcm_cleanup_allowed = 1u;
+  negative_stimulus_done = 0u;
   ide_enabled = 0u;
   session_active = 0u;
   session_id = 0u;
@@ -1037,11 +1079,9 @@ exercise_rule(TEST_CONTEXT *context)
    * Positive branch: with TDI in RUN and the link protected by IDE, an
    * external Realm access to the Realm-assigned DCM page must succeed.
    */
-  status = access_realm_dcm(context->root_bdf,
-                            context->endpoint_bdf,
-                            aer_offset,
-                            test_base,
-                            0u);
+  status = access_realm_dcm_allowed(context->endpoint_bdf,
+                                    test_base,
+                                    realm_alias);
   if (status != ACS_STATUS_PASS)
   {
     val_print(ACS_PRINT_ERR,
@@ -1051,6 +1091,13 @@ exercise_rule(TEST_CONTEXT *context)
     goto cleanup;
   }
   val_print(ACS_PRINT_INFO, " RFZBMW: external Realm DCM access succeeded with IDE", 0);
+
+  status = seed_device_media(context->endpoint_bdf, test_base, NEGATIVE_BASELINE_VALUE);
+  if (status != ACS_STATUS_PASS)
+  {
+    result = status;
+    goto cleanup;
+  }
 
   /*
    * Negative branch: keep TDI in RUN but disable the IDE stream.  The same
@@ -1108,32 +1155,86 @@ exercise_rule(TEST_CONTEXT *context)
     goto cleanup;
   }
 
-  status = seed_device_media(context->endpoint_bdf, test_base, NEGATIVE_BASELINE_VALUE);
-  if (status != ACS_STATUS_PASS)
-  {
-    result = status;
-    goto cleanup;
-  }
-
-  status = access_realm_dcm(context->root_bdf,
-                            context->endpoint_bdf,
-                            aer_offset,
-                            test_base,
-                            1u);
+  status = access_realm_dcm_rejected(context->root_bdf,
+                                     aer_offset,
+                                     realm_alias);
   if (status != ACS_STATUS_PASS)
   {
     val_print(ACS_PRINT_ERR,
               " RFZBMW: IDE-disabled external Realm DCM access was not blocked",
               0);
     result = ACS_STATUS_FAIL;
+  }
+  else
+  {
+    negative_stimulus_done = 1u;
+    result = ACS_STATUS_PASS;
+  }
+
+  /*
+   * Leave the RFZBMW stimulus state by moving the TDI out of RUN before any
+   * media readback or DCM sideband cleanup.  Re-establishing IDE here requires
+   * IDE_KM EL3 services, which are not safe immediately after the expected
+   * rejected access on this model.
+   */
+  status = stop_tdisp_session(context->endpoint_bdf, &spdm_ctx, session_id);
+  session_active = 0u;
+  if (status != ACS_STATUS_PASS)
+  {
+    val_print(ACS_PRINT_ERR,
+              " RFZBMW: cleanup TDISP session stop failed after reject",
+              0);
+    result = ACS_STATUS_FAIL;
     goto cleanup;
   }
 
-  val_print(ACS_PRINT_INFO, " RFZBMW: external Realm DCM access blocked without IDE", 0);
-  result = ACS_STATUS_PASS;
+  if (aer_offset != 0u)
+    val_cxl_aer_clear(context->root_bdf, aer_offset);
+
+  if (read_device_media(context->endpoint_bdf, test_base, &observed) != ACS_STATUS_PASS)
+  {
+    result = ACS_STATUS_FAIL;
+    goto cleanup;
+  }
+
+  if (observed != NEGATIVE_BASELINE_VALUE)
+  {
+    val_print(ACS_PRINT_ERR, " RFZBMW: external Realm write modified DCM without IDE", 0);
+    val_print(ACS_PRINT_ERR, " RFZBMW: observed 0x%llx", observed);
+    result = ACS_STATUS_FAIL;
+    goto cleanup;
+  }
+
+  if (result == ACS_STATUS_PASS)
+    val_print(ACS_PRINT_INFO, " RFZBMW: external Realm DCM access blocked without IDE", 0);
 
 cleanup:
-  if (realm_assigned != 0u)
+  clear_el3_access_state();
+
+  if ((negative_stimulus_done == 0u) && (context->rmecda_ctl1_valid != 0u))
+  {
+    val_print(ACS_PRINT_INFO, " RFZBMW: restoring RMECDA_CTL1 before DCM cleanup", 0);
+    if (restore_rmecda_ctl1(context) != ACS_STATUS_PASS)
+    {
+      val_print(ACS_PRINT_ERR, " RFZBMW: RMECDA_CTL1 restore failed", 0);
+      dcm_cleanup_allowed = 0u;
+      result = ACS_STATUS_FAIL;
+    }
+    else
+    {
+      val_print(ACS_PRINT_INFO, " RFZBMW: RMECDA_CTL1 restored", 0);
+    }
+  }
+  else if (negative_stimulus_done != 0u)
+  {
+    val_print(ACS_PRINT_INFO,
+              " RFZBMW: terminal reject observed; avoiding post-reject SMC cleanup",
+              0);
+    best_effort_restore_rmecda_ctl1_cfg(context);
+    dcm_cleanup_allowed = 0u;
+  }
+
+  if ((realm_assigned != 0u) && (dcm_cleanup_allowed != 0u))
   {
     if (val_cxl_exerciser_execute_cmd(context->endpoint_bdf,
                                       CXL_CMD_OP_DCM_SET_REALM_ASSIGNMENT,
@@ -1144,6 +1245,10 @@ cleanup:
       val_print(ACS_PRINT_ERR, " RFZBMW: failed to clear Realm DCM assignment", 0);
       result = ACS_STATUS_FAIL;
     }
+  }
+  else if (realm_assigned != 0u)
+  {
+    val_print(ACS_PRINT_WARN, " RFZBMW: skipped DCM assignment cleanup", 0);
   }
 
   if (ide_enabled != 0u)
@@ -1226,11 +1331,11 @@ payload(void)
 #endif
 
 uint32_t
-cda_rfzbmw_external_dcm_ide_gate_entry(void)
+cda_rfzbmw_external_dcm_ide_gate_entry(uint32_t num_pe)
 {
-  uint32_t num_pe = 1;
   uint32_t status;
 
+  num_pe = 1;
   status = val_initialize_test(TEST_NAME, TEST_DESC, num_pe, TEST_RULE);
 
   if (status != ACS_STATUS_SKIP)

@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022-2023, 2025, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2023, 2025-2026, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -271,6 +271,7 @@ pal_iovirt_create_info_table(IOVIRT_INFO_TABLE *IoVirtTable)
   print(ACS_PRINT_DEBUG, " Number of IOVIRT blocks = %d", IoVirtTable->num_blocks);
   for(i = 0; i < IoVirtTable->num_blocks; i++, block = IOVIRT_NEXT_BLOCK(block)) {
     block = ALIGN_MEMORY(block, bound);
-    dump_block(block);
+    if (g_print_level <= ACS_PRINT_INFO)
+      dump_block(block);
   }
 }

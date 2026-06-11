@@ -160,6 +160,6 @@ uint32_t
 val_rme_tdisp_execute_tests(uint32_t num_pe);
 
 uint32_t
-tdisp_rfpymv_vdm_response_check_entry(void);
+tdisp_rfpymv_vdm_response_check_entry(uint32_t num_pe);
 
 #endif

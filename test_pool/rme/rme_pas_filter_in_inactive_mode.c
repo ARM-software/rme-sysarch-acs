@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2023-2025, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2023-2026, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -118,10 +118,10 @@ void payload(void)
 }
 
 uint32_t
-rme_pas_filter_in_inactive_mode_entry(void)
+rme_pas_filter_in_inactive_mode_entry(uint32_t num_pe)
 {
 
-  uint32_t num_pe = 1;
+  num_pe = 1;
   uint32_t status = ACS_STATUS_FAIL;
 
   status = val_initialize_test(TEST_NAME, TEST_DESC, num_pe, TEST_RULE);

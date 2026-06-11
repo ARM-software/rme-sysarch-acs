@@ -99,8 +99,8 @@ typedef struct
 **/
 typedef struct
 {
-  UINT32 base_addr;
-  UINT32 regn_size;
+  UINT64 base_addr;
+  UINT64 regn_size;
   UINT64 resourse_pas;
 } MEM_REGN_INFO_ENTRY;
 

@@ -88,7 +88,7 @@
 #define DISABLE_MEC  0x3
 
 /* Defines related to PGT attrinutes of an address */
-#define MAIR_REG_VAL_EL3 0x00000000004404ff
+#define MAIR_REG_VAL_EL3 0x00000000004400ff
 
 #define GPT_SECURE      0x8
 #define GPT_NONSECURE   0x9

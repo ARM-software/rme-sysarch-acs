@@ -49,7 +49,6 @@
   src/val_timer_support.c
   src/val_wd.c
   src/val_wakeup.c
-  src/val_peripherals.c
   src/val_memory.c
   src/val_exerciser.c
   src/val_pgt.c

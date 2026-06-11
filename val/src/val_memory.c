@@ -16,7 +16,6 @@
  **/
 
 #include "include/val.h"
-#include "include/val_peripherals.h"
 #include "include/val_common.h"
 #include "include/val_memory.h"
 #include "include/val_pgt.h"

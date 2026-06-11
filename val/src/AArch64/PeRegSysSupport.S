@@ -1,5 +1,5 @@
 #/** @file
-# Copyright (c) 2023, 2025, Arm Limited or its affiliates. All rights reserved.
+# Copyright (c) 2023, 2025-2026, Arm Limited or its affiliates. All rights reserved.
 # SPDX-License-Identifier : Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -452,9 +452,14 @@ ASM_PFX(AA64ReadSpsel):
   ret
 
 ASM_PFX(AA64ReadSP_EL0):
+  mrs   x1, Spsel
   msr   spsel, #0
   mov   x0, sp
+  cbz   x1, 1f
   msr   spsel, #1
+  ret
+1:
+  msr   spsel, #0
   ret
 
 ASM_PFX(AA64WriteSp):

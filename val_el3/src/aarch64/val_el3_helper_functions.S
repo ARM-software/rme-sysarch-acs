@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022-2023, 2025, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2023, 2025-2026, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -61,8 +61,6 @@
         .globl val_el3_acs_ldr_pas_filter
         .globl val_el3_write_mair_el3
         .globl val_el3_read_mair_el3
-        .globl val_el3_write_cpsr
-        .globl val_el3_read_cpsr
         .globl val_el3_set_daif
         .globl val_el3_mmio_read
         .globl val_el3_mmio_read64
@@ -189,6 +187,8 @@ val_el3_acs_ldr_pas_filter:
  * @return None
  */
 val_el3_tlbi_vae3:
+       /* TLBI VAE3 takes VA[55:12] in Xt, not the raw byte address. */
+       lsr    x0, x0, #12
        tlbi vae3, x0
        dsb    sy
        isb

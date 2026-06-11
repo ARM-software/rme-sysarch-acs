@@ -319,9 +319,9 @@ payload(void)
 #endif
 
 uint32_t
-cxl_rplcmc_type3_target_ckid_entry(void)
+cxl_rplcmc_type3_target_ckid_entry(uint32_t num_pe)
 {
-  uint32_t num_pe = 1;
+  num_pe = 1;
   uint32_t status;
 
   /* Initialize the test and invoke the payload on the primary PE. */

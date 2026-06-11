@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2024-2025, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2024-2026, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -67,7 +67,7 @@ payload(void)
   uint32_t pgt_attr_el3;
   uint32_t sel_str_lock_bit;
   uint64_t va;
-  uint32_t cfg_addr;
+  uint64_t cfg_addr;
   uint32_t da_cap_base;
   uint32_t stream_id;
   uint32_t str_index;
@@ -187,10 +187,10 @@ payload(void)
 }
 
 uint32_t
-da_selective_ide_register_property_entry(void)
+da_selective_ide_register_property_entry(uint32_t num_pe)
 {
 
-  uint32_t num_pe = 1;
+  num_pe = 1;
   uint32_t status = ACS_STATUS_FAIL;  //default value
 
   status = val_initialize_test(TEST_NAME, TEST_DESC, num_pe, TEST_RULE);

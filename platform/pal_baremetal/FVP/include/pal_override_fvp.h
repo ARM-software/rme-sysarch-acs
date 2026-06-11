@@ -294,9 +294,6 @@
 #define PLATFORM_PCIE_DEV7_BEHIND_SMMU   1
 #define PLATFORM_PCIE_DEV7_ATC_SUPPORT   0
 
-/* PERIPHERAL platform config parameters */
-#define PLATFORM_OVERRIDE_PERIPHERAL_COUNT 1  //UART
-
 #define UART_ADDRESS                     0xF9750000
 #define BASE_ADDRESS_ADDRESS             0x1C0B0000
 #define UART_GLOBAL_SYSTEM_INTERRUPT     0x25
@@ -315,6 +312,8 @@
 #define IOVIRT_NAMED_COMPONENT_COUNT  0
 #define IOVIRT_PMCG_COUNT             0
 #define IOVIRT_SMMUV3_0_BASE_ADDRESS  0x2B400000
+/* Configured SMMU stream-table span, independent of IDR1.SIDSIZE. */
+#define PLATFORM_OVERRIDE_SMMU_STRTAB_BITS 16U
 #define IOVIRT_SMMU_CTX_INT_OFFSET    0x0
 #define IOVIRT_SMMU_CTX_INT_CNT       0x0
 #define IOVIRT_RC_PCI_SEG_NUM         0x0

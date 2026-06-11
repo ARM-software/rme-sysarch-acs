@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2025, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2025-2026, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -35,25 +35,9 @@
 uint32_t
 val_rme_mec_execute_tests(uint32_t num_pe)
 {
-  uint32_t status, i, reset_status, smmu_cnt;
+  uint32_t status = ACS_STATUS_SKIP, reset_status, smmu_cnt;
   uint64_t num_smmus = val_smmu_get_info(SMMU_NUM_CTRL, 0);
   uint64_t smmu_base_arr[num_smmus], pgt_attr_el3;
-
-  for (i = 0 ; i < g_num_skip ; i++) {
-      if (val_memory_compare((char8_t *)g_skip_test_str[i], MEC_MODULE,
-                             val_strnlen(g_skip_test_str[i])) == 0)
-      {
-          val_print(ACS_PRINT_ALWAYS, "\n USER Override - Skipping all RME-MEC tests \n", 0);
-          return ACS_STATUS_SKIP;
-      }
-  }
-
-  /* Check if there are any tests to be executed in current module with user override options*/
-  status = val_check_skip_module(MEC_MODULE);
-  if (status) {
-    val_print(ACS_PRINT_ALWAYS, "\n USER Override - Skipping all RME-MEC tests \n", 0);
-    return ACS_STATUS_SKIP;
-  }
 
   if (!val_is_mec_supported())
   {
@@ -97,10 +81,11 @@ val_rme_mec_execute_tests(uint32_t num_pe)
       reset_status != RESET_LS_TEST3_FLAG)
   {
     val_print(ACS_PRINT_ALWAYS, "\n\n*******************************************************\n", 0);
-    status = mec_support_mecid_and_mecid_width_entry(num_pe);
-    status |= mec_mecid_assosiation_and_encryption_entry();
-    status |= mec_effect_of_popa_cmo_entry();
-    status |= mec_cmo_uses_correct_mecid_entry(2);
+    status = val_execute_module_tests(MEC_MODULE_ID,
+                                      MEC_MODULE_START,
+                                      MEC_MODULE_END,
+                                      num_pe,
+                                      status);
   }
 
   return status;

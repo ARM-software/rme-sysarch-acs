@@ -171,10 +171,10 @@ payload(void)
 }
 
 uint32_t
-da_outgoing_realm_rqst_ide_tbit_1_entry(void)
+da_outgoing_realm_rqst_ide_tbit_1_entry(uint32_t num_pe)
 {
 
-  uint32_t num_pe = 1;
+  num_pe = 1;
   uint32_t status = ACS_STATUS_FAIL;  //default value
 
   status = val_initialize_test(TEST_NAME, TEST_DESC, num_pe, TEST_RULE);
