@@ -19,8 +19,17 @@
 #define __RME_ACS_CDA_H__
 
 uint32_t cda_rjzqcp_reset_transition_entry(uint32_t num_pe);
+uint32_t cda_rydsyl_d2h_sec_sid_rid_entry(uint32_t num_pe);
 uint32_t cda_rkrcwk_host_side_gpc_entry(uint32_t num_pe);
 uint32_t cda_rfzbmw_external_dcm_ide_gate_entry(uint32_t num_pe);
 uint32_t cda_rwwbpm_internal_dcm_run_gate_entry(uint32_t num_pe);
+
+uint32_t val_cda_program_rid_range(uint64_t cfg_va,
+                                   uint32_t rmecda_cap_base,
+                                   uint32_t ctl3_template,
+                                   uint32_t ctl4_template,
+                                   uint32_t rid_base,
+                                   uint32_t rid_limit,
+                                   uint32_t rid_range_valid);
 
 #endif

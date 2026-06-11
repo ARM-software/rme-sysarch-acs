@@ -1153,6 +1153,31 @@ Testcase checklist
 
   * -
 
+      `cda_rydsyl_d2h_sec_sid_rid <../test_pool/cda/cda_rydsyl_d2h_sec_sid_rid.c>`_
+
+    -
+
+      RYDSYL: An RME-CDA coherent device guarantees that the CHI SEC_SID and CHI RID fields on any device-to-host memory request from a TDI or from a cache associated with a TDI are set as follows:
+
+      - If the TDI is in the RUN TDISP state, CHI SEC_SID is Realm. Otherwise, CHI SEC_SID is Non-secure.
+      - The CHI RID field is set to the Requester ID of the TDI. For a TDI in the RUN TDISP state, this value is equal to the Requester ID field in the TDISP-specified INTERFACE_ID of the TDI.
+      - A device-to-host access from a cache specifies the SEC_SID and RID fields of the allocating access.
+
+    -
+
+      1. Select a CHI-C2C-capable CXL root port that exposes the RME-CDA DVSEC and a downstream CHI-C2C exerciser endpoint. Skip the test if no such endpoint is available.
+      2. Enable CXL.mem for the endpoint and map the root port configuration space for Root access. Save the original RMECDA_CTL1, RMECDA_CTL3, and RMECDA_CTL4 register values for cleanup.
+      3. Clear RMECDA_CTL1.LINK_STR_LOCK before changing the RID window. Program RMECDA_CTL4.RID_BASE and RMECDA_CTL3.RID_LIMIT to the endpoint TDI Requester ID, set RMECDA_CTL4.RID_RANGE_VALID, and then set RMECDA_CTL1.TDISP_EN and RMECDA_CTL1.LINK_STR_LOCK.
+      4. Establish an SPDM session, transition the endpoint TDI to RUN, establish the CXL IDE link if supported, and verify that the link IDE stream is Active when IDE is supported.
+      5. Configure SMMU mappings and GPT entries for Realm DMA source and destination buffers. Program the exerciser to use translated addressing and its own Requester ID.
+      6. With the TDI in RUN state, issue device-to-host DMA without explicitly overriding SEC_SID in the exerciser. Verify the DMA completes and the destination buffer matches the source buffer. This acceptance indirectly validates that the device/root complex supplied the TDI Requester ID and Realm identity required by the configured RID window and Realm access policy.
+      7. Stop the TDI so it is no longer in RUN state and issue the same Realm DMA path. Verify the request is rejected and the destination buffer is not updated.
+      8. Disable the IDE link if it was enabled, close the SPDM session, restore GPT/SMMU state, and restore RMECDA_CTL1, RMECDA_CTL3, and RMECDA_CTL4.
+
+      Note: This CDA scenario is applicable only to CHI-C2C-capable devices. The CHI SEC_SID and CHI RID fields are not directly readable by ACS software, so the test uses host-port RID range programming and Realm DMA acceptance/rejection as the observable validation mechanism.
+
+  * -
+
       `cxl_rgtvgz_tdisp_enable_link_gate <../test_pool/cxl/cxl_rgtvgz_tdisp_enable_link_gate.c>`_
 
     -

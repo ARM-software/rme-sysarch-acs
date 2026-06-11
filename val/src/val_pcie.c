@@ -269,6 +269,47 @@ uint64_t val_pcie_get_bdf_config_addr(uint32_t bdf)
 
 }
 
+/**
+  @brief  Map a PCIe function's config space so EL3 can access it as Root.
+
+  @param  bdf         Segment/Bus/Dev/Func in PCIE_CREATE_BDF format.
+  @param  cfg_va_out  Output pointer that receives the Root-accessible VA.
+
+  @return ACS_STATUS_PASS on success, ACS_STATUS_ERR on failure.
+**/
+uint32_t
+val_pcie_map_root_config(uint32_t bdf, uint64_t *cfg_va_out)
+{
+  uint64_t cfg_addr;
+  uint64_t cfg_va;
+  uint64_t tg;
+  uint32_t attr;
+
+  if (cfg_va_out == NULL)
+    return ACS_STATUS_ERR;
+
+  *cfg_va_out = 0u;
+  tg = val_get_min_tg();
+  cfg_addr = val_pcie_get_bdf_config_addr(bdf);
+  if ((tg == 0u) || (cfg_addr == 0u))
+    return ACS_STATUS_ERR;
+
+  cfg_va = val_get_free_va(tg);
+  if (cfg_va == 0u)
+    return ACS_STATUS_ERR;
+
+  attr = LOWER_ATTRS(PGT_ENTRY_ACCESS |
+                     SHAREABLE_ATTR(OUTER_SHAREABLE) |
+                     GET_ATTR_INDEX(DEV_MEM_nGnRnE) |
+                     PGT_ENTRY_AP_RW |
+                     PAS_ATTR(ROOT_PAS));
+  if (val_add_mmu_entry_el3(cfg_va, cfg_addr, attr))
+    return ACS_STATUS_ERR;
+
+  *cfg_va_out = cfg_va;
+  return ACS_STATUS_PASS;
+}
+
 
 /**
   @brief  This API performs the PCI enumeration

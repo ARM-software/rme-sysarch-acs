@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022-2023, 2025, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2023, 2025-2026, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -41,6 +41,19 @@ void *val_memory_alloc_pages(uint32_t num_pages);
 void val_memory_free_pages(void *page_base, uint32_t num_pages);
 void *val_aligned_alloc(uint32_t alignment, uint32_t size);
 void val_memory_free_aligned(void *addr);
+uint32_t val_memory_read_el3(uint64_t address, uint32_t *value);
+uint32_t val_memory_write_el3(uint64_t address, uint32_t value);
+uint32_t val_memory_map_el3_data(uint64_t va, uint32_t size, uint32_t pas);
+uint32_t val_memory_map_dma_buffers_el3(void *buffer_va,
+                                         uint64_t buffer_pa,
+                                         uint32_t length,
+                                         uint32_t pas);
+uint32_t val_memory_prepare_dma_buffers_el3(void *buffer_src,
+                                            void *buffer_dst,
+                                            uint32_t length,
+                                            uint32_t src_pattern,
+                                            uint32_t dst_pattern);
+uint32_t val_memory_compare_el3(uint64_t src_va, uint64_t dst_va, uint32_t size);
 uint32_t val_memory_compare_src_el3(uint32_t *src, uint32_t *dest, uint32_t size);
 uint32_t val_strnlen(const char8_t *str);
 // NSEL2 MMU mem map APIs

@@ -19,6 +19,85 @@
 #include "include/val_common.h"
 #include "include/val_interface.h"
 #include "include/val_cda.h"
+#include "include/val_cxl_spec.h"
+#include "include/val_el32.h"
+#include "include/val_iovirt.h"
+#include "include/val_memory.h"
+#include "include/val_pgt.h"
+
+#define RMECDA_CTL3_RID_LIMIT_SHIFT       8u
+#define RMECDA_CTL3_RID_LIMIT_MASK        (0xFFFFu << RMECDA_CTL3_RID_LIMIT_SHIFT)
+#define RMECDA_CTL4_RID_BASE_SHIFT        8u
+#define RMECDA_CTL4_RID_BASE_MASK         (0xFFFFu << RMECDA_CTL4_RID_BASE_SHIFT)
+#define RMECDA_CTL4_RID_RANGE_VALID_MASK  0x1u
+
+/**
+  @brief  Program the RMECDA_CTL3/CTL4 Requester ID range.
+
+  @param  cfg_va           Root-accessible VA for the root port config space.
+  @param  rmecda_cap_base  RME-CDA DVSEC capability offset.
+  @param  ctl3_template    Existing RMECDA_CTL3 value; non-RID fields are preserved.
+  @param  ctl4_template    Existing RMECDA_CTL4 value; non-RID fields are preserved.
+  @param  rid_base         RID_BASE value to program.
+  @param  rid_limit        RID_LIMIT value to program.
+  @param  rid_range_valid  Nonzero to set RID_RANGE_VALID.
+
+  @return ACS_STATUS_PASS if the fields were programmed and verified.
+          ACS_STATUS_SKIP if the RID fields are not writable.
+          ACS_STATUS_ERR  if Root access failed.
+**/
+uint32_t
+val_cda_program_rid_range(uint64_t cfg_va,
+                          uint32_t rmecda_cap_base,
+                          uint32_t ctl3_template,
+                          uint32_t ctl4_template,
+                          uint32_t rid_base,
+                          uint32_t rid_limit,
+                          uint32_t rid_range_valid)
+{
+  uint32_t ctl3_program;
+  uint32_t ctl4_program;
+  uint32_t ctl3_readback;
+  uint32_t ctl4_readback;
+
+  if (cfg_va == 0u)
+    return ACS_STATUS_ERR;
+
+  ctl3_program = (ctl3_template & ~RMECDA_CTL3_RID_LIMIT_MASK) |
+                 (((rid_limit & 0xFFFFu) << RMECDA_CTL3_RID_LIMIT_SHIFT) &
+                  RMECDA_CTL3_RID_LIMIT_MASK);
+  ctl4_program = ctl4_template &
+                 ~(RMECDA_CTL4_RID_BASE_MASK |
+                   RMECDA_CTL4_RID_RANGE_VALID_MASK);
+  ctl4_program |= ((rid_base & 0xFFFFu) << RMECDA_CTL4_RID_BASE_SHIFT) &
+                  RMECDA_CTL4_RID_BASE_MASK;
+  if (rid_range_valid != 0u)
+    ctl4_program |= RMECDA_CTL4_RID_RANGE_VALID_MASK;
+
+  if (val_memory_write_el3(cfg_va + rmecda_cap_base + RMECDA_CTL3_OFFSET,
+                           ctl3_program) != ACS_STATUS_PASS)
+    return ACS_STATUS_ERR;
+
+  if (val_memory_write_el3(cfg_va + rmecda_cap_base + RMECDA_CTL4_OFFSET,
+                           ctl4_program) != ACS_STATUS_PASS)
+    return ACS_STATUS_ERR;
+
+  if ((val_memory_read_el3(cfg_va + rmecda_cap_base + RMECDA_CTL3_OFFSET,
+                           &ctl3_readback) != ACS_STATUS_PASS) ||
+      (val_memory_read_el3(cfg_va + rmecda_cap_base + RMECDA_CTL4_OFFSET,
+                           &ctl4_readback) != ACS_STATUS_PASS))
+    return ACS_STATUS_ERR;
+
+  if (((ctl3_readback & RMECDA_CTL3_RID_LIMIT_MASK) !=
+       (ctl3_program & RMECDA_CTL3_RID_LIMIT_MASK)) ||
+      ((ctl4_readback & (RMECDA_CTL4_RID_BASE_MASK |
+                         RMECDA_CTL4_RID_RANGE_VALID_MASK)) !=
+       (ctl4_program & (RMECDA_CTL4_RID_BASE_MASK |
+                        RMECDA_CTL4_RID_RANGE_VALID_MASK))))
+    return ACS_STATUS_SKIP;
+
+  return ACS_STATUS_PASS;
+}
 
 /**
   @brief   Execute all CDA compliance tests registered for the suite.
@@ -31,8 +110,52 @@ uint32_t
 val_rme_cda_execute_tests(uint32_t num_pe)
 {
   uint32_t status = ACS_STATUS_SKIP;
+  uint64_t num_smmus = val_smmu_get_info(SMMU_NUM_CTRL, 0);
+  uint64_t *smmu_base_arr = NULL;
+  uint64_t pgt_attr_el3;
+  uint32_t smmu_cnt;
 
   g_curr_module = 1 << CDA_MODULE_ID;
+
+  if ((num_smmus != 0u) && !g_rl_smmu_init)
+  {
+    smmu_base_arr = val_memory_alloc_pages(1);
+    if (smmu_base_arr == NULL)
+    {
+      val_print(ACS_PRINT_ERR, " Failed to allocate CDA smmu_base_arr", 0);
+      return ACS_STATUS_ERR;
+    }
+
+    smmu_cnt = 0u;
+    while (smmu_cnt < num_smmus)
+    {
+      smmu_base_arr[smmu_cnt] = val_smmu_get_info(SMMU_CTRL_BASE, smmu_cnt);
+      smmu_cnt++;
+    }
+
+    pgt_attr_el3 = LOWER_ATTRS(PGT_ENTRY_ACCESS |
+                               SHAREABLE_ATTR(OUTER_SHAREABLE) |
+                               PGT_ENTRY_AP_RW |
+                               PAS_ATTR(NONSECURE_PAS));
+    if (val_add_mmu_entry_el3((uint64_t)smmu_base_arr,
+                              (uint64_t)val_memory_virt_to_phys(smmu_base_arr),
+                              pgt_attr_el3))
+    {
+      val_print(ACS_PRINT_ERR, " MMU mapping failed for CDA smmu_base_arr", 0);
+      val_memory_free_pages(smmu_base_arr, 1);
+      return ACS_STATUS_ERR;
+    }
+
+    if (val_rlm_smmu_init(num_smmus, smmu_base_arr))
+    {
+      val_print(ACS_PRINT_ERR, " CDA SMMU REALM INIT failed", 0);
+      val_memory_free_pages(smmu_base_arr, 1);
+      return ACS_STATUS_ERR;
+    }
+
+    g_rl_smmu_init = 1u;
+    val_memory_free_pages(smmu_base_arr, 1);
+  }
 
   val_print(ACS_PRINT_ALWAYS, "\n\n*******************************************************\n", 0);
   status = val_execute_module_tests(CDA_MODULE_ID,

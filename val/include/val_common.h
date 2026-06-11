@@ -113,6 +113,7 @@ typedef uint32_t (*test_entry_fn)(uint32_t num_pe);
 /* Enumerations of test entry functions per module (found under test_pool/) */
 typedef enum {
     CDA_MODULE_START = -1,
+    CDA_ENTRY_CDA_RYDSYL_D2H_SEC_SID_RID_ENTRY,
     CDA_ENTRY_CDA_RJZQCP_RESET_TRANSITION_ENTRY,
     CDA_ENTRY_CDA_RKRCWK_HOST_SIDE_GPC_ENTRY,
     CDA_ENTRY_CDA_RFZBMW_EXTERNAL_DCM_IDE_GATE_ENTRY,

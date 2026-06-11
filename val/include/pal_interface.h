@@ -489,6 +489,7 @@ typedef struct {
   uint32_t substreamid;
   uint32_t ssid_bits;
   uint32_t stage2;
+  uint32_t bypass;
 } smmu_master_attributes_t;
 
 typedef struct {

@@ -72,6 +72,10 @@ MODULE_TEST_DISPATCHER_s g_module_test_table[MODULE_SENTINEL] = {
   [CDA_MODULE_ID] = {
     .module_id = CDA_MODULE_ID,
     .entry = {
+      [CDA_ENTRY_CDA_RYDSYL_D2H_SEC_SID_RID_ENTRY] = {
+        .entry_fn = cda_rydsyl_d2h_sec_sid_rid_entry,
+        .test_text = "cda_rydsyl_d2h_sec_sid_rid",
+      },
       [CDA_ENTRY_CDA_RJZQCP_RESET_TRANSITION_ENTRY] = {
         .entry_fn = cda_rjzqcp_reset_transition_entry,
         .test_text = "cda_rjzqcp_reset_transition",

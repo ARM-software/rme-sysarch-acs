@@ -277,6 +277,231 @@ uint32_t val_enable_mmu(void)
 }
 #endif  // TARGET_BM_BOOT
 
+static void
+val_memory_clear_el3_access_state(void)
+{
+  shared_data->exception_expected = CLEAR;
+  shared_data->exception_generated = CLEAR;
+  shared_data->access_mut = CLEAR;
+  shared_data->pas_filter_flag = CLEAR;
+  shared_data->arg1 = 0u;
+  shared_data->num_access = 0u;
+}
+
+/**
+  @brief  Read a 32-bit value through the EL3 MUT access path.
+
+  @param  address  Address to read.
+  @param  value    Output pointer that receives the read value.
+
+  @return ACS_STATUS_PASS on success, ACS_STATUS_ERR on failure.
+**/
+uint32_t
+val_memory_read_el3(uint64_t address, uint32_t *value)
+{
+  if (value == NULL)
+    return ACS_STATUS_ERR;
+
+  val_memory_clear_el3_access_state();
+  shared_data->num_access = 1;
+  shared_data->shared_data_access[0].addr = address;
+  shared_data->shared_data_access[0].access_type = READ_DATA;
+
+  if (val_pe_access_mut_el3())
+  {
+    val_memory_clear_el3_access_state();
+    val_print(ACS_PRINT_ERR, " EL3: MUT read failed for 0x%llx", address);
+    return ACS_STATUS_ERR;
+  }
+
+  *value = (uint32_t)shared_data->shared_data_access[0].data;
+  val_memory_clear_el3_access_state();
+  return ACS_STATUS_PASS;
+}
+
+/**
+  @brief  Write a 32-bit value through the EL3 MUT access path.
+
+  @param  address  Address to write.
+  @param  value    Value to write.
+
+  @return ACS_STATUS_PASS on success, ACS_STATUS_ERR on failure.
+**/
+uint32_t
+val_memory_write_el3(uint64_t address, uint32_t value)
+{
+  val_memory_clear_el3_access_state();
+  shared_data->num_access = 1;
+  shared_data->shared_data_access[0].addr = address;
+  shared_data->shared_data_access[0].data = value;
+  shared_data->shared_data_access[0].access_type = WRITE_DATA;
+
+  if (val_pe_access_mut_el3())
+  {
+    val_memory_clear_el3_access_state();
+    val_print(ACS_PRINT_ERR, " EL3: MUT write failed for 0x%llx", address);
+    return ACS_STATUS_ERR;
+  }
+
+  val_memory_clear_el3_access_state();
+  return ACS_STATUS_PASS;
+}
+
+/**
+  @brief  Map a small data structure for EL3 access under the requested PAS.
+
+  @param  va    Virtual address of the structure.
+  @param  size  Size of the structure in bytes.
+  @param  pas   PAS_ATTR value to use for the EL3 mapping.
+
+  @return ACS_STATUS_PASS on success, ACS_STATUS_ERR on failure.
+**/
+uint32_t
+val_memory_map_el3_data(uint64_t va, uint32_t size, uint32_t pas)
+{
+  uint32_t attr;
+  uint64_t pa;
+  uint64_t page_size;
+  uint64_t page_mask;
+  uint64_t map_va;
+  uint64_t end_va;
+
+  if ((va == 0u) || (size == 0u))
+    return ACS_STATUS_ERR;
+
+  page_size = val_memory_page_size();
+  if ((page_size == 0u) || ((page_size & (page_size - 1u)) != 0u))
+    return ACS_STATUS_ERR;
+
+  page_mask = ~(page_size - 1u);
+  attr = LOWER_ATTRS(PGT_ENTRY_ACCESS |
+                     SHAREABLE_ATTR(OUTER_SHAREABLE) |
+                     PGT_ENTRY_AP_RW |
+                     PAS_ATTR(pas));
+
+  map_va = va & page_mask;
+  end_va = (va + size - 1u) & page_mask;
+  while (map_va <= end_va)
+  {
+    pa = (uint64_t)val_memory_virt_to_phys((void *)map_va);
+    if (pa == 0u)
+      return ACS_STATUS_ERR;
+
+    if (val_add_mmu_entry_el3(map_va, pa & page_mask, attr))
+      return ACS_STATUS_ERR;
+
+    map_va += page_size;
+  }
+
+  return ACS_STATUS_PASS;
+}
+
+/**
+  @brief  Map adjacent source/destination DMA buffers for EL3 access.
+
+  @param  buffer_va  VA of the first buffer.
+  @param  buffer_pa  PA of the first buffer.
+  @param  length     Size of each buffer in bytes.
+  @param  pas        PAS_ATTR value to use for both mappings.
+
+  @return ACS_STATUS_PASS on success, ACS_STATUS_ERR on failure.
+**/
+uint32_t
+val_memory_map_dma_buffers_el3(void *buffer_va,
+                               uint64_t buffer_pa,
+                               uint32_t length,
+                               uint32_t pas)
+{
+  uint32_t attr;
+
+  if ((buffer_va == NULL) || (buffer_pa == 0u) || (length == 0u))
+    return ACS_STATUS_ERR;
+
+  attr = LOWER_ATTRS(PGT_ENTRY_ACCESS |
+                     SHAREABLE_ATTR(OUTER_SHAREABLE) |
+                     GET_ATTR_INDEX(DEV_MEM_nGnRnE) |
+                     PGT_ENTRY_AP_RW |
+                     PAS_ATTR(pas));
+
+  if (val_add_mmu_entry_el3((uint64_t)buffer_va, buffer_pa, attr))
+    return ACS_STATUS_ERR;
+
+  if (val_add_mmu_entry_el3((uint64_t)((uint8_t *)buffer_va + length),
+                            buffer_pa + length,
+                            attr))
+    return ACS_STATUS_ERR;
+
+  return ACS_STATUS_PASS;
+}
+
+/**
+  @brief  Initialize source and destination DMA buffers through EL3.
+
+  @param  buffer_src   Source buffer VA.
+  @param  buffer_dst   Destination buffer VA.
+  @param  length       Size of each buffer in bytes.
+  @param  src_pattern  Byte pattern for the source buffer.
+  @param  dst_pattern  Byte pattern for the destination buffer.
+
+  @return ACS_STATUS_PASS on success, ACS_STATUS_ERR on failure.
+**/
+uint32_t
+val_memory_prepare_dma_buffers_el3(void *buffer_src,
+                                   void *buffer_dst,
+                                   uint32_t length,
+                                   uint32_t src_pattern,
+                                   uint32_t dst_pattern)
+{
+  if ((buffer_src == NULL) || (buffer_dst == NULL) || (length == 0u))
+    return ACS_STATUS_ERR;
+
+  if (val_memory_set_el3(buffer_src, length, (uint8_t)src_pattern))
+    return ACS_STATUS_ERR;
+
+  if (val_memory_set_el3(buffer_dst, length, (uint8_t)dst_pattern))
+    return ACS_STATUS_ERR;
+
+  return ACS_STATUS_PASS;
+}
+
+/**
+  @brief  Compare two buffers through EL3 MUT reads.
+
+  @param  src_va  Source buffer VA.
+  @param  dst_va  Destination buffer VA.
+  @param  size    Number of bytes to compare. Must be 32-bit aligned.
+
+  @return 0 if the buffers match, 1 if they differ, ACS_STATUS_ERR on access
+          failure.
+**/
+uint32_t
+val_memory_compare_el3(uint64_t src_va, uint64_t dst_va, uint32_t size)
+{
+  uint32_t src_data;
+  uint32_t dst_data;
+
+  if ((src_va == 0u) || (dst_va == 0u) || ((size % sizeof(uint32_t)) != 0u))
+    return ACS_STATUS_ERR;
+
+  while (size > 0u)
+  {
+    if (val_memory_read_el3(src_va, &src_data) != ACS_STATUS_PASS)
+      return ACS_STATUS_ERR;
+
+    if (val_memory_read_el3(dst_va, &dst_data) != ACS_STATUS_PASS)
+      return ACS_STATUS_ERR;
+
+    if (src_data != dst_data)
+      return 1u;
+
+    src_va += sizeof(uint32_t);
+    dst_va += sizeof(uint32_t);
+    size -= sizeof(uint32_t);
+  }
+
+  return 0u;
+}
+
 /**
  * @brief Compare two memory regions word-by-word with source bffer read from EL3.
  *
