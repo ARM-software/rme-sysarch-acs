@@ -1178,6 +1178,29 @@ Testcase checklist
 
   * -
 
+      `cda_rdmspt_rid_range_check <../test_pool/cda/cda_rdmspt_rid_range_check.c>`_
+
+    -
+
+      RDMSPT: For an RME-CDA coherent CHI-C2C device, device-to-host requests are accepted by the host port only when the Requester ID is inside the permitted RMECDA RID range while RMECDA_CTL1.LINK_STR_LOCK is set.
+
+    -
+
+      1. Select a CHI-C2C-capable CXL root port that exposes the RME-CDA DVSEC and locate a downstream CHI-C2C exerciser endpoint. Skip the test if no such endpoint is available.
+      2. Enable CXL.mem for the endpoint, map the root port configuration space for Root access, and save the original RMECDA_CTL1, RMECDA_CTL3, and RMECDA_CTL4 register values for cleanup.
+      3. Allocate source and destination DMA pages, mark them Non-secure in GPT, and map the same VA/PA pairs for EL3 access so the test can initialize and compare buffers safely after ownership changes.
+      4. Configure an identity SMMU mapping for both DMA pages, enable the SMMU for the endpoint stream, and program the exerciser to use translated addressing.
+      5. Use the endpoint's natural Requester ID. Do not spoof or override the exerciser RID; this keeps the check aligned with the Requester ID emitted by the TDI/exerciser path.
+      6. Positive check: clear RMECDA_CTL1.LINK_STR_LOCK, program RMECDA_CTL4.RID_BASE and RMECDA_CTL3.RID_LIMIT to exactly the endpoint Requester ID, set RMECDA_CTL4.RID_RANGE_VALID, then set RMECDA_CTL1.LINK_STR_LOCK.
+      7. Load the exerciser device buffer using host-to-device DMA, issue device-to-host DMA into the destination page, and verify that the destination buffer matches the source buffer. A match means the in-range Requester ID was accepted.
+      8. Negative check: clear RMECDA_CTL1.LINK_STR_LOCK, program a valid RID range that excludes the endpoint Requester ID, set RMECDA_CTL4.RID_RANGE_VALID, and set RMECDA_CTL1.LINK_STR_LOCK again.
+      9. Issue device-to-host DMA without reloading the device buffer and verify the destination buffer remains different from the source buffer. A mismatch means the out-of-range Requester ID was rejected by the host port.
+      10. Restore RMECDA_CTL1, RMECDA_CTL3, and RMECDA_CTL4, disable the endpoint SMMU mapping, restore GPT entries, and free the DMA pages.
+
+      Note: This CDA scenario is applicable only to CHI-C2C-capable devices and validates the RID range indirectly through D2H DMA acceptance/rejection.
+
+  * -
+
       `cxl_rgtvgz_tdisp_enable_link_gate <../test_pool/cxl/cxl_rgtvgz_tdisp_enable_link_gate.c>`_
 
     -

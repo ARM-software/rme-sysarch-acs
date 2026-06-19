@@ -400,20 +400,20 @@ val_memory_map_el3_data(uint64_t va, uint32_t size, uint32_t pas)
 }
 
 /**
-  @brief  Map adjacent source/destination DMA buffers for EL3 access.
+  @brief  Map a DMA buffer for EL3 access.
 
-  @param  buffer_va  VA of the first buffer.
-  @param  buffer_pa  PA of the first buffer.
-  @param  length     Size of each buffer in bytes.
-  @param  pas        PAS_ATTR value to use for both mappings.
+  @param  buffer_va  VA of the buffer.
+  @param  buffer_pa  PA of the buffer.
+  @param  length     Size of the buffer in bytes.
+  @param  pas        PAS_ATTR value to use for the mapping.
 
   @return ACS_STATUS_PASS on success, ACS_STATUS_ERR on failure.
 **/
 uint32_t
-val_memory_map_dma_buffers_el3(void *buffer_va,
-                               uint64_t buffer_pa,
-                               uint32_t length,
-                               uint32_t pas)
+val_memory_map_dma_buffer_el3(void *buffer_va,
+                              uint64_t buffer_pa,
+                              uint32_t length,
+                              uint32_t pas)
 {
   uint32_t attr;
 
@@ -429,12 +429,33 @@ val_memory_map_dma_buffers_el3(void *buffer_va,
   if (val_add_mmu_entry_el3((uint64_t)buffer_va, buffer_pa, attr))
     return ACS_STATUS_ERR;
 
-  if (val_add_mmu_entry_el3((uint64_t)((uint8_t *)buffer_va + length),
-                            buffer_pa + length,
-                            attr))
+  return ACS_STATUS_PASS;
+}
+
+/**
+  @brief  Map adjacent source/destination DMA buffers for EL3 access.
+
+  @param  buffer_va  VA of the first buffer.
+  @param  buffer_pa  PA of the first buffer.
+  @param  length     Size of each buffer in bytes.
+  @param  pas        PAS_ATTR value to use for both mappings.
+
+  @return ACS_STATUS_PASS on success, ACS_STATUS_ERR on failure.
+**/
+uint32_t
+val_memory_map_dma_buffers_el3(void *buffer_va,
+                               uint64_t buffer_pa,
+                               uint32_t length,
+                               uint32_t pas)
+{
+  if (val_memory_map_dma_buffer_el3(buffer_va, buffer_pa, length, pas)
+      != ACS_STATUS_PASS)
     return ACS_STATUS_ERR;
 
-  return ACS_STATUS_PASS;
+  return val_memory_map_dma_buffer_el3((void *)((uint8_t *)buffer_va + length),
+                                       buffer_pa + length,
+                                       length,
+                                       pas);
 }
 
 /**

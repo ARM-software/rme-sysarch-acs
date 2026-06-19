@@ -44,6 +44,10 @@ void val_memory_free_aligned(void *addr);
 uint32_t val_memory_read_el3(uint64_t address, uint32_t *value);
 uint32_t val_memory_write_el3(uint64_t address, uint32_t value);
 uint32_t val_memory_map_el3_data(uint64_t va, uint32_t size, uint32_t pas);
+uint32_t val_memory_map_dma_buffer_el3(void *buffer_va,
+                                       uint64_t buffer_pa,
+                                       uint32_t length,
+                                       uint32_t pas);
 uint32_t val_memory_map_dma_buffers_el3(void *buffer_va,
                                          uint64_t buffer_pa,
                                          uint32_t length,

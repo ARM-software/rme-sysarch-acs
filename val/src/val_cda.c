@@ -19,17 +19,134 @@
 #include "include/val_common.h"
 #include "include/val_interface.h"
 #include "include/val_cda.h"
+#include "include/val_cxl.h"
 #include "include/val_cxl_spec.h"
 #include "include/val_el32.h"
+#include "include/val_exerciser.h"
 #include "include/val_iovirt.h"
 #include "include/val_memory.h"
+#include "include/val_pcie.h"
+#include "include/val_pcie_spec.h"
 #include "include/val_pgt.h"
 
+#define RMECDA_CTL1_LINK_STR_LOCK_MASK  (1u << 1)
 #define RMECDA_CTL3_RID_LIMIT_SHIFT       8u
 #define RMECDA_CTL3_RID_LIMIT_MASK        (0xFFFFu << RMECDA_CTL3_RID_LIMIT_SHIFT)
 #define RMECDA_CTL4_RID_BASE_SHIFT        8u
 #define RMECDA_CTL4_RID_BASE_MASK         (0xFFFFu << RMECDA_CTL4_RID_BASE_SHIFT)
 #define RMECDA_CTL4_RID_RANGE_VALID_MASK  0x1u
+
+/**
+  @brief  Find a CHI-C2C exerciser endpoint downstream of a root port.
+
+  @param  root_bdf          Root port BDF.
+  @param  endpoint_bdf_out  Output pointer for the endpoint BDF.
+
+  @return ACS_STATUS_PASS if a usable endpoint was found.
+          ACS_STATUS_SKIP if no matching endpoint is present.
+          ACS_STATUS_ERR  if discovery data cannot be read.
+**/
+uint32_t
+val_cda_find_downstream_chi_c2c_exerciser_endpoint(uint32_t root_bdf,
+                                                   uint32_t *endpoint_bdf_out)
+{
+  CXL_COMPONENT_TABLE *table;
+  uint32_t reg_value;
+  uint32_t secondary_bus;
+  uint32_t subordinate_bus;
+  uint32_t segment;
+
+  if (endpoint_bdf_out == NULL)
+    return ACS_STATUS_ERR;
+
+  *endpoint_bdf_out = ACS_INVALID_INDEX;
+
+  table = val_cxl_component_table_ptr();
+  if ((table == NULL) || (table->num_entries == 0u))
+    return ACS_STATUS_ERR;
+
+  if (val_pcie_read_cfg(root_bdf, TYPE1_PBN, &reg_value) != PCIE_SUCCESS)
+    return ACS_STATUS_ERR;
+
+  secondary_bus = (reg_value >> SECBN_SHIFT) & SECBN_MASK;
+  subordinate_bus = (reg_value >> SUBBN_SHIFT) & SUBBN_MASK;
+  segment = PCIE_EXTRACT_BDF_SEG(root_bdf);
+
+  if ((secondary_bus == 0u) && (subordinate_bus == 0u))
+    return ACS_STATUS_SKIP;
+
+  for (uint32_t idx = 0u; idx < table->num_entries; ++idx)
+  {
+    const CXL_COMPONENT_ENTRY *candidate = &table->component[idx];
+    uint32_t candidate_bdf = candidate->bdf;
+    uint32_t candidate_bus;
+
+    if (candidate->role != CXL_COMPONENT_ROLE_ENDPOINT)
+      continue;
+
+    if (candidate->chi_c2c_supported == 0u)
+      continue;
+
+    if (PCIE_EXTRACT_BDF_SEG(candidate_bdf) != segment)
+      continue;
+
+    candidate_bus = PCIE_EXTRACT_BDF_BUS(candidate_bdf);
+    if ((candidate_bus < secondary_bus) || (candidate_bus > subordinate_bus))
+      continue;
+
+    if (val_exerciser_init_by_bdf(candidate_bdf) == 0u)
+    {
+      *endpoint_bdf_out = candidate_bdf;
+      return ACS_STATUS_PASS;
+    }
+  }
+
+  return ACS_STATUS_SKIP;
+}
+
+/**
+  @brief  Set or clear RMECDA_CTL1.LINK_STR_LOCK and verify the readback.
+
+  @param  cfg_va           Root-accessible VA for the root port config space.
+  @param  rmecda_cap_base  RME-CDA DVSEC capability offset.
+  @param  ctl1_template    Existing RMECDA_CTL1 value; non-lock fields are preserved.
+  @param  lock             Nonzero to set LINK_STR_LOCK, zero to clear it.
+
+  @return ACS_STATUS_PASS if the requested state was programmed and verified.
+          ACS_STATUS_SKIP if the bit did not take the requested state.
+          ACS_STATUS_ERR  if Root access failed.
+**/
+uint32_t
+val_cda_set_link_stream_lock(uint64_t cfg_va,
+                             uint32_t rmecda_cap_base,
+                             uint32_t ctl1_template,
+                             uint32_t lock)
+{
+  uint32_t value;
+  uint32_t readback;
+
+  if (cfg_va == 0u)
+    return ACS_STATUS_ERR;
+
+  value = ctl1_template;
+  if (lock != 0u)
+    value |= RMECDA_CTL1_LINK_STR_LOCK_MASK;
+  else
+    value &= ~RMECDA_CTL1_LINK_STR_LOCK_MASK;
+
+  if (val_memory_write_el3(cfg_va + rmecda_cap_base + RMECDA_CTL1_OFFSET,
+                           value) != ACS_STATUS_PASS)
+    return ACS_STATUS_ERR;
+
+  if (val_memory_read_el3(cfg_va + rmecda_cap_base + RMECDA_CTL1_OFFSET,
+                          &readback) != ACS_STATUS_PASS)
+    return ACS_STATUS_ERR;
+
+  if (((readback & RMECDA_CTL1_LINK_STR_LOCK_MASK) != 0u) != (lock != 0u))
+    return ACS_STATUS_SKIP;
+
+  return ACS_STATUS_PASS;
+}
 
 /**
   @brief  Program the RMECDA_CTL3/CTL4 Requester ID range.

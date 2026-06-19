@@ -89,69 +89,6 @@ find_component_index_by_bdf(const CXL_COMPONENT_TABLE *table,
 }
 
 static uint32_t
-find_downstream_chi_c2c_exerciser_endpoint(uint32_t root_bdf,
-                                           uint32_t *endpoint_bdf_out)
-{
-  CXL_COMPONENT_TABLE *table;
-  uint32_t reg_value;
-  uint32_t secondary_bus;
-  uint32_t subordinate_bus;
-  uint32_t segment;
-
-  if (endpoint_bdf_out == NULL)
-    return ACS_STATUS_ERR;
-
-  *endpoint_bdf_out = ACS_INVALID_INDEX;
-
-  table = val_cxl_component_table_ptr();
-  if ((table == NULL) || (table->num_entries == 0u))
-    return ACS_STATUS_ERR;
-
-  if (val_pcie_read_cfg(root_bdf, TYPE1_PBN, &reg_value) != PCIE_SUCCESS)
-    return ACS_STATUS_ERR;
-
-  secondary_bus = (reg_value >> SECBN_SHIFT) & SECBN_MASK;
-  subordinate_bus = (reg_value >> SUBBN_SHIFT) & SUBBN_MASK;
-  segment = PCIE_EXTRACT_BDF_SEG(root_bdf);
-
-  if ((secondary_bus == 0u) && (subordinate_bus == 0u))
-    return ACS_STATUS_SKIP;
-
-  /*
-   * Limit the search to the Root Port's downstream bus range so we only pick
-   * an endpoint that is actually attached to the candidate Root Port.  The
-   * CHI-C2C filter keeps this CDA rule aligned with the current spec scope.
-   */
-  for (uint32_t idx = 0u; idx < table->num_entries; ++idx)
-  {
-    const CXL_COMPONENT_ENTRY *candidate = &table->component[idx];
-    uint32_t candidate_bdf = candidate->bdf;
-    uint32_t candidate_bus;
-
-    if (candidate->role != CXL_COMPONENT_ROLE_ENDPOINT)
-      continue;
-
-    if (candidate->chi_c2c_supported == 0u)
-      continue;
-
-    if (PCIE_EXTRACT_BDF_SEG(candidate_bdf) != segment)
-      continue;
-
-    candidate_bus = PCIE_EXTRACT_BDF_BUS(candidate_bdf);
-    if ((candidate_bus < secondary_bus) || (candidate_bus > subordinate_bus))
-      continue;
-
-    if (val_exerciser_init_by_bdf(candidate_bdf) == 0u)
-    {
-      *endpoint_bdf_out = candidate_bdf;
-      return ACS_STATUS_PASS;
-    }
-  }
-
-  return ACS_STATUS_SKIP;
-}
-
-static uint32_t
 restore_context_state(const TEST_CONTEXT *context)
 {
   uint32_t restore_status;
@@ -266,7 +203,8 @@ prepare_context(TEST_CONTEXT *context)
       continue;
     }
 
-    status = find_downstream_chi_c2c_exerciser_endpoint(root_port->bdf, &endpoint_bdf);
+    status = val_cda_find_downstream_chi_c2c_exerciser_endpoint(root_port->bdf,
+                                                                &endpoint_bdf);
     if (status != ACS_STATUS_PASS)
     {
       val_print(ACS_PRINT_DEBUG,
