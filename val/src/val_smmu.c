@@ -20,6 +20,19 @@
 
 #include "include/val_smmu.h"
 #include "include/val_iovirt.h"
+#include "include/val_el32.h"
+#include "include/val_memory.h"
+
+/*
+ * The VAL SMMU base passed to these helpers is the start of the SMMU register
+ * frame. Root Page 0 registers are addressed directly from that base.
+ */
+#define SMMU_R_PAGE_0_OFFSET       0u
+#define SMMU_R_CR0_OFFSET          (SMMU_R_PAGE_0_OFFSET + 0x020u)
+#define SMMU_R_CR0ACK_OFFSET       (SMMU_R_PAGE_0_OFFSET + 0x024u)
+#define SMMU_R_DPT_BASE_CFG_OFFSET (SMMU_R_PAGE_0_OFFSET + 0x208u)
+#define SMMU_R_DPT_WALK_EN_MASK    (1u << 10)
+#define SMMU_DPT_CFG_SYNC_RETRIES  10000u
 
 /**
   @brief  This API reads 32-bit data from a register of an SMMU controller
@@ -40,6 +53,176 @@ val_smmu_read_cfg(uint32_t offset, uint32_t index)
       return 0;
 
   return val_mmio_read(ctrl_base + offset);
+}
+
+/**
+  @brief  Read SMMU_R_DPT_BASE_CFG using EL3 access.
+  @param  smmu_base  SMMU controller base address
+  @param  cfg        On return, DPT base config value
+  @return ACS_STATUS_PASS/ERR
+**/
+uint32_t
+val_smmu_read_dpt_base_cfg(uint64_t smmu_base, uint32_t *cfg)
+{
+  if ((smmu_base == 0u) || (cfg == NULL))
+    return ACS_STATUS_ERR;
+
+  return val_memory_read_el3(smmu_base + SMMU_R_DPT_BASE_CFG_OFFSET, cfg);
+}
+
+/**
+  @brief  Write SMMU_R_CR0 and wait until SMMU_R_CR0ACK reflects the value.
+  @param  smmu_base  SMMU controller base address
+  @param  value      Value to write to SMMU_R_CR0
+  @return ACS_STATUS_PASS/ERR
+**/
+uint32_t
+val_smmu_write_root_cr0_sync(uint64_t smmu_base, uint32_t value)
+{
+  uint32_t ack;
+
+  if (smmu_base == 0u)
+    return ACS_STATUS_ERR;
+
+  if (val_memory_write_el3(smmu_base + SMMU_R_CR0_OFFSET, value) != ACS_STATUS_PASS)
+    return ACS_STATUS_ERR;
+
+  for (uint32_t retry = 0u; retry < SMMU_DPT_CFG_SYNC_RETRIES; ++retry)
+  {
+    if (val_memory_read_el3(smmu_base + SMMU_R_CR0ACK_OFFSET, &ack) != ACS_STATUS_PASS)
+      return ACS_STATUS_ERR;
+
+    if (ack == value)
+      return ACS_STATUS_PASS;
+  }
+
+  val_print(ACS_PRINT_ERR, " SMMU_R_CR0ACK sync timed out", 0);
+  return ACS_STATUS_ERR;
+}
+
+/**
+  @brief  Write SMMU_R_DPT_BASE_CFG while preserving DPT walk enable state.
+  @param  smmu_base  SMMU controller base address
+  @param  cfg        DPT base config value to program
+  @return ACS_STATUS_PASS/ERR
+**/
+uint32_t
+val_smmu_write_dpt_base_cfg(uint64_t smmu_base, uint32_t cfg)
+{
+  uint32_t cr0;
+  uint32_t readback;
+
+  if (smmu_base == 0u)
+    return ACS_STATUS_ERR;
+
+  if (val_memory_read_el3(smmu_base + SMMU_R_CR0_OFFSET, &cr0) != ACS_STATUS_PASS)
+    return ACS_STATUS_ERR;
+
+  if ((cr0 & SMMU_R_DPT_WALK_EN_MASK) != 0u)
+  {
+    if (val_smmu_write_root_cr0_sync(smmu_base, cr0 & ~SMMU_R_DPT_WALK_EN_MASK)
+        != ACS_STATUS_PASS)
+    {
+      return ACS_STATUS_ERR;
+    }
+  }
+
+  if (val_memory_write_el3(smmu_base + SMMU_R_DPT_BASE_CFG_OFFSET, cfg)
+      != ACS_STATUS_PASS)
+    return ACS_STATUS_ERR;
+
+  if (val_memory_read_el3(smmu_base + SMMU_R_DPT_BASE_CFG_OFFSET, &readback)
+      != ACS_STATUS_PASS)
+    return ACS_STATUS_ERR;
+
+  if (readback != cfg)
+  {
+    val_print(ACS_PRINT_ERR, " SMMU_R_DPT_BASE_CFG readback 0x%x",
+              (uint64_t)readback);
+    return ACS_STATUS_ERR;
+  }
+
+  if ((cr0 & SMMU_R_DPT_WALK_EN_MASK) != 0u)
+  {
+    if (val_smmu_write_root_cr0_sync(smmu_base, cr0) != ACS_STATUS_PASS)
+      return ACS_STATUS_ERR;
+  }
+
+  return ACS_STATUS_PASS;
+}
+
+/**
+  @brief  Convert an SMMU DPTPS encoding to the corresponding PA width.
+  @param  encoding  DPTPS field encoding
+  @return PA width in bits, or zero for an unsupported encoding
+**/
+uint32_t
+val_smmu_dptps_bits_from_encoding(uint32_t encoding)
+{
+  switch (encoding & SMMU_DPT_BASE_CFG_DPTPS_MASK)
+  {
+  case 0u: return 32u;
+  case 1u: return 36u;
+  case 2u: return 40u;
+  case 3u: return 42u;
+  case 4u: return 44u;
+  case 5u: return 48u;
+  case 6u: return 52u;
+  default: return 0u;
+  }
+}
+
+/**
+  @brief  Select DPTPS and L0DPTSZ encodings that cover the input address.
+  @param  address            Physical address that must be covered by DPT walks
+  @param  dptps_encoding    On return, selected DPTPS encoding
+  @param  l0dptsz_encoding  On return, selected L0DPTSZ encoding
+  @return ACS_STATUS_PASS/SKIP/ERR
+**/
+uint32_t
+val_smmu_select_dptps_encoding(uint64_t address,
+                               uint32_t *dptps_encoding,
+                               uint32_t *l0dptsz_encoding)
+{
+  if ((dptps_encoding == NULL) || (l0dptsz_encoding == NULL))
+    return ACS_STATUS_ERR;
+
+  if (address < (1ull << 32))
+  {
+    *dptps_encoding = 0u;
+    *l0dptsz_encoding = 0u;
+  }
+  else if (address < (1ull << 36))
+  {
+    *dptps_encoding = 1u;
+    *l0dptsz_encoding = 4u;
+  }
+  else if (address < (1ull << 40))
+  {
+    *dptps_encoding = 2u;
+    *l0dptsz_encoding = 6u;
+  }
+  else if (address < (1ull << 42))
+  {
+    *dptps_encoding = 3u;
+    *l0dptsz_encoding = 6u;
+  }
+  else if (address < (1ull << 44))
+  {
+    *dptps_encoding = 4u;
+    *l0dptsz_encoding = 6u;
+  }
+  else if (address < (1ull << 48))
+  {
+    *dptps_encoding = 5u;
+    *l0dptsz_encoding = 9u;
+  }
+  else
+  {
+    return ACS_STATUS_SKIP;
+  }
+
+  return ACS_STATUS_PASS;
 }
 
 /**

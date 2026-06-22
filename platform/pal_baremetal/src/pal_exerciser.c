@@ -168,21 +168,20 @@ uint32_t pal_exerciser_set_param(EXERCISER_PARAM_TYPE Type, uint64_t Value1, uin
                 return 0;
             case TXN_ADDR_TYPE:
                 /* Change Address Type for DMA Transaction.*/
+                Data = pal_mmio_read(Base + DMACTL1) & ~(0x3u << 10);
                 switch (Value2)
                 {
                     case AT_UNTRANSLATED:
-                        Data = 0x1;
-                        pal_mmio_write(Base + DMACTL1, pal_mmio_read(Base + DMACTL1) | (Data << 10));
+                        Data |= (0x1u << 10);
                         break;
                     case AT_TRANSLATED:
-                        Data = 0x2;
-                        pal_mmio_write(Base + DMACTL1, pal_mmio_read(Base + DMACTL1) | (Data << 10));
+                        Data |= (0x2u << 10);
                         break;
                     case AT_RESERVED:
-                        Data = 0x3;
-                        pal_mmio_write(Base + DMACTL1, pal_mmio_read(Base + DMACTL1) | (Data << 10));
+                        Data |= (0x3u << 10);
                         break;
                 }
+                pal_mmio_write(Base + DMACTL1, Data);
                 return 0;
             default:
                 return 1;
@@ -361,7 +360,7 @@ uint32_t pal_exerciser_get_param(EXERCISER_PARAM_TYPE Type, uint64_t *Value1, ui
           *Value1 = pal_mmio_read(Base + MSICTL);
           return pal_mmio_read(Base + MSICTL) | MASK_BIT;
       case ATS_RES_ATTRIBUTES:
-          *Value1 = pal_mmio_read(Base + ATS_ADDR);
+          *Value1 = pal_mmio_read64(Base + ATS_ADDR);
           return 0;
       case EXERCISER_CXL_CMD_DATA0:
           *Value1 = (uint64_t)pal_mmio_read(Base + CXL_CMD_DATA0_LO);

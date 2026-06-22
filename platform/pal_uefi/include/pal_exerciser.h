@@ -293,6 +293,7 @@ typedef enum {
 } EXERCISER_ERROR_CODE;
 
 UINT32 pal_mmio_read(UINT64 addr);
+UINT64 pal_mmio_read64(UINT64 addr);
 VOID pal_mmio_write(UINT64 addr, UINT32 data);
 VOID pal_mmio_write64(UINT64 addr, UINT64 data);
 UINT64 pal_pcie_get_mcfg_ecam();

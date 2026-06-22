@@ -1201,6 +1201,29 @@ Testcase checklist
 
   * -
 
+      `cda_rqrmsc_dcm_ats_dependency <../test_pool/cda/cda_rqrmsc_dcm_ats_dependency.c>`_
+
+    -
+
+      RQRMSC: If PAS_CHECK==FALSE, internal access to DCM is subject to host-side GPC and the device is not permitted to access DCM without first using ATS for host-side address translation and GPC. If PAS_CHECK==TRUE, internal access to DCM is subject to the device-side PAS protection check and direct DCM access without ATS is permitted by the rule.
+
+    -
+
+      1. Select a CHI-C2C-capable CXL root port that exposes the RME-CDA DVSEC and locate a downstream CHI-C2C exerciser endpoint. Skip the test if no such endpoint is available.
+      2. Program the host and endpoint CXL.mem decoders, program the RMECDA RID range for the endpoint Requester ID, enable RMECDA_CTL1.TDISP_EN, and set RMECDA_CTL1.LINK_STR_LOCK.
+      3. Select and log a DCM PA from the programmed CXL.mem window to confirm that the endpoint is exercised in the CDA/CHI-C2C topology.
+      4. Query the endpoint PAS_CHECK property through TDISP GET_DEV_PROP. If PAS_CHECK==TRUE, skip the ATS dependency checks because the rule permits device-side PAS checks for direct DCM access.
+      5. For PAS_CHECK==FALSE, verify ATS capability is present and enable ATS for the endpoint.
+      6. Allocate separate ACS-owned source and destination DMA pages. Mark both pages Non-secure in GPT, map both through the Realm SMMU stage-2 context, and install read/write DPT entries for both translated PAs.
+      7. Positive check: prepare different source and destination patterns, issue AT=Translated DMA TO_DEVICE from the source page and AT=Translated DMA FROM_DEVICE to the destination page, and verify that the source and destination pages compare equal.
+      8. Negative check: seed the device with a non-source pattern through permitted DMA, deny the translated source page in DPT, invalidate DPT, and retry the translated source load.
+      9. Verify that the denied source load is rejected or that a following device-to-host DMA does not make the destination page match the source page. If the direct AT=Translated exerciser stimulus ignores the DPT deny, record the FVP stimulus limitation after the positive translated path has completed.
+      10. Restore ATS, RMECDA, HDM decoder, GPT, SMMU, and DPT state and free the DMA pages.
+
+      Note: This CDA scenario is applicable only to CHI-C2C-capable devices. The executable DMA check uses ACS-owned source and destination pages so the test does not depend on implementation-defined exerciser-internal DMA buffer placement.
+
+  * -
+
       `cxl_rgtvgz_tdisp_enable_link_gate <../test_pool/cxl/cxl_rgtvgz_tdisp_enable_link_gate.c>`_
 
     -

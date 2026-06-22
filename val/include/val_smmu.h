@@ -32,8 +32,30 @@
 #define SMMUv3_IIDR   0x18
 #define SMMUv3_AIDR   0x1C
 
+#define SMMU_DPT_BASE_CFG_DPTPS_SHIFT   0u
+#define SMMU_DPT_BASE_CFG_DPTPS_MASK    0x7u
+#define SMMU_DPT_BASE_CFG_L0DPTSZ_SHIFT 20u
+#define SMMU_DPT_BASE_CFG_L0DPTSZ_MASK  0xFu
+
 uint32_t
 val_smmu_read_cfg(uint32_t offset, uint32_t index);
+
+uint32_t
+val_smmu_read_dpt_base_cfg(uint64_t smmu_base, uint32_t *cfg);
+
+uint32_t
+val_smmu_write_root_cr0_sync(uint64_t smmu_base, uint32_t value);
+
+uint32_t
+val_smmu_write_dpt_base_cfg(uint64_t smmu_base, uint32_t cfg);
+
+uint32_t
+val_smmu_dptps_bits_from_encoding(uint32_t encoding);
+
+uint32_t
+val_smmu_select_dptps_encoding(uint64_t address,
+                               uint32_t *dptps_encoding,
+                               uint32_t *l0dptsz_encoding);
 
 uint32_t
 val_smmu_enable(uint32_t smmu_index);

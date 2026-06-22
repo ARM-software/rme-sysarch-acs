@@ -203,6 +203,9 @@ uint32_t val_pcie_find_vendor_dvsec(uint32_t bdf,
                                     uint32_t *cid_offset);
 void val_pcie_disable_bme(uint32_t bdf);
 void val_pcie_enable_bme(uint32_t bdf);
+uint32_t val_pcie_enable_ats(uint32_t bdf,
+                             uint32_t *ats_cap_base,
+                             uint32_t *ats_ctrl_orig);
 void val_pcie_disable_msa(uint32_t bdf);
 void val_pcie_enable_msa(uint32_t bdf);
 uint32_t val_pcie_is_msa_enabled(uint32_t bdf);

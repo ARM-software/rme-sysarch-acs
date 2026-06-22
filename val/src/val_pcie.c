@@ -1299,6 +1299,50 @@ val_pcie_enable_bme(uint32_t bdf)
 }
 
 /**
+  @brief  Enable Address Translation Cache in the ATS extended capability.
+  @param  bdf            Segment/Bus/Dev/Func in PCIE_CREATE_BDF format
+  @param  ats_cap_base   Optional output for ATS capability offset
+  @param  ats_ctrl_orig  Optional output for the original ATS control value
+  @return ACS_STATUS_PASS if enabled, ACS_STATUS_SKIP if ATS is absent,
+          else error/failure
+**/
+uint32_t
+val_pcie_enable_ats(uint32_t bdf,
+                    uint32_t *ats_cap_base,
+                    uint32_t *ats_ctrl_orig)
+{
+  uint32_t cap_base;
+  uint32_t ctrl;
+  uint32_t status;
+
+  status = val_pcie_find_capability(bdf, PCIE_ECAP, ECID_ATS, &cap_base);
+  if (status == PCIE_CAP_NOT_FOUND)
+    return ACS_STATUS_SKIP;
+
+  if (status != PCIE_SUCCESS)
+    return ACS_STATUS_ERR;
+
+  if (val_pcie_read_cfg(bdf, cap_base + ATS_CTRL, &ctrl) != PCIE_SUCCESS)
+    return ACS_STATUS_ERR;
+
+  if (ats_cap_base != NULL)
+    *ats_cap_base = cap_base;
+
+  if (ats_ctrl_orig != NULL)
+    *ats_ctrl_orig = ctrl;
+
+  val_pcie_write_cfg(bdf, cap_base + ATS_CTRL, ctrl | ATS_CACHING_EN);
+
+  if (val_pcie_read_cfg(bdf, cap_base + ATS_CTRL, &ctrl) != PCIE_SUCCESS)
+    return ACS_STATUS_ERR;
+
+  if ((ctrl & ATS_CACHING_EN) == 0u)
+    return ACS_STATUS_FAIL;
+
+  return ACS_STATUS_PASS;
+}
+
+/**
   @brief  Disables BAR memory space access by clearring memory space enable bit
           in the command register. When MSE bit is clear, all received memory
           space accesses are caused to be handled as Unsupported Requests.

@@ -24,6 +24,7 @@ uint32_t cda_rdmspt_rid_range_check_entry(uint32_t num_pe);
 uint32_t cda_rkrcwk_host_side_gpc_entry(uint32_t num_pe);
 uint32_t cda_rfzbmw_external_dcm_ide_gate_entry(uint32_t num_pe);
 uint32_t cda_rwwbpm_internal_dcm_run_gate_entry(uint32_t num_pe);
+uint32_t cda_rqrmsc_dcm_ats_dependency_entry(uint32_t num_pe);
 
 uint32_t val_cda_find_downstream_chi_c2c_exerciser_endpoint(uint32_t root_bdf,
                                                             uint32_t *endpoint_bdf_out);

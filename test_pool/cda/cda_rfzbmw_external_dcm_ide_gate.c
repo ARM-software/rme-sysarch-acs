@@ -87,17 +87,6 @@ init_context(TEST_CONTEXT *context)
   context->endpoint_index = CXL_COMPONENT_INVALID_INDEX;
 }
 
-static void
-clear_el3_access_state(void)
-{
-  shared_data->exception_expected = CLEAR;
-  shared_data->exception_generated = CLEAR;
-  shared_data->access_mut = CLEAR;
-  shared_data->pas_filter_flag = CLEAR;
-  shared_data->arg1 = 0u;
-  shared_data->num_access = 0u;
-}
-
 static uint32_t
 find_component_index_by_bdf(const CXL_COMPONENT_TABLE *table,
                             uint32_t bdf,
@@ -124,27 +113,27 @@ read_from_root(uint64_t address, uint32_t *value)
   if (value == NULL)
     return ACS_STATUS_ERR;
 
-  clear_el3_access_state();
+  val_memory_clear_el3_access_state();
   shared_data->num_access = 1;
   shared_data->shared_data_access[0].addr = address;
   shared_data->shared_data_access[0].access_type = READ_DATA;
 
   if (val_pe_access_mut_el3())
   {
-    clear_el3_access_state();
+    val_memory_clear_el3_access_state();
     val_print(ACS_PRINT_ERR, " RFZBMW: MUT read failed for 0x%llx", address);
     return ACS_STATUS_ERR;
   }
 
   *value = (uint32_t)shared_data->shared_data_access[0].data;
-  clear_el3_access_state();
+  val_memory_clear_el3_access_state();
   return ACS_STATUS_PASS;
 }
 
 static uint32_t
 write_from_root(uint64_t address, uint32_t value)
 {
-  clear_el3_access_state();
+  val_memory_clear_el3_access_state();
   shared_data->num_access = 1;
   shared_data->shared_data_access[0].addr = address;
   shared_data->shared_data_access[0].data = value;
@@ -152,12 +141,12 @@ write_from_root(uint64_t address, uint32_t value)
 
   if (val_pe_access_mut_el3())
   {
-    clear_el3_access_state();
+    val_memory_clear_el3_access_state();
     val_print(ACS_PRINT_ERR, " RFZBMW: MUT write failed for 0x%llx", address);
     return ACS_STATUS_ERR;
   }
 
-  clear_el3_access_state();
+  val_memory_clear_el3_access_state();
   return ACS_STATUS_PASS;
 }
 
@@ -631,7 +620,7 @@ access_realm_dcm_allowed(uint32_t endpoint_bdf,
   if (pattern == (uint32_t)baseline)
     pattern ^= 0x1u;
 
-  clear_el3_access_state();
+  val_memory_clear_el3_access_state();
   shared_data->num_access = 2;
   shared_data->shared_data_access[0].addr = (uint64_t)mapped;
   shared_data->shared_data_access[0].data = (uint64_t)pattern;
@@ -641,7 +630,7 @@ access_realm_dcm_allowed(uint32_t endpoint_bdf,
   shared_data->shared_data_access[1].access_type = READ_DATA;
 
   access_status = val_pe_access_mut_el3();
-  clear_el3_access_state();
+  val_memory_clear_el3_access_state();
 
   if (read_device_media(endpoint_bdf, phys, &observed) != ACS_STATUS_PASS)
     return ACS_STATUS_ERR;
@@ -676,13 +665,13 @@ access_realm_dcm_rejected(uint32_t root_bdf,
    * write path reports this model's reject as a non-GPF exception, so use the
    * same terminal fault-stimulus pattern as the host-side GPC CDA test.
    */
-  clear_el3_access_state();
+  val_memory_clear_el3_access_state();
   shared_data->access_mut = SET;
   shared_data->arg1 = (uint64_t)mapped;
   shared_data->exception_expected = SET;
 
   access_status = val_pe_access_mut_el3();
-  clear_el3_access_state();
+  val_memory_clear_el3_access_state();
 
   if (access_status != 0u)
     return ACS_STATUS_FAIL;
@@ -942,7 +931,7 @@ exercise_rule(TEST_CONTEXT *context)
   val_print(ACS_PRINT_INFO, " RFZBMW: Realm DCM page 0x%llx", test_base);
 
   realm_alias = NULL;
-  clear_el3_access_state();
+  val_memory_clear_el3_access_state();
   if (map_window_alias(test_base, REALM_PAS, &realm_alias) != ACS_STATUS_PASS)
     return ACS_STATUS_ERR;
 
@@ -1152,7 +1141,7 @@ exercise_rule(TEST_CONTEXT *context)
     val_print(ACS_PRINT_INFO, " RFZBMW: external Realm DCM access blocked without IDE", 0);
 
 cleanup:
-  clear_el3_access_state();
+  val_memory_clear_el3_access_state();
 
   if ((negative_stimulus_done == 0u) && (context->rmecda_ctl1_valid != 0u))
   {

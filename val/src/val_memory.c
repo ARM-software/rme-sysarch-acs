@@ -280,7 +280,7 @@ uint32_t val_enable_mmu(void)
 }
 #endif  // TARGET_BM_BOOT
 
-static void
+void
 val_memory_clear_el3_access_state(void)
 {
   shared_data->exception_expected = CLEAR;

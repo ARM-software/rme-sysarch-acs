@@ -41,6 +41,7 @@ void *val_memory_alloc_pages(uint32_t num_pages);
 void val_memory_free_pages(void *page_base, uint32_t num_pages);
 void *val_aligned_alloc(uint32_t alignment, uint32_t size);
 void val_memory_free_aligned(void *addr);
+void val_memory_clear_el3_access_state(void);
 uint32_t val_memory_read_el3(uint64_t address, uint32_t *value);
 uint32_t val_memory_write_el3(uint64_t address, uint32_t value);
 uint32_t val_memory_map_el3_data(uint64_t va, uint32_t size, uint32_t pas);
