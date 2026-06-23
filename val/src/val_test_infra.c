@@ -100,6 +100,10 @@ MODULE_TEST_DISPATCHER_s g_module_test_table[MODULE_SENTINEL] = {
         .entry_fn = cda_rwwbpm_internal_dcm_run_gate_entry,
         .test_text = "cda_rwwbpm_internal_dcm_run_gate",
       },
+      [CDA_ENTRY_CDA_RSHRMN_COHERENT_LINK_TOPOLOGY_ENTRY] = {
+        .entry_fn = cda_rshrmn_coherent_link_topology_entry,
+        .test_text = "cda_rshrmn_coherent_link_topology",
+      },
     },
   },
   [CXL_MODULE_ID] = {

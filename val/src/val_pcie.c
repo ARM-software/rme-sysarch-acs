@@ -2241,6 +2241,36 @@ val_pcie_get_downstream_function(uint32_t bdf, uint32_t *dsf_bdf)
 }
 
 /**
+  @brief  Check whether a candidate BDF is in a bridge/root-port downstream
+          bus window.
+
+  @param  root_bdf         Bridge/root-port BDF used for segment matching.
+  @param  secondary_bus    Secondary bus number of the downstream window.
+  @param  subordinate_bus  Subordinate bus number of the downstream window.
+  @param  candidate_bdf    BDF to test.
+
+  @return 1 if candidate_bdf is in the same segment and downstream bus range,
+          otherwise 0.
+**/
+uint32_t
+val_pcie_is_downstream_bdf(uint32_t root_bdf,
+                           uint32_t secondary_bus,
+                           uint32_t subordinate_bus,
+                           uint32_t candidate_bdf)
+{
+  uint32_t candidate_bus;
+
+  if (PCIE_EXTRACT_BDF_SEG(candidate_bdf) != PCIE_EXTRACT_BDF_SEG(root_bdf))
+    return 0u;
+
+  candidate_bus = PCIE_EXTRACT_BDF_BUS(candidate_bdf);
+  if ((candidate_bus < secondary_bus) || (candidate_bus > subordinate_bus))
+    return 0u;
+
+  return 1u;
+}
+
+/**
   @brief  Returns BDF of the upstream Root Port of a pcie device function.
 
   @param  bdf       - Function's Segment/Bus/Dev/Func in PCIE_CREATE_BDF format

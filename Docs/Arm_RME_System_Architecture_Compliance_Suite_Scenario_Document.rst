@@ -1153,6 +1153,26 @@ Testcase checklist
 
   * -
 
+      `cda_rshrmn_coherent_link_topology <../test_pool/cda/cda_rshrmn_coherent_link_topology.c>`_
+
+    -
+
+      RSHRMN: For each coherent link, at most a single coherent device is permitted to be attached to a host node over that link. A coherent device is permitted to include multiple requesters and multiple home agents.
+
+    -
+
+      1. Skip the test if the platform does not advertise coherent DA support.
+      2. Enumerate the CXL component table and select root ports that are marked CHI-C2C capable and expose the RME-CDA DVSEC.
+      3. For each selected root port, read the Type-1 secondary/subordinate bus range and find downstream CHI-C2C endpoint components.
+      4. Group downstream endpoints by segment, bus, and device number, ignoring function number because multiple requesters can be represented as multiple functions within one coherent device.
+      5. Pass the link when exactly one coherent device group is present.
+      6. Fail the link when more than one coherent device group is present under the same coherent root port.
+      7. Skip the link when no downstream CHI-C2C coherent endpoint is present.
+
+      Note: This topology-only CDA scenario does not perform the optional SPDM/TDISP attestation smoke check and does not require CHI trace visibility.
+
+  * -
+
       `cda_rydsyl_d2h_sec_sid_rid <../test_pool/cda/cda_rydsyl_d2h_sec_sid_rid.c>`_
 
     -

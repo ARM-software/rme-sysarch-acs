@@ -18,16 +18,23 @@
 #ifndef __RME_ACS_CDA_H__
 #define __RME_ACS_CDA_H__
 
+#include "val_cxl.h"
+
 uint32_t cda_rjzqcp_reset_transition_entry(uint32_t num_pe);
 uint32_t cda_rydsyl_d2h_sec_sid_rid_entry(uint32_t num_pe);
 uint32_t cda_rdmspt_rid_range_check_entry(uint32_t num_pe);
 uint32_t cda_rkrcwk_host_side_gpc_entry(uint32_t num_pe);
+uint32_t cda_rshrmn_coherent_link_topology_entry(uint32_t num_pe);
 uint32_t cda_rfzbmw_external_dcm_ide_gate_entry(uint32_t num_pe);
 uint32_t cda_rwwbpm_internal_dcm_run_gate_entry(uint32_t num_pe);
 uint32_t cda_rqrmsc_dcm_ats_dependency_entry(uint32_t num_pe);
 
 uint32_t val_cda_find_downstream_chi_c2c_exerciser_endpoint(uint32_t root_bdf,
                                                             uint32_t *endpoint_bdf_out);
+uint32_t val_cda_is_downstream_chi_c2c_endpoint(const CXL_COMPONENT_ENTRY *entry,
+                                                uint32_t root_bdf,
+                                                uint32_t secondary_bus,
+                                                uint32_t subordinate_bus);
 uint32_t val_cda_set_link_stream_lock(uint64_t cfg_va,
                                       uint32_t rmecda_cap_base,
                                       uint32_t ctl1_template,

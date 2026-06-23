@@ -105,6 +105,39 @@ val_cda_find_downstream_chi_c2c_exerciser_endpoint(uint32_t root_bdf,
 }
 
 /**
+  @brief  Check whether a CXL component is a CHI-C2C endpoint downstream of a
+          root port bus window.
+
+  @param  entry            CXL component entry to test.
+  @param  root_bdf         Root port BDF used for segment matching.
+  @param  secondary_bus    Root port secondary bus number.
+  @param  subordinate_bus  Root port subordinate bus number.
+
+  @return 1 if entry is a CHI-C2C endpoint in the downstream window,
+          otherwise 0.
+**/
+uint32_t
+val_cda_is_downstream_chi_c2c_endpoint(const CXL_COMPONENT_ENTRY *entry,
+                                       uint32_t root_bdf,
+                                       uint32_t secondary_bus,
+                                       uint32_t subordinate_bus)
+{
+  if (entry == NULL)
+    return 0u;
+
+  if (entry->role != CXL_COMPONENT_ROLE_ENDPOINT)
+    return 0u;
+
+  if (entry->chi_c2c_supported == 0u)
+    return 0u;
+
+  return val_pcie_is_downstream_bdf(root_bdf,
+                                    secondary_bus,
+                                    subordinate_bus,
+                                    entry->bdf);
+}
+
+/**
   @brief  Set or clear RMECDA_CTL1.LINK_STR_LOCK and verify the readback.
 
   @param  cfg_va           Root-accessible VA for the root port config space.
