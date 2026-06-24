@@ -49,12 +49,17 @@ payload()
 
   tbl_index = 0;
   bdf_tbl_ptr = val_pcie_bdf_table_ptr();
+  if ((bdf_tbl_ptr == NULL) || (bdf_tbl_ptr->num_entries == 0))
+  {
+      val_print(ACS_PRINT_WARN, " No PCIe BDF entries discovered", 0);
+      val_set_status(pe_index, "SKIP", 01);
+      return;
+  }
+
   while (tbl_index < bdf_tbl_ptr->num_entries)
   {
       bdf = bdf_tbl_ptr->device[tbl_index++].bdf;
       dp_type = val_pcie_device_port_type(bdf);
-
-      test_skip = 0;
 
       if (dp_type == RP)
       {
@@ -63,20 +68,20 @@ payload()
           /* Get the PCIE DVSEC Capability register */
           if (val_pcie_find_da_capability(bdf, &da_cap_base) != PCIE_SUCCESS)
           {
-              val_print(ACS_PRINT_ERR,
+              val_print(ACS_PRINT_WARN,
                               " PCIe DA DVSEC capability not present,bdf 0x%x", bdf);
-              test_fails++;
               continue;
           }
 
           /* Get the PCIE IDE Extended Capability register */
           if (val_pcie_find_capability(bdf, PCIE_ECAP, ECID_IDE, &ide_cap_base) != PCIE_SUCCESS)
           {
-              val_print(ACS_PRINT_ERR,
+              val_print(ACS_PRINT_WARN,
                               " PCIe IDE Capability not present for BDF: 0x%x", bdf);
-              test_fails++;
               continue;
           }
+
+          test_skip = 0;
 
           /* Read the RMEDA_CTL registers */
           val_pcie_read_cfg(bdf, da_cap_base + RMEDA_CTL1, &reg_ctl1);

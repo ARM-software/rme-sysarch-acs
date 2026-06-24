@@ -50,6 +50,11 @@ void payload(void)
 
   mem_region_pas_filter_cfg = val_mem_pas_info_table();
   num_regn = mem_region_pas_filter_cfg->header.num_of_regn_pas_filter;
+  if (num_regn == 0) {
+    val_print(ACS_PRINT_WARN, " No PAS filter regions provided by the platform", 0);
+    val_set_status(index, "SKIP", 01);
+    return;
+  }
   shared_data->shared_data_access[0].data = INIT_DATA;
   size = val_get_min_tg();
   VA = val_get_free_va(num_regn * NUM_PAS * size);

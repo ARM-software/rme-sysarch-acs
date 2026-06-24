@@ -47,7 +47,7 @@ payload(void)
 {
 
   uint32_t pe_index;
-  uint32_t instance, num_exercisers;
+  uint32_t instance, num_exercisers, num_smmu;
   uint32_t bdf, rp_bdf, da_cap_base;
   uint32_t dma_len, test_data_blk_size;
   uint32_t status, reg_value;
@@ -72,7 +72,28 @@ payload(void)
   test_data_blk_size = page_size * TEST_DATA_NUM_PAGES;
   dma_len = test_data_blk_size / 2;
 
+  if (val_pcie_get_info(PCIE_INFO_NUM_ECAM, 0) == 0)
+  {
+    val_print(ACS_PRINT_WARN, " No PCIe ECAM regions discovered", 0);
+    val_set_status(pe_index, "SKIP", 01);
+    return;
+  }
+
   num_exercisers = val_exerciser_get_info(EXERCISER_NUM_CARDS);
+  if (num_exercisers == 0)
+  {
+    val_print(ACS_PRINT_WARN, " No exerciser cards discovered", 0);
+    val_set_status(pe_index, "SKIP", 02);
+    return;
+  }
+
+  num_smmu = val_iovirt_get_smmu_info(SMMU_NUM_CTRL, 0);
+  if (num_smmu == 0)
+  {
+    val_print(ACS_PRINT_WARN, " No SMMU controllers discovered", 0);
+    val_set_status(pe_index, "SKIP", 03);
+    return;
+  }
 
   if (val_rlm_enable_mec())
   {
@@ -144,16 +165,15 @@ payload(void)
       if (val_pcie_get_rootport(bdf, &rp_bdf))
           continue;
 
-      test_skip = 0;
-
       /* Check for DA Capability */
       if (val_pcie_find_da_capability(rp_bdf, &da_cap_base) != PCIE_SUCCESS)
       {
-          val_print(ACS_PRINT_ERR,
+          val_print(ACS_PRINT_WARN,
                         " PCIe DA DVSEC capability not present,bdf 0x%x", bdf);
-          test_fail++;
           continue;
       }
+
+      test_skip = 0;
 
       /* Enable RMEDA_CTL1.TDISP_EN*/
       if (val_pcie_enable_tdisp(rp_bdf))

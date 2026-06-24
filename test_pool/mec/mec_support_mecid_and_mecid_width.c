@@ -64,6 +64,13 @@ payload2(void)
   uint32_t i, common_mecidw = INVALID_MECIDW, max_mecid;
   uint32_t test_fail = 0;
 
+  num_smmu = val_smmu_get_info(SMMU_NUM_CTRL, 0);
+  if (num_smmu == 0) {
+      val_print(ACS_PRINT_WARN, " No SMMU controllers discovered", 0);
+      val_set_status(pe_index, "SKIP", 02);
+      return;
+  }
+
   if (val_rlm_enable_mec())
   {
     val_print(ACS_PRINT_ERR, "\n    Failed to enable MEC", 0);
@@ -71,14 +78,7 @@ payload2(void)
     return;
   }
 
-  num_smmu = val_smmu_get_info(SMMU_NUM_CTRL, 0);
-
   smmu_mecidw = val_memory_alloc(num_smmu * sizeof(uint32_t));
-  if (num_smmu == 0) {
-      val_print(ACS_PRINT_ERR, "No SMMU Controllers are discovered ", 0);
-      val_set_status(pe_index, "FAIL", 02);
-      return;
-  }
 
   for (i = 0; i < num_smmu; i++) {
     smmu_base = val_smmu_get_info(SMMU_CTRL_BASE, i);

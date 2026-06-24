@@ -23,6 +23,7 @@
 #include "include/val_mem_interface.h"
 #include "include/val_interface.h"
 #include "include/val_pe.h"
+#include "include/val_memory.h"
 
 /**
   @brief   This API will execute all RME MEC tests designated for a given compliance level
@@ -35,9 +36,11 @@
 uint32_t
 val_rme_mec_execute_tests(uint32_t num_pe)
 {
-  uint32_t status = ACS_STATUS_SKIP, reset_status, smmu_cnt;
+  uint32_t status = ACS_STATUS_SKIP, reset_status, smmu_cnt, page_size;
   uint64_t num_smmus = val_smmu_get_info(SMMU_NUM_CTRL, 0);
-  uint64_t smmu_base_arr[num_smmus], pgt_attr_el3;
+  uint64_t smmu_base_arr_size, smmu_base_arr_pages;
+  uint64_t *smmu_base_arr = NULL;
+  uint64_t pgt_attr_el3;
 
   if (!val_is_mec_supported())
   {
@@ -46,8 +49,33 @@ val_rme_mec_execute_tests(uint32_t num_pe)
       return ACS_STATUS_SKIP;
   }
 
+  if (num_smmus == 0)
+  {
+      val_print(ACS_PRINT_WARN, " No SMMU Controller Found, Skipping RME-MEC tests...", 0);
+      return ACS_STATUS_SKIP;
+  }
+
   if (!g_rl_smmu_init)
   {
+      page_size = val_memory_page_size();
+      if (page_size == 0)
+      {
+        val_print(ACS_PRINT_ERR, " Invalid page size for smmu_base_arr allocation", 0);
+        return ACS_STATUS_ERR;
+      }
+
+      smmu_base_arr_size = num_smmus * sizeof(*smmu_base_arr);
+      smmu_base_arr_pages = smmu_base_arr_size / page_size;
+      if ((smmu_base_arr_size % page_size) != 0)
+        smmu_base_arr_pages++;
+
+      smmu_base_arr = val_memory_alloc_pages((uint32_t)smmu_base_arr_pages);
+      if (smmu_base_arr == NULL)
+      {
+        val_print(ACS_PRINT_ERR, " Failed to allocate smmu_base_arr", 0);
+        return ACS_STATUS_ERR;
+      }
+
       smmu_cnt = 0;
 
       while (smmu_cnt < num_smmus)
@@ -58,18 +86,23 @@ val_rme_mec_execute_tests(uint32_t num_pe)
       /* Map the Pointer in EL3 as NS Access PAS so that EL3 can access this struct pointers */
       pgt_attr_el3 = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(OUTER_SHAREABLE) |
                                  PGT_ENTRY_AP_RW | PAS_ATTR(NONSECURE_PAS));
-      if (val_add_mmu_entry_el3((uint64_t)(smmu_base_arr), (uint64_t)(smmu_base_arr), pgt_attr_el3))
+      if (val_add_mmu_entry_el3((uint64_t)(smmu_base_arr),
+                                (uint64_t)val_memory_virt_to_phys(smmu_base_arr),
+                                pgt_attr_el3))
       {
         val_print(ACS_PRINT_ERR, " MMU mapping failed for smmu_base_arr", 0);
+        val_memory_free_pages(smmu_base_arr, (uint32_t)smmu_base_arr_pages);
         return ACS_STATUS_ERR;
       }
       if (val_rlm_smmu_init(num_smmus, smmu_base_arr))
       {
         val_print(ACS_PRINT_ERR, " SMMU REALM INIT failed", 0);
+        val_memory_free_pages(smmu_base_arr, (uint32_t)smmu_base_arr_pages);
         return ACS_STATUS_ERR;
       }
 
       g_rl_smmu_init = 1;
+      val_memory_free_pages(smmu_base_arr, (uint32_t)smmu_base_arr_pages);
   }
 
   reset_status = val_read_reset_status();
