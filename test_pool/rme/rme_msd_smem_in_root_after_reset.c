@@ -41,6 +41,12 @@
 static
 void payload(void)
 {
+  uint8_t status_fail_cnt = 0;
+  uint32_t index = val_pe_get_index_mpid(val_pe_get_mpid()), security_state, attr;
+  uint64_t pas_list[4] = {ROOT_PAS, REALM_PAS, NONSECURE_PAS, SECURE_PAS};
+  uint64_t VA, PA, VA_Top, size, rd_data1, rd_data2;
+  uint64_t root_smem_avaialbile = val_get_root_smem_base();
+
   if (val_read_reset_status() == RESET_TST32_FLAG)
           goto reset_done;
 
@@ -49,14 +55,13 @@ void payload(void)
   val_save_global_test_data();
   val_system_reset();
 
+  val_print(ACS_PRINT_ERR, " System reset returned unexpectedly", 0);
+  val_set_status(index, "FAIL", 02);
+  return;
+
 reset_done:
   val_restore_global_test_data();
   val_print(ACS_PRINT_TEST, " After system reset", 0);
-  uint8_t status_fail_cnt = 0;
-  uint32_t index = val_pe_get_index_mpid(val_pe_get_mpid()), security_state, attr;
-  uint64_t pas_list[4] = {ROOT_PAS, REALM_PAS, NONSECURE_PAS, SECURE_PAS};
-  uint64_t VA, PA, VA_Top, size, rd_data1, rd_data2;
-  uint64_t root_smem_avaialbile = val_get_root_smem_base();
 
   shared_data->shared_data_access[0].data = INIT_DATA;
   size = val_get_min_tg();
@@ -66,7 +71,7 @@ reset_done:
   else {
     PA = val_get_free_pa(size, size);
     /* Map this PA as Root in the GPT */
-   val_add_gpt_entry_el3(PA, GPT_ROOT);
+    val_add_gpt_entry_el3(PA, GPT_ROOT);
   }
 
   VA = val_get_free_va(NUM_PAS * NUM_SMEM_REGN * size);

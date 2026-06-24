@@ -69,6 +69,12 @@ payload()
   uint32_t status;
 
   instance = val_exerciser_get_info(EXERCISER_NUM_CARDS);
+  if (instance == 0)
+  {
+    val_print(ACS_PRINT_WARN, " No exerciser cards discovered", 0);
+    val_set_status(pe_index, "SKIP", 01);
+    return;
+  }
 
   while (instance-- != 0) {
 

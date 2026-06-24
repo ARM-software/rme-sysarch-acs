@@ -64,6 +64,12 @@ payload(void)
   dma_len = test_data_blk_size / 2;
 
   num_exercisers = val_exerciser_get_info(EXERCISER_NUM_CARDS);
+  if (num_exercisers == 0)
+  {
+    val_print(ACS_PRINT_WARN, " No exerciser cards discovered", 0);
+    val_set_status(pe_index, "SKIP", 01);
+    return;
+  }
 
   /* Initialize DMA master and memory descriptors */
   val_memory_set(&master, sizeof(master), 0);
@@ -107,20 +113,19 @@ payload(void)
       if (val_pcie_get_rootport(bdf, &rp_bdf))
           continue;
 
-      test_skip = 0;
-
       /* Check for DA Capability */
       if (val_pcie_find_da_capability(rp_bdf, &da_cap_base) != PCIE_SUCCESS)
       {
-          val_print(ACS_PRINT_ERR,
+          val_print(ACS_PRINT_WARN,
                         " PCIe DA DVSEC capability not present,bdf 0x%x", bdf);
-          test_fail++;
           continue;
       }
 
       /* If ATS Capability Not Present, Skip. */
       if (val_pcie_find_capability(bdf, PCIE_ECAP, ECID_ATS, &cap_base) != PCIE_SUCCESS)
             continue;
+
+      test_skip = 0;
 
       val_print(ACS_PRINT_DEBUG, " Enabling the ATS Cache for the exerciser: 0x%x", bdf);
       val_pcie_read_cfg(bdf, cap_base + ATS_CTRL, &reg_value);

@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2023, 2025, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2023-2026, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -105,6 +105,10 @@ void payload(uint32_t num_pe)
   val_write_reset_status(RESET_TST31_FLAG);
   val_save_global_test_data();
   write_gpr_and_reset();
+
+  val_print(ACS_PRINT_ERR, " System reset returned unexpectedly", 0);
+  val_set_status(index, "FAIL", 03);
+  return;
 
 reset_done:
   val_restore_global_test_data();

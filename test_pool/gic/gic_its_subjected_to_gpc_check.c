@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2023-2024, 2025, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2023-2024, 2026, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -79,6 +79,7 @@ payload(void)
     uint32_t timeout;
     uint32_t status;
     uint32_t instance;
+    uint32_t num_exercisers;
     uint32_t test_skip = 1;
     uint32_t msi_index = 0;
     uint32_t msi_cap_offset = 0;
@@ -88,35 +89,57 @@ payload(void)
     uint32_t its_id = 0;
     uint64_t its_base = 0, itt_base;
 
-    /* Create the list of valid Pcie Device Functions */
-    if (val_pcie_create_device_bdf_table()) {
-        val_print(ACS_PRINT_WARN, " Create BDF Table Failed...", 0);
-        return;
-    }
-
-    if (val_gic_get_info(GIC_INFO_NUM_ITS) == 0) {
-        val_print(ACS_PRINT_ERR, " No ITS, Skipping Test.", 0);
+    if (val_pcie_get_info(PCIE_INFO_NUM_ECAM, 0) == 0) {
+        val_print(ACS_PRINT_WARN, " No PCIe ECAM regions discovered", 0);
         val_set_status(index, "SKIP", 1);
         return;
     }
 
-    val_exerciser_create_info_table();
-
-    instance = 0;
-
-    if (val_exerciser_init(instance))
-        return;
-
-    /* Get the exerciser BDF */
-    e_bdf = val_exerciser_get_bdf(instance);
-
-    /* Search for MSI-X Capability */
-    if (val_pcie_find_capability(e_bdf, PCIE_CAP, CID_MSIX, &msi_cap_offset)) {
-        val_print(ACS_PRINT_ERR, " No MSI-X Capability, Skipping for 0x%x", e_bdf);
+    /* Create the list of valid Pcie Device Functions */
+    if (val_pcie_create_device_bdf_table()) {
+        val_print(ACS_PRINT_WARN, " Create BDF Table Failed...", 0);
+        val_set_status(index, "SKIP", 2);
         return;
     }
 
-    test_skip = 0;
+    if (val_gic_get_info(GIC_INFO_NUM_ITS) == 0) {
+        val_print(ACS_PRINT_WARN, " No ITS, Skipping Test.", 0);
+        val_set_status(index, "SKIP", 3);
+        return;
+    }
+
+    val_exerciser_create_info_table();
+    num_exercisers = val_exerciser_get_info(EXERCISER_NUM_CARDS);
+    if (num_exercisers == 0) {
+        val_print(ACS_PRINT_WARN, " No exerciser cards discovered", 0);
+        val_set_status(index, "SKIP", 4);
+        return;
+    }
+
+    for (instance = 0; instance < num_exercisers; ++instance) {
+        if (val_exerciser_init(instance)) {
+            val_print(ACS_PRINT_WARN, " Exerciser init failed for instance %d", instance);
+            continue;
+        }
+
+        /* Get the exerciser BDF */
+        e_bdf = val_exerciser_get_bdf(instance);
+
+        /* Search for MSI-X Capability */
+        if (val_pcie_find_capability(e_bdf, PCIE_CAP, CID_MSIX, &msi_cap_offset)) {
+            val_print(ACS_PRINT_WARN, " No MSI-X Capability for BDF 0x%x", e_bdf);
+            continue;
+        }
+
+        test_skip = 0;
+        break;
+    }
+
+    if (test_skip) {
+        val_print(ACS_PRINT_WARN, " No usable exerciser with MSI-X capability found", 0);
+        val_set_status(index, "SKIP", 5);
+        return;
+    }
 
     /* Get DeviceID & ITS_ID for this device */
     status = val_iovirt_get_device_info(PCIE_CREATE_BDF_PACKED(e_bdf),

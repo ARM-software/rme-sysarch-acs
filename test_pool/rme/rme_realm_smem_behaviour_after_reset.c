@@ -86,6 +86,10 @@ void payload(void)
   val_save_global_test_data();
   val_system_reset();
 
+  val_print(ACS_PRINT_ERR, " System reset returned unexpectedly", 0);
+  val_set_status(index, "FAIL", 02);
+  return;
+
 reset_done:
   val_print(ACS_PRINT_TEST, " After system reset", 0);
   val_restore_global_test_data();

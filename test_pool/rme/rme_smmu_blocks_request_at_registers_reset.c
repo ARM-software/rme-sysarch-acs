@@ -83,24 +83,45 @@ payload(void)
   uint32_t instance;
   uint32_t e_bdf, num_smmu;
   uint32_t smmu_index;
+  uint32_t num_exercisers;
+  uint32_t test_skip;
   uint64_t smmu_base;
   void *dram_buf1_virt;
   void *dram_buf1_phys;
 
   dram_buf1_virt = NULL;
   dram_buf1_phys = NULL;
+  smmu_base = 0;
+  test_skip = 1;
 
   pe_index = val_pe_get_index_mpid(val_pe_get_mpid());
 
   num_smmu = val_iovirt_get_smmu_info(SMMU_NUM_CTRL, 0);
+  if (num_smmu == 0) {
+      val_print(ACS_PRINT_WARN, " No SMMU controllers discovered", 0);
+      val_set_status(pe_index, "SKIP", 01);
+      return;
+  }
+
+  if (val_pcie_get_info(PCIE_INFO_NUM_ECAM, 0) == 0) {
+      val_print(ACS_PRINT_WARN, " No PCIe ECAM regions discovered", 0);
+      val_set_status(pe_index, "SKIP", 02);
+      return;
+  }
+
+  /* Read the number of excerciser cards */
+  num_exercisers = val_exerciser_get_info(EXERCISER_NUM_CARDS);
+  if (num_exercisers == 0) {
+      val_print(ACS_PRINT_WARN, " No exerciser cards discovered", 0);
+      val_set_status(pe_index, "SKIP", 03);
+      return;
+  }
 
   /* Disable All SMMU's */
   for (instance = 0; instance < num_smmu; ++instance)
       val_smmu_disable(instance);
 
-  /* Read the number of excerciser cards */
-  instance = val_exerciser_get_info(EXERCISER_NUM_CARDS);
-
+  instance = num_exercisers;
   while (instance-- != 0) {
 
     /* if init fail moves to next exerciser */
@@ -114,26 +135,30 @@ payload(void)
     smmu_index = val_iovirt_get_rc_smmu_index(PCIE_EXTRACT_BDF_SEG(e_bdf),
                     PCIE_CREATE_BDF_PACKED(e_bdf));
 
+    if (smmu_index == ACS_INVALID_INDEX) {
+        val_print(ACS_PRINT_WARN, " No SMMU mapping found for exerciser %x", instance);
+        continue;
+    }
+
+    test_skip = 0;
     smmu_base = val_smmu_get_info(SMMU_CTRL_BASE, smmu_index);
     /* Disable SMMU globally by writing reset values to SMMU_CR0.SMMUEN and
      * SMMU_ROOT_CR0.ACCESSEN thereby setting the SMMU in reset state.
      */
     val_print(ACS_PRINT_TEST,
       " Disabling SMMU %d through it's Control registers in both Root and NS state", smmu_index);
-    if (smmu_index != ACS_INVALID_INDEX) {
-        if (val_smmu_access_disable(smmu_base))
-        {
-            val_print(ACS_PRINT_ERR, " Exerciser %x smmu root access disable error", instance);
-            val_smmu_access_enable(smmu_base);
-            val_set_status(pe_index, "FAIL", 01);
-            return;
-        }
-        if (val_smmu_disable(smmu_index)) {
-            val_print(ACS_PRINT_ERR, " Exerciser %x smmu disable error", instance);
-            val_smmu_access_enable(smmu_base);
-            val_set_status(pe_index, "FAIL", 02);
-            return;
-        }
+    if (val_smmu_access_disable(smmu_base))
+    {
+        val_print(ACS_PRINT_ERR, " Exerciser %x smmu root access disable error", instance);
+        val_smmu_access_enable(smmu_base);
+        val_set_status(pe_index, "FAIL", 01);
+        return;
+    }
+    if (val_smmu_disable(smmu_index)) {
+        val_print(ACS_PRINT_ERR, " Exerciser %x smmu disable error", instance);
+        val_smmu_access_enable(smmu_base);
+        val_set_status(pe_index, "FAIL", 02);
+        return;
     }
 
     /* Get a WB, outer shareable DDR Buffer which is Non-Secure of size TEST_DATA_BLK_SIZE */
@@ -152,12 +177,18 @@ payload(void)
 
   }
 
-  val_smmu_access_enable(smmu_base);
-  val_set_status(pe_index, "PASS", 0);
+  if (!test_skip && smmu_base != 0)
+      val_smmu_access_enable(smmu_base);
+
+  if (test_skip)
+      val_set_status(pe_index, "SKIP", 03);
+  else
+      val_set_status(pe_index, "PASS", 0);
   return;
 
 test_fail:
-  val_smmu_access_enable(smmu_base);
+  if (smmu_base != 0)
+      val_smmu_access_enable(smmu_base);
   val_set_status(pe_index, "FAIL", 06);
   val_memory_free_cacheable(e_bdf, TEST_DATA_BLK_SIZE, dram_buf1_virt, dram_buf1_phys);
   return;
