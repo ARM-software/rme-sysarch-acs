@@ -85,6 +85,13 @@ uint32_t dptps_value[DPT_PS_MAX_IDX] = {4, 64, 1000, 4000, 16000, 256000, 400000
 #define MAX_LOG2_EVT_QUEUE_SIZE 7U
 
 #define EVTQ_DWORDS_PER_ENT     4U
+#define CMDQ_CONS_ERR_SHIFT     24U
+#define CMDQ_CONS_ERR_MASK      (0x7FU << CMDQ_CONS_ERR_SHIFT)
+#define CMDQ_CONS_ERR_NONE      0U
+#define CMDQ_CONS_ERR_ILL       1U
+#define CMDQ_CONS_ERR_ABT       2U
+#define CMDQ_CONS_ERR_ATC_SYNC  3U
+#define SMMU_GERROR_CMDQ_ERR    1U
 
 smmu_dev_t *g_smmu;
 uint32_t g_num_smmus;
@@ -123,6 +130,65 @@ static uint32_t smmu_queue_empty(smmu_queue_t *q)
 
     return ((q->prod & index_mask) == (q->cons & index_mask)) &&
            ((q->prod & wrap_mask) == (q->cons & wrap_mask));
+}
+
+static uint32_t smmu_cmdq_cons_err(uint32_t cons)
+{
+    return (cons & CMDQ_CONS_ERR_MASK) >> CMDQ_CONS_ERR_SHIFT;
+}
+
+static const char *smmu_cmdq_err_name(uint32_t err)
+{
+    switch (err) {
+    case CMDQ_CONS_ERR_NONE:
+        return "NONE";
+    case CMDQ_CONS_ERR_ILL:
+        return "ILL";
+    case CMDQ_CONS_ERR_ABT:
+        return "ABT";
+    case CMDQ_CONS_ERR_ATC_SYNC:
+        return "ATC_INV_SYNC";
+    default:
+        return "UNKNOWN";
+    }
+}
+
+static void smmu_cmdq_log_error(smmu_dev_t *smmu, uint32_t cons, const char *context)
+{
+    uint32_t err = smmu_cmdq_cons_err(cons);
+    smmu_queue_type_t *cmdq = &smmu->cmd_type;
+    uint32_t index = cons & ((0x1ul << cmdq->queue.log2nent) - 1);
+    uint64_t *cmd = (uint64_t *)(cmdq->base + (index * cmdq->entry_size));
+
+    ERROR("\n    SMMU CMDQ error during %s     ", context);
+    ERROR("\n    CMDQ_CONS.ERR = 0x%02x (%s)     ", err, smmu_cmdq_err_name(err));
+    ERROR("\n    prod_reg = 0x%08x     ", val_el3_mmio_read((uint64_t)cmdq->prod_reg));
+    ERROR("\n    cons_reg = 0x%08x     ", cons);
+    ERROR("\n    gerror   = 0x%08x     ", val_el3_mmio_read(smmu->base + SMMU_R_GERROR));
+    ERROR("\n    gerrorn  = 0x%08x     ", val_el3_mmio_read(smmu->base + SMMU_R_GERRORN));
+    ERROR("\n    cmdq_pa  = 0x%lx     ", cmdq->base_phys);
+    ERROR("\n    cmdq_va  = 0x%lx     ", (uint64_t)cmdq->base);
+    ERROR("\n    cmd_idx  = 0x%08x     ", index);
+    ERROR("\n    cmd[0]   = 0x%lx     ", cmd[0]);
+    ERROR("\n    cmd[1]   = 0x%lx     ", cmd[1]);
+}
+
+static int smmu_cmdq_check_error(smmu_dev_t *smmu, const char *context)
+{
+    uint32_t gerror = val_el3_mmio_read(smmu->base + SMMU_R_GERROR);
+    uint32_t gerrorn = val_el3_mmio_read(smmu->base + SMMU_R_GERRORN);
+    uint32_t cons;
+
+    if ((gerror & SMMU_GERROR_CMDQ_ERR) == (gerrorn & SMMU_GERROR_CMDQ_ERR))
+        return 0;
+
+    cons = val_el3_mmio_read((uint64_t)smmu->cmd_type.cons_reg);
+    smmu_cmdq_log_error(smmu, cons, context);
+
+    gerrorn ^= SMMU_GERROR_CMDQ_ERR;
+    val_el3_mmio_write(smmu->base + SMMU_R_GERRORN, gerrorn);
+
+    return -1;
 }
 
 static void smmu_configure_queue(smmu_dev_t *smmu, smmu_queue_type_t *queue,
@@ -183,8 +249,10 @@ static int smmu_cmdq_write_cmd(smmu_dev_t *smmu, uint64_t *cmd)
     do {
         hw_prod = val_el3_mmio_read((uint64_t)cmdq->prod_reg);
         hw_cons = val_el3_mmio_read((uint64_t)cmdq->cons_reg);
+        if (smmu_cmdq_check_error(smmu, "enqueue"))
+            return -1;
         queue.prod = hw_prod;
-        queue.cons = hw_cons;
+        queue.cons = hw_cons & ~CMDQ_CONS_ERR_MASK;
         if (!smmu_queue_full(&queue))
             break;
     } while (--timeout);
@@ -199,6 +267,8 @@ static int smmu_cmdq_write_cmd(smmu_dev_t *smmu, uint64_t *cmd)
               (cmdq->entry_size)));
     for (i = 0; i < QUEUE_DWORDS_PER_ENT; ++i)
         cmd_dst[i] = cmd[i];
+    for (i = 0; i < QUEUE_DWORDS_PER_ENT; ++i)
+        val_el3_clean_cache(&cmd_dst[i]);
     queue.prod = smmu_cmdq_inc_prod(&queue);
 
     val_el3_mem_barrier();
@@ -220,20 +290,27 @@ static int smmu_cmdq_issue_cmd(smmu_dev_t *smmu,
     return smmu_cmdq_write_cmd(smmu, cmd);
 }
 
-static void smmu_cmdq_poll_until_consumed(smmu_dev_t *smmu)
+static int smmu_cmdq_poll_until_consumed(smmu_dev_t *smmu)
 {
     uint32_t timeout = SMMU_CMDQ_POLL_TIMEOUT;
     smmu_queue_type_t *cmdq = &smmu->cmd_type;
+    uint32_t cons;
     smmu_queue_t queue = {
                 .log2nent = smmu->cmd_type.queue.log2nent,
                 .prod = val_el3_mmio_read((uint64_t)smmu->cmd_type.prod_reg),
-                .cons = val_el3_mmio_read((uint64_t)smmu->cmd_type.cons_reg)
             };
 
     while (timeout > 0) {
+        cons = val_el3_mmio_read((uint64_t)cmdq->cons_reg);
+        if (smmu_cmdq_check_error(smmu, "poll"))
+            return -1;
+        /*
+         * CMDQ_CONS.ERR is only meaningful while R_GERROR.CMDQ_ERR is active.
+         * Queue logic only uses the consumer index and wrap bit.
+         */
+        queue.cons = cons & ~CMDQ_CONS_ERR_MASK;
         if (smmu_queue_empty(&queue))
             break;
-        queue.cons = val_el3_mmio_read((uint64_t)cmdq->cons_reg);
         timeout--;
     }
 
@@ -242,41 +319,50 @@ static void smmu_cmdq_poll_until_consumed(smmu_dev_t *smmu)
         ERROR("\n    prod_reg = 0x%08x     ", val_el3_mmio_read((uint64_t)smmu->cmd_type.prod_reg));
         ERROR("\n    cons_reg = 0x%08x     ", val_el3_mmio_read((uint64_t)smmu->cmd_type.cons_reg));
         ERROR("\n    gerror   = 0x%08x     ", val_el3_mmio_read(smmu->base + SMMU_R_GERROR));
+        return -1;
     }
+
+    return 0;
 }
 
-static void smmu_tlbi_cached_ste(smmu_dev_t *smmu)
+static int smmu_tlbi_cached_ste(smmu_dev_t *smmu)
 {
     /* Invalidate any cached configuration */
-    smmu_cmdq_issue_cmd(smmu, CMDQ_OP_CFGI_STE);
-    smmu_cmdq_issue_cmd(smmu, CMDQ_OP_CMD_SYNC);
+    if (smmu_cmdq_issue_cmd(smmu, CMDQ_OP_CFGI_STE))
+        return -1;
+    if (smmu_cmdq_issue_cmd(smmu, CMDQ_OP_CMD_SYNC))
+        return -1;
 
-    smmu_cmdq_poll_until_consumed(smmu);
+    return smmu_cmdq_poll_until_consumed(smmu);
 }
 
-static void smmu_tlbi_prefetch_cfg(smmu_dev_t *smmu)
+static int smmu_tlbi_prefetch_cfg(smmu_dev_t *smmu)
 {
     /* Invalidate any cached configuration */
-    smmu_cmdq_issue_cmd(smmu, CMDQ_OP_CFGI_STE);
+    if (smmu_cmdq_issue_cmd(smmu, CMDQ_OP_CFGI_STE))
+        return -1;
 
-    smmu_cmdq_poll_until_consumed(smmu);
+    return smmu_cmdq_poll_until_consumed(smmu);
 }
 
-void smmu_dpti_all(smmu_dev_t *smmu)
+int smmu_dpti_all(smmu_dev_t *smmu)
 {
-    smmu_cmdq_issue_cmd(smmu, 0x70);
+    return smmu_cmdq_issue_cmd(smmu, 0x70);
 }
 
-static void smmu_tlbi_cfgi(smmu_dev_t *smmu)
+static int smmu_tlbi_cfgi(smmu_dev_t *smmu)
 {
     /* Invalidate any cached configuration */
-    smmu_cmdq_issue_cmd(smmu, CMDQ_OP_CFGI_ALL);
-    if (smmu->supported.hyp)
-        smmu_cmdq_issue_cmd(smmu, CMDQ_OP_TLBI_EL2_ALL);
-    smmu_cmdq_issue_cmd(smmu, CMDQ_OP_TLBI_NSNH_ALL);
-    smmu_cmdq_issue_cmd(smmu, CMDQ_OP_CMD_SYNC);
+    if (smmu_cmdq_issue_cmd(smmu, CMDQ_OP_CFGI_ALL))
+        return -1;
+    if (smmu->supported.hyp && smmu_cmdq_issue_cmd(smmu, CMDQ_OP_TLBI_EL2_ALL))
+        return -1;
+    if (smmu_cmdq_issue_cmd(smmu, CMDQ_OP_TLBI_NSNH_ALL))
+        return -1;
+    if (smmu_cmdq_issue_cmd(smmu, CMDQ_OP_CMD_SYNC))
+        return -1;
 
-    smmu_cmdq_poll_until_consumed(smmu);
+    return smmu_cmdq_poll_until_consumed(smmu);
 }
 
 uint32_t val_el3_smmu_gpt_invalidate(smmu_master_attributes_t master_attr)
@@ -731,7 +817,8 @@ static int32_t smmu_reset(smmu_dev_t *smmu)
         return ret;
     }
 
-    smmu_tlbi_cfgi(smmu);
+    if (smmu_tlbi_cfgi(smmu))
+        return 0;
 
     r_cr0 |= CR0_SMMUEN;
     ret = smmu_reg_write_sync(smmu, r_cr0, SMMU_R_CR0,
@@ -1369,7 +1456,12 @@ val_el3_smmu_program_dpt_base(smmu_dev_t *smmu, uint64_t dpt_base)
       return ret;
   }
 
-  smmu_dpti_all(smmu);
+  ret = smmu_dpti_all(smmu);
+  if (ret)
+  {
+      ERROR("\n SMMU Base: %lx DPT invalidate failed", smmu->base);
+      return ret;
+  }
 
   return 0;
 }
@@ -1558,12 +1650,21 @@ uint32_t
 val_el3_smmu_dpt_init(smmu_dev_t *smmu)
 {
   uint64_t dpt_base;
+  uint32_t ret;
 
   dpt_base = (uint64_t)val_el3_memory_calloc(1, SIZE_4KB, SIZE_4KB);
-  val_el3_disable_dpt_walk(smmu);
+  ret = val_el3_disable_dpt_walk(smmu);
+  if (ret)
+    return ret;
+
   val_el3_mmio_write(smmu->base + SMMU_R_DPT_BASE_CFG, 0);
-  val_el3_smmu_program_dpt_base(smmu, dpt_base >> 12);
-  val_el3_enable_dpt_walk(smmu);
+  ret = val_el3_smmu_program_dpt_base(smmu, dpt_base >> 12);
+  if (ret)
+    return ret;
+
+  ret = val_el3_enable_dpt_walk(smmu);
+  if (ret)
+    return ret;
 
   return 0;
 }
@@ -1624,6 +1725,15 @@ void val_el3_smmu_init(uint32_t num_smmu, uint64_t *smmu_base_arr)
             shared_data->error_msg[j] = '\0';
             g_smmu[i].base = 0;
             return;
+        }
+
+        /* Warn and skip DPT init if this SMMU does not support DPT. */
+        uint64_t r_idr3 = val_el3_mmio_read64(g_smmu[i].base + SMMU_R_IDR3);
+        if (!VAL_EXTRACT_BITS(r_idr3, DPT_SHIFT, DPT_SHIFT))
+        {
+            WARN("\n SMMU Base: %lx DPT not supported, SMMU_R_IDR3 = 0x%lx",
+                 g_smmu[i].base, r_idr3);
+            continue;
         }
 
         if (val_el3_smmu_dpt_init(&g_smmu[i]))
