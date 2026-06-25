@@ -261,23 +261,12 @@ fvp_build() {
 
     local ACS_PATH_DEFAULT="${REPO_ROOT}"
     local ACS_PATH_VAL="${ACS_PATH:-$ACS_PATH_DEFAULT}"
-    local PLATFORM_BASEFVP_DEFINE_RE=""
-
-    local EL3_CONFIG="${ACS_PATH_VAL}/pal_el3/include/pal_el3_config.h"
+    local EL3_CONFIG="${ACS_PATH_VAL}/pal_el3/FVP/include/pal_el3_config.h"
     if [[ ! -f "$EL3_CONFIG" ]]; then
         log "pal_el3_config.h not found: $EL3_CONFIG";popd >/dev/null; exit 1
     fi
 
-    log "Ensuring PLATFORM_BASEFVP=1 in $EL3_CONFIG"
-    PLATFORM_BASEFVP_DEFINE_RE='^[[:space:]]*#define'
-    PLATFORM_BASEFVP_DEFINE_RE+='[[:space:]]+PLATFORM_BASEFVP'
-    if grep -Eq "$PLATFORM_BASEFVP_DEFINE_RE" "$EL3_CONFIG"; then
-        sed -i -E \
-            "s/(${PLATFORM_BASEFVP_DEFINE_RE}[[:space:]]+).*/\1 1/" \
-            "$EL3_CONFIG"
-    else
-        printf '\n#define PLATFORM_BASEFVP 1\n' >> "$EL3_CONFIG"
-    fi
+    log "Using FVP PAL EL3 config: $EL3_CONFIG"
 
     fvp_preflight
 
@@ -437,27 +426,16 @@ rdv3_build() {
     local ACS_PATH_DEFAULT="${REPO_ROOT}"
     local ACS_PATH_VAL="${ACS_PATH:-$ACS_PATH_DEFAULT}"
     local MANIFEST_URL=""
-    local PLATFORM_BASEFVP_DEFINE_RE=""
     export ACS_HOME="$ACS_PATH_VAL"
     MANIFEST_URL="https://git.gitlab.arm.com/infra-solutions/reference-design"
     MANIFEST_URL+="/infra-refdesign-manifests.git"
 
-    # Ensure PLATFORM_BASEFVP is 0 for RDV3 builds (idempotent)
-    local EL3_CONFIG="${ACS_HOME}/pal_el3/include/pal_el3_config.h"
+    local EL3_CONFIG="${ACS_HOME}/pal_el3/rdv3/include/pal_el3_config.h"
     if [[ ! -f "$EL3_CONFIG" ]]; then
         log "pal_el3_config.h not found: $EL3_CONFIG";popd >/dev/null; exit 1
     fi
 
-    log "Ensuring PLATFORM_BASEFVP=0 in $EL3_CONFIG"
-    PLATFORM_BASEFVP_DEFINE_RE='^[[:space:]]*#define'
-    PLATFORM_BASEFVP_DEFINE_RE+='[[:space:]]+PLATFORM_BASEFVP'
-    if grep -Eq "$PLATFORM_BASEFVP_DEFINE_RE" "$EL3_CONFIG"; then
-        sed -i -E \
-            "s/(${PLATFORM_BASEFVP_DEFINE_RE}[[:space:]]+).*/\1 0/" \
-            "$EL3_CONFIG"
-    else
-        printf '\n#define PLATFORM_BASEFVP 0\n' >> "$EL3_CONFIG"
-    fi
+    log "Using RD-V3 PAL EL3 config: $EL3_CONFIG"
 
 
     mkdir -p "${HOME}/.bin"
@@ -537,7 +515,6 @@ rdv3_run() {
     export MODEL="$MODEL_BIN_PATH"
     [[ -x "$MODEL" ]] || {
         log "Model binary not found/executable: $MODEL"
-        popd >/dev/null
         exit 1
     }
     # Work within RDV3 working directory for stack/model scripts

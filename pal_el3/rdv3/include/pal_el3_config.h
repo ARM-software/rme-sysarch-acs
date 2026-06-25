@@ -16,48 +16,21 @@
 **/
 
 /**
- * EL3 local configuration header to decouple platform overrides.
- * Provides default values for EL3-only builds; NS world may override via shared_data.
+ * EL3 local configuration header for RD-V3.
 **/
 
 #ifndef VAL_EL3_CONFIG_H
 #define VAL_EL3_CONFIG_H
 
-/**
- * Defaults chosen to match common FVP settings; can be overridden at build time.
- * Set this to 1 to match FVP platform, 0 for RDV3 platform.
-**/
-
-#define PLATFORM_BASEFVP 1
-
-#if PLATFORM_BASEFVP
-
-#define SMMUV3_ROOT_REG_OFFSET  (0x20000)
-
-#define PLAT_FREE_MEM_START     0x880000000ULL
-
-#define PLAT_SHARED_ADDRESS     0xE0000000ULL
-
-#define PLAT_FREE_MEM_SMMU      0x880400000ULL
-#define PLAT_MEMORY_POOL_SIZE   (2 * 1024 * 1024)
-
-/* Configured SMMU stream-table span, independent of IDR1.SIDSIZE. */
-#define PLATFORM_OVERRIDE_SMMU_STRTAB_BITS 16U
-
-#else
-
 #define SMMUV3_ROOT_REG_OFFSET  (0xA0000)
 
 #define PLAT_FREE_MEM_START     0x8080000000ULL
 
-#define PLAT_SHARED_ADDRESS     0x0080000000ULL
+#define PLAT_SHARED_ADDRESS     0xE0000000ULL
 
 #define PLAT_FREE_MEM_SMMU      0x8080400000ULL
-#define PLAT_MEMORY_POOL_SIZE   (130 * 1024 * 1024)
+#define PLAT_MEMORY_POOL_SIZE   (2 * 1024 * 1024)
 
-/* Configured SMMU stream-table span, independent of IDR1.SIDSIZE. */
 #define PLATFORM_OVERRIDE_SMMU_STRTAB_BITS 20U
-
-#endif
 
 #endif /* VAL_EL3_CONFIG_H */
