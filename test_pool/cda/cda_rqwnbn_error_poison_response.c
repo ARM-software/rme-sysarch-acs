@@ -1,0 +1,1181 @@
+/** @file
+ * Copyright (c) 2026, Arm Limited or its affiliates. All rights reserved.
+ * SPDX-License-Identifier : Apache-2.0
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *  http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ **/
+
+#include "val/include/val.h"
+#include "val/include/val_interface.h"
+
+#include "val/include/val_cda.h"
+#include "val/include/val_cxl.h"
+#include "val/include/val_cxl_spec.h"
+#include "val/include/val_el32.h"
+#include "val/include/val_exerciser.h"
+#include "val/include/val_memory.h"
+#include "val/include/val_pcie.h"
+#include "val/include/val_pcie_spec.h"
+#include "val/include/val_pe.h"
+#include "val/include/val_spdm.h"
+#include "val/include/val_tdisp.h"
+
+#define TEST_NAME "cda_rqwnbn_error_poison_response"
+#define TEST_DESC "TDI ERROR cached Realm snoop response is poisoned"
+#define TEST_RULE "RQWNBN"
+
+#define DECODER_SLOT 0u
+#define AER_POISONED_TLP (1u << 12)
+
+#define PCIE_TARGET_PORT_ID_MASK 0xFFu
+#define RQWNBN_HDM_ALIGNMENT_SHIFT 28u
+#define RQWNBN_HDM_ALIGNMENT_MASK ((1ULL << RQWNBN_HDM_ALIGNMENT_SHIFT) - 1ULL)
+#define RQWNBN_HDM_ERROR_BIT (1u << 11)
+
+#define RMECDA_CTL1_TDISP_EN_MASK 0x1u
+#define RMECDA_CTL1_LINK_STR_LOCK_MASK (1u << 1)
+
+#define RQWNBN_SEED_VALUE 0xA55A0123456789EFULL
+
+#ifndef PCI_TDISP_INTERFACE_STATE_CONFIG_LOCKED
+#define PCI_TDISP_INTERFACE_STATE_CONFIG_LOCKED 1u
+#endif
+
+#ifndef PCI_TDISP_INTERFACE_STATE_RUN
+#define PCI_TDISP_INTERFACE_STATE_RUN 2u
+#endif
+
+#if ENABLE_SPDM
+
+typedef struct {
+  uint32_t host_index;
+  uint32_t root_index;
+  uint32_t root_bdf;
+  uint32_t endpoint_index;
+  uint32_t endpoint_bdf;
+  uint64_t window_base;
+  uint64_t window_size;
+  uint64_t host_decoder_base_orig;
+  uint64_t host_decoder_size_orig;
+  uint64_t endpoint_decoder_base_orig;
+  uint64_t endpoint_decoder_size_orig;
+  uint32_t host_target_low_orig;
+  uint32_t host_target_high_orig;
+  uint32_t host_target_valid;
+  uint32_t rmecda_ctl1_orig;
+  uint32_t rmecda_ctl1_valid;
+  uint32_t rmecda_cap_base;
+  uint64_t rmecda_cfg_va;
+  uint32_t aer_offset;
+} TEST_CONTEXT;
+
+static void
+init_context(TEST_CONTEXT *context)
+{
+  if (context == NULL)
+    return;
+
+  val_memory_set(context, sizeof(*context), 0);
+  context->host_index = CXL_COMPONENT_INVALID_INDEX;
+  context->root_index = CXL_COMPONENT_INVALID_INDEX;
+  context->endpoint_index = CXL_COMPONENT_INVALID_INDEX;
+}
+
+static uint32_t
+find_component_index_by_bdf(const CXL_COMPONENT_TABLE *table,
+                            uint32_t bdf,
+                            uint32_t *index_out)
+{
+  if ((table == NULL) || (index_out == NULL))
+    return ACS_STATUS_ERR;
+
+  for (uint32_t idx = 0u; idx < table->num_entries; ++idx)
+  {
+    if (table->component[idx].bdf == bdf)
+    {
+      *index_out = idx;
+      return ACS_STATUS_PASS;
+    }
+  }
+
+  return ACS_STATUS_SKIP;
+}
+
+static uint32_t
+encode_hdm_value(uint64_t value, uint32_t *low, uint32_t *high)
+{
+  if ((low == NULL) || (high == NULL))
+    return ACS_STATUS_ERR;
+
+  if ((value & RQWNBN_HDM_ALIGNMENT_MASK) != 0u)
+    return ACS_STATUS_ERR;
+
+  *low = (uint32_t)(((value >> RQWNBN_HDM_ALIGNMENT_SHIFT) & 0xFULL) << 28);
+  *high = (uint32_t)(value >> 32);
+  return ACS_STATUS_PASS;
+}
+
+static uint32_t
+program_host_decoder_and_target(uint64_t host_comp_base,
+                                uint64_t base,
+                                uint64_t size,
+                                uint32_t target_low,
+                                uint32_t target_high,
+                                TEST_CONTEXT *context,
+                                uint32_t save_original_target)
+{
+  uint32_t base_low;
+  uint32_t base_high;
+  uint32_t size_low;
+  uint32_t size_high;
+  uint32_t ctrl;
+  uint32_t readback_low;
+  uint32_t readback_high;
+  uint32_t attempt;
+  uint64_t hdm_cap_base;
+  uint64_t ctrl_addr;
+
+  if ((host_comp_base == 0u) || (size == 0u))
+    return ACS_STATUS_ERR;
+
+  if ((encode_hdm_value(base, &base_low, &base_high) != ACS_STATUS_PASS) ||
+      (encode_hdm_value(size, &size_low, &size_high) != ACS_STATUS_PASS))
+    return ACS_STATUS_ERR;
+
+  if (val_cxl_find_capability(host_comp_base, CXL_CAPID_HDM_DECODER, &hdm_cap_base)
+      != ACS_STATUS_PASS)
+    return ACS_STATUS_ERR;
+
+  val_print(ACS_PRINT_DEBUG,
+            " RQWNBN: HDM cap base 0x%llx",
+            hdm_cap_base);
+
+  if ((save_original_target != 0u) && (context != NULL))
+  {
+    context->host_target_low_orig =
+      val_mmio_read(hdm_cap_base + CXL_HDM_DECODER_TARGET_LOW(DECODER_SLOT));
+    context->host_target_high_orig =
+      val_mmio_read(hdm_cap_base + CXL_HDM_DECODER_TARGET_HIGH(DECODER_SLOT));
+    context->host_target_valid = 1u;
+  }
+
+  ctrl_addr = hdm_cap_base + CXL_HDM_DECODER_CTRL(DECODER_SLOT);
+  ctrl = val_mmio_read(ctrl_addr);
+
+  if ((ctrl & CXL_HDM_COMMIT_BIT) != 0u)
+  {
+    val_mmio_write(ctrl_addr, ctrl & ~CXL_HDM_COMMIT_BIT);
+
+    for (attempt = 0u; attempt < CXL_HDM_COMMIT_TIMEOUT_MS; ++attempt)
+    {
+      ctrl = val_mmio_read(ctrl_addr);
+
+      if ((ctrl & CXL_HDM_COMMITTED_BIT) == 0u)
+        break;
+      (void)val_time_delay_ms(1);
+    }
+  }
+
+  ctrl = val_mmio_read(ctrl_addr);
+
+  if ((ctrl & CXL_HDM_COMMITTED_BIT) != 0u)
+    return ACS_STATUS_ERR;
+
+  /* Program the host HDM decoder with normal MMIO, matching the other CDA tests. */
+  val_mmio_write(hdm_cap_base + CXL_HDM_DECODER_BASE_LOW(DECODER_SLOT), base_low);
+  val_mmio_write(hdm_cap_base + CXL_HDM_DECODER_BASE_HIGH(DECODER_SLOT), base_high);
+  val_mmio_write(hdm_cap_base + CXL_HDM_DECODER_SIZE_LOW(DECODER_SLOT), size_low);
+  val_mmio_write(hdm_cap_base + CXL_HDM_DECODER_SIZE_HIGH(DECODER_SLOT), size_high);
+  val_print(ACS_PRINT_DEBUG,
+            " RQWNBN: requested host target low 0x%x",
+            (uint64_t)target_low);
+  val_print(ACS_PRINT_DEBUG,
+            " RQWNBN: requested host target high 0x%x",
+            (uint64_t)target_high);
+  val_mmio_write(hdm_cap_base + CXL_HDM_DECODER_TARGET_LOW(DECODER_SLOT), target_low);
+  val_mmio_write(hdm_cap_base + CXL_HDM_DECODER_TARGET_HIGH(DECODER_SLOT), target_high);
+
+  readback_low = val_mmio_read(hdm_cap_base + CXL_HDM_DECODER_TARGET_LOW(DECODER_SLOT));
+  readback_high = val_mmio_read(hdm_cap_base + CXL_HDM_DECODER_TARGET_HIGH(DECODER_SLOT));
+
+  val_print(ACS_PRINT_DEBUG,
+            " RQWNBN: host target list low 0x%x",
+            (uint64_t)readback_low);
+  val_print(ACS_PRINT_DEBUG,
+            " RQWNBN: host target list high 0x%x",
+            (uint64_t)readback_high);
+
+  if ((readback_low != target_low) || (readback_high != target_high))
+  {
+    /*
+     * The final host read must be routed to the selected CHI-C2C port.  If the
+     * target-list write does not stick, the later poison check is meaningless.
+     */
+    val_print(ACS_PRINT_ERR,
+              " RQWNBN: host target list readback differs from requested value",
+              0);
+    return ACS_STATUS_ERR;
+  }
+
+  ctrl = val_mmio_read(ctrl_addr);
+
+  ctrl |= CXL_HDM_COMMIT_BIT;
+  val_mmio_write(ctrl_addr, ctrl);
+
+  for (attempt = 0u; attempt < CXL_HDM_COMMIT_TIMEOUT_MS; ++attempt)
+  {
+    ctrl = val_mmio_read(ctrl_addr);
+
+    if ((ctrl & RQWNBN_HDM_ERROR_BIT) != 0u)
+      return ACS_STATUS_FAIL;
+    if ((ctrl & CXL_HDM_COMMITTED_BIT) != 0u)
+      return ACS_STATUS_PASS;
+    (void)val_time_delay_ms(1);
+  }
+
+  return ACS_STATUS_FAIL;
+}
+
+static uint32_t
+program_host_decoder_for_root(uint32_t root_bdf,
+                              uint64_t host_comp_base,
+                              uint64_t base,
+                              uint64_t size,
+                              TEST_CONTEXT *context)
+{
+  uint32_t port_id;
+
+  if (val_pcie_get_root_port_id(root_bdf, &port_id) != PCIE_SUCCESS)
+    return ACS_STATUS_ERR;
+
+  val_print(ACS_PRINT_DEBUG,
+            " RQWNBN: host target port id 0x%x",
+            (uint64_t)port_id);
+
+  return program_host_decoder_and_target(host_comp_base,
+                                         base,
+                                         size,
+                                         port_id & PCIE_TARGET_PORT_ID_MASK,
+                                         0u,
+                                         context,
+                                         1u);
+}
+
+static uint32_t
+restore_host_decoder_and_target(const TEST_CONTEXT *context)
+{
+  uint64_t comp_base;
+
+  if (context == NULL)
+    return ACS_STATUS_ERR;
+
+  if ((context->host_index == CXL_COMPONENT_INVALID_INDEX) ||
+      (context->host_decoder_size_orig == 0u))
+    return ACS_STATUS_PASS;
+
+  if (context->host_target_valid == 0u)
+    return val_cxl_program_host_decoder(context->host_index,
+                                        DECODER_SLOT,
+                                        context->host_decoder_base_orig,
+                                        context->host_decoder_size_orig);
+
+  comp_base = val_cxl_get_info(CXL_INFO_COMPONENT_BASE, context->host_index);
+  if (comp_base == 0u)
+    return ACS_STATUS_ERR;
+
+  return program_host_decoder_and_target(comp_base,
+                                         context->host_decoder_base_orig,
+                                         context->host_decoder_size_orig,
+                                         context->host_target_low_orig,
+                                         context->host_target_high_orig,
+                                         NULL,
+                                         0u);
+}
+
+static uint32_t
+restore_context_state(const TEST_CONTEXT *context)
+{
+  uint32_t restore_status;
+  uint32_t readback;
+
+  if (context == NULL)
+    return ACS_STATUS_ERR;
+
+  restore_status = ACS_STATUS_PASS;
+  readback = 0u;
+
+  if (context->rmecda_ctl1_valid != 0u)
+  {
+    if (context->rmecda_cfg_va != 0u)
+    {
+      if ((val_memory_write_el3(context->rmecda_cfg_va +
+                                context->rmecda_cap_base +
+                                RMECDA_CTL1_OFFSET,
+                                context->rmecda_ctl1_orig) != ACS_STATUS_PASS) ||
+          (val_memory_read_el3(context->rmecda_cfg_va +
+                               context->rmecda_cap_base +
+                               RMECDA_CTL1_OFFSET,
+                               &readback) != ACS_STATUS_PASS) ||
+          (readback != context->rmecda_ctl1_orig))
+      {
+        val_print(ACS_PRINT_WARN,
+                  " RQWNBN: RMECDA_CTL1 root restore readback 0x%x",
+                  (uint64_t)readback);
+        restore_status = ACS_STATUS_ERR;
+      }
+    }
+    else
+    {
+      val_pcie_write_cfg(context->root_bdf,
+                         context->rmecda_cap_base + RMECDA_CTL1_OFFSET,
+                         context->rmecda_ctl1_orig);
+
+      if ((val_pcie_read_cfg(context->root_bdf,
+                             context->rmecda_cap_base + RMECDA_CTL1_OFFSET,
+                             &readback) != PCIE_SUCCESS) ||
+          (readback != context->rmecda_ctl1_orig))
+      {
+        val_print(ACS_PRINT_WARN,
+                  " RQWNBN: RMECDA_CTL1 restore readback 0x%x",
+                  (uint64_t)readback);
+        restore_status = ACS_STATUS_ERR;
+      }
+    }
+  }
+
+  if ((context->endpoint_index != CXL_COMPONENT_INVALID_INDEX) &&
+      (context->endpoint_decoder_size_orig != 0u) &&
+      (val_cxl_program_component_decoder(context->endpoint_index,
+                                         DECODER_SLOT,
+                                         context->endpoint_decoder_base_orig,
+                                         context->endpoint_decoder_size_orig)
+       != ACS_STATUS_PASS))
+  {
+    restore_status = ACS_STATUS_ERR;
+  }
+
+  if (restore_host_decoder_and_target(context) != ACS_STATUS_PASS)
+  {
+    restore_status = ACS_STATUS_ERR;
+  }
+
+  return restore_status;
+}
+
+static uint32_t
+select_test_base(uint64_t window_base,
+                 uint64_t window_size,
+                 uint64_t *test_base_out)
+{
+  uint64_t page_size;
+  uint64_t window_end;
+  uint64_t aligned_base;
+
+  if (test_base_out == NULL)
+    return ACS_STATUS_ERR;
+
+  page_size = (uint64_t)val_memory_page_size();
+  if (page_size == 0u)
+    return ACS_STATUS_ERR;
+
+  if (window_size < page_size)
+    return ACS_STATUS_SKIP;
+
+  window_end = window_base + window_size;
+  if (window_end < window_base)
+    return ACS_STATUS_ERR;
+
+  aligned_base = (window_end - page_size) & ~(page_size - 1u);
+  if ((aligned_base < window_base) || ((aligned_base + page_size) > window_end))
+    return ACS_STATUS_SKIP;
+
+  *test_base_out = aligned_base;
+  return ACS_STATUS_PASS;
+}
+
+static uint32_t
+map_realm_alias(uint64_t phys, volatile uint64_t **virt_out)
+{
+  uint64_t page_size;
+  uint64_t va;
+  uint32_t attr;
+
+  if ((phys == 0u) || (virt_out == NULL))
+    return ACS_STATUS_ERR;
+
+  page_size = (uint64_t)val_memory_page_size();
+  if (page_size == 0u)
+    return ACS_STATUS_ERR;
+
+  va = val_get_free_va(page_size);
+  if (va == 0u)
+    return ACS_STATUS_ERR;
+
+  /*
+   * Use a cacheable Realm alias so the post-ERROR host read can participate
+   * in coherency. A device memory alias would not reliably create the snoop
+   * condition needed by RQWNBN.
+   */
+  attr = LOWER_ATTRS(PGT_ENTRY_ACCESS |
+                     SHAREABLE_ATTR(OUTER_SHAREABLE) |
+                     GET_ATTR_INDEX(WRITE_BACK_NT) |
+                     PGT_ENTRY_AP_RW |
+                     PAS_ATTR(REALM_PAS));
+
+  if (val_add_mmu_entry_el3(va, phys, attr))
+    return ACS_STATUS_ERR;
+
+  *virt_out = (volatile uint64_t *)va;
+  return ACS_STATUS_PASS;
+}
+
+static uint32_t
+host_read64(volatile uint64_t *address,
+            uint64_t *value_out,
+            uint32_t *fault_seen_out)
+{
+  uint32_t fault_seen;
+
+  if ((address == NULL) || (value_out == NULL))
+    return ACS_STATUS_ERR;
+
+  /*
+   * The final host read can fault when the model rejects external Realm DCM
+   * access after the TDI leaves RUN. Use the protected EL3 access path so the
+   * test can recover and inspect the Root Port AER status.
+   */
+  val_memory_clear_el3_access_state();
+  shared_data->access_mut = SET;
+  shared_data->pas_filter_flag = SET;
+  shared_data->arg1 = (uint64_t)address;
+  shared_data->exception_expected = SET;
+  shared_data->exception_generated = CLEAR;
+  shared_data->shared_data_access[0].data = *value_out;
+
+  if (val_pe_access_mut_el3())
+  {
+    val_memory_clear_el3_access_state();
+    return ACS_STATUS_ERR;
+  }
+
+  fault_seen = (shared_data->exception_expected == CLEAR);
+  *value_out = shared_data->shared_data_access[0].data;
+  if (fault_seen_out != NULL)
+    *fault_seen_out = fault_seen;
+  val_memory_clear_el3_access_state();
+  return ACS_STATUS_PASS;
+}
+
+static uint32_t
+get_tdisp_interface_state(val_spdm_context_t *spdm_ctx,
+                          uint32_t session_id,
+                          const pci_tdisp_interface_id_t *interface_id,
+                          uint8_t *tdi_state_out)
+{
+  if ((spdm_ctx == NULL) || (session_id == 0u) ||
+      (interface_id == NULL) || (tdi_state_out == NULL))
+    return ACS_STATUS_ERR;
+
+  return val_tdisp_get_interface_state(spdm_ctx,
+                                       session_id,
+                                       interface_id,
+                                       tdi_state_out);
+}
+
+static uint32_t
+establish_tdisp_run(uint32_t endpoint_bdf,
+                    val_spdm_context_t *spdm_ctx,
+                    uint32_t *session_id_out,
+                    pci_tdisp_interface_id_t *interface_id_out)
+{
+  pci_tdisp_requester_capabilities_t req_caps;
+  pci_tdisp_responder_capabilities_t rsp_caps;
+  pci_tdisp_lock_interface_param_t lock_param;
+  uint8_t nonce[PCI_TDISP_START_INTERFACE_NONCE_SIZE];
+  uint32_t session_id;
+  uint32_t status;
+  uint8_t tdi_state;
+
+  if ((spdm_ctx == NULL) || (session_id_out == NULL) || (interface_id_out == NULL))
+    return ACS_STATUS_ERR;
+
+  *session_id_out = 0u;
+  val_memory_set(spdm_ctx, sizeof(*spdm_ctx), 0);
+  val_memory_set(&req_caps, sizeof(req_caps), 0);
+  val_memory_set(&rsp_caps, sizeof(rsp_caps), 0);
+  val_memory_set(&lock_param, sizeof(lock_param), 0);
+  val_memory_set(nonce, sizeof(nonce), 0);
+
+  interface_id_out->function_id = (uint32_t)PCIE_CREATE_BDF_PACKED(endpoint_bdf);
+  interface_id_out->reserved = 0ull;
+
+  status = val_spdm_session_open(endpoint_bdf, spdm_ctx, &session_id);
+  if (status != ACS_STATUS_PASS)
+    return status;
+
+  status = val_spdm_send_pci_tdisp_get_version(spdm_ctx, session_id, interface_id_out);
+  if (status != ACS_STATUS_PASS)
+    goto close_session;
+
+  status = val_spdm_send_pci_tdisp_get_capabilities(spdm_ctx,
+                                                    session_id,
+                                                    interface_id_out,
+                                                    &req_caps,
+                                                    &rsp_caps);
+  if (status != ACS_STATUS_PASS)
+    goto close_session;
+
+  lock_param.flags = 0u;
+  lock_param.default_stream_id = 0u;
+  lock_param.reserved = 0u;
+  lock_param.mmio_reporting_offset = 0ull;
+  lock_param.bind_p2p_address_mask = 0ull;
+
+  status = val_spdm_send_pci_tdisp_lock_interface(spdm_ctx,
+                                                  session_id,
+                                                  interface_id_out,
+                                                  &lock_param,
+                                                  nonce);
+  if (status != ACS_STATUS_PASS)
+    goto close_session;
+
+  status = get_tdisp_interface_state(spdm_ctx, session_id, interface_id_out, &tdi_state);
+  if (status != ACS_STATUS_PASS)
+    goto close_session;
+
+  if (tdi_state != PCI_TDISP_INTERFACE_STATE_CONFIG_LOCKED)
+  {
+    val_print(ACS_PRINT_INFO, " RQWNBN: TDI not CONFIG_LOCKED 0x%x", tdi_state);
+    status = ACS_STATUS_SKIP;
+    goto close_session;
+  }
+
+  status = val_spdm_send_pci_tdisp_start_interface(spdm_ctx,
+                                                   session_id,
+                                                   interface_id_out,
+                                                   nonce);
+  if (status != ACS_STATUS_PASS)
+    goto close_session;
+
+  status = get_tdisp_interface_state(spdm_ctx, session_id, interface_id_out, &tdi_state);
+  if (status != ACS_STATUS_PASS)
+    goto close_session;
+
+  if (tdi_state != PCI_TDISP_INTERFACE_STATE_RUN)
+  {
+    val_print(ACS_PRINT_INFO, " RQWNBN: TDI not RUN 0x%x", tdi_state);
+    status = ACS_STATUS_SKIP;
+    goto close_session;
+  }
+
+  *session_id_out = session_id;
+  return ACS_STATUS_PASS;
+
+close_session:
+  (void)val_spdm_session_close(spdm_ctx, session_id);
+  return status;
+}
+
+static uint32_t
+force_tdi_error(val_spdm_context_t *spdm_ctx,
+                uint32_t session_id)
+{
+  if ((spdm_ctx == NULL) || (session_id == 0u))
+    return ACS_STATUS_ERR;
+
+  /*
+   * Closing the SPDM session while the interface is CONFIG_LOCKED or RUN is
+   * one of the TDI ERROR transition paths implemented by the model. After this
+   * point the secure session is gone, so the caller must not issue STOP_INTERFACE
+   * during cleanup.
+   */
+  return val_spdm_session_close(spdm_ctx, session_id);
+}
+
+static uint32_t
+stop_tdisp_if_needed(val_spdm_context_t *spdm_ctx,
+                     uint32_t session_id,
+                     const pci_tdisp_interface_id_t *interface_id,
+                     uint32_t tdi_in_error)
+{
+  if ((spdm_ctx == NULL) || (session_id == 0u) || (interface_id == NULL))
+    return ACS_STATUS_PASS;
+
+  if (tdi_in_error == 0u)
+    (void)val_spdm_send_pci_tdisp_stop_interface(spdm_ctx, session_id, interface_id);
+
+  return val_spdm_session_close(spdm_ctx, session_id);
+}
+
+static uint32_t
+prepare_context(TEST_CONTEXT *context)
+{
+  CXL_COMPONENT_TABLE *table;
+
+  if (context == NULL)
+    return ACS_STATUS_ERR;
+
+  init_context(context);
+
+  table = val_cxl_component_table_ptr();
+  if ((table == NULL) || (table->num_entries == 0u))
+    return ACS_STATUS_SKIP;
+
+  /*
+   * Walk CHI-C2C Root Ports first, then use the CDA helper to find a
+   * downstream CHI-C2C exerciser endpoint. This matches the other CDA tests
+   * and avoids depending on a separate CXL exerciser table being populated.
+   */
+  for (uint32_t root_idx = 0u; root_idx < table->num_entries; ++root_idx)
+  {
+    TEST_CONTEXT candidate;
+    const CXL_COMPONENT_ENTRY *root_port;
+    const CXL_COMPONENT_ENTRY *endpoint;
+    uint64_t host_comp_base;
+    uint32_t endpoint_bdf;
+    uint32_t status;
+    uint32_t ctl1_programmed;
+    uint32_t ctl1_readback;
+
+    init_context(&candidate);
+
+    root_port = &table->component[root_idx];
+    if (root_port->role != CXL_COMPONENT_ROLE_ROOT_PORT)
+      continue;
+
+    val_print(ACS_PRINT_DEBUG,
+              " RQWNBN: considering RP BDF 0x%x",
+              (uint64_t)root_port->bdf);
+    val_print(ACS_PRINT_DEBUG,
+              " RQWNBN: RP chi_c2c flag %u",
+              (uint64_t)root_port->chi_c2c_supported);
+
+    if (root_port->chi_c2c_supported == 0u)
+      continue;
+
+    status = val_cda_find_downstream_chi_c2c_exerciser_endpoint(root_port->bdf,
+                                                                &endpoint_bdf);
+    if (status != ACS_STATUS_PASS)
+    {
+      val_print(ACS_PRINT_DEBUG,
+                " RQWNBN: no downstream CHI-C2C exerciser for RP 0x%x",
+                (uint64_t)root_port->bdf);
+      val_print(ACS_PRINT_DEBUG,
+                " RQWNBN: downstream endpoint search status %u",
+                (uint64_t)status);
+      continue;
+    }
+
+    if (find_component_index_by_bdf(table,
+                                    endpoint_bdf,
+                                    &candidate.endpoint_index)
+        != ACS_STATUS_PASS)
+    {
+      val_print(ACS_PRINT_DEBUG,
+                " RQWNBN: endpoint 0x%x missing from component table",
+                (uint64_t)endpoint_bdf);
+      continue;
+    }
+
+    endpoint = &table->component[candidate.endpoint_index];
+    if ((endpoint->role != CXL_COMPONENT_ROLE_ENDPOINT) ||
+        (endpoint->chi_c2c_supported == 0u))
+    {
+      val_print(ACS_PRINT_DEBUG,
+                " RQWNBN: endpoint 0x%x is not CHI-C2C endpoint",
+                (uint64_t)endpoint_bdf);
+      continue;
+    }
+
+    candidate.root_index = root_idx;
+    candidate.root_bdf = root_port->bdf;
+    candidate.endpoint_bdf = endpoint_bdf;
+
+    if (val_pcie_find_cda_capability(candidate.root_bdf, &candidate.rmecda_cap_base)
+        != PCIE_SUCCESS)
+    {
+      val_print(ACS_PRINT_DEBUG,
+                " RQWNBN: root 0x%x lacks RME-CDA capability",
+                (uint64_t)candidate.root_bdf);
+      continue;
+    }
+
+    if (val_pcie_find_capability(candidate.root_bdf,
+                                 PCIE_ECAP,
+                                 ECID_AER,
+                                 &candidate.aer_offset) != PCIE_SUCCESS)
+    {
+      val_print(ACS_PRINT_DEBUG,
+                " RQWNBN: root 0x%x lacks AER capability",
+                (uint64_t)candidate.root_bdf);
+      continue;
+    }
+
+    candidate.host_index = root_port->host_bridge_index;
+    if (candidate.host_index == CXL_COMPONENT_INVALID_INDEX)
+    {
+      val_print(ACS_PRINT_DEBUG,
+                " RQWNBN: root 0x%x missing host bridge index",
+                (uint64_t)candidate.root_bdf);
+      continue;
+    }
+
+    if (val_cxl_select_cfmws_window(candidate.host_index,
+                                    &candidate.window_base,
+                                    &candidate.window_size) != ACS_STATUS_PASS)
+    {
+      val_print(ACS_PRINT_DEBUG,
+                " RQWNBN: host index %u has no CFMWS window",
+                (uint64_t)candidate.host_index);
+      continue;
+    }
+
+    host_comp_base = val_cxl_get_info(CXL_INFO_COMPONENT_BASE, candidate.host_index);
+    if (host_comp_base == 0u)
+    {
+      val_print(ACS_PRINT_DEBUG,
+                " RQWNBN: host index %u missing component base",
+                (uint64_t)candidate.host_index);
+      continue;
+    }
+
+    if (val_cxl_get_decoder(candidate.host_index,
+                            DECODER_SLOT,
+                            &candidate.host_decoder_base_orig,
+                            &candidate.host_decoder_size_orig) != 0u)
+    {
+      (void)restore_context_state(&candidate);
+      val_print(ACS_PRINT_DEBUG,
+                " RQWNBN: failed to save host decoder state",
+                0);
+      continue;
+    }
+
+    if (val_cxl_get_component_decoder(candidate.endpoint_index,
+                                      DECODER_SLOT,
+                                      &candidate.endpoint_decoder_base_orig,
+                                      &candidate.endpoint_decoder_size_orig)
+        != 0u)
+    {
+      (void)restore_context_state(&candidate);
+      val_print(ACS_PRINT_DEBUG,
+                " RQWNBN: failed to save endpoint decoder state",
+                0);
+      continue;
+    }
+
+    if (val_pcie_read_cfg(candidate.root_bdf,
+                          candidate.rmecda_cap_base + RMECDA_CTL1_OFFSET,
+                          &candidate.rmecda_ctl1_orig) != PCIE_SUCCESS)
+    {
+      (void)restore_context_state(&candidate);
+      continue;
+    }
+
+    val_print(ACS_PRINT_DEBUG,
+              " RQWNBN: RMECDA_CTL1 initial readback 0x%x",
+              (uint64_t)candidate.rmecda_ctl1_orig);
+
+    if ((candidate.rmecda_ctl1_orig &
+         (RMECDA_CTL1_TDISP_EN_MASK | RMECDA_CTL1_LINK_STR_LOCK_MASK)) != 0u)
+    {
+      /*
+       * RQWNBN owns its setup and does not consume state from any earlier CDA
+       * test. If RMECDA is already enabled/locked, skip this Root Port rather
+       * than depending on a preserved route or alias.
+       */
+      val_print(ACS_PRINT_DEBUG,
+                " RQWNBN: RMECDA_CTL1 not clean 0x%x",
+                (uint64_t)candidate.rmecda_ctl1_orig);
+      continue;
+    }
+
+    if (val_pcie_map_root_config(candidate.root_bdf,
+                                 &candidate.rmecda_cfg_va) != ACS_STATUS_PASS)
+    {
+      (void)restore_context_state(&candidate);
+      val_print(ACS_PRINT_DEBUG,
+                " RQWNBN: config map failed for RP 0x%x",
+                (uint64_t)candidate.root_bdf);
+      continue;
+    }
+
+    if (val_memory_read_el3(candidate.rmecda_cfg_va +
+                            candidate.rmecda_cap_base +
+                            RMECDA_CTL1_OFFSET,
+                            &candidate.rmecda_ctl1_orig) != ACS_STATUS_PASS)
+    {
+      (void)restore_context_state(&candidate);
+      continue;
+    }
+
+    candidate.rmecda_ctl1_valid = 1u;
+    if ((candidate.rmecda_ctl1_orig &
+         (RMECDA_CTL1_TDISP_EN_MASK | RMECDA_CTL1_LINK_STR_LOCK_MASK)) != 0u)
+    {
+      (void)restore_context_state(&candidate);
+      val_print(ACS_PRINT_DEBUG,
+                " RQWNBN: RMECDA_CTL1 root state not clean 0x%x",
+                (uint64_t)candidate.rmecda_ctl1_orig);
+      continue;
+    }
+
+    if (val_cxl_enable_mem(candidate.endpoint_bdf) != ACS_STATUS_PASS)
+    {
+      (void)restore_context_state(&candidate);
+      val_print(ACS_PRINT_DEBUG,
+                " RQWNBN: CXL.mem enable failed for EP 0x%x",
+                (uint64_t)candidate.endpoint_bdf);
+      continue;
+    }
+
+    if (program_host_decoder_for_root(candidate.root_bdf,
+                                      host_comp_base,
+                                      candidate.window_base,
+                                      candidate.window_size,
+                                      &candidate) != ACS_STATUS_PASS)
+    {
+      (void)restore_context_state(&candidate);
+      val_print(ACS_PRINT_DEBUG,
+                " RQWNBN: failed to program host decoder target",
+                0);
+      continue;
+    }
+
+    if (val_cxl_program_component_decoder(candidate.endpoint_index,
+                                          DECODER_SLOT,
+                                          candidate.window_base,
+                                          candidate.window_size) != ACS_STATUS_PASS)
+    {
+      (void)restore_context_state(&candidate);
+      val_print(ACS_PRINT_DEBUG,
+                " RQWNBN: failed to program endpoint decoder",
+                0);
+      continue;
+    }
+
+    ctl1_programmed = candidate.rmecda_ctl1_orig |
+                      RMECDA_CTL1_TDISP_EN_MASK |
+                      RMECDA_CTL1_LINK_STR_LOCK_MASK;
+
+    if (val_memory_write_el3(candidate.rmecda_cfg_va +
+                             candidate.rmecda_cap_base +
+                             RMECDA_CTL1_OFFSET,
+                             ctl1_programmed) != ACS_STATUS_PASS)
+    {
+      (void)restore_context_state(&candidate);
+      continue;
+    }
+
+    if (val_memory_read_el3(candidate.rmecda_cfg_va +
+                            candidate.rmecda_cap_base +
+                            RMECDA_CTL1_OFFSET,
+                            &ctl1_readback) != ACS_STATUS_PASS)
+    {
+      (void)restore_context_state(&candidate);
+      continue;
+    }
+
+    val_print(ACS_PRINT_DEBUG,
+              " RQWNBN: RMECDA_CTL1 root-write readback 0x%x",
+              (uint64_t)ctl1_readback);
+
+    if ((ctl1_readback &
+         (RMECDA_CTL1_TDISP_EN_MASK | RMECDA_CTL1_LINK_STR_LOCK_MASK)) !=
+        (RMECDA_CTL1_TDISP_EN_MASK | RMECDA_CTL1_LINK_STR_LOCK_MASK))
+    {
+      (void)restore_context_state(&candidate);
+      val_print(ACS_PRINT_DEBUG,
+                " RQWNBN: RMECDA_CTL1 required bits did not stick",
+                0);
+      continue;
+    }
+
+    *context = candidate;
+    val_print(ACS_PRINT_INFO, " RQWNBN: selected RP 0x%x", context->root_bdf);
+    val_print(ACS_PRINT_INFO, " RQWNBN: selected EP 0x%x", context->endpoint_bdf);
+    return ACS_STATUS_PASS;
+  }
+
+  return ACS_STATUS_SKIP;
+}
+
+static uint32_t
+exercise_rule(TEST_CONTEXT *context)
+{
+  volatile uint64_t *realm_alias;
+  PCIE_ENDPOINT_CFG endpoint_cfg;
+  val_spdm_context_t spdm_ctx;
+  pci_tdisp_interface_id_t interface_id;
+  uint32_t session_id;
+  uint32_t session_open;
+  uint32_t tdi_in_error;
+  uint32_t realm_assigned;
+  uint32_t result;
+  uint32_t status;
+  uint32_t aer_uncorr;
+  uint32_t endpoint_cfg_valid;
+  uint32_t host_fault;
+  uint64_t test_base;
+  uint64_t observed;
+
+  if (context == NULL)
+    return ACS_STATUS_ERR;
+
+  status = select_test_base(context->window_base,
+                            context->window_size,
+                            &test_base);
+  if (status != ACS_STATUS_PASS)
+    return status;
+
+  val_print(ACS_PRINT_INFO, " RQWNBN: Realm DCM page 0x%llx", test_base);
+
+  realm_alias = NULL;
+  if (map_realm_alias(test_base, &realm_alias) != ACS_STATUS_PASS)
+    return ACS_STATUS_ERR;
+
+  val_memory_set(&endpoint_cfg, sizeof(endpoint_cfg), 0);
+  endpoint_cfg_valid = 0u;
+  if (val_pcie_save_endpoint_cfg(context->endpoint_bdf, &endpoint_cfg) == ACS_STATUS_PASS)
+    endpoint_cfg_valid = 1u;
+  else
+    val_print(ACS_PRINT_WARN, " RQWNBN: endpoint config snapshot failed", 0);
+
+  val_memory_set(&spdm_ctx, sizeof(spdm_ctx), 0);
+  session_id = 0u;
+  session_open = 0u;
+  tdi_in_error = 0u;
+  realm_assigned = 0u;
+  result = ACS_STATUS_FAIL;
+
+  /*
+   * Associate the CFMWS-backed page with this TDI. External Realm DCM accesses
+   * are IDE-gated, so the test uses the exerciser's PAS=Realm path to create
+   * the TDI-side cached copy and reserves the host access for the final snoop.
+   */
+  status = val_cxl_exerciser_execute_cmd(context->endpoint_bdf,
+                                         CXL_CMD_OP_DCM_SET_REALM_ASSIGNMENT,
+                                         test_base,
+                                         1u,
+                                         NULL);
+  if (status != ACS_STATUS_PASS)
+  {
+    val_print(ACS_PRINT_INFO, " RQWNBN: Realm DCM assignment hook unavailable", 0);
+    return ACS_STATUS_SKIP;
+  }
+  realm_assigned = 1u;
+
+  status = establish_tdisp_run(context->endpoint_bdf,
+                               &spdm_ctx,
+                               &session_id,
+                               &interface_id);
+  if (status != ACS_STATUS_PASS)
+  {
+    result = ACS_STATUS_SKIP;
+    goto cleanup;
+  }
+  session_open = 1u;
+
+  /*
+   * Ask the exerciser/model to create a dirty cached copy for the Realm DCM
+   * page while the TDI is in RUN. The final host read after ERROR is then the
+   * observable snoop/writeback trigger.
+   */
+  status = val_cxl_exerciser_execute_cmd_with_ctrl(context->endpoint_bdf,
+                                                   CXL_CMD_OP_DCM_CACHE_DIRTY,
+                                                   CXL_CMD_CTRL_PAS_REALM,
+                                                   test_base,
+                                                   RQWNBN_SEED_VALUE,
+                                                   NULL);
+  if (status != ACS_STATUS_PASS)
+  {
+    val_print(ACS_PRINT_INFO, " RQWNBN: DCM cache-dirty stimulus unavailable", 0);
+    result = ACS_STATUS_SKIP;
+    goto cleanup;
+  }
+
+  /*
+   * Follow the setup with a Realm read from the running TDI before forcing
+   * ERROR. This verifies the page remains accessible through the TDI path.
+   */
+  status = val_cxl_exerciser_execute_cmd_with_ctrl(context->endpoint_bdf,
+                                                   CXL_CMD_OP_BACKDOOR_READ64,
+                                                   CXL_CMD_CTRL_PAS_REALM,
+                                                   test_base,
+                                                   0u,
+                                                   &observed);
+  if (status != ACS_STATUS_PASS)
+  {
+    val_print(ACS_PRINT_INFO, " RQWNBN: device Realm read stimulus unavailable", 0);
+    result = ACS_STATUS_SKIP;
+    goto cleanup;
+  }
+
+  if (observed != RQWNBN_SEED_VALUE)
+  {
+    val_print(ACS_PRINT_INFO,
+              " RQWNBN: device Realm read observed 0x%llx",
+              observed);
+    result = ACS_STATUS_SKIP;
+    goto cleanup;
+  }
+
+  status = force_tdi_error(&spdm_ctx, session_id);
+  if (status != ACS_STATUS_PASS)
+  {
+    result = ACS_STATUS_SKIP;
+    goto cleanup;
+  }
+  session_open = 0u;
+  tdi_in_error = 1u;
+
+  val_cxl_aer_clear(context->root_bdf, context->aer_offset);
+  observed = 0u;
+  host_fault = 0u;
+  status = host_read64(realm_alias, &observed, &host_fault);
+  (void)val_cxl_aer_read_uncorr(context->root_bdf,
+                                context->aer_offset,
+                                &aer_uncorr);
+  val_print(ACS_PRINT_DEBUG, " RQWNBN: host read status %u", status);
+  val_print(ACS_PRINT_DEBUG, " RQWNBN: host read fault %u", host_fault);
+  val_print(ACS_PRINT_DEBUG, " RQWNBN: host read observed 0x%llx", observed);
+  val_print(ACS_PRINT_DEBUG, " RQWNBN: AER uncorrectable 0x%x", aer_uncorr);
+
+  if ((aer_uncorr & AER_POISONED_TLP) == 0u)
+  {
+    val_print(ACS_PRINT_ERR,
+              " RQWNBN: Poisoned TLP not logged after TDI ERROR snoop",
+              0);
+    result = ACS_STATUS_FAIL;
+    goto cleanup;
+  }
+
+  result = ACS_STATUS_PASS;
+
+cleanup:
+  if (context->aer_offset != 0u)
+    val_cxl_aer_clear(context->root_bdf, context->aer_offset);
+
+  if (session_open != 0u)
+  {
+    if (stop_tdisp_if_needed(&spdm_ctx,
+                             session_id,
+                             &interface_id,
+                             tdi_in_error) != ACS_STATUS_PASS)
+    {
+      val_print(ACS_PRINT_WARN, " RQWNBN: TDISP session cleanup failed", 0);
+    }
+  }
+
+  if (realm_assigned != 0u)
+  {
+    if (val_cxl_exerciser_execute_cmd(context->endpoint_bdf,
+                                      CXL_CMD_OP_DCM_SET_REALM_ASSIGNMENT,
+                                      test_base,
+                                      0u,
+                                      NULL) != ACS_STATUS_PASS)
+    {
+      val_print(ACS_PRINT_WARN, " RQWNBN: failed to clear DCM assignment", 0);
+    }
+  }
+
+  if (tdi_in_error != 0u)
+  {
+    /*
+     * Forcing ERROR is the RQWNBN stimulus. Reset/unlock the endpoint before
+     * the next CDA test so this test does not leave TDISP state behind.
+     */
+    if (val_cxl_unlock_tsp_best_effort(context->root_bdf,
+                                       context->endpoint_bdf,
+                                       (endpoint_cfg_valid != 0u) ? &endpoint_cfg : NULL)
+        != ACS_STATUS_PASS)
+    {
+      val_print(ACS_PRINT_WARN, " RQWNBN: endpoint reset after ERROR failed", 0);
+      result = ACS_STATUS_FAIL;
+    }
+  }
+
+  return result;
+}
+
+static void
+payload(void)
+{
+  TEST_CONTEXT context;
+  uint32_t pe_index;
+  uint32_t status;
+  uint32_t cleanup_status;
+
+  pe_index = val_pe_get_index_mpid(val_pe_get_mpid());
+
+  status = prepare_context(&context);
+  if (status == ACS_STATUS_SKIP)
+  {
+    val_print(ACS_PRINT_INFO, " RQWNBN: no suitable CHI-C2C CDA context", 0);
+    val_set_status(pe_index, "SKIP", 01);
+    return;
+  }
+
+  if (status != ACS_STATUS_PASS)
+  {
+    val_set_status(pe_index, "FAIL", 01);
+    return;
+  }
+
+  status = exercise_rule(&context);
+  cleanup_status = restore_context_state(&context);
+  if (cleanup_status != ACS_STATUS_PASS)
+  {
+    val_print(ACS_PRINT_ERR, " RQWNBN: platform cleanup failed", 0);
+    status = ACS_STATUS_FAIL;
+  }
+
+  if (status == ACS_STATUS_PASS)
+    val_set_status(pe_index, "PASS", 01);
+  else if (status == ACS_STATUS_SKIP)
+    val_set_status(pe_index, "SKIP", 02);
+  else
+    val_set_status(pe_index, "FAIL", 02);
+}
+
+#else
+
+static void
+payload(void)
+{
+  uint32_t pe_index;
+
+  pe_index = val_pe_get_index_mpid(val_pe_get_mpid());
+  val_print(ACS_PRINT_INFO, " RQWNBN: SPDM/TDISP support not enabled", 0);
+  val_set_status(pe_index, "SKIP", 01);
+}
+
+#endif
+
+uint32_t
+cda_rqwnbn_error_poison_response_entry(uint32_t num_pe)
+{
+  uint32_t status;
+
+  num_pe = 1;
+  status = val_initialize_test(TEST_NAME, TEST_DESC, num_pe, TEST_RULE);
+
+  if (status != ACS_STATUS_SKIP)
+    val_run_test_payload(num_pe, payload, 0);
+
+  status = val_check_for_error(num_pe);
+
+  val_report_status(0, "END");
+
+  return status;
+}

@@ -29,6 +29,20 @@
 #define TEST_DESC "One coherent device per coherent link topology"
 #define TEST_RULE "RSHRMN"
 
+/*
+ * Test strategy:
+ *  1. Find each CHI-C2C root port that exposes the RME-CDA DVSEC.
+ *  2. Use the root port Secondary/Subordinate bus numbers to identify the
+ *     downstream hierarchy attached to that coherent link.
+ *  3. Count downstream CHI-C2C endpoints as coherent device groups. Multiple
+ *     functions on the same bus/device are counted as one coherent device.
+ *  4. Fail the link if more than one coherent device group is present.
+ *
+ * The optional attestation/assignment flow called out by the informational
+ * statements is intentionally not performed here; this test is limited to the
+ * topology rule check.
+ */
+
 static uint32_t
 coherent_device_key(uint32_t bdf)
 {
@@ -41,6 +55,11 @@ coherent_device_key(uint32_t bdf)
   return bdf & ~0xFFu;
 }
 
+/*
+ * Return 1 only for the first endpoint function seen for a coherent device
+ * group. This avoids counting multifunction requesters inside one device as
+ * multiple coherent devices.
+ */
 static uint32_t
 is_first_device_group(const CXL_COMPONENT_TABLE *table,
                       uint32_t candidate_index,
@@ -55,6 +74,11 @@ is_first_device_group(const CXL_COMPONENT_TABLE *table,
 
   candidate_key = coherent_device_key(table->component[candidate_index].bdf);
 
+  /*
+   * Only compare against earlier downstream CHI-C2C endpoints for the same
+   * root-port bus window. Endpoints elsewhere in the CXL table do not belong
+   * to this coherent link.
+   */
   for (uint32_t idx = 0u; idx < candidate_index; ++idx)
   {
     const CXL_COMPONENT_ENTRY *entry = &table->component[idx];
@@ -72,6 +96,11 @@ is_first_device_group(const CXL_COMPONENT_TABLE *table,
   return 1u;
 }
 
+/*
+ * Count how many requester functions are represented by one coherent device
+ * group. The count is used for diagnostics only; RSHRMN permits multiple
+ * requesters when they are part of the same coherent device.
+ */
 static uint32_t
 count_group_functions(const CXL_COMPONENT_TABLE *table,
                       uint32_t root_bdf,
@@ -101,6 +130,11 @@ count_group_functions(const CXL_COMPONENT_TABLE *table,
   return function_count;
 }
 
+/*
+ * Check one CHI-C2C root-port link. A skipped result means the link could not
+ * be evaluated because it has no downstream bus window or no downstream
+ * CHI-C2C coherent endpoint in the component table.
+ */
 static uint32_t
 check_root_port_topology(const CXL_COMPONENT_TABLE *table,
                          const CXL_COMPONENT_ENTRY *root_port)
@@ -125,6 +159,11 @@ check_root_port_topology(const CXL_COMPONENT_TABLE *table,
   secondary_bus = (pbn >> SECBN_SHIFT) & SECBN_MASK;
   subordinate_bus = (pbn >> SUBBN_SHIFT) & SUBBN_MASK;
 
+  /*
+   * The Type 1 bus numbers define the hierarchy below this root port. The
+   * helper filters candidates by segment, endpoint role, CHI-C2C support, and
+   * this inclusive bus range.
+   */
   val_print(ACS_PRINT_INFO, " RSHRMN: checking CHI-C2C RP 0x%x",
             root_port->bdf);
   val_print(ACS_PRINT_DEBUG, " RSHRMN: secondary bus 0x%x", secondary_bus);
@@ -142,6 +181,7 @@ check_root_port_topology(const CXL_COMPONENT_TABLE *table,
     uint32_t device_key;
     uint32_t function_count;
 
+    /* Ignore non-endpoints, non-CHI-C2C devices, and devices on other links. */
     if (val_cda_is_downstream_chi_c2c_endpoint(entry,
                                                root_port->bdf,
                                                secondary_bus,
@@ -150,6 +190,11 @@ check_root_port_topology(const CXL_COMPONENT_TABLE *table,
 
     endpoint_function_count++;
 
+    /*
+     * Count one coherent device group per segment/bus/device. Additional
+     * functions for that same group are expected for multifunction devices and
+     * are not an RSHRMN violation.
+     */
     if (is_first_device_group(table,
                               idx,
                               root_port->bdf,
@@ -179,6 +224,7 @@ check_root_port_topology(const CXL_COMPONENT_TABLE *table,
     return ACS_STATUS_SKIP;
   }
 
+  /* RSHRMN allows exactly one coherent device group on a coherent link. */
   if (device_group_count > 1u)
   {
     val_print(ACS_PRINT_ERR,
@@ -224,6 +270,11 @@ payload(void)
     return;
   }
 
+  /*
+   * RSHRMN applies to coherent links, so start from CHI-C2C root ports that
+   * expose the RME-CDA capability. Endpoint-only entries and non-coherent root
+   * ports are not part of this rule check.
+   */
   for (uint32_t idx = 0u; idx < table->num_entries; ++idx)
   {
     const CXL_COMPONENT_ENTRY *entry = &table->component[idx];

@@ -56,6 +56,7 @@ typedef struct {
   uint32_t rmecda_ctl1_orig;
   uint32_t rmecda_ctl1_valid;
   uint32_t rmecda_cap_base;
+  uint64_t rmecda_cfg_va;
 } TEST_CONTEXT;
 
 static void
@@ -102,13 +103,17 @@ restore_context_state(const TEST_CONTEXT *context)
 
   if (context->rmecda_ctl1_valid != 0u)
   {
-    val_pcie_write_cfg(context->root_bdf,
-                       context->rmecda_cap_base + RMECDA_CTL1_OFFSET,
-                       context->rmecda_ctl1_orig);
+    if (context->rmecda_cfg_va == 0u)
+      return ACS_STATUS_ERR;
 
-    if ((val_pcie_read_cfg(context->root_bdf,
-                           context->rmecda_cap_base + RMECDA_CTL1_OFFSET,
-                           &readback) != PCIE_SUCCESS) ||
+    if ((val_memory_write_el3(context->rmecda_cfg_va +
+                              context->rmecda_cap_base +
+                              RMECDA_CTL1_OFFSET,
+                              context->rmecda_ctl1_orig) != ACS_STATUS_PASS) ||
+        (val_memory_read_el3(context->rmecda_cfg_va +
+                             context->rmecda_cap_base +
+                             RMECDA_CTL1_OFFSET,
+                             &readback) != ACS_STATUS_PASS) ||
         (readback != context->rmecda_ctl1_orig))
     {
       val_print(ACS_PRINT_WARN,
@@ -287,9 +292,21 @@ prepare_context(TEST_CONTEXT *context)
       continue;
     }
 
-    if (val_pcie_read_cfg(candidate.root_bdf,
-                          candidate.rmecda_cap_base + RMECDA_CTL1_OFFSET,
-                          &candidate.rmecda_ctl1_orig) != PCIE_SUCCESS)
+    if (val_pcie_map_root_config(candidate.root_bdf,
+                                 &candidate.rmecda_cfg_va) != ACS_STATUS_PASS)
+    {
+      val_print(ACS_PRINT_DEBUG,
+                " RWWBPM: config map failed for RP 0x%x",
+                (uint64_t)candidate.root_bdf);
+      if (restore_context_state(&candidate) != ACS_STATUS_PASS)
+        return ACS_STATUS_ERR;
+      continue;
+    }
+
+    if (val_memory_read_el3(candidate.rmecda_cfg_va +
+                            candidate.rmecda_cap_base +
+                            RMECDA_CTL1_OFFSET,
+                            &candidate.rmecda_ctl1_orig) != ACS_STATUS_PASS)
     {
       if (restore_context_state(&candidate) != ACS_STATUS_PASS)
         return ACS_STATUS_ERR;
@@ -312,27 +329,29 @@ prepare_context(TEST_CONTEXT *context)
     }
     else
     {
-      /*
-       * Avoid EL3-mediated config-space writes here.  The previous CDA rule can
-       * legitimately end with a terminal reject path, after which another EL3
-       * MMU/MUT config access is not a safe setup dependency for this test.
-       */
-      val_pcie_write_cfg(candidate.root_bdf,
-                         candidate.rmecda_cap_base + RMECDA_CTL1_OFFSET,
-                         ctl1_programmed);
-
-      if (val_pcie_read_cfg(candidate.root_bdf,
-                            candidate.rmecda_cap_base + RMECDA_CTL1_OFFSET,
-                            &ctl1_readback) != PCIE_SUCCESS)
+      candidate.rmecda_ctl1_valid = 1u;
+      if (val_memory_write_el3(candidate.rmecda_cfg_va +
+                               candidate.rmecda_cap_base +
+                               RMECDA_CTL1_OFFSET,
+                               ctl1_programmed) != ACS_STATUS_PASS)
       {
         if (restore_context_state(&candidate) != ACS_STATUS_PASS)
           return ACS_STATUS_ERR;
         continue;
       }
 
-      candidate.rmecda_ctl1_valid = 1u;
+      if (val_memory_read_el3(candidate.rmecda_cfg_va +
+                              candidate.rmecda_cap_base +
+                              RMECDA_CTL1_OFFSET,
+                              &ctl1_readback) != ACS_STATUS_PASS)
+      {
+        if (restore_context_state(&candidate) != ACS_STATUS_PASS)
+          return ACS_STATUS_ERR;
+        continue;
+      }
+
       val_print(ACS_PRINT_DEBUG,
-                " RWWBPM: RMECDA_CTL1 config-write readback 0x%x",
+                " RWWBPM: RMECDA_CTL1 root-write readback 0x%x",
                 (uint64_t)ctl1_readback);
     }
 

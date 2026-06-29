@@ -60,6 +60,7 @@
   ../test_pool/cda/cda_rjzqcp_reset_transition.c
   ../test_pool/cda/cda_rkrcwk_host_side_gpc.c
   ../test_pool/cda/cda_rshrmn_coherent_link_topology.c
+  ../test_pool/cda/cda_rqwnbn_error_poison_response.c
   ../test_pool/cda/cda_rfzbmw_external_dcm_ide_gate.c
   ../test_pool/cda/cda_rydsyl_d2h_sec_sid_rid.c
   ../test_pool/cda/cda_rdmspt_rid_range_check.c

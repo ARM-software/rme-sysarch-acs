@@ -1163,6 +1163,13 @@ cleanup:
               " RFZBMW: terminal reject observed; avoiding post-reject SMC cleanup",
               0);
     best_effort_restore_rmecda_ctl1_cfg(context);
+    /*
+     * RMECDA_CTL1 can remain enabled after the terminal reject. In that state
+     * post-reject EL3 config or host-decoder writes are not safe, so do not
+     * attempt further restore operations from this test.
+     */
+    context->host_target_valid = 0u;
+    context->host_decoder_size_orig = 0u;
     dcm_cleanup_allowed = 0u;
   }
 

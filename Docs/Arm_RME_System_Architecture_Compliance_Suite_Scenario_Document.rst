@@ -1244,6 +1244,32 @@ Testcase checklist
 
   * -
 
+      `cda_rqwnbn_error_poison_response <../test_pool/cda/cda_rqwnbn_error_poison_response.c>`_
+
+    -
+
+      RQWNBN: When a TDI of a coherent device is in the ERROR TDISP state, then for any cached Location in the Realm PAS that is associated with the TDI:
+
+      - The coherent device will poison write-backs of that Location from the cache.
+      - The coherent device will respond with a poison to snoop requests to that Location.
+
+    -
+
+      1. Select a CHI-C2C-capable CXL root port that exposes the RME-CDA DVSEC and locate a downstream CHI-C2C exerciser endpoint. Skip the test if no such endpoint is available.
+      2. Require a clean RMECDA_CTL1 state for the selected root port. Skip that root port if RMECDA_CTL1.TDISP_EN or RMECDA_CTL1.LINK_STR_LOCK is already set so the test does not consume preserved state from another CDA scenario.
+      3. Enable CXL.mem, select a CFMWS-backed DCM page, and program the host and endpoint HDM decoders for that window.
+      4. Enable RMECDA_CTL1.TDISP_EN and set RMECDA_CTL1.LINK_STR_LOCK after decoder programming is complete.
+      5. Map the selected DCM page as a cacheable Realm alias, assign the DCM page to the endpoint TDI, establish SPDM/TDISP, and transition the TDI to RUN.
+      6. Use the exerciser Realm path to dirty/cache the selected Realm DCM Location on the TDI side, then read it back through the same Realm device path to verify the cached value is associated with that TDI.
+      7. Force the TDI into ERROR by closing the SPDM session while the TDI is in RUN state.
+      8. Clear the root-port AER Uncorrectable Status register, then issue a protected host read to the cacheable Realm alias so the host attempts to consume or snoop the TDI-associated cached Location.
+      9. Pass the test when the root port logs a Poisoned TLP in AER after the host read. Fail the test if the host read completes without the Poisoned TLP indication.
+      10. Clear AER status, clear the DCM assignment when safe, reset/unlock the endpoint after the intentional TDI ERROR, close any still-open SPDM/TDISP session, and restore RMECDA/decoder state.
+
+      Note: This CDA scenario is applicable only to CHI-C2C-capable devices. ACS uses the root-port Poisoned TLP indication as the observable result because host software cannot directly inspect the CHI snoop response payload.
+
+  * -
+
       `cxl_rgtvgz_tdisp_enable_link_gate <../test_pool/cxl/cxl_rgtvgz_tdisp_enable_link_gate.c>`_
 
     -
@@ -1537,7 +1563,7 @@ Testcase checklist
     -
 
       1. Select a CHI-C2C-capable CXL root port and a downstream CHI-C2C exerciser endpoint, then choose a device-local DCM location for the internal access path.
-      2. Verify RMECDA_CTL1.TDISP_EN and RMECDA_CTL1.LINK_STR_LOCK are set, enabling them through normal config access with readback if required, and transition the endpoint TDI to RUN.
+      2. Verify RMECDA_CTL1.TDISP_EN and RMECDA_CTL1.LINK_STR_LOCK are set, enabling them through Root config access with readback if required, and transition the endpoint TDI to RUN.
       3. Assign the selected device-local DCM location to Realm.
       4. Seed that Realm-assigned DCM location with a known baseline value, then issue an internal device access that specifies PAS==Realm and verify the DCM contents change.
       5. Transition the TDI out of RUN with STOP_INTERFACE, restore a known baseline value at the same Realm-assigned DCM location, and re-issue the same internal PAS==Realm access.

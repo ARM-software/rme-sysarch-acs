@@ -766,6 +766,7 @@ typedef enum {
 #define CXL_CMD_OP_BISNP                     0x2u
 #define CXL_CMD_OP_BACKDOOR_WRITE64          0x3u
 #define CXL_CMD_OP_DCM_SET_REALM_ASSIGNMENT  0x6u
+#define CXL_CMD_OP_DCM_CACHE_DIRTY           0x7u
 #define CXL_CMD_CTRL_PAS_REALM               (1u << 8)
 
 typedef enum {
