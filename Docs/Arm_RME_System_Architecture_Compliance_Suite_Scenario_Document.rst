@@ -1566,6 +1566,78 @@ Testcase checklist
 
   * -
 
+      `tdisp_rxdkdt_set_interface_req_semantics <../test_pool/tdisp/tdisp_rxdkdt_set_interface_req_semantics.c>`_
+
+    -
+
+      RXDKDT: The TDISP VDM request SET_INTERFACE_REQ applies to a specific
+      INTERFACE_ID. The device must not ignore the INTERFACE_ID field when
+      applying the request.
+
+    -
+
+      1. Select CHI-C2C-capable Root Ports from the CXL component table.
+      2. For each Root Port, locate a downstream endpoint and skip if none.
+      3. Verify RME-CDA DVSEC on the Root Port and enable RMECDA_CTL1.TDISP_EN.
+      4. Establish an SPDM session to the downstream endpoint.
+      5. Derive a valid INTERFACE_ID from the endpoint BDF.
+      6. Query GET_INTERFACE_STATE and proceed only if the state is
+         CONFIG_UNLOCKED.
+      7. Query GET_DEV_PROP to determine MEC support / MECID width and select a
+         benign PMECID value (PMECID=0).
+      8. Baseline: send SET_INTERFACE with the valid INTERFACE_ID and confirm a
+         success-path SET_INTERFACE_RESP is returned.
+      9. Negative: send SET_INTERFACE with a different INTERFACE_ID and confirm
+         it does not return a success-path SET_INTERFACE_RESP.
+      10. Close the SPDM session and disable TDISP on the Root Port.
+
+  * -
+
+      `tdisp_rfmhst_set_interface_resp_format <../test_pool/tdisp/tdisp_rfmhst_set_interface_resp_format.c>`_
+
+    -
+
+      RFMHST: The TDISP VDM response SET_INTERFACE_RESP has the specified format
+      and contains only the Arm VDM header and the request/response header.
+
+    -
+
+      1. Select CHI-C2C-capable Root Ports from the CXL component table.
+      2. For each Root Port, locate a downstream endpoint and skip if none.
+      3. Verify RME-CDA DVSEC on the Root Port and enable RMECDA_CTL1.TDISP_EN.
+      4. Establish an SPDM session to the downstream endpoint.
+      5. Derive INTERFACE_ID from the endpoint BDF.
+      6. Query GET_INTERFACE_STATE and proceed only if the state is
+         CONFIG_UNLOCKED.
+      7. Send Arm VDM SET_INTERFACE (PMECID=0) and capture SET_INTERFACE_RESP.
+      8. Validate SET_INTERFACE_RESP framing: MessageType==VDM_RSP, Arm VDM
+         header fields match, Arm type is SET_INTERFACE_RESP, and the response
+         size matches the base header size.
+      9. Close the SPDM session and disable TDISP on the Root Port.
+
+  * -
+
+      `tdisp_rwfpxr_tdisp_error_allowed <../test_pool/tdisp/tdisp_rwfpxr_tdisp_error_allowed.c>`_
+
+    -
+
+      RWFPXR: For an Arm TDISP VDM request that is malformed, the device is
+      permitted to respond with a TDISP_ERROR response message.
+
+    -
+
+      1. Select CHI-C2C-capable Root Ports from the CXL component table.
+      2. For each Root Port, locate a downstream endpoint and skip if none.
+      3. Verify RME-CDA DVSEC on the Root Port and enable RMECDA_CTL1.TDISP_EN.
+      4. Establish an SPDM session to the downstream endpoint.
+      5. Derive INTERFACE_ID from the endpoint BDF.
+      6. Build a minimal Arm VDM request and set an invalid Arm message type.
+      7. Send the malformed request over SPDM and verify MessageType is
+         PCI_TDISP_ERROR.
+      8. Close the SPDM session and disable TDISP on the Root Port.
+
+  * -
+
       `dpt_system_resource_valid_without_dpti <../test_pool/dpt/dpt_system_resource_valid_without_dpti.c>`_, `dpt_system_resource_valid_with_dpti <../test_pool/dpt/dpt_system_resource_valid_with_dpti.c>`_, `dpt_system_resource_invalid <../test_pool/dpt/dpt_system_resource_invalid.c>`_, `dpt_p2p_same_rootport_valid <../test_pool/dpt/dpt_p2p_same_rootport_valid.c>`_, `dpt_p2p_same_rootport_invalid <../test_pool/dpt/dpt_p2p_same_rootport_invalid.c>`_, `dpt_p2p_different_rootport_valid <../test_pool/dpt/dpt_p2p_different_rootport_valid.c>`_, `dpt_p2p_different_rootport_invalid <../test_pool/dpt/dpt_p2p_different_rootport_invalid.c>`_
 
     -

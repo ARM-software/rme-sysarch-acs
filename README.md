@@ -23,12 +23,13 @@ Most of the tests are executed from UEFI Shell by executing the RME UEFI shell a
     - Issue B: EAC
     - Issue C:
       - CDA: ALPHA
-      - CXL: BETA
-      - TDISP: ALPHA
+      - CXL: EAC
+      - TDISP: BETA
   - The tests are written for version A.d, B.a and C.a of the Arm Realm Management Extension (RME) System Architecture.
   - The compliance suite is not a substitute for design verification.
 
 ## GitHub branch
+  - Latest tag: vC.a_CXL.EAC_TDISP.BETA_26.07
   - To pick up the release version of the code, checkout the latest tag.
   - To get the latest version of the code with bug fixes and new features, use the master branch.
 
