@@ -144,6 +144,7 @@ payload(void)
 
   if ((cxl_tbl_ptr == NULL) || (cxl_tbl_ptr->num_entries == 0u))
   {
+    val_print(ACS_PRINT_ERR, " No CXL components found", 0);
     val_set_status(pe_index, "SKIP", 01);
     return;
   }
@@ -164,16 +165,25 @@ payload(void)
     endpoint_index = CXL_COMPONENT_INVALID_INDEX;
     status = val_cxl_find_downstream_endpoint(root_index, &endpoint_index);
     if (status != ACS_STATUS_PASS)
+    {
+      val_print(ACS_PRINT_DEBUG, " No downstream EP for RP 0x%x", rp_bdf);
       continue;
+    }
 
     endpoint = &cxl_tbl_ptr->component[endpoint_index];
     bdf = endpoint->bdf;
     if (bdf == CXL_COMPONENT_INVALID_INDEX)
+    {
+      val_print(ACS_PRINT_DEBUG, " Invalid EP BDF for RP 0x%x", rp_bdf);
       continue;
+    }
 
     /* Ensure RME-CDA DVSEC exists on the root port before enabling TDISP. */
     if (val_pcie_find_cda_capability(rp_bdf, &cda_cap_base) != PCIE_SUCCESS)
+    {
+      val_print(ACS_PRINT_DEBUG, " CDA cap not found for RP 0x%x", rp_bdf);
       continue;
+    }
 
     tdisp_enabled = 0;
     session_open = 0;
@@ -181,6 +191,7 @@ payload(void)
     /* TDISP enable is controlled on the root port (RME-CDA DVSEC). */
     if (val_pcie_enable_tdisp(rp_bdf))
     {
+      val_print(ACS_PRINT_ERR, " Failed to enable TDISP for RP 0x%x", rp_bdf);
       test_fail++;
       continue;
     }
@@ -189,9 +200,13 @@ payload(void)
     /* VDM messages are tunneled over SPDM; open a session to the endpoint. */
     status = val_spdm_session_open(bdf, &spdm_context, &session_id);
     if (status == ACS_STATUS_SKIP)
+    {
+      val_print(ACS_PRINT_WARN, " SPDM session not available for 0x%x", bdf);
       goto cleanup;
+    }
     if (status != ACS_STATUS_PASS)
     {
+      val_print(ACS_PRINT_ERR, " SPDM session open failed for 0x%x", bdf);
       test_fail++;
       goto cleanup;
     }
@@ -213,6 +228,7 @@ payload(void)
       goto cleanup;
     if (status != ACS_STATUS_PASS)
     {
+      val_print(ACS_PRINT_ERR, " GET_VERSION failed for 0x%x", bdf);
       test_fail++;
       goto cleanup;
     }

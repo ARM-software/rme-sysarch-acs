@@ -136,8 +136,7 @@ tdisp_rxdkdt_get_pmecid_for_device(uint32_t bdf,
 }
 
 static uint32_t
-tdisp_rxdkdt_validate_set_interface_success_rsp(uint32_t bdf,
-                                                const uint8_t *response,
+tdisp_rxdkdt_validate_set_interface_success_rsp(const uint8_t *response,
                                                 uint32_t response_size)
 {
   /* Validate the response envelope and that the Arm message is SET_INTERFACE_RESP. */
@@ -157,10 +156,7 @@ tdisp_rxdkdt_validate_set_interface_success_rsp(uint32_t bdf,
 
   /* Need at least the Arm VDM header + request/response header. */
   if (response_size < VAL_TDISP_ARM_VDM_BASE_SIZE)
-  {
-    val_print(ACS_PRINT_WARN, " SET_INTERFACE_RESP too small for 0x%x", bdf);
     return ACS_STATUS_FAIL;
-  }
 
   rsp_msg_type = response[VAL_TDISP_HDR_MSG_TYPE_OFF];
   /* SET_INTERFACE success-path responses must use VDM_RSP MessageType. */
@@ -213,14 +209,17 @@ tdisp_rxdkdt_set_interface_and_get_success(uint32_t bdf,
                                        response,
                                        &response_size);
   if (status != ACS_STATUS_PASS)
+  {
+    val_print(ACS_PRINT_ERR, " SET_INTERFACE send failed for 0x%x", bdf);
     return status;
+  }
 
   /*
    * For the negative path we intentionally treat malformed/short replies as
    * 'not success' so the payload can evaluate INTERFACE_ID semantics.
    */
   /* Treat TDISP_ERROR or invalid response as "not a success response". */
-  if (tdisp_rxdkdt_validate_set_interface_success_rsp(bdf, response, response_size) ==
+  if (tdisp_rxdkdt_validate_set_interface_success_rsp(response, response_size) ==
       ACS_STATUS_PASS)
   {
     *success = 1;
@@ -263,6 +262,7 @@ payload(void)
 
   if ((cxl_tbl_ptr == NULL) || (cxl_tbl_ptr->num_entries == 0u))
   {
+    val_print(ACS_PRINT_ERR, " No CXL components found", 0);
     val_set_status(pe_index, "SKIP", 01);
     return;
   }
@@ -282,15 +282,24 @@ payload(void)
     endpoint_index = CXL_COMPONENT_INVALID_INDEX;
     status = val_cxl_find_downstream_endpoint(root_index, &endpoint_index);
     if (status != ACS_STATUS_PASS)
+    {
+      val_print(ACS_PRINT_DEBUG, " No downstream EP for RP 0x%x", rp_bdf);
       continue;
+    }
 
     endpoint = &cxl_tbl_ptr->component[endpoint_index];
     bdf = endpoint->bdf;
     if (bdf == CXL_COMPONENT_INVALID_INDEX)
+    {
+      val_print(ACS_PRINT_DEBUG, " Invalid EP BDF for RP 0x%x", rp_bdf);
       continue;
+    }
 
     if (val_pcie_find_cda_capability(rp_bdf, &cda_cap_base) != PCIE_SUCCESS)
+    {
+      val_print(ACS_PRINT_DEBUG, " CDA cap not found for RP 0x%x", rp_bdf);
       continue;
+    }
 
     tdisp_enabled = 0;
     session_open = 0;
@@ -301,6 +310,7 @@ payload(void)
     /* TDISP enable is controlled on the root port (RME-CDA DVSEC). */
     if (val_pcie_enable_tdisp(rp_bdf))
     {
+      val_print(ACS_PRINT_ERR, " Failed to enable TDISP for RP 0x%x", rp_bdf);
       test_fail++;
       continue;
     }
@@ -309,9 +319,13 @@ payload(void)
     /* VDM messages are tunneled over SPDM; open a session to the endpoint. */
     status = val_spdm_session_open(bdf, &spdm_context, &session_id);
     if (status == ACS_STATUS_SKIP)
+    {
+      val_print(ACS_PRINT_WARN, " SPDM session not available for 0x%x", bdf);
       goto cleanup;
+    }
     if (status != ACS_STATUS_PASS)
     {
+      val_print(ACS_PRINT_ERR, " SPDM session open failed for 0x%x", bdf);
       test_fail++;
       goto cleanup;
     }
@@ -331,9 +345,15 @@ payload(void)
                                           &interface_id_valid,
                                           &tdi_state);
     if (status != ACS_STATUS_PASS)
+    {
+      val_print(ACS_PRINT_ERR, " Failed to get interface state for 0x%x", bdf);
       goto cleanup;
+    }
     if (tdi_state != PCI_TDISP_INTERFACE_STATE_CONFIG_UNLOCKED)
+    {
+      val_print(ACS_PRINT_DEBUG, " Interface not CONFIG_UNLOCKED for 0x%x", bdf);
       goto cleanup;
+    }
 
     pmecid = 0;
     /* Use a benign PMECID (see helper comment above). */
