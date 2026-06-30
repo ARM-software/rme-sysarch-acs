@@ -249,9 +249,8 @@ payload(void)
 }
 
 uint32_t
-tdisp_rgrpdp_get_dev_prop_req_entry(void)
+tdisp_rgrpdp_get_dev_prop_req_entry(uint32_t num_pe)
 {
-  uint32_t num_pe;
   uint32_t status;
 
   num_pe = 1;

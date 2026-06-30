@@ -411,9 +411,8 @@ payload(void)
 }
 
 uint32_t
-tdisp_rxdkdt_set_interface_req_semantics_entry(void)
+tdisp_rxdkdt_set_interface_req_semantics_entry(uint32_t num_pe)
 {
-  uint32_t num_pe;
   uint32_t status;
 
   num_pe = 1;

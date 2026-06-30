@@ -160,18 +160,27 @@ uint32_t
 val_rme_tdisp_execute_tests(uint32_t num_pe);
 
 uint32_t
+tdisp_rwfpxr_tdisp_error_allowed_entry(uint32_t num_pe);
+
+uint32_t
+tdisp_rxdkdt_set_interface_req_semantics_entry(uint32_t num_pe);
+
+uint32_t
+tdisp_rfmhst_set_interface_resp_format_entry(uint32_t num_pe);
+
+uint32_t
 tdisp_rfpymv_vdm_response_check_entry(uint32_t num_pe);
 
 uint32_t
-tdisp_rpxlfy_get_version_req_entry(void);
+tdisp_rpxlfy_get_version_req_entry(uint32_t num_pe);
 
 uint32_t
-tdisp_rwfwlf_get_version_resp_format_entry(void);
+tdisp_rwfwlf_get_version_resp_format_entry(uint32_t num_pe);
 
 uint32_t
-tdisp_rgrpdp_get_dev_prop_req_entry(void);
+tdisp_rgrpdp_get_dev_prop_req_entry(uint32_t num_pe);
 
 uint32_t
-tdisp_rghdcb_get_dev_prop_resp_format_entry(void);
+tdisp_rghdcb_get_dev_prop_resp_format_entry(uint32_t num_pe);
 
 #endif
