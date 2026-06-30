@@ -380,14 +380,11 @@ val_rme_tdisp_execute_tests(uint32_t num_pe)
   g_curr_module = 1 << TDISP_MODULE_ID;
 
   val_print(ACS_PRINT_ALWAYS, "\n\n*******************************************************\n", 0);
-  status = tdisp_rpxlfy_get_version_req_entry();
-  status |= tdisp_rwfwlf_get_version_resp_format_entry();
-  status |= tdisp_rgrpdp_get_dev_prop_req_entry();
-  status |= tdisp_rghdcb_get_dev_prop_resp_format_entry();
-  status |= tdisp_rfpymv_vdm_response_check_entry();
-  status |= tdisp_rxdkdt_set_interface_req_semantics_entry();
-  status |= tdisp_rfmhst_set_interface_resp_format_entry();
-  status |= tdisp_rwfpxr_tdisp_error_allowed_entry();
+  status = val_execute_module_tests(TDISP_MODULE_ID,
+                                    TDISP_MODULE_START,
+                                    TDISP_MODULE_END,
+                                    num_pe,
+                                    status);
 
   return status;
 }

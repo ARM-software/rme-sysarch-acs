@@ -224,9 +224,8 @@ payload(void)
 }
 
 uint32_t
-tdisp_rfmhst_set_interface_resp_format_entry(void)
+tdisp_rfmhst_set_interface_resp_format_entry(uint32_t num_pe)
 {
-  uint32_t num_pe;
   uint32_t status;
 
   num_pe = 1;

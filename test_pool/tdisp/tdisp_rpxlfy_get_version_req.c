@@ -248,9 +248,8 @@ payload(void)
 }
 
 uint32_t
-tdisp_rpxlfy_get_version_req_entry(void)
+tdisp_rpxlfy_get_version_req_entry(uint32_t num_pe)
 {
-  uint32_t num_pe;
   uint32_t status;
 
   num_pe = 1;

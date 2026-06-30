@@ -208,9 +208,8 @@ payload(void)
 }
 
 uint32_t
-tdisp_rwfpxr_tdisp_error_allowed_entry(void)
+tdisp_rwfpxr_tdisp_error_allowed_entry(uint32_t num_pe)
 {
-  uint32_t num_pe;
   uint32_t status;
 
   num_pe = 1;
