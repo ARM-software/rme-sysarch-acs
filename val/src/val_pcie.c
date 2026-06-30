@@ -56,6 +56,10 @@ val_pcie_read_cfg(uint32_t bdf, uint32_t offset, uint32_t *data)
   addr_t   ecam_base = 0;
   uint32_t i = 0;
 
+  if (data == NULL)
+      return PCIE_NO_MAPPING;
+
+  *data = PCIE_UNKNOWN_RESPONSE;
 
   if ((bus >= PCIE_MAX_BUS) || (dev >= PCIE_MAX_DEV) || (func >= PCIE_MAX_FUNC)) {
      val_print(ACS_PRINT_ERR, " Invalid Bus/Dev/Func  %x", bdf);
@@ -131,7 +135,6 @@ val_pcie_write_cfg(uint32_t bdf, uint32_t offset, uint32_t data)
   uint32_t cfg_addr;
   addr_t   ecam_base = 0;
   uint32_t i = 0;
-
 
   if ((bus >= PCIE_MAX_BUS) || (dev >= PCIE_MAX_DEV) || (func >= PCIE_MAX_FUNC)) {
      val_print(ACS_PRINT_ERR, " Invalid Bus/Dev/Func  %x ", bdf);
@@ -617,6 +620,9 @@ addr_t val_pcie_get_ecam_base(uint32_t bdf)
   addr_t ecam_base;
 
   ecam_index = 0;
+  sec_bus = 0;
+  sub_bus = 0;
+  reg_value = 0;
   ecam_base = 0;
 
   seg_num = PCIE_EXTRACT_BDF_SEG(bdf);
@@ -632,7 +638,11 @@ addr_t val_pcie_get_ecam_base(uint32_t bdf)
               break;
           } else {
               /* Check for Secondary/Subordinate bus if Type1 Header */
-              val_pcie_read_cfg(bdf, TYPE1_PBN, &reg_value);
+              if (val_pcie_read_cfg(bdf, TYPE1_PBN, &reg_value) != PCIE_SUCCESS)
+              {
+                  ecam_index++;
+                  continue;
+              }
               sec_bus = ((reg_value >> SECBN_SHIFT) & SECBN_MASK);
               sub_bus = ((reg_value >> SUBBN_SHIFT) & SUBBN_MASK);
 
@@ -2400,6 +2410,14 @@ uint32_t val_pcie_get_ecam_index(uint32_t bdf, uint32_t *ecam_index)
   uint32_t bus_num;
   uint32_t index = 0;
 
+  if (ecam_index == NULL)
+      return 1;
+
+  *ecam_index = ACS_INVALID_INDEX;
+  sec_bus = 0;
+  sub_bus = 0;
+  reg_value = 0;
+
   seg_num = PCIE_EXTRACT_BDF_SEG(bdf);
   bus_num = PCIE_EXTRACT_BDF_BUS(bdf);
 
@@ -2416,7 +2434,11 @@ uint32_t val_pcie_get_ecam_index(uint32_t bdf, uint32_t *ecam_index)
               return 0;
           } else {
               /* Check for Secondary/Subordinate bus if Type1 Header */
-              val_pcie_read_cfg(bdf, TYPE1_PBN, &reg_value);
+              if (val_pcie_read_cfg(bdf, TYPE1_PBN, &reg_value) != PCIE_SUCCESS)
+              {
+                  index++;
+                  continue;
+              }
               sec_bus = ((reg_value >> SECBN_SHIFT) & SECBN_MASK);
               sub_bus = ((reg_value >> SUBBN_SHIFT) & SUBBN_MASK);
 
@@ -2610,7 +2632,9 @@ uint32_t val_pcie_enable_tdisp(uint32_t bdf)
   if (cfg_addr == 0u)
     return 1;
 
-  val_pcie_read_cfg(bdf, cap_base + reg_offset, &reg_value);
+  if (val_pcie_read_cfg(bdf, cap_base + reg_offset, &reg_value) != PCIE_SUCCESS)
+    return 1;
+
   write_value = reg_value | 0x1u;
   attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(OUTER_SHAREABLE)
                   | GET_ATTR_INDEX(DEV_MEM_nGnRnE) | PGT_ENTRY_AP_RW);
@@ -2670,7 +2694,9 @@ uint32_t val_pcie_disable_tdisp(uint32_t bdf)
   if (cfg_addr == 0u)
     return 1;
 
-  val_pcie_read_cfg(bdf, cap_base + reg_offset, &reg_value);
+  if (val_pcie_read_cfg(bdf, cap_base + reg_offset, &reg_value) != PCIE_SUCCESS)
+    return 1;
+
   write_value = reg_value & ~0x1u;
   attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(OUTER_SHAREABLE)
                   | GET_ATTR_INDEX(DEV_MEM_nGnRnE) | PGT_ENTRY_AP_RW);
@@ -3015,14 +3041,23 @@ uint32_t
 val_pcie_get_bar_index(uint32_t bdf, uint64_t bar_address, uint32_t *bar_index)
 {
     uint32_t index = 0;
-    uint32_t bar_low32bits, bar_high32bits;
+    uint32_t bar_low32bits;
+    uint32_t bar_high32bits;
     uint64_t base_address;
+
+    if (bar_index == NULL)
+        return 1;
+
+    *bar_index = ACS_INVALID_INDEX;
 
     while (index < TYPE0_MAX_BARS) {
         base_address = 0u;
+        bar_low32bits = 0u;
+        bar_high32bits = 0u;
 
         /* Read the base address register at loop index */
-        val_pcie_read_cfg(bdf, TYPE01_BAR + index * 4, &bar_low32bits);
+        if (val_pcie_read_cfg(bdf, TYPE01_BAR + index * 4, &bar_low32bits) != PCIE_SUCCESS)
+            return 1;
 
         /* Check if the BAR is Memory Mapped IO type */
         if (((bar_low32bits >> BAR_MIT_SHIFT) & BAR_MIT_MASK) == MMIO) {
@@ -3032,7 +3067,9 @@ val_pcie_get_bar_index(uint32_t bdf, uint64_t bar_address, uint32_t *bar_index)
                     return 1;
 
                 /* Read the second sequential BAR at next index */
-                val_pcie_read_cfg(bdf, TYPE01_BAR + (index + 1) * 4, &bar_high32bits);
+                if (val_pcie_read_cfg(bdf, TYPE01_BAR + (index + 1) * 4,
+                                      &bar_high32bits) != PCIE_SUCCESS)
+                    return 1;
 
                 /* Combine high and low 32 bits */
                 base_address = ((uint64_t)bar_high32bits << 32) |

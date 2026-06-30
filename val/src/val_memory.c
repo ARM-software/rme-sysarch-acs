@@ -232,9 +232,12 @@ uint32_t val_setup_mmu(void)
 **/
 uint32_t val_enable_mmu(void)
 {
-    uint64_t tcr = val_pe_reg_read(TCR_ELx);
+    uint64_t tcr;
     uint32_t currentEL;
+
+    tcr = 0;
     currentEL = (val_read_current_el() & 0xc) >> 2;
+    tcr = val_pe_reg_read(TCR_ELx);
 
     /*
      * Setup Memory Attribute Indirection Register
