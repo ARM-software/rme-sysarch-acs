@@ -1,5 +1,5 @@
 ## @file
- # Copyright (c) 2022-2024, 2025, Arm Limited or its affiliates. All rights reserved.
+ # Copyright (c) 2022-2024, 2025-2026, Arm Limited or its affiliates. All rights reserved.
  # SPDX-License-Identifier : Apache-2.0
  #
  # Licensed under the Apache License, Version 2.0 (the "License");
@@ -84,10 +84,21 @@ ACS_HOME ?= $(abspath ..)
 # Current EL3 sources live under val_el3/src and use pal_el3 stubs
 # Auto-collect all C files and the AArch64 assembly helpers
 EL3_SRC_DIR := ${ACS_HOME}/val_el3/src
+PAL_EL3_PLAT ?= $(PLAT)
+ifeq ($(PAL_EL3_PLAT),aemfvp-a)
+PAL_EL3_PLAT := FVP
+endif
+ifeq ($(PAL_EL3_PLAT),fvp)
+PAL_EL3_PLAT := FVP
+endif
+PAL_EL3_PATH := ${ACS_HOME}/pal_el3/${PAL_EL3_PLAT}
+ifeq (,$(wildcard $(PAL_EL3_PATH)/include/pal_el3.h))
+$(error PAL_EL3 platform path not found: $(PAL_EL3_PATH))
+endif
 EXTRA_SOURCES := \
                 $(wildcard $(EL3_SRC_DIR)/*.c) \
                 $(wildcard $(EL3_SRC_DIR)/aarch64/*.S) \
-                $(wildcard $(ACS_HOME)/pal_el3/src/*.c) \
+                $(wildcard $(PAL_EL3_PATH)/src/*.c) \
 
 # Compute once, then append to INCDIRS
 PLAT_INC_DIRS := \
@@ -100,7 +111,7 @@ PLAT_INC_FLAGS := $(addprefix -I ,$(strip $(PLAT_INC_DIRS)))
 
 INCDIRS = -I ${ACS_HOME}/val/include \
           -I ${ACS_HOME}/val_el3/include \
-          -I ${ACS_HOME}/pal_el3/include \
+          -I ${PAL_EL3_PATH}/include \
           -I ${TFA_PATH}/include \
           -I ${TFA_PATH}/include/arch/aarch64 \
           -I ${TFA_PATH}/include/lib/libc \
