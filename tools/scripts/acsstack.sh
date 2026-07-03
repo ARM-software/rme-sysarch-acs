@@ -121,6 +121,8 @@ fvp_install_prereqs() {
             "per prerequisites list"
     fi
 
+    local SHRINKWRAP_REVISION="${SHRINKWRAP_REVISION:-0b335e12b12807d6c5a3b7d243aa6040b4569f2f}"
+
     # Determine if shrinkwrap already available
     if command -v shrinkwrap >/dev/null 2>&1; then
         log "shrinkwrap found in PATH; skipping local clone and venv setup"
@@ -134,6 +136,10 @@ fvp_install_prereqs() {
         else
             log "shrinkwrap already present in tools/, skipping clone"
         fi
+
+        log "Checking out shrinkwrap revision ${SHRINKWRAP_REVISION}"
+        git -C "$SHRINKWRAP_DIR" fetch --tags origin
+        git -C "$SHRINKWRAP_DIR" checkout "$SHRINKWRAP_REVISION"
     fi
 
     # Create and update a Python virtual environment
