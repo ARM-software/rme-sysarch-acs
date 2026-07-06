@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022-2023, 2025, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2023, 2025-2026, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,7 +15,7 @@
  * limitations under the License.
 **/
 
-#include "FVP/include/pal_override_struct.h"
+#include "pal_override_struct.h"
 #include "include/pal_common_support.h"
 
 extern PLATFORM_OVERRIDE_TIMER_INFO_TABLE platform_timer_cfg;
