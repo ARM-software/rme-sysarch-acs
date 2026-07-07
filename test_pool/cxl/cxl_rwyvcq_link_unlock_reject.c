@@ -32,6 +32,7 @@
 #define DECODER_SLOT        0u
 #define ALIGNMENT_MASK      ((1ULL << 28) - 1ULL)
 #define AER_POISONED_TLP    (1u << 12)
+#define RWYVCQ_POISON_FIXED_VALUE 0xFFFFFFFFu
 #define PCIE_LNKCAP_OFFSET  0x0Cu
 #define PCIE_LNKCAP_PN_SHIFT 24u
 #define PCIE_LNKCAP_PN_MASK  0xFFu
@@ -324,6 +325,7 @@ payload(void)
   uint32_t aer_offset = 0;
   uint32_t aer_uncorr = 0;
   uint32_t control_readback = 0;
+  uint32_t readback_value = 0;
   uint64_t endpoint_base = 0u;
   uint64_t endpoint_size = 0u;
 
@@ -564,6 +566,7 @@ payload(void)
     val_set_status(pe_index, "FAIL", 14);
     goto restore;
   }
+  readback_value = (uint32_t)shared_data->shared_data_access[0].data;
 
   val_cxl_aer_read_uncorr(root_bdf,
                           aer_offset,
@@ -574,6 +577,27 @@ payload(void)
               " RWYVCQ: Poisoned TLP not logged (uncorr 0x%llx)",
               (uint64_t)aer_uncorr);
     val_set_status(pe_index, "FAIL", 15);
+    goto restore;
+  }
+
+  if (readback_value == RWYVCQ_POISON_FIXED_VALUE)
+  {
+    val_print(ACS_PRINT_DEBUG,
+              " RWYVCQ: Realm read returned fixed poison data 0x%x",
+              readback_value);
+  }
+  else if (readback_value != baseline_value)
+  {
+    val_print(ACS_PRINT_INFO,
+              " RWYVCQ: Realm read returned non-original poison data 0x%x",
+              readback_value);
+  }
+  else
+  {
+    val_print(ACS_PRINT_ERR,
+              " RWYVCQ: Realm read returned clean data 0x%x",
+              readback_value);
+    val_set_status(pe_index, "FAIL", 16);
     goto restore;
   }
 

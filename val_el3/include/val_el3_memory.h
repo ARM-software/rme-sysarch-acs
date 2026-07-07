@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2025, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2025-2026, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -81,7 +81,7 @@ void val_el3_tlbi_alle3is(void);
 void val_el3_isb(void);
 void val_el3_map_shared_mem(uint64_t shared_addr);
 void val_el3_access_mut(void);
-void val_el3_acs_ldr_pas_filter(uint64_t *address, uint64_t data);
+void val_el3_acs_ldr_pas_filter(uint64_t *address, uint64_t *data);
 
 #endif /* __ASSEMBLER__ */
 

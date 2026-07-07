@@ -351,6 +351,92 @@ val_memory_write_el3(uint64_t address, uint32_t value)
 }
 
 /**
+  @brief  Map a physical address as a cacheable Realm PAS alias for EL3 access.
+
+  @param  phys      Physical address to map.
+  @param  virt_out  Output pointer that receives the virtual alias.
+
+  @return ACS_STATUS_PASS on success, ACS_STATUS_ERR on failure.
+**/
+uint32_t
+val_memory_map_realm_cacheable_alias(uint64_t phys, volatile uint64_t **virt_out)
+{
+  uint64_t page_size;
+  uint64_t va;
+  uint32_t attr;
+
+  if ((phys == 0u) || (virt_out == NULL))
+    return ACS_STATUS_ERR;
+
+  page_size = (uint64_t)val_memory_page_size();
+  if (page_size == 0u)
+    return ACS_STATUS_ERR;
+
+  va = val_get_free_va(page_size);
+  if (va == 0u)
+    return ACS_STATUS_ERR;
+
+  attr = LOWER_ATTRS(PGT_ENTRY_ACCESS |
+                     SHAREABLE_ATTR(OUTER_SHAREABLE) |
+                     GET_ATTR_INDEX(WRITE_BACK_NT) |
+                     PGT_ENTRY_AP_RW |
+                     PAS_ATTR(REALM_PAS));
+
+  if (val_add_mmu_entry_el3(va, phys, attr))
+    return ACS_STATUS_ERR;
+
+  *virt_out = (volatile uint64_t *)va;
+  return ACS_STATUS_PASS;
+}
+
+/**
+  @brief  Perform a protected EL3 64-bit read that can recover from a fault.
+
+  @param  address         Address to read.
+  @param  value_out       Output pointer that receives read data if the access completes.
+  @param  fault_seen_out  Optional output flag set when EL3 recovered from a fault.
+
+  @return ACS_STATUS_PASS when the protected access path ran, ACS_STATUS_ERR on setup failure.
+**/
+uint32_t
+val_memory_read64_el3_protected(volatile uint64_t *address,
+                                uint64_t *value_out,
+                                uint32_t *fault_seen_out)
+{
+  uint32_t fault_seen;
+
+  if ((address == NULL) || (value_out == NULL))
+    return ACS_STATUS_ERR;
+
+  /*
+   * Use the pas_filter protected-load path instead of READ_DATA. READ_DATA is a
+   * 32-bit generic MUT operation; this path performs a 64-bit load and lets EL3
+   * recover when the access is expected to fault.
+   */
+  val_memory_clear_el3_access_state();
+  shared_data->access_mut = SET;
+  shared_data->pas_filter_flag = SET;
+  shared_data->arg1 = (uint64_t)address;
+  shared_data->shared_data_access[0].data = 0u;
+  shared_data->exception_expected = SET;
+  shared_data->exception_generated = CLEAR;
+
+  if (val_pe_access_mut_el3())
+  {
+    val_memory_clear_el3_access_state();
+    return ACS_STATUS_ERR;
+  }
+
+  fault_seen = (shared_data->exception_expected == CLEAR);
+  *value_out = shared_data->shared_data_access[0].data;
+  if (fault_seen_out != NULL)
+    *fault_seen_out = fault_seen;
+
+  val_memory_clear_el3_access_state();
+  return ACS_STATUS_PASS;
+}
+
+/**
   @brief  Map a small data structure for EL3 access under the requested PAS.
 
   @param  va    Virtual address of the structure.

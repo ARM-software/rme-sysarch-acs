@@ -1,5 +1,5 @@
 /** @file
-  * Copyright (c) 2022-2025, Arm Limited or its affiliates. All rights reserved.
+  * Copyright (c) 2022-2026, Arm Limited or its affiliates. All rights reserved.
   * SPDX-License-Identifier : Apache-2.0
 
   * Licensed under the Apache License, Version 2.0 (the "License");
@@ -88,7 +88,7 @@ void val_el3_ack_handler(void)
     if (shared_data->pas_filter_flag == SET) {
         val_el3_set_daif();
         val_el3_acs_ldr_pas_filter((uint64_t *)shared_data->arg1,
-                        shared_data->shared_data_access[0].data);
+                        &shared_data->shared_data_access[0].data);
     } else if (shared_data->exception_expected == SET) {
         VERBOSE("Exception Expected\n");
         VERBOSE("Saved elr = %lx\n", *(elr_ptr));

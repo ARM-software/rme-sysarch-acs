@@ -1284,14 +1284,37 @@ Testcase checklist
       2. Require a clean RMECDA_CTL1 state for the selected root port. Skip that root port if RMECDA_CTL1.TDISP_EN or RMECDA_CTL1.LINK_STR_LOCK is already set so the test does not consume preserved state from another CDA scenario.
       3. Enable CXL.mem, select a CFMWS-backed DCM page, and program the host and endpoint HDM decoders for that window.
       4. Enable RMECDA_CTL1.TDISP_EN and set RMECDA_CTL1.LINK_STR_LOCK after decoder programming is complete.
-      5. Map the selected DCM page as a cacheable Realm alias, assign the DCM page to the endpoint TDI, establish SPDM/TDISP, and transition the TDI to RUN.
-      6. Use the exerciser Realm path to dirty/cache the selected Realm DCM Location on the TDI side, then read it back through the same Realm device path to verify the cached value is associated with that TDI.
+      5. Select two DCM pages from the CFMWS-backed window. Map one page as a cacheable Realm alias for the snoop-response check. Assign both pages to the endpoint TDI, establish SPDM/TDISP, and transition the TDI to RUN.
+      6. Use the exerciser Realm path to dirty/cache both selected Realm DCM Locations on the TDI side, then read each location back through the same Realm device path to verify the cached values are associated with that TDI.
       7. Force the TDI into ERROR by closing the SPDM session while the TDI is in RUN state.
-      8. Clear the root-port AER Uncorrectable Status register, then issue a protected host read to the cacheable Realm alias so the host attempts to consume or snoop the TDI-associated cached Location.
-      9. Pass the test when the root port logs a Poisoned TLP in AER after the host read. Fail the test if the host read completes without the Poisoned TLP indication.
-      10. Clear AER status, clear the DCM assignment when safe, reset/unlock the endpoint after the intentional TDI ERROR, close any still-open SPDM/TDISP session, and restore RMECDA/decoder state.
+      8. Clear the root-port AER Uncorrectable Status register, then issue a protected host read to the cacheable Realm alias so the host attempts to consume or snoop the TDI-associated cached Location. Fail the test if the root port does not log a Poisoned TLP after the host read. For the readback data, accept a synchronous fault, an all-ones fixed poison value, or an implementation-defined poison/fixed value that is not the original dirty value cached by the TDI before it entered ERROR state. Fail if the read completes normally and returns the original dirty value.
+      9. Clear AER again, then use the exerciser/model writeback hook to force or simulate a cache writeback for the second dirty Realm DCM Location. Fail the writeback subcase if the stimulus completes without a Poisoned TLP indication. If the writeback hook is unavailable and no Poisoned TLP is logged, retain the snoop-response result and report the writeback stimulus limitation.
+      10. Clear AER status, clear both DCM assignments when safe, reset/unlock the endpoint after the intentional TDI ERROR, close any still-open SPDM/TDISP session, and restore RMECDA/decoder state.
 
-      Note: This CDA scenario is applicable only to CHI-C2C-capable devices. ACS uses the root-port Poisoned TLP indication as the observable result because host software cannot directly inspect the CHI snoop response payload.
+      Note: This CDA scenario is applicable only to CHI-C2C-capable devices. ACS uses the root-port Poisoned TLP indication as the observable result because host software cannot directly inspect the CHI snoop response payload or the device cache writeback payload.
+
+  * -
+
+      `cda_rhttnb_dirty_snoop_blocked <../test_pool/cda/cda_rhttnb_dirty_snoop_blocked.c>`_
+
+    -
+
+      RHTTNB: If a host-to-device snoop request cannot be forwarded to a coherent device, for example because the IDE Stream is in Insecure state, and the host port is tracking the Location as potentially owned by the device in a Dirty state, the host port must respond with poison and fixed data. If the host port cannot associate the response with a correct MECID, it must use the default MECID of zero.
+
+    -
+
+      1. Select a CHI-C2C-capable CXL root port that exposes the RME-CDA DVSEC and locate a downstream CHI-C2C exerciser endpoint. Skip the test if no such endpoint is available.
+      2. Require a clean RMECDA_CTL1 state for the selected root port. Skip that root port if RMECDA_CTL1.TDISP_EN or RMECDA_CTL1.LINK_STR_LOCK is already set.
+      3. Enable CXL.mem, select a CFMWS-backed DCM page, and program the host and endpoint HDM decoders for that window.
+      4. Enable RMECDA_CTL1.TDISP_EN and set RMECDA_CTL1.LINK_STR_LOCK after decoder programming is complete.
+      5. Map the selected DCM page as a cacheable Realm alias, assign the DCM page to the endpoint TDI, establish SPDM/TDISP, transition the TDI to RUN, and establish the CXL IDE link.
+      6. Use the exerciser Realm path to dirty/cache the selected Realm DCM Location on the TDI side, then read it back through the same Realm device path to verify the cached value is associated with that TDI while IDE is active.
+      7. Disable the CXL IDE link while the TDI remains in RUN state. This creates the RHTTNB condition where a host-to-device snoop cannot be forwarded to the coherent device.
+      8. Clear the root-port AER Uncorrectable Status register, then issue a protected host read to the cacheable Realm alias so the host port must resolve a potentially device-owned dirty Location without forwarding the snoop.
+      9. Pass the test when the root port logs a Poisoned TLP in AER after the host read and the readback path either faults or returns poison/fixed data. Accept an all-ones fixed poison value, or an implementation-defined poison/fixed value that is not the original dirty value cached by the TDI. Fail if the host read completes normally and returns the original dirty value.
+      10. Clear AER status, stop the TDI interface, close the SPDM session, clear the DCM assignment when safe, and restore RMECDA/decoder state.
+
+      Note: This CDA scenario is applicable only to CHI-C2C-capable devices. ACS uses the root-port Poisoned TLP indication as the observable result because host software cannot directly inspect the CHI snoop response payload or the fixed-data value.
 
   * -
 
@@ -1606,7 +1629,7 @@ Testcase checklist
 
       1. Program HDM decoders and enable CXL.mem for a selected Type-3 endpoint and upstream root port.
       2. Clear RMECDA_CTL1.LINK_STR_LOCK and attempt Realm PAS CXL.mem accesses.
-      3. Verify Realm accesses do not modify memory and that AER logs a Poisoned TLP; verify Non-secure accesses succeed.
+      3. Verify Realm writes do not modify memory, Realm reads log a Poisoned TLP and return poison/fixed data rather than the original memory value, and Non-secure accesses succeed.
 
   * -
 

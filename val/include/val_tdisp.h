@@ -58,6 +58,14 @@ typedef struct {
 #define PCI_TDISP_INTERFACE_STATE_CONFIG_UNLOCKED 0u
 #endif
 
+#ifndef PCI_TDISP_INTERFACE_STATE_CONFIG_LOCKED
+#define PCI_TDISP_INTERFACE_STATE_CONFIG_LOCKED 1u
+#endif
+
+#ifndef PCI_TDISP_INTERFACE_STATE_RUN
+#define PCI_TDISP_INTERFACE_STATE_RUN 2u
+#endif
+
 /* Common limits. */
 #define VAL_TDISP_ARM_VDM_MAX_RSP_SIZE 1024u
 
@@ -173,6 +181,18 @@ val_tdisp_get_interface_state(val_spdm_context_t *context,
                               uint32_t session_id,
                               const pci_tdisp_interface_id_t *interface_id,
                               uint8_t *tdi_state);
+
+uint32_t
+val_tdisp_establish_run(uint32_t endpoint_bdf,
+                        val_spdm_context_t *spdm_ctx,
+                        uint32_t *session_id_out,
+                        pci_tdisp_interface_id_t *interface_id_out);
+
+uint32_t
+val_tdisp_stop_if_needed(val_spdm_context_t *spdm_ctx,
+                         uint32_t session_id,
+                         const pci_tdisp_interface_id_t *interface_id,
+                         uint32_t tdi_in_error);
 
 uint32_t
 val_rme_tdisp_execute_tests(uint32_t num_pe);
