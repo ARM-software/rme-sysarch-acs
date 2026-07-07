@@ -108,6 +108,10 @@ MODULE_TEST_DISPATCHER_s g_module_test_table[MODULE_SENTINEL] = {
         .entry_fn = cda_rqwnbn_error_poison_response_entry,
         .test_text = "cda_rqwnbn_error_poison_response",
       },
+      [CDA_ENTRY_CDA_RWFYLW_DEV_PROP_LOCK_ENTRY] = {
+        .entry_fn = cda_rwfylw_dev_prop_lock_entry,
+        .test_text = "cda_rwfylw_dev_prop_lock",
+      },
     },
   },
   [CXL_MODULE_ID] = {

@@ -26,6 +26,7 @@ uint32_t cda_rdmspt_rid_range_check_entry(uint32_t num_pe);
 uint32_t cda_rkrcwk_host_side_gpc_entry(uint32_t num_pe);
 uint32_t cda_rshrmn_coherent_link_topology_entry(uint32_t num_pe);
 uint32_t cda_rqwnbn_error_poison_response_entry(uint32_t num_pe);
+uint32_t cda_rwfylw_dev_prop_lock_entry(uint32_t num_pe);
 uint32_t cda_rfzbmw_external_dcm_ide_gate_entry(uint32_t num_pe);
 uint32_t cda_rwwbpm_internal_dcm_run_gate_entry(uint32_t num_pe);
 uint32_t cda_rqrmsc_dcm_ats_dependency_entry(uint32_t num_pe);

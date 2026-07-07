@@ -1244,6 +1244,31 @@ Testcase checklist
 
   * -
 
+      `cda_rwfylw_dev_prop_lock <../test_pool/cda/cda_rwfylw_dev_prop_lock.c>`_
+
+    -
+
+      RWFYLW: Any configuration register in an RME-CDA coherent device that affects the RME security guarantee must either be exclusively controlled by the device DSM, or be locked and verified by the device DSM before responding to TDISP LOCK_INTERFACE_REQUEST. The DSM verification includes address-decoder consistency checks to prevent aliasing and to ensure DCM is only accessible through host-visible address ranges, and includes implementation-defined memory integrity, error injection, and debug controls exposed by the device.
+
+    -
+
+      1. Select a CHI-C2C-capable CXL root port that exposes the RME-CDA DVSEC and locate a downstream CHI-C2C exerciser endpoint. Skip the test if no such endpoint is available.
+      2. Select a CFMWS-backed DCM window and a same-sized aligned address range that is outside every host-visible CFMWS window. Save the original RMECDA_CTL1 value and the original host and endpoint HDM decoder state for cleanup.
+      3. Clear RMECDA_CTL1.TDISP_EN and RMECDA_CTL1.LINK_STR_LOCK through Root access for the ACS setup phase, then program both host and endpoint HDM decoders to the same CFMWS-backed DCM window. This establishes a valid, non-aliased address-decoder configuration before protection is enabled.
+      4. Set RMECDA_CTL1.TDISP_EN and RMECDA_CTL1.LINK_STR_LOCK through Root access and verify the bits read back as set. These bits activate the modelled protected state for RME-sensitive device configuration registers.
+      5. While the TDI is still CONFIG_UNLOCKED, attempt to mutate the endpoint HDM decoder to the non-host-visible address range and reread the decoder. Fail the test if the decoder base or size changes. This verifies that an address-decoder register affecting DCM access is already protected before the DSM accepts LOCK_INTERFACE.
+      6. Open an SPDM session to the endpoint TDI, issue TDISP GET_VERSION and GET_CAPABILITIES, and keep the interface in CONFIG_UNLOCKED state.
+      7. Send Arm TDISP VDM GET_DEV_PROP and validate that the response framing and PROPERTIES reserved bits are correct. Save the PROPERTIES field and the opaque implementation-defined REGISTER_LIST bytes returned before LOCK_INTERFACE.
+      8. Send TDISP LOCK_INTERFACE_REQUEST and verify that the TDI reaches CONFIG_LOCKED state.
+      9. Send GET_DEV_PROP again and verify that PROPERTIES and REGISTER_LIST size are unchanged after LOCK_INTERFACE. If REGISTER_LIST is non-empty, compare the pre-lock and post-lock REGISTER_LIST bytes and fail if the DSM-provided validation blob changed across lock.
+      10. If REGISTER_LIST is empty, query TDISP GET_DEVICE_INTERFACE_REPORT and require PCI_TDISP_INTERFACE_INFO.NO_UPDATE_AFTER_LOCK to be set. This is the generic observable for devices whose RME-sensitive registers are DSM-owned or globally locked rather than exposed through GET_DEV_PROP.
+      11. While the TDI is CONFIG_LOCKED, repeat the endpoint HDM decoder mutation attempt to the non-host-visible address range and reread the decoder. Fail the test if the decoder base or size changes after lock.
+      12. Stop the TDI interface, close the SPDM session, clear RMECDA protection for cleanup, restore original decoder state, restore RMECDA_CTL1, and report PASS only when the protected decoder state cannot be mutated before or after LOCK_INTERFACE and the DSM property/register-list observable is stable across LOCK_INTERFACE.
+
+      Note: The GET_DEV_PROP REGISTER_LIST encoding is implementation-defined by the architecture, so ACS treats it as an opaque DSM validation blob. Standard HDM decoder checks provide a concrete address-decoder stimulus for address-decoding registers; implementation-defined memory-integrity, error-injection, and debug controls are covered through the DSM-exposed REGISTER_LIST or the no-update-after-lock interface report.
+
+  * -
+
       `cda_rqwnbn_error_poison_response <../test_pool/cda/cda_rqwnbn_error_poison_response.c>`_
 
     -
