@@ -136,6 +136,7 @@ val_el3_acs_str:
        str    x1, [x0]
        dsb    sy
        ldr    x0, =PLAT_SHARED_ADDRESS
+       str    xzr, [x0, #0x18]
        ldr    x1, [x0, #0x8]
        ldr    x2, [x0, #0x10]
        msr    elr_el3, x1
