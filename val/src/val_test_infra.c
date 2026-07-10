@@ -1393,7 +1393,7 @@ void val_restore_global_test_data(void)
 uint32_t val_configure_acs(void)
 {
   uint64_t sp_val;
-  uint32_t num_smmus, attr;
+  uint32_t attr;
 
   /* EL2 startup runs on the active SP, which is not guaranteed to be SP_EL0. */
   sp_val = AA64ReadSp();
@@ -1406,8 +1406,6 @@ uint32_t val_configure_acs(void)
     val_print(ACS_PRINT_ERR, " MMU mapping failed for SP address: 0x%llx", sp_val);
     return 1;
   }
-
-  num_smmus = val_iovirt_get_smmu_info(SMMU_NUM_CTRL, 0);
 
   if (val_rme_install_handler_el3())
   {
@@ -1427,11 +1425,16 @@ uint32_t val_configure_acs(void)
   val_cxl_print_component_summary();
 
   val_exerciser_create_info_table();
+#ifndef SKIP_SMMU_GIC_ITS_INIT
+  uint32_t num_smmus = val_iovirt_get_smmu_info(SMMU_NUM_CTRL, 0);
   val_smmu_init();
 
   /* Disable all SMMUs */
   for (uint32_t instance = 0; instance < num_smmus; ++instance)
     val_smmu_disable(instance);
+#else
+  val_print(ACS_PRINT_INFO, " Skipping SMMU init/disable (SKIP_SMMU_GIC_ITS_INIT)", 0);
+#endif
 
   return 0;
 }

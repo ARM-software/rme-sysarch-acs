@@ -1,3 +1,16 @@
+vC.a_CXL.EAC_TDISP.BETA_26.07
+
+Test Updates:
+* Added expanded TDISP VDM compliance coverage for GET_VERSION, GET_DEV_PROP, SET_INTERFACE, and TDISP_ERROR handling flows.
+* Added request validation and response-format checks for GET_VERSION and GET_DEV_PROP commands.
+* Added SET_INTERFACE request semantics validation and response-format checks.
+* Added TDISP_ERROR handling coverage for the RWFPXR scenario.
+Infrastructure Enhancements
+* Extended VAL TDISP helper support and test registration for the new TDISP VDM scenarios.
+* Updated BM and UEFI application integration to include the new TDISP tests in the release flow.
+* Updated scenario documentation with new TDISP VDM rules, expected behavior, and debug guidance.
+
+
 vC.a_CXL.BETA_CDA_TDISP.ALPHA_26.03
 
 Test Updates:
