@@ -291,7 +291,11 @@ ShellAppMainrme(
    * Configure Gic Redistributor and ITS to support
    * Generation of LPIs.
   */
+#ifndef SKIP_SMMU_GIC_ITS_INIT
   configureGicIts();
+#else
+  val_print(g_print_level, "Skipping GIC ITS configuration (SKIP_SMMU_GIC_ITS_INIT)\n", 0);
+#endif
 
   /* Create the platform config tables for the RME Issue A tests */
   createMemCfgInfoTable();

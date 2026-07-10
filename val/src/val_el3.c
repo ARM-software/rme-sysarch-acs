@@ -518,6 +518,13 @@ uint32_t val_smmu_check_rmeda_el3(uint64_t smmu_base)
  */
 uint32_t val_rlm_smmu_init(uint64_t num_smmu, uint64_t *smmu_base_arr)
 {
+#ifdef SKIP_SMMU_GIC_ITS_INIT
+  (void)num_smmu;
+  (void)smmu_base_arr;
+  val_print(ACS_PRINT_INFO,
+            " EL3: Skipping SMMU_REALM page table init (SKIP_SMMU_GIC_ITS_INIT)", 0);
+  return 0;
+#else
   UserCallSMC(ARM_ACS_SMC_FID, SMMU_CONFIG_SERVICE, SMMU_RLM_PGT_INIT, num_smmu,
               (uint64_t)smmu_base_arr);
   if (val_pe_get_index_mpid(val_pe_get_mpid()) != 0)
@@ -530,6 +537,7 @@ uint32_t val_rlm_smmu_init(uint64_t num_smmu, uint64_t *smmu_base_arr)
     val_print(ACS_PRINT_INFO, " EL3: SMMU_REALM page table initialised successfully", 0);
     return 0;
   }
+#endif
 }
 
 /**

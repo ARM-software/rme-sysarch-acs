@@ -78,6 +78,20 @@ if(DEFINED ACS_ENABLE_MMU)
     add_compile_definitions(ACS_ENABLE_MMU=${ACS_ENABLE_MMU})
 endif()
 
+set(SKIP_SMMU_GIC_ITS_INIT "0" CACHE STRING
+    "Skip SMMU and GIC ITS initialization (0 or 1)")
+set_property(CACHE SKIP_SMMU_GIC_ITS_INIT PROPERTY STRINGS 0 1)
+
+if(NOT "${SKIP_SMMU_GIC_ITS_INIT}" MATCHES "^[01]$")
+    message(FATAL_ERROR
+        "[ACS] : Error: Unsupported value '${SKIP_SMMU_GIC_ITS_INIT}' for -DSKIP_SMMU_GIC_ITS_INIT=. Supported values are: 0, 1")
+endif()
+
+if(SKIP_SMMU_GIC_ITS_INIT STREQUAL "1")
+    message(STATUS "[ACS] : SKIP_SMMU_GIC_ITS_INIT (compile defs) = ${SKIP_SMMU_GIC_ITS_INIT}")
+    add_compile_definitions(SKIP_SMMU_GIC_ITS_INIT)
+endif()
+
 # Enable fast-path optimizations for simulation/emulation builds.
 # Use:
 #   cmake -DTARGET_SIMULATION=ON ...
