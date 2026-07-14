@@ -25,11 +25,11 @@ index e39091528..8a9cf387f 100644
  
 +PLAT_INCLUDES += -I${ACS_HOME}/val_el3/include/ \
 +                  -I${ACS_HOME}/val/include/ \
-+                  -I${ACS_HOME}/pal_el3/include/
++                  -I${ACS_HOME}/pal_el3/FVP/include/
 +
 +BL31_SOURCES +=  $(wildcard $(ACS_HOME)/val_el3/src/*.c) \
 +                 $(wildcard $(ACS_HOME)/val_el3/src/aarch64/*.S) \
-+                 $(wildcard $(ACS_HOME)/pal_el3/src/*.c) \
++                 $(wildcard $(ACS_HOME)/pal_el3/FVP/src/*.c) \
 +
  ifeq (${ENABLE_PMF}, 1)
  BL31_SOURCES		+=	lib/pmf/pmf_main.c				\

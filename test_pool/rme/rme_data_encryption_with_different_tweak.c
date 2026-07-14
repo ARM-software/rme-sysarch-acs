@@ -52,10 +52,16 @@ void payload(void)
   attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(NON_SHAREABLE) | PGT_ENTRY_AP_RW);
 
   PA_NXT_BLK = PA + 16;
+  if (val_add_gpt_entry_el3(PA, GPT_ANY))
+  {
+      val_print(ACS_PRINT_ERR, " Failed to add GPT entry for PA 0x%llx", PA);
+      val_set_status(index, "FAIL", 01);
+      return;
+  }
   if (val_add_mmu_entry_el3(VA_S, PA, (attr | LOWER_ATTRS(PAS_ATTR(SECURE_PAS)))))
   {
       val_print(ACS_PRINT_ERR, "\n  Failed to add MMU entry for VA_S 0x%llx", VA_S);
-      val_set_status(index, "FAIL", 01);
+      val_set_status(index, "FAIL", 02);
       return;
   }
   if (val_add_mmu_entry_el3(VA_S_NXT_BLK, PA_NXT_BLK,
@@ -63,13 +69,13 @@ void payload(void)
   {
       val_print(ACS_PRINT_ERR,
         "\n  Failed to add MMU entry for VA_S_NXT_BLK 0x%llx", VA_S_NXT_BLK);
-      val_set_status(index, "FAIL", 02);
+      val_set_status(index, "FAIL", 03);
       return;
   }
   if (val_add_mmu_entry_el3(VA_NS, PA, (attr | LOWER_ATTRS(PAS_ATTR(NONSECURE_PAS)))))
   {
       val_print(ACS_PRINT_ERR, "\n  Failed to add MMU entry for VA_NS 0x%llx", VA_NS);
-      val_set_status(index, "FAIL", 03);
+      val_set_status(index, "FAIL", 04);
       return;
   }
   if (val_add_mmu_entry_el3(VA_NS_NXT_BLK, PA_NXT_BLK,
@@ -77,7 +83,7 @@ void payload(void)
   {
       val_print(ACS_PRINT_ERR,
         "\n  Failed to add MMU entry for VA_NS_NXT_BLK 0x%llx", VA_NS_NXT_BLK);
-      val_set_status(index, "FAIL", 04);
+      val_set_status(index, "FAIL", 05);
       return;
   }
 
@@ -90,7 +96,7 @@ void payload(void)
   if (val_pe_access_mut_el3())
   {
       val_print(ACS_PRINT_ERR, " Failed to access VA_S = 0x%llx", VA_S);
-      val_set_status(index, "FAIL", 05);
+      val_set_status(index, "FAIL", 06);
       return;
   }
 
@@ -102,7 +108,7 @@ void payload(void)
   if (val_pe_access_mut_el3())
   {
       val_print(ACS_PRINT_ERR, " Failed to access VA_S_NXT_BLK = 0x%llx", VA_S_NXT_BLK);
-      val_set_status(index, "FAIL", 06);
+      val_set_status(index, "FAIL", 07);
       return;
   }
 
@@ -111,25 +117,25 @@ void payload(void)
   if (val_data_cache_ops_by_pa_el3(PA, SECURE_PAS))
   {
       val_print(ACS_PRINT_ERR, " Failed to issue CMO for PA 0x%llx", PA);
-      val_set_status(index, "FAIL", 07);
+      val_set_status(index, "FAIL", 8);
       return;
   }
   if (val_data_cache_ops_by_pa_el3(PA_NXT_BLK, SECURE_PAS))
   {
       val_print(ACS_PRINT_ERR, " Failed to issue CMO for PA_NXT_BLK 0x%llx", PA_NXT_BLK);
-      val_set_status(index, "FAIL", 8);
+      val_set_status(index, "FAIL", 9);
       return;
   }
   if (val_data_cache_ops_by_pa_el3(PA, NONSECURE_PAS))
   {
       val_print(ACS_PRINT_ERR, " Failed to issue CMO for PA 0x%llx", PA);
-      val_set_status(index, "FAIL", 9);
+      val_set_status(index, "FAIL", 10);
       return;
   }
   if (val_data_cache_ops_by_pa_el3(PA_NXT_BLK, NONSECURE_PAS))
   {
       val_print(ACS_PRINT_ERR, " Failed to issue CMO for PA_NXT_BLK 0x%llx", PA_NXT_BLK);
-      val_set_status(index, "FAIL", 10);
+      val_set_status(index, "FAIL", 11);
       return;
   }
 
@@ -145,7 +151,7 @@ void payload(void)
   if (val_pe_access_mut_el3())
   {
       val_print(ACS_PRINT_ERR, " Failed to access VA_NS and VA_NS_NXT_BLK", 0);
-      val_set_status(index, "FAIL", 11);
+      val_set_status(index, "FAIL", 12);
       return;
   }
 
@@ -160,7 +166,7 @@ void payload(void)
   if (data_rd_ns_nxt_blk != data_rd_ns)
       val_set_status(index, "PASS", 01);
   else
-      val_set_status(index, "FAIL", 12);
+      val_set_status(index, "FAIL", 13);
   return;
 
 }
@@ -183,4 +189,3 @@ rme_data_encryption_with_different_tweak_entry(uint32_t num_pe)
 
   return status;
 }
-

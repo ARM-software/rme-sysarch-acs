@@ -60,6 +60,9 @@ payload(void)
   bdf_tbl_ptr = val_pcie_bdf_table_ptr();
 
   table_entries = sizeof(bf_info_table18)/sizeof(bf_info_table18[0]);
+  rp_bdf = 0;
+  ep_bdf = 0;
+  index = 0;
   ep_index = 0;
 
   while (tbl_index < bdf_tbl_ptr->num_entries)

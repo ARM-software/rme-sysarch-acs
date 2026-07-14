@@ -30,6 +30,9 @@
 #define PGT_LEVEL_2   2
 #define PGT_LEVEL_3   3
 
+#define GPT_DESC_TYPE_TABLE 0x3ull
+#define GPT_GPI_MASK       0xfull
+
 uint64_t free_pa = PLAT_FREE_MEM_START;
 
 /**
@@ -135,6 +138,53 @@ typedef struct {
 } acs_pgt_t;
 
 static acs_pgt_t acs_pgt_info;
+
+static uint64_t val_el3_create_gpt_l1_entry(uint64_t gpi)
+{
+    uint32_t i;
+    uint64_t desc = 0;
+
+    for (i = 0; i < 16; i++)
+        desc |= (gpi & GPT_GPI_MASK) << (i * 4);
+
+    return desc;
+}
+
+static uint64_t *val_el3_split_gpt_l0_block(uint64_t *l0_entry, uint8_t l0gptsz,
+                                            uint8_t p)
+{
+    uint64_t old_gpi = (*l0_entry >> 4) & GPT_GPI_MASK;
+    uint64_t entry_count = 1ull << (l0gptsz - (p + 4));
+    uint64_t table_size = entry_count * sizeof(uint64_t);
+    uint64_t l1_table_pa;
+    uint64_t *l1_table;
+    uint64_t i;
+
+    if (!val_el3_is_gpi_valid(old_gpi)) {
+        ERROR("Invalid L0 GPT block GPI 0x%lx", old_gpi);
+        return NULL;
+    }
+
+    free_pa = (free_pa + table_size - 1) & ~(table_size - 1);
+    l1_table_pa = free_pa;
+    free_pa += table_size;
+    l1_table = (uint64_t *)l1_table_pa;
+
+    if (((val_el3_at_s1e3w((uint64_t)l1_table)) & 0x1) == 0x1)
+        val_el3_add_mmu_entry((uint64_t)l1_table, (uint64_t)l1_table, ROOT_PAS);
+
+    for (i = 0; i < entry_count; i++)
+        l1_table[i] = val_el3_create_gpt_l1_entry(old_gpi);
+
+    val_el3_clean_pgt_table(l1_table, entry_count);
+    val_el3_mem_barrier();
+
+    *l0_entry = (l1_table_pa & (((0x1ull << 40) - 1) << 12)) | GPT_DESC_TYPE_TABLE;
+    val_el3_cln_and_invldt_cache(l0_entry);
+    val_el3_mem_barrier();
+
+    return l1_table;
+}
 
 void val_el3_setup_acs_pgt_values(void)
 {
@@ -309,17 +359,10 @@ void val_el3_add_gpt_entry(uint64_t arg0, uint64_t arg1)
     } else {
         /* Block_descriptor[63:8] = RES0 */
         VERBOSE("The Block Descriptor\n");
-        *l0_entry = val_el3_modify_gpt_gpi(*l0_entry, PA, 0, p, gpi);
-        val_el3_cln_and_invldt_cache(l0_entry);
-        gpt_desc.size = p;
-        gpt_desc.contig_size = l0gptsz;
-        gpt_desc.level = 0;
-        gpt_desc.pa = PA;
-        VERBOSE("val_pe_gpt_map_add: l0 entry after modification = %lx     \n", *l0_entry);
-        VERBOSE("val_pe_gpt_map_add: level  = %u     \n", gpt_desc.level);
-        VERBOSE("val_pe_gpt_map_add: size  = %x     \n", gpt_desc.size);
-        VERBOSE("val_pe_gpt_map_add: PA  = %lx     \n", gpt_desc.pa);
-        return;
+        gpt_desc.gpt_base = (uint64_t)val_el3_split_gpt_l0_block(l0_entry, l0gptsz, p);
+        if (gpt_desc.gpt_base == 0)
+            return;
+        VERBOSE("val_pe_gpt_map_add: l0 block split to table = %lx     \n", gpt_desc.gpt_base);
     }
 
         /*              Level 1 GPT walk        */

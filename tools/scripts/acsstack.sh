@@ -121,6 +121,8 @@ fvp_install_prereqs() {
             "per prerequisites list"
     fi
 
+    local SHRINKWRAP_REVISION="${SHRINKWRAP_REVISION:-0b335e12b12807d6c5a3b7d243aa6040b4569f2f}"
+
     # Determine if shrinkwrap already available
     if command -v shrinkwrap >/dev/null 2>&1; then
         log "shrinkwrap found in PATH; skipping local clone and venv setup"
@@ -134,6 +136,10 @@ fvp_install_prereqs() {
         else
             log "shrinkwrap already present in tools/, skipping clone"
         fi
+
+        log "Checking out shrinkwrap revision ${SHRINKWRAP_REVISION}"
+        git -C "$SHRINKWRAP_DIR" fetch --tags origin
+        git -C "$SHRINKWRAP_DIR" checkout "$SHRINKWRAP_REVISION"
     fi
 
     # Create and update a Python virtual environment
@@ -261,23 +267,12 @@ fvp_build() {
 
     local ACS_PATH_DEFAULT="${REPO_ROOT}"
     local ACS_PATH_VAL="${ACS_PATH:-$ACS_PATH_DEFAULT}"
-    local PLATFORM_BASEFVP_DEFINE_RE=""
-
-    local EL3_CONFIG="${ACS_PATH_VAL}/pal_el3/include/pal_el3_config.h"
+    local EL3_CONFIG="${ACS_PATH_VAL}/pal_el3/FVP/include/pal_el3_config.h"
     if [[ ! -f "$EL3_CONFIG" ]]; then
         log "pal_el3_config.h not found: $EL3_CONFIG";popd >/dev/null; exit 1
     fi
 
-    log "Ensuring PLATFORM_BASEFVP=1 in $EL3_CONFIG"
-    PLATFORM_BASEFVP_DEFINE_RE='^[[:space:]]*#define'
-    PLATFORM_BASEFVP_DEFINE_RE+='[[:space:]]+PLATFORM_BASEFVP'
-    if grep -Eq "$PLATFORM_BASEFVP_DEFINE_RE" "$EL3_CONFIG"; then
-        sed -i -E \
-            "s/(${PLATFORM_BASEFVP_DEFINE_RE}[[:space:]]+).*/\1 1/" \
-            "$EL3_CONFIG"
-    else
-        printf '\n#define PLATFORM_BASEFVP 1\n' >> "$EL3_CONFIG"
-    fi
+    log "Using FVP PAL EL3 config: $EL3_CONFIG"
 
     fvp_preflight
 
@@ -437,27 +432,16 @@ rdv3_build() {
     local ACS_PATH_DEFAULT="${REPO_ROOT}"
     local ACS_PATH_VAL="${ACS_PATH:-$ACS_PATH_DEFAULT}"
     local MANIFEST_URL=""
-    local PLATFORM_BASEFVP_DEFINE_RE=""
     export ACS_HOME="$ACS_PATH_VAL"
     MANIFEST_URL="https://git.gitlab.arm.com/infra-solutions/reference-design"
     MANIFEST_URL+="/infra-refdesign-manifests.git"
 
-    # Ensure PLATFORM_BASEFVP is 0 for RDV3 builds (idempotent)
-    local EL3_CONFIG="${ACS_HOME}/pal_el3/include/pal_el3_config.h"
+    local EL3_CONFIG="${ACS_HOME}/pal_el3/rdv3/include/pal_el3_config.h"
     if [[ ! -f "$EL3_CONFIG" ]]; then
         log "pal_el3_config.h not found: $EL3_CONFIG";popd >/dev/null; exit 1
     fi
 
-    log "Ensuring PLATFORM_BASEFVP=0 in $EL3_CONFIG"
-    PLATFORM_BASEFVP_DEFINE_RE='^[[:space:]]*#define'
-    PLATFORM_BASEFVP_DEFINE_RE+='[[:space:]]+PLATFORM_BASEFVP'
-    if grep -Eq "$PLATFORM_BASEFVP_DEFINE_RE" "$EL3_CONFIG"; then
-        sed -i -E \
-            "s/(${PLATFORM_BASEFVP_DEFINE_RE}[[:space:]]+).*/\1 0/" \
-            "$EL3_CONFIG"
-    else
-        printf '\n#define PLATFORM_BASEFVP 0\n' >> "$EL3_CONFIG"
-    fi
+    log "Using RD-V3 PAL EL3 config: $EL3_CONFIG"
 
 
     mkdir -p "${HOME}/.bin"
@@ -537,7 +521,6 @@ rdv3_run() {
     export MODEL="$MODEL_BIN_PATH"
     [[ -x "$MODEL" ]] || {
         log "Model binary not found/executable: $MODEL"
-        popd >/dev/null
         exit 1
     }
     # Work within RDV3 working directory for stack/model scripts

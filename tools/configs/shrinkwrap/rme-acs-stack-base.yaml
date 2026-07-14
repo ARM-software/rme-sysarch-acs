@@ -58,6 +58,11 @@ build:
     postbuild:
       - rm -rf .rmm_venv
 
+  dt:
+    repo:
+      remote:  --depth 1 --branch v6.17-dts https://git.kernel.org/pub/scm/linux/kernel/git/devicetree/devicetree-rebasing.git
+      revision: v6.17-dts
+
 buildex:
   btvars:
     ACS_PATH:

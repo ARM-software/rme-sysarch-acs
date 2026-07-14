@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022-2023, 2025, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2023, 2025-2026, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -45,7 +45,14 @@ val_timer_get_info(TIMER_INFO_e info_type, uint64_t instance)
   switch (info_type)
   {
       case TIMER_INFO_CNTFREQ:
+      {
+          uint64_t counter_frequency = pal_timer_get_counter_frequency();
+
+          if (counter_frequency != 0)
+              return counter_frequency;
+
           return val_timer_ArmArchTimerReadReg(CntFrq);
+      }
       case TIMER_INFO_PHY_EL1_INTID:
           return g_timer_info_table->header.ns_el1_timer_gsiv;
       case TIMER_INFO_VIR_EL1_INTID:
