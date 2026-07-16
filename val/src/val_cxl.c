@@ -809,11 +809,20 @@ static uint32_t
 val_cxl_ext_security_capability_base(uint32_t component_index, uint64_t *base_out)
 {
   const CXL_COMPONENT_ENTRY *entry = val_cxl_get_component_entry(component_index);
+  uint64_t host_component_base;
 
-  if ((entry == NULL) || (entry->component_reg_base == 0u) || (base_out == NULL))
+  if ((entry == NULL) || (base_out == NULL))
     return ACS_STATUS_ERR;
 
-  return val_cxl_find_capability(entry->component_reg_base,
+  if (entry->host_bridge_index == CXL_COMPONENT_INVALID_INDEX)
+    return ACS_STATUS_SKIP;
+
+  host_component_base = val_cxl_get_info(CXL_INFO_COMPONENT_BASE,
+                                         entry->host_bridge_index);
+  if (host_component_base == 0u)
+    return ACS_STATUS_ERR;
+
+  return val_cxl_find_capability(host_component_base,
                                  CXL_CAPID_EXT_SECURITY,
                                  base_out);
 }
