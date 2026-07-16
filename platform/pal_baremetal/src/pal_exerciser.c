@@ -168,21 +168,23 @@ uint32_t pal_exerciser_set_param(EXERCISER_PARAM_TYPE Type, uint64_t Value1, uin
                 return 0;
             case TXN_ADDR_TYPE:
                 /* Change Address Type for DMA Transaction.*/
+                Data = pal_mmio_read(Base + DMACTL1);
+                Data &= ~(0x3u << 10);
                 switch (Value2)
                 {
                     case AT_UNTRANSLATED:
-                        Data = 0x1;
-                        pal_mmio_write(Base + DMACTL1, pal_mmio_read(Base + DMACTL1) | (Data << 10));
+                        Data |= (0x1u << 10);
                         break;
                     case AT_TRANSLATED:
-                        Data = 0x2;
-                        pal_mmio_write(Base + DMACTL1, pal_mmio_read(Base + DMACTL1) | (Data << 10));
+                        Data |= (0x2u << 10);
                         break;
                     case AT_RESERVED:
-                        Data = 0x3;
-                        pal_mmio_write(Base + DMACTL1, pal_mmio_read(Base + DMACTL1) | (Data << 10));
+                        Data |= (0x3u << 10);
                         break;
+                    default:
+                        return 1;
                 }
+                pal_mmio_write(Base + DMACTL1, Data);
                 return 0;
             default:
                 return 1;
