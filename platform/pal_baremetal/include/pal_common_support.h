@@ -716,9 +716,9 @@ typedef enum {
     CXL_CMD_START        = 0x10
 } EXERCISER_OPS;
 
-#define CXL_CMD_OP_BACKDOOR_READ64 0x1u
-#define CXL_CMD_OP_BISNP           0x2u
-#define CXL_CMD_OP_BACKDOOR_WRITE64 0x3u
+#define CXL_CMD_OP_BACKDOOR_READ64  0x1u
+#define CXL_CMD_OP_BACKDOOR_WRITE64 0x2u
+#define CXL_CMD_OP_BISNP            0x3u
 
 /* LibC functions declaration */
 

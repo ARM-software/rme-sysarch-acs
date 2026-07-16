@@ -57,14 +57,16 @@
 #define ATS_ADDR      0x028
 #define TXN_TRACE     0x40
 #define TXN_CTRL_BASE 0x44
-#define SEC_SID_CTL   0x48
-#define CXL_CMD_OP      0x80
-#define CXL_CMD_CTRL    0x84
-#define CXL_CMD_STATUS  0x88
-#define CXL_CMD_ADDR_LO 0x8C
-#define CXL_CMD_ADDR_HI 0x90
-#define CXL_CMD_DATA0_LO 0x94
-#define CXL_CMD_DATA0_HI 0x98
+#define SEC_SID_VALUE_REG 0x94
+#define CXL_CMD_REG      0x80
+#define CXL_CMD_OP       CXL_CMD_REG
+#define CXL_CMD_ADDR_LO  0x84
+#define CXL_CMD_ADDR_HI  0x88
+#define CXL_CMD_DATA0_LO 0x8C
+#define CXL_CMD_DATA0_HI 0x90
+/* FastSim's CHI C2C SEC_SID register requires bit 31 to mark the SID valid. */
+#define SEC_SID_VALUE_REG_VALID (1u << 31)
+#define SEC_SID_VALUE_REG_MASK (1u << 1)
 #define PCI_MAX_BUS     255
 #define PCI_MAX_DEVICE  31
 
@@ -103,11 +105,16 @@
 #define ERR_CODE_SHIFT         20
 #define FATAL_SHIFT            31
 #define ERROR_INJECT_BIT       17
-#define CXL_CMD_CTRL_GO        (1u << 0)
-#define CXL_CMD_CTRL_CLEAR_ERR (1u << 1)
-#define CXL_CMD_STATUS_DONE    (1u << 0)
-#define CXL_CMD_STATUS_BUSY    (1u << 1)
-#define CXL_CMD_STATUS_ERR     (1u << 2)
+#define CXL_CMD_OP_MASK       0xFu
+#define CXL_CMD_STATUS_MASK   (0xFu << 8)
+#define CXL_CMD_STATUS_DONE   (0x1u << 8)
+#define CXL_CMD_STATUS_ERR    (0x2u << 8)
+#define CXL_CMD_CLEAR_ERR     (1u << 30)
+#define CXL_CMD_TRIGGER       (1u << 31)
+
+#define CXL_CMD_OP_BACKDOOR_READ64  0x1u
+#define CXL_CMD_OP_BACKDOOR_WRITE64 0x2u
+#define CXL_CMD_OP_BISNP            0x3u
 
 #define PCI_CAP_PTR_OFFSET 8
 #define PCIE_CAP_PTR_OFFSET 20
