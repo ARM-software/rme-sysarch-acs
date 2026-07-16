@@ -297,7 +297,8 @@ UINT32 pal_exerciser_set_param (
         return 0;
 
     case EXERCISER_SEC_SID:
-        pal_mmio_write(Base + SEC_SID_CTL, (UINT32)(Value1 & 0x3u));
+        pal_mmio_write(Base + SEC_SID_VALUE_REG,
+                       (UINT32)(Value1 & SEC_SID_VALUE_REG_MASK) | SEC_SID_VALUE_REG_VALID);
         return 0;
 
       default:
@@ -358,6 +359,9 @@ pal_exerciser_get_param (
       case EXERCISER_CXL_CMD_DATA0:
           *Value1 = (UINT64)pal_mmio_read(Base + CXL_CMD_DATA0_LO);
           *Value1 |= ((UINT64)pal_mmio_read(Base + CXL_CMD_DATA0_HI)) << 32;
+          return 0;
+      case EXERCISER_SEC_SID:
+          *Value1 = (UINT64)(pal_mmio_read(Base + SEC_SID_VALUE_REG) & SEC_SID_VALUE_REG_MASK);
           return 0;
       case CFG_TXN_ATTRIBUTES:
       case TRANSACTION_TYPE:
@@ -537,21 +541,41 @@ pal_exerciser_ops (
         return 0;
 
     case CXL_CMD_START:
-        UINT32 prev_status;
+        {
+        UINT32 cmd;
+        UINT32 opcode;
 
-        prev_status = pal_mmio_read(Base + CXL_CMD_STATUS);
-        rme_print(ACS_PRINT_DEBUG, L" CXL_CMD_START prev status 0x%x", prev_status);
-        pal_mmio_write(Base + CXL_CMD_CTRL, CXL_CMD_CTRL_GO);
-        rme_print(ACS_PRINT_DEBUG, L" CXL_CMD_CTRL write GO 0x%x", CXL_CMD_CTRL_GO);
+        cmd = pal_mmio_read(Base + CXL_CMD_REG);
+        rme_print(ACS_PRINT_DEBUG, L" CXL_CMD_START prev cmd 0x%x", cmd);
+        opcode = cmd & CXL_CMD_OP_MASK;
+        if ((cmd & CXL_CMD_STATUS_MASK) == CXL_CMD_STATUS_ERR)
+        {
+            UINT32 idx;
+
+            pal_mmio_write(Base + CXL_CMD_REG, opcode | CXL_CMD_CLEAR_ERR);
+            for (idx = 0u; idx < 10000u; ++idx)
+            {
+                data = pal_mmio_read(Base + CXL_CMD_REG);
+                if ((data & CXL_CMD_STATUS_MASK) != CXL_CMD_STATUS_ERR)
+                    break;
+            }
+            if (idx == 10000u)
+                return 1;
+        }
+
+        pal_mmio_write(Base + CXL_CMD_REG, opcode | CXL_CMD_TRIGGER);
+        rme_print(ACS_PRINT_DEBUG, L" CXL_CMD_REG trigger write 0x%x",
+                  opcode | CXL_CMD_TRIGGER);
         for (UINT32 idx = 0u; idx < 10000u; ++idx)
         {
-            data = pal_mmio_read(Base + CXL_CMD_STATUS);
-            if ((data & CXL_CMD_STATUS_DONE) != 0u)
+            data = pal_mmio_read(Base + CXL_CMD_REG);
+            if ((data & CXL_CMD_STATUS_MASK) == CXL_CMD_STATUS_DONE)
                 return 0;
-            if ((data & CXL_CMD_STATUS_ERR) != 0u)
+            if ((data & CXL_CMD_STATUS_MASK) == CXL_CMD_STATUS_ERR)
                 return 1;
         }
         return 1;
+        }
 
     case START_TXN_MONITOR:
         pal_mmio_write(Base + TXN_CTRL_BASE, TXN_START);
