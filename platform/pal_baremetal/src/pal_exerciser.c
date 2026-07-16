@@ -241,7 +241,8 @@ uint32_t pal_exerciser_set_param(EXERCISER_PARAM_TYPE Type, uint64_t Value1, uin
         return 0;
 
       case EXERCISER_SEC_SID:
-        pal_mmio_write(Base + SEC_SID_CTL, (uint32_t)(Value1 & 0x3u));
+        pal_mmio_write(Base + SEC_SID_VALUE_REG,
+                       (uint32_t)(Value1 & SEC_SID_VALUE_REG_MASK) | SEC_SID_VALUE_REG_VALID);
         return 0;
 
       default:
@@ -363,6 +364,9 @@ uint32_t pal_exerciser_get_param(EXERCISER_PARAM_TYPE Type, uint64_t *Value1, ui
           *Value1 = (uint64_t)pal_mmio_read(Base + CXL_CMD_DATA0_LO);
           *Value1 |= ((uint64_t)pal_mmio_read(Base + CXL_CMD_DATA0_HI)) << 32;
           return 0;
+      case EXERCISER_SEC_SID:
+          *Value1 = (uint64_t)(pal_mmio_read(Base + SEC_SID_VALUE_REG) & SEC_SID_VALUE_REG_MASK);
+          return 0;
       default:
           return 1;
   }
@@ -480,20 +484,38 @@ uint32_t pal_exerciser_ops(EXERCISER_OPS Ops, uint64_t Param, uint32_t Bdf)
 
     case CXL_CMD_START:
         {
-        uint32_t prev_status;
+        uint32_t cmd;
+        uint32_t opcode;
 
-        prev_status = pal_mmio_read(Base + CXL_CMD_STATUS);
-        print(ACS_PRINT_DEBUG, " CXL_CMD_START prev status 0x%x", prev_status);
-        pal_mmio_write(Base + CXL_CMD_CTRL, CXL_CMD_CTRL_GO);
-        print(ACS_PRINT_DEBUG, " CXL_CMD_CTRL write GO 0x%x", CXL_CMD_CTRL_GO);
+        cmd = pal_mmio_read(Base + CXL_CMD_REG);
+        print(ACS_PRINT_DEBUG, " CXL_CMD_START prev cmd 0x%x", cmd);
+        opcode = cmd & CXL_CMD_OP_MASK;
+        if ((cmd & CXL_CMD_STATUS_MASK) == CXL_CMD_STATUS_ERR)
+        {
+            uint32_t idx;
+
+            pal_mmio_write(Base + CXL_CMD_REG, opcode | CXL_CMD_CLEAR_ERR);
+            for (idx = 0u; idx < 10000u; ++idx)
+            {
+                data = pal_mmio_read(Base + CXL_CMD_REG);
+                if ((data & CXL_CMD_STATUS_MASK) != CXL_CMD_STATUS_ERR)
+                    break;
+            }
+            if (idx == 10000u)
+                return 1;
+        }
+
+        pal_mmio_write(Base + CXL_CMD_REG, opcode | CXL_CMD_TRIGGER);
+        print(ACS_PRINT_DEBUG, " CXL_CMD_REG trigger write 0x%x",
+              opcode | CXL_CMD_TRIGGER);
         for (uint32_t idx = 0u; idx < 10000u; ++idx)
         {
-            data = pal_mmio_read(Base + CXL_CMD_STATUS);
-            if ((data & CXL_CMD_STATUS_DONE) != 0u)
+            data = pal_mmio_read(Base + CXL_CMD_REG);
+            if ((data & CXL_CMD_STATUS_MASK) == CXL_CMD_STATUS_DONE)
                 return 0;
-            if ((data & CXL_CMD_STATUS_ERR) != 0u)
+            if ((data & CXL_CMD_STATUS_MASK) == CXL_CMD_STATUS_ERR)
             {
-                print(ACS_PRINT_DEBUG, " CXL_CMD_START error status 0x%x", data);
+                print(ACS_PRINT_DEBUG, " CXL_CMD_START error cmd 0x%x", data);
                 return 1;
             }
         }
