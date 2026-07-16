@@ -3508,6 +3508,43 @@ val_cxl_program_host_decoder_target(uint32_t host_index,
 }
 
 /**
+  @brief   Restore a host HDM decoder, preserving a target-list entry when one
+           was captured by the caller.
+
+  @param  host_index     Index within the firmware CXL info table.
+  @param  decoder_index  Decoder slot to restore.
+  @param  base           HPA base aligned to 256MB.
+  @param  size           Window length aligned to 256MB.
+  @param  target_valid   Nonzero if target_low/target_high should be restored.
+  @param  target_low     Target list low register value.
+  @param  target_high    Target list high register value.
+
+  @return ACS_STATUS_PASS if no restore is needed or the decoder is restored.
+**/
+uint32_t
+val_cxl_restore_host_decoder(uint32_t host_index,
+                             uint32_t decoder_index,
+                             uint64_t base,
+                             uint64_t size,
+                             uint32_t target_valid,
+                             uint32_t target_low,
+                             uint32_t target_high)
+{
+  if ((host_index == CXL_COMPONENT_INVALID_INDEX) || (size == 0u))
+    return ACS_STATUS_PASS;
+
+  if (target_valid == 0u)
+    return val_cxl_program_host_decoder(host_index, decoder_index, base, size);
+
+  return val_cxl_program_host_decoder_target(host_index,
+                                             decoder_index,
+                                             base,
+                                             size,
+                                             target_low,
+                                             target_high);
+}
+
+/**
   @brief   Program a host HDM decoder target-list entry to a root port.
 
   @param  root_bdf       Root port BDF used to derive the target port ID.

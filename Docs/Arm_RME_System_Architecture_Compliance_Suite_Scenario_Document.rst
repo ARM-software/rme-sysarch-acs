@@ -1295,6 +1295,30 @@ Testcase checklist
 
   * -
 
+      `cda_rlmflx_config_unlocked_invalidate <../test_pool/cda/cda_rlmflx_config_unlocked_invalidate.c>`_
+
+    -
+
+      RLMFLX: When a TDI transitions to CONFIG_UNLOCKED TDISP state, the coherent device must invalidate content associated with that TDI that is stored in the device, including cached copies of Locations and ATC entries. Dirty cached data must be written back and invalidated when writeback is possible, for example while the IDE Stream is secure.
+
+    -
+
+      1. Select a CHI-C2C-capable CXL root port that exposes the RME-CDA DVSEC and locate a downstream CHI-C2C exerciser endpoint. Skip the test if no such endpoint is available.
+      2. Require a clean RMECDA_CTL1 state, enable CXL.mem, select a CFMWS-backed DCM page, and program the host and endpoint HDM decoders for that window.
+      3. Enable RMECDA_CTL1.TDISP_EN and set RMECDA_CTL1.LINK_STR_LOCK after decoder programming is complete.
+      4. Map the selected DCM page as a cacheable Realm alias, assign the DCM page to the endpoint TDI, establish SPDM/TDISP, transition the TDI to RUN, and establish the CXL IDE link.
+      5. Optionally prepare an ATS stale-translation probe by enabling ATS, mapping an ACS-owned IOVA to one Non-secure PA through the Realm SMMU stage-2 context, installing DPT entries, and issuing an ATS request while the TDI is in RUN. If the exerciser cannot issue the ATS request, continue with the mandatory dirty-cache invalidation check.
+      6. Use the exerciser Realm path to create a dirty cached copy of the selected Realm DCM Location while the TDI is in RUN and IDE is active, then read it back through the same Realm device path to verify that the dirty value is associated with the TDI.
+      7. Issue STOP_INTERFACE_REQUEST and verify that the TDI reaches CONFIG_UNLOCKED state.
+      8. If the ATS stale-translation probe was available, remap the same IOVA to a different PA while the TDI is in CONFIG_UNLOCKED.
+      9. Close the first SPDM session, re-establish the TDI in RUN, and re-establish the CXL IDE link. Invalidate any host PE cacheline for the selected Realm DCM Location without cleaning stale PE data back to memory, clear the root-port AER Uncorrectable Status register, then issue a protected host read to the cacheable Realm alias. Fail if the read faults, because that indicates stale dirty TDI-owned state was not invalidated across CONFIG_UNLOCKED. Then read the same Realm DCM Location through the Realm exerciser path and fail if the dirty value is not present, which verifies that writeback/preservation completed before invalidation.
+      10. If the ATS stale-translation probe was available, issue the ATS request again after re-entering RUN and fail if the returned translation is the old PA rather than the remapped PA.
+      11. Clear AER status, stop and close any active TDISP session, clear the DCM assignment, restore ATS, RMECDA, HDM decoder, GPT, SMMU, and DPT state, and free any allocated ACS pages.
+
+      Note: This CDA scenario is applicable only to CHI-C2C-capable devices. The dirty-cache check is mandatory; the ATC invalidation check is executed when the platform exerciser exposes a usable ATS request stimulus.
+
+  * -
+
       `cda_rhttnb_dirty_snoop_blocked <../test_pool/cda/cda_rhttnb_dirty_snoop_blocked.c>`_
 
     -

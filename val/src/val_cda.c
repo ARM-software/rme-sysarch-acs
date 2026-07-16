@@ -138,6 +138,52 @@ val_cda_is_downstream_chi_c2c_endpoint(const CXL_COMPONENT_ENTRY *entry,
 }
 
 /**
+  @brief  Select a page within a DCM host-visible window for test stimulus.
+
+  @param  window_base  DCM window base address.
+  @param  window_size  DCM window size in bytes.
+  @param  page_out     Output pointer for the selected page base.
+
+  @return ACS_STATUS_PASS if a page is selected.
+          ACS_STATUS_SKIP if the window cannot contain a complete page.
+          ACS_STATUS_ERR  if the inputs are invalid.
+**/
+uint32_t
+val_cda_select_dcm_page(uint64_t window_base,
+                        uint64_t window_size,
+                        uint64_t *page_out)
+{
+  uint64_t page_size;
+  uint64_t window_end;
+  uint64_t page_base;
+
+  if (page_out == NULL)
+    return ACS_STATUS_ERR;
+
+  page_size = (uint64_t)val_memory_page_size();
+  if (page_size == 0u)
+    return ACS_STATUS_ERR;
+
+  if (window_size < page_size)
+    return ACS_STATUS_SKIP;
+
+  window_end = window_base + window_size;
+  if (window_end < window_base)
+    return ACS_STATUS_ERR;
+
+  /*
+   * Use the end of the window so the selected page does not collide with ACS
+   * allocations that may come from low CFMWS-backed addresses.
+   */
+  page_base = (window_end - page_size) & ~(page_size - 1u);
+  if ((page_base < window_base) || ((page_base + page_size) > window_end))
+    return ACS_STATUS_SKIP;
+
+  *page_out = page_base;
+  return ACS_STATUS_PASS;
+}
+
+/**
   @brief  Set or clear RMECDA_CTL1.LINK_STR_LOCK and verify the readback.
 
   @param  cfg_va           Root-accessible VA for the root port config space.

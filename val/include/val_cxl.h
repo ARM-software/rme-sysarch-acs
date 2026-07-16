@@ -177,6 +177,13 @@ uint32_t val_cxl_program_host_decoder_target(uint32_t host_index,
                                              uint64_t length,
                                              uint32_t target_low,
                                              uint32_t target_high);
+uint32_t val_cxl_restore_host_decoder(uint32_t host_index,
+                                      uint32_t decoder_index,
+                                      uint64_t base,
+                                      uint64_t length,
+                                      uint32_t target_valid,
+                                      uint32_t target_low,
+                                      uint32_t target_high);
 uint32_t val_cxl_program_host_decoder_for_root(uint32_t root_bdf,
                                                uint32_t host_index,
                                                uint32_t decoder_index,

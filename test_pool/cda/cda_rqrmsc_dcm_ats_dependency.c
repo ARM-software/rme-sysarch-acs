@@ -54,13 +54,6 @@
 #if ENABLE_SPDM
 
 typedef struct {
-  uint32_t valid;
-  uint32_t updated;
-  uint64_t smmu_base;
-  uint32_t original_cfg;
-} RQRMSC_DPT_CFG_STATE;
-
-typedef struct {
   /* Host bridge and decoder window used to expose DCM through CXL.mem. */
   uint32_t host_index;
   uint32_t root_bdf;
@@ -100,87 +93,6 @@ init_context(RQRMSC_CONTEXT *context)
   val_memory_set(context, sizeof(*context), 0);
   context->host_index = CXL_COMPONENT_INVALID_INDEX;
   context->endpoint_index = CXL_COMPONENT_INVALID_INDEX;
-}
-
-static uint32_t
-configure_dpt_coverage(uint32_t smmu_index,
-                       uint64_t translated_addr,
-                       RQRMSC_DPT_CFG_STATE *state)
-{
-  uint32_t dpt_cfg;
-  uint32_t current_dptps_bits;
-  uint32_t desired_dptps_encoding;
-  uint32_t desired_l0dptsz_encoding;
-  uint32_t desired_cfg;
-  uint64_t smmu_base;
-
-  if ((translated_addr == 0u) || (state == NULL))
-    return ACS_STATUS_ERR;
-
-  val_memory_set(state, sizeof(*state), 0);
-
-  smmu_base = val_smmu_get_info(SMMU_CTRL_BASE, smmu_index);
-  if (smmu_base == 0u)
-    return ACS_STATUS_SKIP;
-
-  state->smmu_base = smmu_base;
-  if (val_smmu_read_dpt_base_cfg(smmu_base, &dpt_cfg) != ACS_STATUS_PASS)
-    return ACS_STATUS_ERR;
-
-  state->original_cfg = dpt_cfg;
-  state->valid = 1u;
-  current_dptps_bits =
-    val_smmu_dptps_bits_from_encoding(
-      (dpt_cfg >> SMMU_DPT_BASE_CFG_DPTPS_SHIFT) &
-      SMMU_DPT_BASE_CFG_DPTPS_MASK);
-
-  val_print(ACS_PRINT_DEBUG, " RQRMSC: DPT cfg original 0x%x",
-            (uint64_t)dpt_cfg);
-  val_print(ACS_PRINT_DEBUG, " RQRMSC: DPTPS bits %u",
-            (uint64_t)current_dptps_bits);
-
-  if ((current_dptps_bits != 0u) &&
-      (current_dptps_bits >= 64u ||
-       translated_addr < (1ull << current_dptps_bits)))
-  {
-    return ACS_STATUS_PASS;
-  }
-
-  if (val_smmu_select_dptps_encoding(translated_addr,
-                                     &desired_dptps_encoding,
-                                     &desired_l0dptsz_encoding) != ACS_STATUS_PASS)
-  {
-    val_print(ACS_PRINT_ERR, " RQRMSC: translated PA above supported DPTPS", 0);
-    return ACS_STATUS_SKIP;
-  }
-
-  desired_cfg = dpt_cfg;
-  desired_cfg &= ~(SMMU_DPT_BASE_CFG_DPTPS_MASK <<
-                   SMMU_DPT_BASE_CFG_DPTPS_SHIFT);
-  desired_cfg &= ~(SMMU_DPT_BASE_CFG_L0DPTSZ_MASK <<
-                   SMMU_DPT_BASE_CFG_L0DPTSZ_SHIFT);
-  desired_cfg |= (desired_dptps_encoding & SMMU_DPT_BASE_CFG_DPTPS_MASK) <<
-                 SMMU_DPT_BASE_CFG_DPTPS_SHIFT;
-  desired_cfg |= (desired_l0dptsz_encoding & SMMU_DPT_BASE_CFG_L0DPTSZ_MASK) <<
-                 SMMU_DPT_BASE_CFG_L0DPTSZ_SHIFT;
-
-  val_print(ACS_PRINT_DEBUG, " RQRMSC: DPT cfg desired 0x%x",
-            (uint64_t)desired_cfg);
-
-  if (val_smmu_write_dpt_base_cfg(smmu_base, desired_cfg) != ACS_STATUS_PASS)
-    return ACS_STATUS_ERR;
-
-  state->updated = 1u;
-  return ACS_STATUS_PASS;
-}
-
-static uint32_t
-restore_dpt_coverage(const RQRMSC_DPT_CFG_STATE *state)
-{
-  if ((state == NULL) || (state->valid == 0u) || (state->updated == 0u))
-    return ACS_STATUS_PASS;
-
-  return val_smmu_write_dpt_base_cfg(state->smmu_base, state->original_cfg);
 }
 
 static uint32_t
@@ -245,8 +157,6 @@ restore_context_state(const RQRMSC_CONTEXT *context)
 {
   uint32_t restore_status;
   uint32_t readback;
-  uint64_t comp_base;
-  uint64_t hdm_cap_base;
 
   if (context == NULL)
     return ACS_STATUS_ERR;
@@ -322,25 +232,6 @@ restore_context_state(const RQRMSC_CONTEXT *context)
     }
   }
 
-  if (context->host_target_valid != 0u)
-  {
-    comp_base = val_cxl_get_info(CXL_INFO_COMPONENT_BASE, context->host_index);
-    if ((comp_base != 0u) &&
-        (val_cxl_find_capability(comp_base,
-                                 CXL_CAPID_HDM_DECODER,
-                                 &hdm_cap_base) == ACS_STATUS_PASS))
-    {
-      val_mmio_write(hdm_cap_base + CXL_HDM_DECODER_TARGET_LOW(DECODER_SLOT),
-                     context->host_target_low_orig);
-      val_mmio_write(hdm_cap_base + CXL_HDM_DECODER_TARGET_HIGH(DECODER_SLOT),
-                     context->host_target_high_orig);
-    }
-    else
-    {
-      restore_status = ACS_STATUS_ERR;
-    }
-  }
-
   if ((context->endpoint_index != CXL_COMPONENT_INVALID_INDEX) &&
       (context->endpoint_decoder_size_orig != 0u) &&
       (val_cxl_program_component_decoder(context->endpoint_index,
@@ -352,54 +243,19 @@ restore_context_state(const RQRMSC_CONTEXT *context)
     restore_status = ACS_STATUS_ERR;
   }
 
-  if ((context->host_index != CXL_COMPONENT_INVALID_INDEX) &&
-      (context->host_decoder_size_orig != 0u) &&
-      (val_cxl_program_host_decoder(context->host_index,
-                                    DECODER_SLOT,
-                                    context->host_decoder_base_orig,
-                                    context->host_decoder_size_orig)
-       != ACS_STATUS_PASS))
+  if (val_cxl_restore_host_decoder(context->host_index,
+                                   DECODER_SLOT,
+                                   context->host_decoder_base_orig,
+                                   context->host_decoder_size_orig,
+                                   context->host_target_valid,
+                                   context->host_target_low_orig,
+                                   context->host_target_high_orig)
+      != ACS_STATUS_PASS)
   {
     restore_status = ACS_STATUS_ERR;
   }
 
   return restore_status;
-}
-
-static uint32_t
-select_dcm_window_page(uint64_t window_base,
-                       uint64_t window_size,
-                       uint64_t *page_out)
-{
-  uint64_t page_size;
-  uint64_t window_end;
-  uint64_t aligned_base;
-
-  if (page_out == NULL)
-    return ACS_STATUS_ERR;
-
-  page_size = (uint64_t)val_memory_page_size();
-  if (page_size == 0u)
-    return ACS_STATUS_ERR;
-
-  if (window_size < page_size)
-    return ACS_STATUS_SKIP;
-
-  window_end = window_base + window_size;
-  if (window_end < window_base)
-    return ACS_STATUS_ERR;
-
-  /*
-   * Use the last page in the CXL.mem window.  The UEFI page allocator can hand
-   * out backing pages from the start of the CFMWS window; using the first page
-   * here can make the selected DCM window page alias an ACS DMA source buffer.
-   */
-  aligned_base = (window_end - page_size) & ~(page_size - 1u);
-  if ((aligned_base < window_base) || ((aligned_base + page_size) > window_end))
-    return ACS_STATUS_SKIP;
-
-  *page_out = aligned_base;
-  return ACS_STATUS_PASS;
 }
 
 static uint32_t
@@ -1083,7 +939,7 @@ exercise_rule(RQRMSC_CONTEXT *context)
 {
   smmu_master_attributes_t master;
   pgt_descriptor_t pgt_desc;
-  RQRMSC_DPT_CFG_STATE dpt_cfg_state;
+  VAL_SMMU_DPT_CFG_STATE dpt_cfg_state;
   uint64_t dcm_window_pa;
   uint8_t *buffer_base_va;
   uint8_t *buffer_src_va;
@@ -1131,9 +987,9 @@ exercise_rule(RQRMSC_CONTEXT *context)
   if (page_size == 0u)
     return ACS_STATUS_ERR;
 
-  status = select_dcm_window_page(context->window_base,
-                                  context->window_size,
-                                  &dcm_window_pa);
+  status = val_cda_select_dcm_page(context->window_base,
+                                   context->window_size,
+                                   &dcm_window_pa);
   if (status != ACS_STATUS_PASS)
     return status;
 
@@ -1253,7 +1109,9 @@ exercise_rule(RQRMSC_CONTEXT *context)
   }
 
   dpt_coverage_pa = (buffer_src_pa > buffer_dst_pa) ? buffer_src_pa : buffer_dst_pa;
-  status = configure_dpt_coverage(master.smmu_index, dpt_coverage_pa, &dpt_cfg_state);
+  status = val_smmu_configure_dpt_coverage(master.smmu_index,
+                                           dpt_coverage_pa,
+                                           &dpt_cfg_state);
   if (status != ACS_STATUS_PASS)
   {
     result = status;
@@ -1497,7 +1355,7 @@ cleanup:
   if ((src_dpt_entry_added != 0u) || (dst_dpt_entry_added != 0u))
     (void)val_dpt_invalidate_all(master.smmu_index);
 
-  if (restore_dpt_coverage(&dpt_cfg_state) != ACS_STATUS_PASS)
+  if (val_smmu_restore_dpt_coverage(&dpt_cfg_state) != ACS_STATUS_PASS)
     result = ACS_STATUS_ERR;
 
   if (pgt_desc.pgt_base != 0u)

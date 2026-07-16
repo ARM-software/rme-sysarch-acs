@@ -299,37 +299,6 @@ best_effort_restore_rmecda_ctl1_cfg(TEST_CONTEXT *context)
 }
 
 static uint32_t
-select_test_base(uint64_t window_base,
-                 uint64_t window_size,
-                 uint64_t *test_base_out)
-{
-  uint64_t page_size;
-  uint64_t window_end;
-  uint64_t aligned_base;
-
-  if (test_base_out == NULL)
-    return ACS_STATUS_ERR;
-
-  page_size = (uint64_t)val_memory_page_size();
-  if (page_size == 0u)
-    return ACS_STATUS_ERR;
-
-  if (window_size < page_size)
-    return ACS_STATUS_SKIP;
-
-  window_end = window_base + window_size;
-  if (window_end < window_base)
-    return ACS_STATUS_ERR;
-
-  aligned_base = (window_end - page_size) & ~(page_size - 1u);
-  if ((aligned_base < window_base) || ((aligned_base + page_size) > window_end))
-    return ACS_STATUS_SKIP;
-
-  *test_base_out = aligned_base;
-  return ACS_STATUS_PASS;
-}
-
-static uint32_t
 map_window_alias(uint64_t phys,
                  uint32_t pas,
                  volatile uint64_t **virt_out)
@@ -914,9 +883,9 @@ exercise_rule(TEST_CONTEXT *context)
   if (context == NULL)
     return ACS_STATUS_ERR;
 
-  status = select_test_base(context->window_base,
-                            context->window_size,
-                            &test_base);
+  status = val_cda_select_dcm_page(context->window_base,
+                                   context->window_size,
+                                   &test_base);
   if (status != ACS_STATUS_PASS)
     return status;
 

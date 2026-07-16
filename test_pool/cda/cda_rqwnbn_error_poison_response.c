@@ -81,30 +81,6 @@ init_context(TEST_CONTEXT *context)
 }
 
 static uint32_t
-restore_host_decoder_and_target(const TEST_CONTEXT *context)
-{
-  if (context == NULL)
-    return ACS_STATUS_ERR;
-
-  if ((context->host_index == CXL_COMPONENT_INVALID_INDEX) ||
-      (context->host_decoder_size_orig == 0u))
-    return ACS_STATUS_PASS;
-
-  if (context->host_target_valid == 0u)
-    return val_cxl_program_host_decoder(context->host_index,
-                                        DECODER_SLOT,
-                                        context->host_decoder_base_orig,
-                                        context->host_decoder_size_orig);
-
-  return val_cxl_program_host_decoder_target(context->host_index,
-                                             DECODER_SLOT,
-                                             context->host_decoder_base_orig,
-                                             context->host_decoder_size_orig,
-                                             context->host_target_low_orig,
-                                             context->host_target_high_orig);
-}
-
-static uint32_t
 restore_context_state(const TEST_CONTEXT *context)
 {
   uint32_t restore_status;
@@ -166,7 +142,14 @@ restore_context_state(const TEST_CONTEXT *context)
     restore_status = ACS_STATUS_ERR;
   }
 
-  if (restore_host_decoder_and_target(context) != ACS_STATUS_PASS)
+  if (val_cxl_restore_host_decoder(context->host_index,
+                                   DECODER_SLOT,
+                                   context->host_decoder_base_orig,
+                                   context->host_decoder_size_orig,
+                                   context->host_target_valid,
+                                   context->host_target_low_orig,
+                                   context->host_target_high_orig)
+      != ACS_STATUS_PASS)
   {
     restore_status = ACS_STATUS_ERR;
   }

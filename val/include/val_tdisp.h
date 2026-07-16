@@ -183,6 +183,11 @@ val_tdisp_get_interface_state(val_spdm_context_t *context,
                               uint8_t *tdi_state);
 
 uint32_t
+val_tdisp_stop_to_config_unlocked(val_spdm_context_t *spdm_ctx,
+                                  uint32_t session_id,
+                                  const pci_tdisp_interface_id_t *interface_id);
+
+uint32_t
 val_tdisp_establish_run(uint32_t endpoint_bdf,
                         val_spdm_context_t *spdm_ctx,
                         uint32_t *session_id_out,

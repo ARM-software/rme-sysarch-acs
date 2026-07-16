@@ -226,6 +226,94 @@ val_smmu_select_dptps_encoding(uint64_t address,
 }
 
 /**
+  @brief  Ensure the SMMU DPT base configuration can cover a translated PA.
+
+  @param  smmu_index       SMMU controller index.
+  @param  translated_addr  Physical address that DPT walks must be able to cover.
+  @param  state            Caller-owned restore state for this programming.
+
+  @return ACS_STATUS_PASS/SKIP/ERR.
+**/
+uint32_t
+val_smmu_configure_dpt_coverage(uint32_t smmu_index,
+                                uint64_t translated_addr,
+                                VAL_SMMU_DPT_CFG_STATE *state)
+{
+  uint32_t dpt_cfg;
+  uint32_t current_dptps_bits;
+  uint32_t desired_dptps_encoding;
+  uint32_t desired_l0dptsz_encoding;
+  uint32_t desired_cfg;
+  uint64_t smmu_base;
+
+  if ((translated_addr == 0u) || (state == NULL))
+    return ACS_STATUS_ERR;
+
+  val_memory_set(state, sizeof(*state), 0);
+
+  smmu_base = val_smmu_get_info(SMMU_CTRL_BASE, smmu_index);
+  if (smmu_base == 0u)
+    return ACS_STATUS_SKIP;
+
+  state->smmu_base = smmu_base;
+  if (val_smmu_read_dpt_base_cfg(smmu_base, &dpt_cfg) != ACS_STATUS_PASS)
+    return ACS_STATUS_ERR;
+
+  state->original_cfg = dpt_cfg;
+  state->valid = 1u;
+  current_dptps_bits =
+    val_smmu_dptps_bits_from_encoding(
+      (dpt_cfg >> SMMU_DPT_BASE_CFG_DPTPS_SHIFT) &
+      SMMU_DPT_BASE_CFG_DPTPS_MASK);
+
+  if ((current_dptps_bits != 0u) &&
+      ((current_dptps_bits >= 64u) ||
+       (translated_addr < (1ull << current_dptps_bits))))
+  {
+    return ACS_STATUS_PASS;
+  }
+
+  if (val_smmu_select_dptps_encoding(translated_addr,
+                                     &desired_dptps_encoding,
+                                     &desired_l0dptsz_encoding) != ACS_STATUS_PASS)
+  {
+    return ACS_STATUS_SKIP;
+  }
+
+  desired_cfg = dpt_cfg;
+  desired_cfg &= ~(SMMU_DPT_BASE_CFG_DPTPS_MASK <<
+                   SMMU_DPT_BASE_CFG_DPTPS_SHIFT);
+  desired_cfg &= ~(SMMU_DPT_BASE_CFG_L0DPTSZ_MASK <<
+                   SMMU_DPT_BASE_CFG_L0DPTSZ_SHIFT);
+  desired_cfg |= (desired_dptps_encoding & SMMU_DPT_BASE_CFG_DPTPS_MASK) <<
+                 SMMU_DPT_BASE_CFG_DPTPS_SHIFT;
+  desired_cfg |= (desired_l0dptsz_encoding & SMMU_DPT_BASE_CFG_L0DPTSZ_MASK) <<
+                 SMMU_DPT_BASE_CFG_L0DPTSZ_SHIFT;
+
+  if (val_smmu_write_dpt_base_cfg(smmu_base, desired_cfg) != ACS_STATUS_PASS)
+    return ACS_STATUS_ERR;
+
+  state->updated = 1u;
+  return ACS_STATUS_PASS;
+}
+
+/**
+  @brief  Restore DPT base configuration saved by val_smmu_configure_dpt_coverage.
+
+  @param  state  Restore state returned by val_smmu_configure_dpt_coverage.
+
+  @return ACS_STATUS_PASS/ERR.
+**/
+uint32_t
+val_smmu_restore_dpt_coverage(const VAL_SMMU_DPT_CFG_STATE *state)
+{
+  if ((state == NULL) || (state->valid == 0u) || (state->updated == 0u))
+    return ACS_STATUS_PASS;
+
+  return val_smmu_write_dpt_base_cfg(state->smmu_base, state->original_cfg);
+}
+
+/**
   @brief   This API executes all the SMMU tests sequentially
            1. Caller       -  Application layer.
            2. Prerequisite -  val_smmu_create_info_table()

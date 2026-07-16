@@ -37,6 +37,13 @@
 #define SMMU_DPT_BASE_CFG_L0DPTSZ_SHIFT 20u
 #define SMMU_DPT_BASE_CFG_L0DPTSZ_MASK  0xFu
 
+typedef struct {
+  uint32_t valid;
+  uint32_t updated;
+  uint64_t smmu_base;
+  uint32_t original_cfg;
+} VAL_SMMU_DPT_CFG_STATE;
+
 uint32_t
 val_smmu_read_cfg(uint32_t offset, uint32_t index);
 
@@ -56,6 +63,14 @@ uint32_t
 val_smmu_select_dptps_encoding(uint64_t address,
                                uint32_t *dptps_encoding,
                                uint32_t *l0dptsz_encoding);
+
+uint32_t
+val_smmu_configure_dpt_coverage(uint32_t smmu_index,
+                                uint64_t translated_addr,
+                                VAL_SMMU_DPT_CFG_STATE *state);
+
+uint32_t
+val_smmu_restore_dpt_coverage(const VAL_SMMU_DPT_CFG_STATE *state);
 
 uint32_t
 val_smmu_enable(uint32_t smmu_index);

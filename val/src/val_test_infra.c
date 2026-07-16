@@ -112,6 +112,10 @@ MODULE_TEST_DISPATCHER_s g_module_test_table[MODULE_SENTINEL] = {
         .entry_fn = cda_rhttnb_dirty_snoop_blocked_entry,
         .test_text = "cda_rhttnb_dirty_snoop_blocked",
       },
+      [CDA_ENTRY_CDA_RLMFLX_CONFIG_UNLOCKED_INVALIDATE_ENTRY] = {
+        .entry_fn = cda_rlmflx_config_unlocked_invalidate_entry,
+        .test_text = "cda_rlmflx_config_unlocked_invalidate",
+      },
       [CDA_ENTRY_CDA_RWFYLW_DEV_PROP_LOCK_ENTRY] = {
         .entry_fn = cda_rwfylw_dev_prop_lock_entry,
         .test_text = "cda_rwfylw_dev_prop_lock",

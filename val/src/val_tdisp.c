@@ -366,6 +366,58 @@ val_tdisp_get_interface_state(val_spdm_context_t *context,
 }
 
 /**
+  @brief  Stop a TDISP interface and verify it reaches CONFIG_UNLOCKED.
+
+  @param  spdm_ctx      SPDM context.
+  @param  session_id    SPDM session identifier.
+  @param  interface_id  TDISP interface identifier.
+
+  @return ACS_STATUS_PASS if STOP succeeds and the interface is CONFIG_UNLOCKED.
+**/
+uint32_t
+val_tdisp_stop_to_config_unlocked(val_spdm_context_t *spdm_ctx,
+                                  uint32_t session_id,
+                                  const pci_tdisp_interface_id_t *interface_id)
+{
+#if ENABLE_SPDM
+  uint8_t tdi_state;
+  uint32_t status;
+
+  if ((spdm_ctx == NULL) || (session_id == 0u) || (interface_id == NULL))
+    return ACS_STATUS_ERR;
+
+  status = val_spdm_send_pci_tdisp_stop_interface(spdm_ctx,
+                                                  session_id,
+                                                  interface_id);
+  if (status != ACS_STATUS_PASS)
+    return status;
+
+  status = val_tdisp_get_interface_state(spdm_ctx,
+                                         session_id,
+                                         interface_id,
+                                         &tdi_state);
+  if (status != ACS_STATUS_PASS)
+    return status;
+
+  if (tdi_state != PCI_TDISP_INTERFACE_STATE_CONFIG_UNLOCKED)
+  {
+    val_print(ACS_PRINT_ERR,
+              " TDISP: interface state after STOP is 0x%x",
+              (uint64_t)tdi_state);
+    return ACS_STATUS_FAIL;
+  }
+
+  return ACS_STATUS_PASS;
+#else
+  (void)spdm_ctx;
+  (void)session_id;
+  (void)interface_id;
+
+  return ACS_STATUS_SKIP;
+#endif
+}
+
+/**
   @brief  Open an SPDM session and move a TDI interface to RUN.
 
   @param  endpoint_bdf      TDI endpoint BDF.

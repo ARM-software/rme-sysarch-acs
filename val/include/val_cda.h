@@ -27,6 +27,7 @@ uint32_t cda_rkrcwk_host_side_gpc_entry(uint32_t num_pe);
 uint32_t cda_rshrmn_coherent_link_topology_entry(uint32_t num_pe);
 uint32_t cda_rqwnbn_error_poison_response_entry(uint32_t num_pe);
 uint32_t cda_rhttnb_dirty_snoop_blocked_entry(uint32_t num_pe);
+uint32_t cda_rlmflx_config_unlocked_invalidate_entry(uint32_t num_pe);
 uint32_t cda_rwfylw_dev_prop_lock_entry(uint32_t num_pe);
 uint32_t cda_rfzbmw_external_dcm_ide_gate_entry(uint32_t num_pe);
 uint32_t cda_rwwbpm_internal_dcm_run_gate_entry(uint32_t num_pe);
@@ -38,6 +39,9 @@ uint32_t val_cda_is_downstream_chi_c2c_endpoint(const CXL_COMPONENT_ENTRY *entry
                                                 uint32_t root_bdf,
                                                 uint32_t secondary_bus,
                                                 uint32_t subordinate_bus);
+uint32_t val_cda_select_dcm_page(uint64_t window_base,
+                                 uint64_t window_size,
+                                 uint64_t *page_out);
 uint32_t val_cda_set_link_stream_lock(uint64_t cfg_va,
                                       uint32_t rmecda_cap_base,
                                       uint32_t ctl1_template,
