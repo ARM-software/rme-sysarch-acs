@@ -1408,6 +1408,7 @@ uint32_t val_configure_acs(void)
   }
 
   num_smmus = val_iovirt_get_smmu_info(SMMU_NUM_CTRL, 0);
+
   if (val_rme_install_handler_el3())
   {
     val_print(ACS_PRINT_ERR, " Failed to install the RME handler in EL3", 0);
