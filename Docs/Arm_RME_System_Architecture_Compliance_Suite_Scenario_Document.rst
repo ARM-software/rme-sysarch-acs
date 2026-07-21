@@ -1997,7 +1997,7 @@ License
 
 RME System ACS is distributed under Apache v2.0 License.
 
-*Copyright (c) 2023-2025, Arm Limited and Contributors. All rights reserved.*
+*Copyright (c) 2023-2026, Arm Limited and Contributors. All rights reserved.*
 
 
 .. _RME_System_Architecture_Spec: https://developer.arm.com/documentation/den0024/latest
