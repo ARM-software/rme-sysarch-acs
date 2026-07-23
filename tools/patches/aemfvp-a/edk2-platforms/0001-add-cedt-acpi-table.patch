@@ -1,0 +1,245 @@
+From cac87565010a9ce2ea1c1aa2a725de0200b6d5a8 Mon Sep 17 00:00:00 2001
+From: Shyamanth RH <shyamanth.rh@arm.com>
+Date: Wed, 11 Feb 2026 07:32:16 +0000
+Subject: [PATCH] add cedt acpi table
+
+Signed-off-by: Shyamanth RH <shyamanth.rh@arm.com>
+---
+ .../AslTables/Dsdt.asl                        | 26 +++++--
+ .../ConfigurationManagerDxe/Cedt.c            | 77 +++++++++++++++++++
+ .../ConfigurationManager.c                    | 31 +++++---
+ .../ConfigurationManager.h                    | 11 ++-
+ .../ConfigurationManagerDxe.inf               |  7 +-
+ 5 files changed, 125 insertions(+), 27 deletions(-)
+ create mode 100644 Platform/ARM/VExpressPkg/ConfigurationManager/ConfigurationManagerDxe/Cedt.c
+
+diff --git a/Platform/ARM/VExpressPkg/ConfigurationManager/ConfigurationManagerDxe/AslTables/Dsdt.asl b/Platform/ARM/VExpressPkg/ConfigurationManager/ConfigurationManagerDxe/AslTables/Dsdt.asl
+index 5df8f5cf7d..65166f8fc2 100644
+--- a/Platform/ARM/VExpressPkg/ConfigurationManager/ConfigurationManagerDxe/AslTables/Dsdt.asl
++++ b/Platform/ARM/VExpressPkg/ConfigurationManager/ConfigurationManagerDxe/AslTables/Dsdt.asl
+@@ -14,9 +14,9 @@ DefinitionBlock("DsdtTable.aml", "DSDT", 2, "ARMLTD", "ARM-VEXP", 1) {
+     //
+     // Processor declaration
+     //
+-    Method (_OSC, 4, Serialized)  { // _OSC: Operating System Capabilities
+-      CreateDWordField (Arg3, 0x00, STS0)
+-      CreateDWordField (Arg3, 0x04, CAP0)
++    Method (_OSC, 4, Serialized)  { // _OSC: Operating System Capabilities
++      CreateDWordField (Arg3, 0x00, STS0)
++      CreateDWordField (Arg3, 0x04, CAP0)
+       If ((Arg0 == ToUUID ("0811b06e-4a27-44f9-8d60-3cbbc22e7b48") /* Platform-wide Capabilities */)) {
+         If (!(Arg1 == One)) {
+           STS0 &= ~0x1F
+@@ -32,11 +32,21 @@ DefinitionBlock("DsdtTable.aml", "DSDT", 2, "ARMLTD", "ARM-VEXP", 1) {
+         STS0 &= ~0x1F
+         STS0 |= 0x06
+       }
+-      Return (Arg3)
+-    }
+-
+-    // SMC91X
+-    Device (NET0) {
++      Return (Arg3)
++    }
++
++    // PCI Root Bridge
++    Device (PCI0) {
++      Name (_HID, "PNP0A08") // PCI Express Root Bridge
++      Name (_CID, "PNP0A03") // Compatible PCI Root Bridge
++      Name (_UID, 0)
++      Name (_SEG, 0)
++      Name (_BBN, 0)
++      Name (_CCA, 1)
++    }
++
++    // SMC91X
++    Device (NET0) {
+       Name (_HID, "LNRO0003")
+       Name (_UID, 0)
+ 
+diff --git a/Platform/ARM/VExpressPkg/ConfigurationManager/ConfigurationManagerDxe/Cedt.c b/Platform/ARM/VExpressPkg/ConfigurationManager/ConfigurationManagerDxe/Cedt.c
+new file mode 100644
+index 0000000000..f067c0ee5b
+--- /dev/null
++++ b/Platform/ARM/VExpressPkg/ConfigurationManager/ConfigurationManagerDxe/Cedt.c
+@@ -0,0 +1,77 @@
++#include <Base.h>
++#include <IndustryStandard/Acpi64.h>
++
++#define VEXPRESS_ACPI_OEM_ID           { 'A', 'R', 'M', 'L', 'T', 'D' }
++#define VEXPRESS_ACPI_OEM_TABLE_ID     SIGNATURE_64 ('V', 'E', 'X', 'P', 'R', 'E', 'S', 'S')
++#define VEXPRESS_ACPI_OEM_REVISION     0x20140727
++#define VEXPRESS_ACPI_CREATOR_ID       SIGNATURE_32 ('A', 'R', 'M', ' ')
++#define VEXPRESS_ACPI_CREATOR_REVISION 0x00000099
++
++#define VEXPRESS_CEDT_INTERLEAVE_TARGETS  1
++
++#pragma pack (1)
++
++typedef struct {
++  UINT8   Type;
++  UINT8   Reserved0;
++  UINT16  RecordLength;
++  UINT32  Reserved1;
++  UINT64  BaseHpa;
++  UINT64  WindowSize;
++  UINT8   EncodedNumberOfInterleaveWays;
++  UINT8   InterleaveArithmetic;
++  UINT16  Reserved2;
++  UINT32  HostBridgeInterleaveGranularity;
++  UINT16  WindowRestrictions;
++  UINT16  QtgId;
++  UINT32  InterleaveTargetList[VEXPRESS_CEDT_INTERLEAVE_TARGETS];
++} VEXPRESS_CEDT_CFMWS_STRUCTURE;
++
++typedef struct {
++  EFI_ACPI_DESCRIPTION_HEADER                 Header;
++  VEXPRESS_CEDT_CFMWS_STRUCTURE               Cfmws;
++  EFI_ACPI_6_4_CEDT_CXL_HOST_BRIDGE_STRUCTURE  Chbs;
++} VEXPRESS_CEDT_STRUCTURE_TABLE;
++
++#pragma pack ()
++
++VEXPRESS_CEDT_STRUCTURE_TABLE  Cedt = {
++  {
++    EFI_ACPI_6_4_CXL_EARLY_DISCOVERY_TABLE_SIGNATURE,
++    sizeof (VEXPRESS_CEDT_STRUCTURE_TABLE),
++    EFI_ACPI_6_4_CEDT_CXL_EARLY_DISCOVERY_TABLE_REVISION_01,
++    0,
++    VEXPRESS_ACPI_OEM_ID,
++    VEXPRESS_ACPI_OEM_TABLE_ID,
++    VEXPRESS_ACPI_OEM_REVISION,
++    VEXPRESS_ACPI_CREATOR_ID,
++    VEXPRESS_ACPI_CREATOR_REVISION
++  },
++  {
++    EFI_ACPI_6_4_CEDT_STRUCTURE_TYPE_CXL_FIXED_MEMORY_WINDOW_STRUCTURE,
++    EFI_ACPI_RESERVED_BYTE,
++    sizeof (VEXPRESS_CEDT_CFMWS_STRUCTURE),
++    EFI_ACPI_RESERVED_DWORD,
++    0x8C0000000ULL,
++    0x20000000ULL,
++    0,
++    0,
++    EFI_ACPI_RESERVED_WORD,
++    4,
++    6,
++    0,
++    {
++      0
++    }
++  },
++  {
++    EFI_ACPI_6_4_CEDT_STRUCTURE_TYPE_CXL_HOST_BRIDGE_STRUCTURE,
++    EFI_ACPI_RESERVED_BYTE,
++    sizeof (EFI_ACPI_6_4_CEDT_CXL_HOST_BRIDGE_STRUCTURE),
++    0,
++    EFI_ACPI_6_4_CEDT_CXL_HOST_BRIDGE_STRUCTURE_CXL_VERSION_HB,
++    EFI_ACPI_RESERVED_DWORD,
++    0x66E000000ULL,
++    0x10000
++  }
++};
+diff --git a/Platform/ARM/VExpressPkg/ConfigurationManager/ConfigurationManagerDxe/ConfigurationManager.c b/Platform/ARM/VExpressPkg/ConfigurationManager/ConfigurationManagerDxe/ConfigurationManager.c
+index 55ba228fbe..a5824955bf 100644
+--- a/Platform/ARM/VExpressPkg/ConfigurationManager/ConfigurationManagerDxe/ConfigurationManager.c
++++ b/Platform/ARM/VExpressPkg/ConfigurationManager/ConfigurationManagerDxe/ConfigurationManager.c
+@@ -10,10 +10,11 @@
+     - Obj or OBJ - Object
+ **/
+ 
+-#include <IndustryStandard/DebugPort2Table.h>
+-#include <IndustryStandard/SerialPortConsoleRedirectionTable.h>
+-#include <IndustryStandard/IoRemappingTable.h>
+-#include <IndustryStandard/MemoryMappedConfigurationSpaceAccessTable.h>
++#include <IndustryStandard/DebugPort2Table.h>
++#include <IndustryStandard/SerialPortConsoleRedirectionTable.h>
++#include <IndustryStandard/IoRemappingTable.h>
++#include <IndustryStandard/MemoryMappedConfigurationSpaceAccessTable.h>
++#include <IndustryStandard/Acpi64.h>
+ #include <Library/ArmLib.h>
+ #include <Library/DebugLib.h>
+ #include <Library/IoLib.h>
+@@ -84,14 +85,20 @@ EDKII_PLATFORM_REPOSITORY_INFO  VExpressPlatRepositoryInfo = {
+       CREATE_STD_ACPI_TABLE_GEN_ID (EStdAcpiTableIdSsdtCpuTopology),
+       NULL
+     },
+-    // PPTT Table
+-    {
+-      EFI_ACPI_6_3_PROCESSOR_PROPERTIES_TOPOLOGY_TABLE_STRUCTURE_SIGNATURE,
+-      EFI_ACPI_6_3_PROCESSOR_PROPERTIES_TOPOLOGY_TABLE_REVISION,
+-      CREATE_STD_ACPI_TABLE_GEN_ID (EStdAcpiTableIdPptt),
+-      NULL
+-    },
+-    // Note: The last 3 tables in this list are for FVP RevC only.
++    // PPTT Table
++    {
++      EFI_ACPI_6_3_PROCESSOR_PROPERTIES_TOPOLOGY_TABLE_STRUCTURE_SIGNATURE,
++      EFI_ACPI_6_3_PROCESSOR_PROPERTIES_TOPOLOGY_TABLE_REVISION,
++      CREATE_STD_ACPI_TABLE_GEN_ID (EStdAcpiTableIdPptt),
++      NULL
++    },
++    {
++      EFI_ACPI_6_4_CXL_EARLY_DISCOVERY_TABLE_SIGNATURE,
++      EFI_ACPI_6_4_CEDT_CXL_EARLY_DISCOVERY_TABLE_REVISION_01,
++      CREATE_STD_ACPI_TABLE_GEN_ID (EStdAcpiTableIdRaw),
++      (EFI_ACPI_DESCRIPTION_HEADER *)&Cedt
++    },
++    // Note: The last 3 tables in this list are for FVP RevC only.
+     // IORT Table - FVP RevC
+     {
+       EFI_ACPI_6_3_IO_REMAPPING_TABLE_SIGNATURE,
+diff --git a/Platform/ARM/VExpressPkg/ConfigurationManager/ConfigurationManagerDxe/ConfigurationManager.h b/Platform/ARM/VExpressPkg/ConfigurationManager/ConfigurationManagerDxe/ConfigurationManager.h
+index 9e65f727e1..4e68a64b38 100644
+--- a/Platform/ARM/VExpressPkg/ConfigurationManager/ConfigurationManagerDxe/ConfigurationManager.h
++++ b/Platform/ARM/VExpressPkg/ConfigurationManager/ConfigurationManagerDxe/ConfigurationManager.h
+@@ -9,14 +9,17 @@
+     - Obj or OBJ - Object
+ **/
+ 
+-#ifndef CONFIGURATION_MANAGER_H__
+-#define CONFIGURATION_MANAGER_H__
++#ifndef CONFIGURATION_MANAGER_H__
++#define CONFIGURATION_MANAGER_H__
++
++#include <IndustryStandard/Acpi64.h>
+ 
+ /** C array containing the compiled AML template.
+     This symbol is defined in the auto generated C file
+     containing the AML bytecode array.
+ */
+-extern CHAR8  dsdt_aml_code[];
++extern CHAR8  dsdt_aml_code[];
++extern EFI_ACPI_DESCRIPTION_HEADER  Cedt;
+ 
+ /** The configuration manager version.
+ */
+@@ -118,7 +121,7 @@ typedef EFI_STATUS (*CM_OBJECT_HANDLER_PROC) (
+ 
+ /** The number of ACPI tables to install
+ */
+-#define PLAT_ACPI_TABLE_COUNT       11
++#define PLAT_ACPI_TABLE_COUNT       12
+ 
+ /** The number of platform generic timer blocks
+ */
+diff --git a/Platform/ARM/VExpressPkg/ConfigurationManager/ConfigurationManagerDxe/ConfigurationManagerDxe.inf b/Platform/ARM/VExpressPkg/ConfigurationManager/ConfigurationManagerDxe/ConfigurationManagerDxe.inf
+index 53f971eb59..dcb33ee361 100644
+--- a/Platform/ARM/VExpressPkg/ConfigurationManager/ConfigurationManagerDxe/ConfigurationManagerDxe.inf
++++ b/Platform/ARM/VExpressPkg/ConfigurationManager/ConfigurationManagerDxe/ConfigurationManagerDxe.inf
+@@ -20,9 +20,10 @@
+ #  VALID_ARCHITECTURES           = ARM AARCH64
+ #
+ 
+-[Sources]
+-  ConfigurationManager.c
+-  AslTables/Dsdt.asl
++[Sources]
++  ConfigurationManager.c
++  Cedt.c
++  AslTables/Dsdt.asl
+ 
+ [Packages]
+   ArmPkg/ArmPkg.dec
+-- 
+2.43.0

@@ -1,0 +1,11 @@
+# rme-cxl-uefi.yaml
+layers:
+  - rme-cxl.yaml
+
+build:
+  edk2-platforms:
+    prebuild:
+      - git fetch --tags --force
+      - git checkout -f 8cc9da9dc8431d1f0dfab28d92b3941e2c19aeb8
+      - git clean -fdx
+      - git apply --3way --ignore-space-change --ignore-whitespace ${btvar:ACS_PATH}/tools/patches/aemfvp-a/edk2-platforms/*.patch

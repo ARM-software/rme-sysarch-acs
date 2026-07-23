@@ -541,6 +541,34 @@ MODULE_TEST_DISPATCHER_s g_module_test_table[MODULE_SENTINEL] = {
         .entry_fn = tdisp_rfpymv_vdm_response_check_entry,
         .test_text = "tdisp_rfpymv_vdm_response_check",
       },
+      [TDISP_ENTRY_TDISP_RPXLFY_GET_VERSION_REQ_ENTRY] = {
+        .entry_fn = tdisp_rpxlfy_get_version_req_entry,
+        .test_text = "tdisp_rpxlfy_get_version_req",
+      },
+      [TDISP_ENTRY_TDISP_RWFWLF_GET_VERSION_RESP_FORMAT_ENTRY] = {
+        .entry_fn = tdisp_rwfwlf_get_version_resp_format_entry,
+        .test_text = "tdisp_rwfwlf_get_version_resp_format",
+      },
+      [TDISP_ENTRY_TDISP_RGRPDP_GET_DEV_PROP_REQ_ENTRY] = {
+        .entry_fn = tdisp_rgrpdp_get_dev_prop_req_entry,
+        .test_text = "tdisp_rgrpdp_get_dev_prop_req",
+      },
+      [TDISP_ENTRY_TDISP_RGHDCB_GET_DEV_PROP_RESP_FORMAT_ENTRY] = {
+        .entry_fn = tdisp_rghdcb_get_dev_prop_resp_format_entry,
+        .test_text = "tdisp_rghdcb_get_dev_prop_resp_format",
+      },
+      [TDISP_ENTRY_TDISP_RWFPXR_TDISP_ERROR_ALLOWED_ENTRY] = {
+        .entry_fn = tdisp_rwfpxr_tdisp_error_allowed_entry,
+        .test_text = "tdisp_rwfpxr_tdisp_error_allowed",
+      },
+      [TDISP_ENTRY_TDISP_RXDKDT_SET_INTERFACE_REQ_SEMANTICS_ENTRY] = {
+        .entry_fn = tdisp_rxdkdt_set_interface_req_semantics_entry,
+        .test_text = "tdisp_rxdkdt_set_interface_req_semantics",
+      },
+      [TDISP_ENTRY_TDISP_RFMHST_SET_INTERFACE_RESP_FORMAT_ENTRY] = {
+        .entry_fn = tdisp_rfmhst_set_interface_resp_format_entry,
+        .test_text = "tdisp_rfmhst_set_interface_resp_format",
+      },
     },
   },
 };
@@ -1397,7 +1425,7 @@ void val_restore_global_test_data(void)
 uint32_t val_configure_acs(void)
 {
   uint64_t sp_val;
-  uint32_t num_smmus, attr;
+  uint32_t attr;
 
   /* EL2 startup runs on the active SP, which is not guaranteed to be SP_EL0. */
   sp_val = AA64ReadSp();
@@ -1410,8 +1438,6 @@ uint32_t val_configure_acs(void)
     val_print(ACS_PRINT_ERR, " MMU mapping failed for SP address: 0x%llx", sp_val);
     return 1;
   }
-
-  num_smmus = val_iovirt_get_smmu_info(SMMU_NUM_CTRL, 0);
 
   if (val_rme_install_handler_el3())
   {
@@ -1431,11 +1457,16 @@ uint32_t val_configure_acs(void)
   val_cxl_print_component_summary();
 
   val_exerciser_create_info_table();
+#ifndef SKIP_SMMU_GIC_ITS_INIT
+  uint32_t num_smmus = val_iovirt_get_smmu_info(SMMU_NUM_CTRL, 0);
   val_smmu_init();
 
   /* Disable all SMMUs */
   for (uint32_t instance = 0; instance < num_smmus; ++instance)
     val_smmu_disable(instance);
+#else
+  val_print(ACS_PRINT_INFO, " Skipping SMMU init/disable (SKIP_SMMU_GIC_ITS_INIT)", 0);
+#endif
 
   return 0;
 }

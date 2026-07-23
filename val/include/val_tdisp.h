@@ -68,8 +68,18 @@ typedef struct {
 #define VAL_TDISP_HDR_INTERFACE_OFF   4u
 #define VAL_TDISP_HDR_SIZE            16u
 
-/* Arm VDM header layout (Appendix B3). */
-#define VAL_TDISP_VDM_HDR_OFF         (VAL_TDISP_HDR_SIZE)
+/* Chapter B3 offsets are relative to the Arm VDM payload. */
+#define VAL_TDISP_B3_ARM_VDM_HDR_OFF              0u
+#define VAL_TDISP_B3_REQ_RESP_HDR_OFF             4u
+#define VAL_TDISP_B3_DATA_OFF                     8u
+#define VAL_TDISP_B3_GET_DEV_PROP_REG_LIST_OFF    12u
+#define VAL_TDISP_B3_SET_IF_REQ_SIZE              12u
+#define VAL_TDISP_B3_SET_IF_RESP_SIZE             8u
+
+/* Full-buffer offsets include the PCI TDISP header before the B3 payload. */
+#define VAL_TDISP_ARM_VDM_PAYLOAD_OFF (VAL_TDISP_HDR_SIZE)
+#define VAL_TDISP_VDM_HDR_OFF         (VAL_TDISP_ARM_VDM_PAYLOAD_OFF + \
+                                       VAL_TDISP_B3_ARM_VDM_HDR_OFF)
 #define VAL_TDISP_VDM_HDR_REG_OFF     0u
 #define VAL_TDISP_VDM_HDR_LEN_OFF     1u
 #define VAL_TDISP_VDM_HDR_VENDOR_OFF  2u
@@ -81,8 +91,8 @@ typedef struct {
 #define VAL_TDISP_ARM_VDM_VENDOR_ID          0x13b5
 
 /* Request/response header layout (Appendix B3). */
-#define VAL_TDISP_REQ_RESP_HDR_OFF    (VAL_TDISP_VDM_HDR_OFF + \
-                                       VAL_TDISP_VDM_HDR_SIZE)
+#define VAL_TDISP_REQ_RESP_HDR_OFF    (VAL_TDISP_ARM_VDM_PAYLOAD_OFF + \
+                                       VAL_TDISP_B3_REQ_RESP_HDR_OFF)
 #define VAL_TDISP_REQ_RESP_VER_OFF    0u
 #define VAL_TDISP_REQ_RESP_TYPE_OFF   1u
 #define VAL_TDISP_REQ_RESP_RSV_OFF    2u
@@ -91,11 +101,19 @@ typedef struct {
 /* Arm VDM request/response header values. */
 #define VAL_TDISP_ARM_VDM_VERSION            0x00
 
-/* Minimum payload sizes. */
-#define VAL_TDISP_ARM_VDM_BASE_SIZE   (VAL_TDISP_REQ_RESP_HDR_OFF + \
-                                       VAL_TDISP_REQ_RESP_HDR_SIZE)
-#define VAL_TDISP_SET_IF_PROP_OFF     (VAL_TDISP_ARM_VDM_BASE_SIZE)
-#define VAL_TDISP_SET_IF_REQ_SIZE     (VAL_TDISP_SET_IF_PROP_OFF + 4u)
+/* Full-buffer offsets and sizes derived from Chapter B3 payload layouts. */
+#define VAL_TDISP_ARM_VDM_BASE_SIZE          (VAL_TDISP_ARM_VDM_PAYLOAD_OFF + \
+                                             VAL_TDISP_B3_DATA_OFF)
+#define VAL_TDISP_GET_VERSION_DATA_OFF       (VAL_TDISP_ARM_VDM_BASE_SIZE)
+#define VAL_TDISP_GET_DEV_PROP_PROP_OFF      (VAL_TDISP_ARM_VDM_BASE_SIZE)
+#define VAL_TDISP_GET_DEV_PROP_REG_LIST_OFF  (VAL_TDISP_ARM_VDM_PAYLOAD_OFF + \
+                                             VAL_TDISP_B3_GET_DEV_PROP_REG_LIST_OFF)
+#define VAL_TDISP_SET_IF_PROP_OFF            (VAL_TDISP_ARM_VDM_PAYLOAD_OFF + \
+                                             VAL_TDISP_B3_DATA_OFF)
+#define VAL_TDISP_SET_IF_REQ_SIZE            (VAL_TDISP_ARM_VDM_PAYLOAD_OFF + \
+                                             VAL_TDISP_B3_SET_IF_REQ_SIZE)
+#define VAL_TDISP_SET_IF_RESP_SIZE           (VAL_TDISP_ARM_VDM_PAYLOAD_OFF + \
+                                             VAL_TDISP_B3_SET_IF_RESP_SIZE)
 
 /* Arm VDM request/response types. */
 #define VAL_TDISP_ARM_MSG_GET_VERSION_REQ    0x01
@@ -160,6 +178,27 @@ uint32_t
 val_rme_tdisp_execute_tests(uint32_t num_pe);
 
 uint32_t
+tdisp_rwfpxr_tdisp_error_allowed_entry(uint32_t num_pe);
+
+uint32_t
+tdisp_rxdkdt_set_interface_req_semantics_entry(uint32_t num_pe);
+
+uint32_t
+tdisp_rfmhst_set_interface_resp_format_entry(uint32_t num_pe);
+
+uint32_t
 tdisp_rfpymv_vdm_response_check_entry(uint32_t num_pe);
+
+uint32_t
+tdisp_rpxlfy_get_version_req_entry(uint32_t num_pe);
+
+uint32_t
+tdisp_rwfwlf_get_version_resp_format_entry(uint32_t num_pe);
+
+uint32_t
+tdisp_rgrpdp_get_dev_prop_req_entry(uint32_t num_pe);
+
+uint32_t
+tdisp_rghdcb_get_dev_prop_resp_format_entry(uint32_t num_pe);
 
 #endif

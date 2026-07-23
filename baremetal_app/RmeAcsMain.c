@@ -247,7 +247,7 @@ ShellAppMainrme(
   g_rme_tests_fail  = 0;
 
   val_print(ACS_PRINT_ALWAYS, "\n\n RME Architecture Compliance Suite \n", 0);
-  val_print(ACS_PRINT_ALWAYS, " Version: Issue C.a ACS v0.5 ALPHA   \n", 0);
+  val_print(ACS_PRINT_ALWAYS, " Version: Issue C.a ACS v0.6 ALPHA   \n", 0);
 
   val_print(ACS_PRINT_ALWAYS, " (Print level is %2d)\n\n", g_print_level);
   /* Initialize runtime-dependent globals (free mem, shared data, NVM). */
@@ -291,7 +291,11 @@ ShellAppMainrme(
    * Configure Gic Redistributor and ITS to support
    * Generation of LPIs.
   */
+#ifndef SKIP_SMMU_GIC_ITS_INIT
   configureGicIts();
+#else
+  val_print(g_print_level, "Skipping GIC ITS configuration (SKIP_SMMU_GIC_ITS_INIT)\n", 0);
+#endif
 
   /* Create the platform config tables for the RME Issue A tests */
   createMemCfgInfoTable();

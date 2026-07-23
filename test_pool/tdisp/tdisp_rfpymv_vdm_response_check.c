@@ -345,7 +345,7 @@ payload(void)
 
   if ((cxl_tbl_ptr == NULL) || (cxl_tbl_ptr->num_entries == 0u))
   {
-    val_print(ACS_PRINT_DEBUG, " No component table entries", 0);
+    val_print(ACS_PRINT_ERR, " No CXL components found", 0);
     val_set_status(pe_index, "SKIP", 01);
     return;
   }
