@@ -1054,8 +1054,8 @@ Testcase checklist
     -
 
       1. Enumerate CXL Root Ports in the system.
-      2. For each root port that does not expose the RME-CDA DVSEC, select a downstream Type-2/Type-3 endpoint and enable CXL.mem; program host/endpoint HDM decoders for a CXL.mem window.
-      3. Validate host-to-device accesses: Non-secure PAS reads/writes succeed and Realm PAS reads/writes are rejected with error.
+      2. For each root port that does not expose the RME-CDA DVSEC, select a downstream Type-2/Type-3 endpoint and enable CXL.mem; program host/endpoint HDM decoders for a CXL.mem window and derive the DPA used by out-of-band media readback.
+      3. Validate host-to-device accesses: Non-secure PAS reads/writes succeed and Realm PAS reads/writes are rejected with error. Use the HPA for the host transaction and the corresponding endpoint-decoded DPA only for media readback.
       4. Validate device-to-host DMA is effectively forced to Non-secure by attempting DMA to Non-secure memory (passes) and Realm-assigned memory (rejected / payload not observed).
 
   * -
@@ -1282,10 +1282,10 @@ Testcase checklist
 
       1. Select a CHI-C2C-capable CXL root port that exposes the RME-CDA DVSEC and locate a downstream CHI-C2C exerciser endpoint. Skip the test if no such endpoint is available.
       2. Require a clean RMECDA_CTL1 state for the selected root port. Skip that root port if RMECDA_CTL1.TDISP_EN or RMECDA_CTL1.LINK_STR_LOCK is already set so the test does not consume preserved state from another CDA scenario.
-      3. Enable CXL.mem, select a CFMWS-backed DCM page, and program the host and endpoint HDM decoders for that window.
+      3. Enable CXL.mem, select a CFMWS-backed DCM page, and program the host and endpoint HDM decoders for that window so internal device accesses can use host-visible HPAs.
       4. Enable RMECDA_CTL1.TDISP_EN and set RMECDA_CTL1.LINK_STR_LOCK after decoder programming is complete.
       5. Select two DCM pages from the CFMWS-backed window. Map one page as a cacheable Realm alias for the snoop-response check. Assign both pages to the endpoint TDI, establish SPDM/TDISP, and transition the TDI to RUN.
-      6. Use the exerciser Realm path to dirty/cache both selected Realm DCM Locations on the TDI side, then read each location back through the same Realm device path to verify the cached values are associated with that TDI.
+      6. Use the exerciser Realm path with the host-visible HPAs to dirty/cache both selected Realm DCM Locations on the TDI side, then issue Realm internal reads using the same HPAs to verify the cached values are associated with that TDI.
       7. Force the TDI into ERROR by closing the SPDM session while the TDI is in RUN state.
       8. Clear the root-port AER Uncorrectable Status register, then issue a protected host read to the cacheable Realm alias so the host attempts to consume or snoop the TDI-associated cached Location. Fail the test if the root port does not log a Poisoned TLP after the host read. For the readback data, accept a synchronous fault, an all-ones fixed poison value, or an implementation-defined poison/fixed value that is not the original dirty value cached by the TDI before it entered ERROR state. Fail if the read completes normally and returns the original dirty value.
       9. Clear AER again, then use the exerciser/model writeback hook to force or simulate a cache writeback for the second dirty Realm DCM Location. Fail the writeback subcase if the stimulus completes without a Poisoned TLP indication. If the writeback hook is unavailable and no Poisoned TLP is logged, retain the snoop-response result and report the writeback stimulus limitation.
@@ -1308,10 +1308,10 @@ Testcase checklist
       3. Enable RMECDA_CTL1.TDISP_EN and set RMECDA_CTL1.LINK_STR_LOCK after decoder programming is complete.
       4. Map the selected DCM page as a cacheable Realm alias, assign the DCM page to the endpoint TDI, establish SPDM/TDISP, transition the TDI to RUN, and establish the CXL IDE link.
       5. Optionally prepare an ATS stale-translation probe by enabling ATS, mapping an ACS-owned IOVA to one Non-secure PA through the Realm SMMU stage-2 context, installing DPT entries, and issuing an ATS request while the TDI is in RUN. If the exerciser cannot issue the ATS request, continue with the mandatory dirty-cache invalidation check.
-      6. Use the exerciser Realm path to create a dirty cached copy of the selected Realm DCM Location while the TDI is in RUN and IDE is active, then read it back through the same Realm device path to verify that the dirty value is associated with the TDI.
+      6. Use the exerciser Realm path with the host-visible HPA to create a dirty cached copy while the TDI is in RUN and IDE is active, then issue a Realm internal read using the same HPA to verify that the dirty value is associated with the TDI.
       7. Issue STOP_INTERFACE_REQUEST and verify that the TDI reaches CONFIG_UNLOCKED state.
       8. If the ATS stale-translation probe was available, remap the same IOVA to a different PA while the TDI is in CONFIG_UNLOCKED.
-      9. Close the first SPDM session, re-establish the TDI in RUN, and re-establish the CXL IDE link. Invalidate any host PE cacheline for the selected Realm DCM Location without cleaning stale PE data back to memory, clear the root-port AER Uncorrectable Status register, then issue a protected host read to the cacheable Realm alias. Fail if the read faults, because that indicates stale dirty TDI-owned state was not invalidated across CONFIG_UNLOCKED. Then read the same Realm DCM Location through the Realm exerciser path and fail if the dirty value is not present, which verifies that writeback/preservation completed before invalidation.
+      9. Close the first SPDM session, re-establish the TDI in RUN, and re-establish the CXL IDE link. Invalidate any host PE cacheline for the selected Realm DCM Location without cleaning stale PE data back to memory, clear the root-port AER Uncorrectable Status register, then issue a protected host read to the cacheable Realm alias. Fail if the read faults, because that indicates stale dirty TDI-owned state was not invalidated across CONFIG_UNLOCKED. Then issue an HPA-based internal Realm read from the TDI to the same DCM Location and fail if the dirty value is not present, which verifies that writeback/preservation completed before invalidation.
       10. If the ATS stale-translation probe was available, issue the ATS request again after re-entering RUN and fail if the returned translation is the old PA rather than the remapped PA.
       11. Clear AER status, stop and close any active TDISP session, clear the DCM assignment, restore ATS, RMECDA, HDM decoder, GPT, SMMU, and DPT state, and free any allocated ACS pages.
 
@@ -1332,7 +1332,7 @@ Testcase checklist
       3. Enable CXL.mem, select a CFMWS-backed DCM page, and program the host and endpoint HDM decoders for that window.
       4. Enable RMECDA_CTL1.TDISP_EN and set RMECDA_CTL1.LINK_STR_LOCK after decoder programming is complete.
       5. Map the selected DCM page as a cacheable Realm alias, assign the DCM page to the endpoint TDI, establish SPDM/TDISP, transition the TDI to RUN, and establish the CXL IDE link.
-      6. Use the exerciser Realm path to dirty/cache the selected Realm DCM Location on the TDI side, then read it back through the same Realm device path to verify the cached value is associated with that TDI while IDE is active.
+      6. Use the exerciser Realm path with the host-visible HPA to dirty/cache the selected Realm DCM Location on the TDI side, then issue a Realm internal read using the same HPA to verify the cached value is associated with that TDI while IDE is active.
       7. Disable the CXL IDE link while the TDI remains in RUN state. This creates the RHTTNB condition where a host-to-device snoop cannot be forwarded to the coherent device.
       8. Clear the root-port AER Uncorrectable Status register, then issue a protected host read to the cacheable Realm alias so the host port must resolve a potentially device-owned dirty Location without forwarding the snoop.
       9. Pass the test when the root port logs a Poisoned TLP in AER after the host read and the readback path either faults or returns poison/fixed data. Accept an all-ones fixed poison value, or an implementation-defined poison/fixed value that is not the original dirty value cached by the TDI. Fail if the host read completes normally and returns the original dirty value.
@@ -1393,7 +1393,7 @@ Testcase checklist
 
       1. Filter CXL Exerciser.
       2. Program host and endpoint HDM decoders for a CXL.mem window and prepare one page in Realm PAS and one page in Non-secure PAS.
-      3. For each PAS, first write a host value through a cacheable host alias so the line is resident in host cache, then overwrite the same PA through the backdoor write path with a different vlue.
+      3. For each PAS, first write a host value through a cacheable HPA alias so the line is resident in host cache, translate that HPA through the endpoint HDM decoder, then overwrite the corresponding DPA through the direct-media backdoor with a different value.
       4. If the root port exposes the RME-CDA DVSEC, clear RMECDA_CTL1.TDISP_EN and RMECDA_CTL1.LINK_STR_LOCK before issuing BISnp.
       5. Issue a BISnp command from the exerciser for the PA tagged with Realm PAS and expect to read cached value.
       6. Issue a BISnp command from the exerciser for the PA tagged with Non-Secure PAS and expect to read updated value from CXL memory.
@@ -1504,7 +1504,7 @@ Testcase checklist
 
       1. Select a CXL root port that exposes the RME-CDA DVSEC and a downstream CHI-C2C-capable exerciser endpoint.
       2. Program host and endpoint HDM decoders for a CXL.mem window, enable CXL.mem, and disable TDISP (RMECDA_CTL1.TDISP_EN=0).
-      3. Verify host-to-device Non-secure PAS reads/writes succeed and host-to-device Realm PAS reads/writes are rejected with error.
+      3. Verify host-to-device Non-secure PAS reads/writes succeed and host-to-device Realm PAS reads/writes are rejected with error; use endpoint-decoded DPAs only for the out-of-band media readback checks.
       4. Generate device-to-host requests tagged as Realm (SEC_SID==Realm or PAS==Realm) and verify the host port rejects them with error (payload not propagated).
 
       Note: This scenario requires a CHI-C2C capable endpoint to generate device-to-host transactions with specific SEC_SID/PAS encodings.
@@ -1592,7 +1592,7 @@ Testcase checklist
 
       1. Select a CXL exerciser endpoint and its upstream root port and program HDM decoders for a CXL.mem window.
       2. Enable TDISP and set RMECDA_CTL1.LINK_STR_LOCK.
-      3. Dirty host cachelines by writing to the window, issue CMOs to PoPA and PoE, and verify a device-side read observes the written pattern.
+      3. Dirty host cachelines by writing to the HPA window, issue CMOs to PoPA and PoE, translate the target HPA through the endpoint decoder, and verify a direct-DPA device-media read observes the written pattern.
 
   * -
 
@@ -1617,9 +1617,9 @@ Testcase checklist
 
     -
 
-      1. Select a CHI-C2C-capable CXL root port that exposes the RME-CDA DVSEC and a downstream CHI-C2C exerciser endpoint, then program host and endpoint decoders for a CXL.mem window.
+      1. Select a CHI-C2C-capable CXL root port that exposes the RME-CDA DVSEC and a downstream CHI-C2C exerciser endpoint, program host and endpoint decoders for a CXL.mem window, and derive the selected DCM page's DPA from the endpoint decoder.
       2. Establish an SPDM session, transition the endpoint TDI to RUN, establish CXL IDE, and enable RMECDA_CTL1.TDISP_EN and RMECDA_CTL1.LINK_STR_LOCK.
-      3. Assign a selected DCM page to Realm and seed it with a known baseline value.
+      3. Assign a selected host-visible DCM page to Realm and seed its corresponding device media through the direct-DPA backdoor with a known baseline value.
       4. Issue an external access that specifies PAS==Realm while IDE is active and verify the Realm-assigned DCM contents change.
       5. Disable the IDE stream while keeping the TDI in RUN, restore a known baseline value at the same Realm-assigned DCM page, and re-issue the same external PAS==Realm access.
       6. Verify that the IDE-disabled external PAS==Realm access is rejected or leaves the Realm-assigned DCM contents unchanged, then stop the TDISP session before cleanup.
@@ -1634,11 +1634,11 @@ Testcase checklist
 
     -
 
-      1. Select a CHI-C2C-capable CXL root port and a downstream CHI-C2C exerciser endpoint, then choose a device-local DCM location for the internal access path.
+      1. Select a CHI-C2C-capable CXL root port and a downstream CHI-C2C exerciser endpoint, select a CFMWS window, and program the endpoint HDM decoder. Use the host-visible DCM HPA for internal device accesses and derive its DPA only for direct-media setup and observation.
       2. Verify RMECDA_CTL1.TDISP_EN and RMECDA_CTL1.LINK_STR_LOCK are set, enabling them through Root config access with readback if required, and transition the endpoint TDI to RUN.
-      3. Assign the selected device-local DCM location to Realm.
-      4. Seed that Realm-assigned DCM location with a known baseline value, then issue an internal device access that specifies PAS==Realm and verify the DCM contents change.
-      5. Transition the TDI out of RUN with STOP_INTERFACE, restore a known baseline value at the same Realm-assigned DCM location, and re-issue the same internal PAS==Realm access.
+      3. Assign the selected host-visible DCM location to Realm.
+      4. Seed the corresponding device media through its DPA backdoor, then issue an HPA-based internal device access that specifies PAS==Realm and verify through DPA media readback that the contents changed.
+      5. Transition the TDI out of RUN with STOP_INTERFACE, restore the media baseline through the DPA backdoor, and re-issue the same HPA-based internal PAS==Realm access.
       6. Verify that the non-RUN internal PAS==Realm access is rejected or leaves the Realm-assigned DCM contents unchanged.
 
   * -

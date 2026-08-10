@@ -88,26 +88,6 @@ init_context(TEST_CONTEXT *context)
 }
 
 static uint32_t
-find_component_index_by_bdf(const CXL_COMPONENT_TABLE *table,
-                            uint32_t bdf,
-                            uint32_t *index_out)
-{
-  if ((table == NULL) || (index_out == NULL))
-    return ACS_STATUS_ERR;
-
-  for (uint32_t idx = 0; idx < table->num_entries; ++idx)
-  {
-    if (table->component[idx].bdf == bdf)
-    {
-      *index_out = idx;
-      return ACS_STATUS_PASS;
-    }
-  }
-
-  return ACS_STATUS_FAIL;
-}
-
-static uint32_t
 read_from_root(uint64_t address, uint32_t *value)
 {
   if (value == NULL)
@@ -332,62 +312,21 @@ map_window_alias(uint64_t phys,
 }
 
 static uint32_t
-read_device_media(uint32_t endpoint_bdf,
-                  uint64_t phys,
-                  uint64_t *value_out)
-{
-  uint64_t readback = 0u;
-
-  if (value_out == NULL)
-    return ACS_STATUS_ERR;
-
-  if (val_exerciser_set_param_by_bdf(EXERCISER_CXL_CMD_CTRL,
-                                     0u,
-                                     0u,
-                                     endpoint_bdf))
-    return ACS_STATUS_FAIL;
-
-  if (val_exerciser_set_param_by_bdf(EXERCISER_CXL_CMD_OP,
-                                     CXL_CMD_OP_BACKDOOR_READ64,
-                                     0u,
-                                     endpoint_bdf))
-    return ACS_STATUS_FAIL;
-
-  if (val_exerciser_set_param_by_bdf(EXERCISER_CXL_CMD_ADDR,
-                                     phys,
-                                     0u,
-                                     endpoint_bdf))
-    return ACS_STATUS_FAIL;
-
-  if (val_exerciser_ops_by_bdf(CXL_CMD_START, 0u, endpoint_bdf))
-    return ACS_STATUS_FAIL;
-
-  if (val_exerciser_get_param_by_bdf(EXERCISER_CXL_CMD_DATA0,
-                                     &readback,
-                                     NULL,
-                                     endpoint_bdf))
-    return ACS_STATUS_FAIL;
-
-  *value_out = readback;
-  return ACS_STATUS_PASS;
-}
-
-static uint32_t
 seed_device_media(uint32_t endpoint_bdf,
-                  uint64_t phys,
+                  uint64_t dpa,
                   uint64_t value)
 {
   uint64_t observed;
 
-  if (val_cxl_exerciser_write64(endpoint_bdf, phys, value) != ACS_STATUS_PASS)
+  if (val_cxl_exerciser_backdoor_write64(endpoint_bdf, dpa, value) != ACS_STATUS_PASS)
     return ACS_STATUS_SKIP;
 
-  if (read_device_media(endpoint_bdf, phys, &observed) != ACS_STATUS_PASS)
+  if (val_cxl_exerciser_backdoor_read64(endpoint_bdf, dpa, &observed) != ACS_STATUS_PASS)
     return ACS_STATUS_FAIL;
 
   if (observed != value)
   {
-    val_print(ACS_PRINT_ERR, " RFZBMW: media seed mismatch at 0x%llx", phys);
+    val_print(ACS_PRINT_ERR, " RFZBMW: media seed mismatch at DPA 0x%llx", dpa);
     val_print(ACS_PRINT_ERR, " RFZBMW: expected 0x%llx", value);
     val_print(ACS_PRINT_ERR, " RFZBMW: observed 0x%llx", observed);
     return ACS_STATUS_FAIL;
@@ -571,7 +510,7 @@ stop_tdisp_session(uint32_t endpoint_bdf,
 
 static uint32_t
 access_realm_dcm_allowed(uint32_t endpoint_bdf,
-                         uint64_t phys,
+                         uint64_t dpa,
                          volatile uint64_t *mapped)
 {
   uint64_t baseline = 0u;
@@ -582,7 +521,7 @@ access_realm_dcm_allowed(uint32_t endpoint_bdf,
   if (mapped == NULL)
     return ACS_STATUS_ERR;
 
-  if (read_device_media(endpoint_bdf, phys, &baseline) != ACS_STATUS_PASS)
+  if (val_cxl_exerciser_backdoor_read64(endpoint_bdf, dpa, &baseline) != ACS_STATUS_PASS)
     return ACS_STATUS_ERR;
 
   pattern = (uint32_t)baseline ^ 0xA5A5A5A5u;
@@ -601,7 +540,7 @@ access_realm_dcm_allowed(uint32_t endpoint_bdf,
   access_status = val_pe_access_mut_el3();
   val_memory_clear_el3_access_state();
 
-  if (read_device_media(endpoint_bdf, phys, &observed) != ACS_STATUS_PASS)
+  if (val_cxl_exerciser_backdoor_read64(endpoint_bdf, dpa, &observed) != ACS_STATUS_PASS)
     return ACS_STATUS_ERR;
 
   if (access_status != 0u)
@@ -691,7 +630,8 @@ prepare_context(TEST_CONTEXT *context)
     if (status != ACS_STATUS_PASS)
       continue;
 
-    if (find_component_index_by_bdf(table, endpoint_bdf, &candidate.endpoint_index)
+    if (val_cxl_find_component_index_by_bdf(endpoint_bdf,
+                                            &candidate.endpoint_index)
         != ACS_STATUS_PASS)
       continue;
 
@@ -873,7 +813,8 @@ exercise_rule(TEST_CONTEXT *context)
   uint32_t root_ide_supported;
   uint32_t endpoint_ide_active;
   uint32_t endpoint_ide_supported;
-  uint64_t test_base;
+  uint64_t test_hpa;
+  uint64_t test_dpa;
   uint64_t observed;
   uint32_t session_id;
   uint8_t tdi_state;
@@ -885,9 +826,16 @@ exercise_rule(TEST_CONTEXT *context)
 
   status = val_cda_select_dcm_page(context->window_base,
                                    context->window_size,
-                                   &test_base);
+                                   &test_hpa);
   if (status != ACS_STATUS_PASS)
     return status;
+
+  status = val_cxl_hpa_to_dpa(context->endpoint_index, test_hpa, &test_dpa);
+  if (status != ACS_STATUS_PASS)
+  {
+    val_print(ACS_PRINT_INFO, " RFZBMW: cannot translate DCM HPA to DPA", 0);
+    return ACS_STATUS_SKIP;
+  }
 
   if (val_pcie_find_capability(context->root_bdf,
                                PCIE_ECAP,
@@ -897,11 +845,12 @@ exercise_rule(TEST_CONTEXT *context)
     aer_offset = 0u;
   }
 
-  val_print(ACS_PRINT_INFO, " RFZBMW: Realm DCM page 0x%llx", test_base);
+  val_print(ACS_PRINT_INFO, " RFZBMW: Realm DCM HPA 0x%llx", test_hpa);
+  val_print(ACS_PRINT_INFO, " RFZBMW: Realm DCM DPA 0x%llx", test_dpa);
 
   realm_alias = NULL;
   val_memory_clear_el3_access_state();
-  if (map_window_alias(test_base, REALM_PAS, &realm_alias) != ACS_STATUS_PASS)
+  if (map_window_alias(test_hpa, REALM_PAS, &realm_alias) != ACS_STATUS_PASS)
     return ACS_STATUS_ERR;
 
   val_memory_set(&spdm_ctx, sizeof(spdm_ctx), 0);
@@ -958,7 +907,7 @@ exercise_rule(TEST_CONTEXT *context)
 
   status = val_cxl_exerciser_execute_cmd(context->endpoint_bdf,
                                          CXL_CMD_OP_DCM_SET_REALM_ASSIGNMENT,
-                                         test_base,
+                                         test_hpa,
                                          1u,
                                          NULL);
   if (status != ACS_STATUS_PASS)
@@ -969,7 +918,7 @@ exercise_rule(TEST_CONTEXT *context)
   }
   realm_assigned = 1u;
 
-  status = seed_device_media(context->endpoint_bdf, test_base, POSITIVE_BASELINE_VALUE);
+  status = seed_device_media(context->endpoint_bdf, test_dpa, POSITIVE_BASELINE_VALUE);
   if (status != ACS_STATUS_PASS)
   {
     result = status;
@@ -981,7 +930,7 @@ exercise_rule(TEST_CONTEXT *context)
    * external Realm access to the Realm-assigned DCM page must succeed.
    */
   status = access_realm_dcm_allowed(context->endpoint_bdf,
-                                    test_base,
+                                    test_dpa,
                                     realm_alias);
   if (status != ACS_STATUS_PASS)
   {
@@ -993,7 +942,7 @@ exercise_rule(TEST_CONTEXT *context)
   }
   val_print(ACS_PRINT_INFO, " RFZBMW: external Realm DCM access succeeded with IDE", 0);
 
-  status = seed_device_media(context->endpoint_bdf, test_base, NEGATIVE_BASELINE_VALUE);
+  status = seed_device_media(context->endpoint_bdf, test_dpa, NEGATIVE_BASELINE_VALUE);
   if (status != ACS_STATUS_PASS)
   {
     result = status;
@@ -1092,7 +1041,9 @@ exercise_rule(TEST_CONTEXT *context)
   if (aer_offset != 0u)
     val_cxl_aer_clear(context->root_bdf, aer_offset);
 
-  if (read_device_media(context->endpoint_bdf, test_base, &observed) != ACS_STATUS_PASS)
+  if (val_cxl_exerciser_backdoor_read64(context->endpoint_bdf,
+                                        test_dpa,
+                                        &observed) != ACS_STATUS_PASS)
   {
     result = ACS_STATUS_FAIL;
     goto cleanup;
@@ -1147,7 +1098,7 @@ cleanup:
   {
     if (val_cxl_exerciser_execute_cmd(context->endpoint_bdf,
                                       CXL_CMD_OP_DCM_SET_REALM_ASSIGNMENT,
-                                      test_base,
+                                      test_hpa,
                                       0u,
                                       NULL) != ACS_STATUS_PASS)
     {

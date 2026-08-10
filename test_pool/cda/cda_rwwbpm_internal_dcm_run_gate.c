@@ -35,6 +35,7 @@
 
 #define RMECDA_CTL1_TDISP_EN_MASK 0x1u
 #define RMECDA_CTL1_LINK_STR_LOCK_MASK (1u << 1)
+#define DECODER_SLOT CXL_HDM_DECODER_SLOT_DEFAULT
 
 #define RUN_BASELINE_VALUE  0x0123456789ABCDEFull
 #define RUN_WRITE_VALUE     0xF0E1D2C3B4A59687ull
@@ -49,9 +50,13 @@ typedef struct {
   /* Downstream CHI-C2C exerciser endpoint used to generate internal accesses. */
   uint32_t endpoint_index;
   uint32_t endpoint_bdf;
-  /* Device-local DPA page used by the exerciser's internal DCM access path. */
-  uint64_t dcm_base;
-  uint64_t dcm_size;
+  uint32_t host_index;
+  /* One DCM location represented in both host and device address spaces. */
+  uint64_t dcm_hpa;
+  uint64_t dcm_dpa;
+  uint64_t endpoint_decoder_base_orig;
+  uint64_t endpoint_decoder_size_orig;
+  uint32_t endpoint_decoder_valid;
   /* Original RMECDA_CTL1 value restored during cleanup. */
   uint32_t rmecda_ctl1_orig;
   uint32_t rmecda_ctl1_valid;
@@ -67,26 +72,7 @@ init_context(TEST_CONTEXT *context)
 
   val_memory_set(context, sizeof(*context), 0);
   context->endpoint_index = CXL_COMPONENT_INVALID_INDEX;
-}
-
-static uint32_t
-find_component_index_by_bdf(const CXL_COMPONENT_TABLE *table,
-                            uint32_t bdf,
-                            uint32_t *index_out)
-{
-  if ((table == NULL) || (index_out == NULL))
-    return ACS_STATUS_ERR;
-
-  for (uint32_t idx = 0; idx < table->num_entries; ++idx)
-  {
-    if (table->component[idx].bdf == bdf)
-    {
-      *index_out = idx;
-      return ACS_STATUS_PASS;
-    }
-  }
-
-  return ACS_STATUS_FAIL;
+  context->host_index = CXL_COMPONENT_INVALID_INDEX;
 }
 
 static uint32_t
@@ -123,19 +109,31 @@ restore_context_state(const TEST_CONTEXT *context)
     }
   }
 
+  if ((context->endpoint_decoder_valid != 0u) &&
+      (context->endpoint_decoder_size_orig != 0u) &&
+      (val_cxl_program_component_decoder(context->endpoint_index,
+                                         DECODER_SLOT,
+                                         context->endpoint_decoder_base_orig,
+                                         context->endpoint_decoder_size_orig)
+       != ACS_STATUS_PASS))
+  {
+    val_print(ACS_PRINT_WARN, " RWWBPM: endpoint decoder restore failed", 0);
+    restore_status = ACS_STATUS_ERR;
+  }
+
   return restore_status;
 }
 
 static uint32_t
-select_test_base(uint64_t window_base,
-                 uint64_t window_size,
-                 uint64_t *test_base_out)
+select_test_hpa(uint64_t window_base,
+                uint64_t window_size,
+                uint64_t *test_hpa_out)
 {
   uint64_t page_size;
   uint64_t window_end;
   uint64_t aligned_base;
 
-  if (test_base_out == NULL)
+  if (test_hpa_out == NULL)
     return ACS_STATUS_ERR;
 
   page_size = (uint64_t)val_memory_page_size();
@@ -153,7 +151,7 @@ select_test_base(uint64_t window_base,
   if ((aligned_base + page_size) > window_end)
     return ACS_STATUS_SKIP;
 
-  *test_base_out = aligned_base;
+  *test_hpa_out = aligned_base;
   return ACS_STATUS_PASS;
 }
 
@@ -186,6 +184,9 @@ prepare_context(TEST_CONTEXT *context)
     uint32_t status;
     uint32_t ctl1_programmed;
     uint32_t ctl1_readback;
+    uint64_t window_base;
+    uint64_t window_size;
+    uint64_t test_hpa;
 
     init_context(&candidate);
 
@@ -221,7 +222,8 @@ prepare_context(TEST_CONTEXT *context)
       continue;
     }
 
-    if (find_component_index_by_bdf(table, endpoint_bdf, &candidate.endpoint_index)
+    if (val_cxl_find_component_index_by_bdf(endpoint_bdf,
+                                            &candidate.endpoint_index)
         != ACS_STATUS_PASS)
     {
       val_print(ACS_PRINT_DEBUG,
@@ -241,6 +243,7 @@ prepare_context(TEST_CONTEXT *context)
 
     candidate.root_bdf = root_port->bdf;
     candidate.endpoint_bdf = endpoint->bdf;
+    candidate.host_index = root_port->host_bridge_index;
 
     val_print(ACS_PRINT_DEBUG,
               " RWWBPM: selected RP 0x%x",
@@ -266,21 +269,37 @@ prepare_context(TEST_CONTEXT *context)
       continue;
     }
 
-    candidate.dcm_size = (uint64_t)val_memory_page_size();
-    if (candidate.dcm_size == 0u)
+    if ((candidate.host_index == CXL_COMPONENT_INVALID_INDEX) ||
+        (val_cxl_select_cfmws_window(candidate.host_index,
+                                     &window_base,
+                                     &window_size) != ACS_STATUS_PASS))
     {
       val_print(ACS_PRINT_DEBUG,
-                " RWWBPM: invalid page size for EP 0x%x",
+                " RWWBPM: no CFMWS window for EP 0x%x",
                 (uint64_t)candidate.endpoint_bdf);
       continue;
     }
 
-    /*
-     * Internal exerciser accesses target device-local DPA directly. Use the
-     * first non-zero page so the address is page-aligned without depending on
-     * pre-programmed HDM decoder state.
-     */
-    candidate.dcm_base = candidate.dcm_size;
+    if (val_cxl_get_component_decoder(candidate.endpoint_index,
+                                      DECODER_SLOT,
+                                      &candidate.endpoint_decoder_base_orig,
+                                      &candidate.endpoint_decoder_size_orig) != 0u)
+    {
+      val_print(ACS_PRINT_DEBUG,
+                " RWWBPM: failed to save endpoint decoder state",
+                0);
+      continue;
+    }
+    candidate.endpoint_decoder_valid = 1u;
+
+    /* Do not overwrite a disabled decoder because VAL cannot restore that state. */
+    if (candidate.endpoint_decoder_size_orig == 0u)
+    {
+      val_print(ACS_PRINT_DEBUG,
+                " RWWBPM: endpoint decoder has no restorable mapping",
+                0);
+      continue;
+    }
 
     if (val_cxl_enable_mem(endpoint->bdf) != ACS_STATUS_PASS)
     {
@@ -291,6 +310,39 @@ prepare_context(TEST_CONTEXT *context)
         return ACS_STATUS_ERR;
       continue;
     }
+
+    if (val_cxl_program_component_decoder(candidate.endpoint_index,
+                                          DECODER_SLOT,
+                                          window_base,
+                                          window_size) != ACS_STATUS_PASS)
+    {
+      val_print(ACS_PRINT_DEBUG,
+                " RWWBPM: failed to program endpoint decoder",
+                0);
+      if (restore_context_state(&candidate) != ACS_STATUS_PASS)
+        return ACS_STATUS_ERR;
+      continue;
+    }
+
+    status = select_test_hpa(window_base, window_size, &test_hpa);
+    if ((status != ACS_STATUS_PASS) ||
+        (val_cxl_hpa_to_dpa(candidate.endpoint_index,
+                            test_hpa,
+                            &candidate.dcm_dpa) != ACS_STATUS_PASS))
+    {
+      val_print(ACS_PRINT_DEBUG,
+                " RWWBPM: cannot derive a test DPA from endpoint HDM",
+                0);
+      if (restore_context_state(&candidate) != ACS_STATUS_PASS)
+        return ACS_STATUS_ERR;
+      continue;
+    }
+    candidate.dcm_hpa = test_hpa;
+
+    val_print(ACS_PRINT_DEBUG, " RWWBPM: selected DCM HPA 0x%llx", test_hpa);
+    val_print(ACS_PRINT_DEBUG,
+              " RWWBPM: translated DCM DPA 0x%llx",
+              candidate.dcm_dpa);
 
     if (val_pcie_map_root_config(candidate.root_bdf,
                                  &candidate.rmecda_cfg_va) != ACS_STATUS_PASS)
@@ -387,21 +439,17 @@ exercise_rule(TEST_CONTEXT *context)
   uint32_t status;
   uint32_t device_locked;
   uint32_t realm_assigned;
-  uint64_t test_base;
+  uint64_t test_hpa;
+  uint64_t test_dpa;
   uint64_t observed;
 
   if (context == NULL)
     return ACS_STATUS_ERR;
 
-  status = select_test_base(context->dcm_base,
-                            context->dcm_size,
-                            &test_base);
-  if (status != ACS_STATUS_PASS)
-    return status;
-
-  val_print(ACS_PRINT_INFO, " RWWBPM: endpoint DPA test base 0x%llx",
-            context->dcm_base);
-  val_print(ACS_PRINT_INFO, " RWWBPM: Realm DCM page 0x%llx", test_base);
+  test_hpa = context->dcm_hpa;
+  test_dpa = context->dcm_dpa;
+  val_print(ACS_PRINT_INFO, " RWWBPM: Realm DCM HPA 0x%llx", test_hpa);
+  val_print(ACS_PRINT_INFO, " RWWBPM: Realm DCM DPA 0x%llx", test_dpa);
 
   device_locked = 0u;
   realm_assigned = 0u;
@@ -421,7 +469,7 @@ exercise_rule(TEST_CONTEXT *context)
    */
   status = val_cxl_exerciser_execute_cmd(context->endpoint_bdf,
                                          CXL_CMD_OP_DCM_SET_REALM_ASSIGNMENT,
-                                         test_base,
+                                         test_hpa,
                                          1u,
                                          NULL);
   if (status != ACS_STATUS_PASS)
@@ -434,17 +482,18 @@ exercise_rule(TEST_CONTEXT *context)
   }
   realm_assigned = 1u;
 
-  if (val_cxl_exerciser_write64(context->endpoint_bdf,
-                         test_base,
-                         RUN_BASELINE_VALUE) != ACS_STATUS_PASS)
+  /* Seed and observe device media through the DPA-only backdoor. */
+  if (val_cxl_exerciser_backdoor_write64(context->endpoint_bdf,
+                                          test_dpa,
+                                          RUN_BASELINE_VALUE) != ACS_STATUS_PASS)
   {
     result = ACS_STATUS_SKIP;
     goto cleanup;
   }
 
-  if (val_cxl_exerciser_read64(context->endpoint_bdf,
-                        test_base,
-                        &observed) != ACS_STATUS_PASS)
+  if (val_cxl_exerciser_backdoor_read64(context->endpoint_bdf,
+                                         test_dpa,
+                                         &observed) != ACS_STATUS_PASS)
   {
     result = ACS_STATUS_SKIP;
     goto cleanup;
@@ -462,12 +511,10 @@ exercise_rule(TEST_CONTEXT *context)
     goto cleanup;
   }
 
-  status = val_cxl_exerciser_execute_cmd_with_ctrl(context->endpoint_bdf,
-                                                   CXL_CMD_OP_BACKDOOR_WRITE64,
-                                                   CXL_CMD_CTRL_PAS_REALM,
-                                                   test_base,
-                                                   RUN_WRITE_VALUE,
-                                                   NULL);
+  status = val_cxl_exerciser_dcm_internal_write64(context->endpoint_bdf,
+                                                  test_hpa,
+                                                  REALM_PAS,
+                                                  RUN_WRITE_VALUE);
   if (status != ACS_STATUS_PASS)
   {
     val_print(ACS_PRINT_ERR,
@@ -477,9 +524,9 @@ exercise_rule(TEST_CONTEXT *context)
     goto cleanup;
   }
 
-  if (val_cxl_exerciser_read64(context->endpoint_bdf,
-                        test_base,
-                        &observed) != ACS_STATUS_PASS)
+  if (val_cxl_exerciser_backdoor_read64(context->endpoint_bdf,
+                                         test_dpa,
+                                         &observed) != ACS_STATUS_PASS)
   {
     result = ACS_STATUS_FAIL;
     goto cleanup;
@@ -513,17 +560,18 @@ exercise_rule(TEST_CONTEXT *context)
   }
   device_locked = 0u;
 
-  if (val_cxl_exerciser_write64(context->endpoint_bdf,
-                         test_base,
-                         STOP_BASELINE_VALUE) != ACS_STATUS_PASS)
+  /* Restore a known media value without exercising the protected path. */
+  if (val_cxl_exerciser_backdoor_write64(context->endpoint_bdf,
+                                          test_dpa,
+                                          STOP_BASELINE_VALUE) != ACS_STATUS_PASS)
   {
     result = ACS_STATUS_FAIL;
     goto cleanup;
   }
 
-  if (val_cxl_exerciser_read64(context->endpoint_bdf,
-                        test_base,
-                        &observed) != ACS_STATUS_PASS)
+  if (val_cxl_exerciser_backdoor_read64(context->endpoint_bdf,
+                                         test_dpa,
+                                         &observed) != ACS_STATUS_PASS)
   {
     result = ACS_STATUS_FAIL;
     goto cleanup;
@@ -541,16 +589,14 @@ exercise_rule(TEST_CONTEXT *context)
     goto cleanup;
   }
 
-  status = val_cxl_exerciser_execute_cmd_with_ctrl(context->endpoint_bdf,
-                                                   CXL_CMD_OP_BACKDOOR_WRITE64,
-                                                   CXL_CMD_CTRL_PAS_REALM,
-                                                   test_base,
-                                                   STOP_WRITE_VALUE,
-                                                   NULL);
+  status = val_cxl_exerciser_dcm_internal_write64(context->endpoint_bdf,
+                                                  test_hpa,
+                                                  REALM_PAS,
+                                                  STOP_WRITE_VALUE);
 
-  if (val_cxl_exerciser_read64(context->endpoint_bdf,
-                        test_base,
-                        &observed) != ACS_STATUS_PASS)
+  if (val_cxl_exerciser_backdoor_read64(context->endpoint_bdf,
+                                         test_dpa,
+                                         &observed) != ACS_STATUS_PASS)
   {
     result = ACS_STATUS_FAIL;
     goto cleanup;
@@ -595,7 +641,7 @@ cleanup:
   {
     if (val_cxl_exerciser_execute_cmd(context->endpoint_bdf,
                                       CXL_CMD_OP_DCM_SET_REALM_ASSIGNMENT,
-                                      test_base,
+                                      test_hpa,
                                       0u,
                                       NULL) != ACS_STATUS_PASS)
     {

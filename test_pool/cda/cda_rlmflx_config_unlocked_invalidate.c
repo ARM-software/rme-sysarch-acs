@@ -504,7 +504,7 @@ exercise_rule(TEST_CONTEXT *context)
   val_spdm_context_t spdm_ctx_second;
   pci_tdisp_interface_id_t interface_id_second;
   uint8_t *ats_buffer;
-  uint64_t dcm_page;
+  uint64_t dcm_hpa;
   uint64_t ats_iova;
   uint64_t ats_old_pa;
   uint64_t ats_new_pa;
@@ -571,18 +571,20 @@ exercise_rule(TEST_CONTEXT *context)
   if (page_size == 0u)
     return ACS_STATUS_ERR;
 
-  status = val_cda_select_dcm_page(context->window_base, context->window_size, &dcm_page);
+  status = val_cda_select_dcm_page(context->window_base,
+                                   context->window_size,
+                                   &dcm_hpa);
   if (status != ACS_STATUS_PASS)
     return status;
 
-  val_print(ACS_PRINT_INFO, " RLMFLX: Realm DCM page 0x%llx", dcm_page);
+  val_print(ACS_PRINT_INFO, " RLMFLX: Realm DCM HPA 0x%llx", dcm_hpa);
 
-  if (val_memory_map_realm_cacheable_alias(dcm_page, &realm_alias) != ACS_STATUS_PASS)
+  if (val_memory_map_realm_cacheable_alias(dcm_hpa, &realm_alias) != ACS_STATUS_PASS)
     return ACS_STATUS_ERR;
 
   status = val_cxl_exerciser_execute_cmd(context->endpoint_bdf,
                                          CXL_CMD_OP_DCM_SET_REALM_ASSIGNMENT,
-                                         dcm_page,
+                                         dcm_hpa,
                                          1u,
                                          NULL);
   if (status != ACS_STATUS_PASS)
@@ -754,7 +756,7 @@ exercise_rule(TEST_CONTEXT *context)
   status = val_cxl_exerciser_execute_cmd_with_ctrl(context->endpoint_bdf,
                                                    CXL_CMD_OP_DCM_CACHE_DIRTY,
                                                    CXL_CMD_CTRL_PAS_REALM,
-                                                   dcm_page,
+                                                   dcm_hpa,
                                                    RLMFLX_DIRTY_VALUE,
                                                    NULL);
   if (status != ACS_STATUS_PASS)
@@ -764,13 +766,12 @@ exercise_rule(TEST_CONTEXT *context)
     goto cleanup;
   }
 
+  /* Verify the dirty value through an HPA-based internal access from the TDI. */
   observed = 0u;
-  status = val_cxl_exerciser_execute_cmd_with_ctrl(context->endpoint_bdf,
-                                                   CXL_CMD_OP_BACKDOOR_READ64,
-                                                   CXL_CMD_CTRL_PAS_REALM,
-                                                   dcm_page,
-                                                   0u,
-                                                   &observed);
+  status = val_cxl_exerciser_dcm_internal_read64(context->endpoint_bdf,
+                                                 dcm_hpa,
+                                                 REALM_PAS,
+                                                 &observed);
   if (status != ACS_STATUS_PASS)
   {
     val_print(ACS_PRINT_INFO, " RLMFLX: running TDI Realm read unavailable", 0);
@@ -913,12 +914,10 @@ exercise_rule(TEST_CONTEXT *context)
    * TDI-owned DCM contents directly.
    */
   observed = 0u;
-  status = val_cxl_exerciser_execute_cmd_with_ctrl(context->endpoint_bdf,
-                                                   CXL_CMD_OP_BACKDOOR_READ64,
-                                                   CXL_CMD_CTRL_PAS_REALM,
-                                                   dcm_page,
-                                                   0u,
-                                                   &observed);
+  status = val_cxl_exerciser_dcm_internal_read64(context->endpoint_bdf,
+                                                 dcm_hpa,
+                                                 REALM_PAS,
+                                                 &observed);
   val_print(ACS_PRINT_DEBUG,
             " RLMFLX: re-RUN Realm device read status %u",
             status);
@@ -1023,7 +1022,7 @@ cleanup:
   {
     if (val_cxl_exerciser_execute_cmd(context->endpoint_bdf,
                                       CXL_CMD_OP_DCM_SET_REALM_ASSIGNMENT,
-                                      dcm_page,
+                                      dcm_hpa,
                                       0u,
                                       NULL) != ACS_STATUS_PASS)
     {

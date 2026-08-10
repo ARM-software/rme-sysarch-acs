@@ -465,7 +465,7 @@ exercise_rule(TEST_CONTEXT *context)
   uint32_t status;
   uint32_t aer_uncorr;
   uint32_t host_fault;
-  uint64_t test_base;
+  uint64_t test_hpa;
   uint64_t observed;
   uint8_t tdi_state;
 
@@ -474,14 +474,14 @@ exercise_rule(TEST_CONTEXT *context)
 
   status = val_cda_select_dcm_page(context->window_base,
                                    context->window_size,
-                                   &test_base);
+                                   &test_hpa);
   if (status != ACS_STATUS_PASS)
     return status;
 
-  val_print(ACS_PRINT_INFO, " RHTTNB: Realm DCM page 0x%llx", test_base);
+  val_print(ACS_PRINT_INFO, " RHTTNB: Realm DCM HPA 0x%llx", test_hpa);
 
   realm_alias = NULL;
-  if (val_memory_map_realm_cacheable_alias(test_base, &realm_alias) != ACS_STATUS_PASS)
+  if (val_memory_map_realm_cacheable_alias(test_hpa, &realm_alias) != ACS_STATUS_PASS)
     return ACS_STATUS_ERR;
 
   val_memory_set(&spdm_ctx, sizeof(spdm_ctx), 0);
@@ -498,7 +498,7 @@ exercise_rule(TEST_CONTEXT *context)
    */
   status = val_cxl_exerciser_execute_cmd(context->endpoint_bdf,
                                          CXL_CMD_OP_DCM_SET_REALM_ASSIGNMENT,
-                                         test_base,
+                                         test_hpa,
                                          1u,
                                          NULL);
   if (status != ACS_STATUS_PASS)
@@ -539,7 +539,7 @@ exercise_rule(TEST_CONTEXT *context)
   status = val_cxl_exerciser_execute_cmd_with_ctrl(context->endpoint_bdf,
                                                    CXL_CMD_OP_DCM_CACHE_DIRTY,
                                                    CXL_CMD_CTRL_PAS_REALM,
-                                                   test_base,
+                                                   test_hpa,
                                                    RHTTNB_SEED_VALUE,
                                                    NULL);
   if (status != ACS_STATUS_PASS)
@@ -550,15 +550,14 @@ exercise_rule(TEST_CONTEXT *context)
   }
 
   /*
-   * Follow the setup with a Realm read from the running TDI before disabling
-   * IDE. This verifies the page remains accessible through the TDI path.
+   * Follow the setup with a Realm internal read from the running TDI before
+   * disabling IDE. The device resolves the host-visible HPA and returns its
+   * cached value through the architectural internal-access stimulus.
    */
-  status = val_cxl_exerciser_execute_cmd_with_ctrl(context->endpoint_bdf,
-                                                   CXL_CMD_OP_BACKDOOR_READ64,
-                                                   CXL_CMD_CTRL_PAS_REALM,
-                                                   test_base,
-                                                   0u,
-                                                   &observed);
+  status = val_cxl_exerciser_dcm_internal_read64(context->endpoint_bdf,
+                                                 test_hpa,
+                                                 REALM_PAS,
+                                                 &observed);
   if (status != ACS_STATUS_PASS)
   {
     val_print(ACS_PRINT_INFO, " RHTTNB: device Realm read stimulus unavailable", 0);
@@ -695,7 +694,7 @@ cleanup:
   {
     if (val_cxl_exerciser_execute_cmd(context->endpoint_bdf,
                                       CXL_CMD_OP_DCM_SET_REALM_ASSIGNMENT,
-                                      test_base,
+                                      test_hpa,
                                       0u,
                                       NULL) != ACS_STATUS_PASS)
     {

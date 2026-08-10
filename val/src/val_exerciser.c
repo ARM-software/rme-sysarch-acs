@@ -18,6 +18,7 @@
 #include "include/val.h"
 #include "include/val_exerciser.h"
 #include "include/val_cxl.h"
+#include "include/val_el32.h"
 #include "include/val_pcie.h"
 #include "include/val_smmu.h"
 
@@ -385,6 +386,7 @@ val_cxl_exerciser_execute_cmd_with_ctrl(uint32_t bdf, uint32_t opcode,
         return ACS_STATUS_FAIL;
 
     if ((opcode != CXL_CMD_OP_BACKDOOR_READ64) &&
+        (opcode != CXL_CMD_OP_DCM_INTERNAL_READ64) &&
         (val_exerciser_set_param_by_bdf(EXERCISER_CXL_CMD_DATA0,
                                         data,
                                         0u,
@@ -418,23 +420,81 @@ val_cxl_exerciser_execute_cmd(uint32_t bdf, uint32_t opcode,
 }
 
 uint32_t
-val_cxl_exerciser_read64(uint32_t bdf, uint64_t address, uint64_t *readback)
+val_cxl_exerciser_backdoor_read64(uint32_t bdf, uint64_t dpa, uint64_t *readback)
 {
     return val_cxl_exerciser_execute_cmd_with_ctrl(bdf,
                                                    CXL_CMD_OP_BACKDOOR_READ64,
                                                    0u,
-                                                   address,
+                                                   dpa,
                                                    0u,
                                                    readback);
 }
 
 uint32_t
-val_cxl_exerciser_write64(uint32_t bdf, uint64_t address, uint64_t data)
+val_cxl_exerciser_backdoor_write64(uint32_t bdf, uint64_t dpa, uint64_t data)
 {
     return val_cxl_exerciser_execute_cmd_with_ctrl(bdf,
                                                    CXL_CMD_OP_BACKDOOR_WRITE64,
                                                    0u,
-                                                   address,
+                                                   dpa,
+                                                   data,
+                                                   NULL);
+}
+
+static uint32_t
+val_cxl_exerciser_access_pas_to_ctrl(uint32_t access_pas, uint32_t *ctrl)
+{
+    if (ctrl == NULL)
+        return ACS_STATUS_ERR;
+
+    if (access_pas == NONSECURE_PAS) {
+        *ctrl = 0u;
+        return ACS_STATUS_PASS;
+    }
+
+    if (access_pas == REALM_PAS) {
+        *ctrl = CXL_CMD_CTRL_PAS_REALM;
+        return ACS_STATUS_PASS;
+    }
+
+    return ACS_STATUS_ERR;
+}
+
+uint32_t
+val_cxl_exerciser_dcm_internal_read64(uint32_t bdf,
+                                      uint64_t hpa,
+                                      uint32_t access_pas,
+                                      uint64_t *readback)
+{
+    uint32_t ctrl;
+
+    if ((readback == NULL) ||
+        (val_cxl_exerciser_access_pas_to_ctrl(access_pas, &ctrl) != ACS_STATUS_PASS))
+        return ACS_STATUS_ERR;
+
+    return val_cxl_exerciser_execute_cmd_with_ctrl(bdf,
+                                                   CXL_CMD_OP_DCM_INTERNAL_READ64,
+                                                   ctrl,
+                                                   hpa,
+                                                   0u,
+                                                   readback);
+}
+
+uint32_t
+val_cxl_exerciser_dcm_internal_write64(uint32_t bdf,
+                                       uint64_t hpa,
+                                       uint32_t access_pas,
+                                       uint64_t data)
+{
+    uint32_t ctrl;
+
+    if (val_cxl_exerciser_access_pas_to_ctrl(access_pas, &ctrl) != ACS_STATUS_PASS)
+        return ACS_STATUS_ERR;
+
+    return val_cxl_exerciser_execute_cmd_with_ctrl(bdf,
+                                                   CXL_CMD_OP_DCM_INTERNAL_WRITE64,
+                                                   ctrl,
+                                                   hpa,
                                                    data,
                                                    NULL);
 }

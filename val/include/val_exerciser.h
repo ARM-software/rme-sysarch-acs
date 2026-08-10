@@ -149,8 +149,18 @@ uint32_t val_cxl_exerciser_execute_cmd_with_ctrl(uint32_t bdf, uint32_t opcode,
 uint32_t val_cxl_exerciser_execute_cmd(uint32_t bdf, uint32_t opcode,
                                        uint64_t address, uint64_t data,
                                        uint64_t *readback);
-uint32_t val_cxl_exerciser_read64(uint32_t bdf, uint64_t address,
+/* Direct media backdoor operations take a device physical address (DPA). */
+uint32_t val_cxl_exerciser_backdoor_read64(uint32_t bdf, uint64_t dpa,
                                   uint64_t *readback);
-uint32_t val_cxl_exerciser_write64(uint32_t bdf, uint64_t address,
+uint32_t val_cxl_exerciser_backdoor_write64(uint32_t bdf, uint64_t dpa,
                                    uint64_t data);
+/* Internal DCM operations take a host physical address and an Access PAS. */
+uint32_t val_cxl_exerciser_dcm_internal_read64(uint32_t bdf,
+                                               uint64_t hpa,
+                                               uint32_t access_pas,
+                                               uint64_t *readback);
+uint32_t val_cxl_exerciser_dcm_internal_write64(uint32_t bdf,
+                                                uint64_t hpa,
+                                                uint32_t access_pas,
+                                                uint64_t data);
 #endif

@@ -162,6 +162,9 @@ uint32_t val_cxl_get_component_decoder(uint32_t component_index,
                                        uint32_t decoder_index,
                                        uint64_t *base,
                                        uint64_t *length);
+uint32_t val_cxl_hpa_to_dpa(uint32_t component_index,
+                            uint64_t hpa,
+                            uint64_t *dpa);
 uint32_t val_cxl_get_cfmws_count(uint32_t index);
 uint32_t val_cxl_get_cfmws(uint32_t index,
                            uint32_t window_index,

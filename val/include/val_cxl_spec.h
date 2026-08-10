@@ -185,9 +185,14 @@
 #define CXL_HDM_DECODER_CTRL(n)       (0x20 + (n) * CXL_HDM_DECODER_STRIDE)
 #define CXL_HDM_DECODER_TARGET_LOW(n) (0x24 + (n) * CXL_HDM_DECODER_STRIDE)
 #define CXL_HDM_DECODER_TARGET_HIGH(n) (0x28 + (n) * CXL_HDM_DECODER_STRIDE)
+#define CXL_HDM_DECODER_IG_SHIFT          0u
+#define CXL_HDM_DECODER_IG_MASK           0xFu
+#define CXL_HDM_DECODER_IW_SHIFT          4u
+#define CXL_HDM_DECODER_IW_MASK           0xFu
 #define CXL_HDM_COMMIT_BIT                (1u << 9)
 #define CXL_HDM_COMMITTED_BIT             (1u << 10)
 #define CXL_HDM_COMMIT_TIMEOUT_MS         20u
+#define CXL_HDM_DPA_SKIP_LOW_MASK          0xF0000000u
 
 #define CXL_BI_DECODER_CAP_OFFSET      0x00
 #define CXL_BI_DECODER_CTRL_OFFSET     0x04

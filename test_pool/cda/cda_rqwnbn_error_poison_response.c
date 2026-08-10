@@ -160,15 +160,15 @@ restore_context_state(const TEST_CONTEXT *context)
 static uint32_t
 select_test_pages(uint64_t window_base,
                   uint64_t window_size,
-                  uint64_t *snoop_base_out,
-                  uint64_t *writeback_base_out)
+                  uint64_t *snoop_hpa_out,
+                  uint64_t *writeback_hpa_out)
 {
   uint64_t page_size;
   uint64_t window_end;
-  uint64_t snoop_base;
-  uint64_t writeback_base;
+  uint64_t snoop_hpa;
+  uint64_t writeback_hpa;
 
-  if ((snoop_base_out == NULL) || (writeback_base_out == NULL))
+  if ((snoop_hpa_out == NULL) || (writeback_hpa_out == NULL))
     return ACS_STATUS_ERR;
 
   page_size = (uint64_t)val_memory_page_size();
@@ -182,16 +182,16 @@ select_test_pages(uint64_t window_base,
   if (window_end < window_base)
     return ACS_STATUS_ERR;
 
-  snoop_base = (window_end - page_size) & ~(page_size - 1u);
-  if ((snoop_base < window_base) || ((snoop_base + page_size) > window_end))
+  snoop_hpa = (window_end - page_size) & ~(page_size - 1u);
+  if ((snoop_hpa < window_base) || ((snoop_hpa + page_size) > window_end))
     return ACS_STATUS_SKIP;
 
-  writeback_base = snoop_base - page_size;
-  if ((writeback_base < window_base) || ((writeback_base + page_size) > snoop_base))
+  writeback_hpa = snoop_hpa - page_size;
+  if ((writeback_hpa < window_base) || ((writeback_hpa + page_size) > snoop_hpa))
     return ACS_STATUS_SKIP;
 
-  *snoop_base_out = snoop_base;
-  *writeback_base_out = writeback_base;
+  *snoop_hpa_out = snoop_hpa;
+  *writeback_hpa_out = writeback_hpa;
   return ACS_STATUS_PASS;
 }
 
@@ -523,8 +523,8 @@ exercise_rule(TEST_CONTEXT *context)
   uint32_t aer_uncorr;
   uint32_t endpoint_cfg_valid;
   uint32_t host_fault;
-  uint64_t snoop_base;
-  uint64_t writeback_base;
+  uint64_t snoop_hpa;
+  uint64_t writeback_hpa;
   uint64_t observed;
 
   if (context == NULL)
@@ -532,16 +532,16 @@ exercise_rule(TEST_CONTEXT *context)
 
   status = select_test_pages(context->window_base,
                              context->window_size,
-                             &snoop_base,
-                             &writeback_base);
+                             &snoop_hpa,
+                             &writeback_hpa);
   if (status != ACS_STATUS_PASS)
     return status;
 
-  val_print(ACS_PRINT_INFO, " RQWNBN: snoop DCM page 0x%llx", snoop_base);
-  val_print(ACS_PRINT_INFO, " RQWNBN: writeback DCM page 0x%llx", writeback_base);
+  val_print(ACS_PRINT_INFO, " RQWNBN: snoop DCM HPA 0x%llx", snoop_hpa);
+  val_print(ACS_PRINT_INFO, " RQWNBN: writeback DCM HPA 0x%llx", writeback_hpa);
 
   realm_alias = NULL;
-  if (val_memory_map_realm_cacheable_alias(snoop_base, &realm_alias) != ACS_STATUS_PASS)
+  if (val_memory_map_realm_cacheable_alias(snoop_hpa, &realm_alias) != ACS_STATUS_PASS)
     return ACS_STATUS_ERR;
 
   val_memory_set(&endpoint_cfg, sizeof(endpoint_cfg), 0);
@@ -566,7 +566,7 @@ exercise_rule(TEST_CONTEXT *context)
    */
   status = val_cxl_exerciser_execute_cmd(context->endpoint_bdf,
                                          CXL_CMD_OP_DCM_SET_REALM_ASSIGNMENT,
-                                         snoop_base,
+                                         snoop_hpa,
                                          1u,
                                          NULL);
   if (status != ACS_STATUS_PASS)
@@ -579,7 +579,7 @@ exercise_rule(TEST_CONTEXT *context)
 
   status = val_cxl_exerciser_execute_cmd(context->endpoint_bdf,
                                          CXL_CMD_OP_DCM_SET_REALM_ASSIGNMENT,
-                                         writeback_base,
+                                         writeback_hpa,
                                          1u,
                                          NULL);
   if (status != ACS_STATUS_PASS)
@@ -609,7 +609,7 @@ exercise_rule(TEST_CONTEXT *context)
   status = val_cxl_exerciser_execute_cmd_with_ctrl(context->endpoint_bdf,
                                                    CXL_CMD_OP_DCM_CACHE_DIRTY,
                                                    CXL_CMD_CTRL_PAS_REALM,
-                                                   snoop_base,
+                                                   snoop_hpa,
                                                    RQWNBN_SNOOP_SEED_VALUE,
                                                    NULL);
   if (status != ACS_STATUS_PASS)
@@ -622,7 +622,7 @@ exercise_rule(TEST_CONTEXT *context)
   status = val_cxl_exerciser_execute_cmd_with_ctrl(context->endpoint_bdf,
                                                    CXL_CMD_OP_DCM_CACHE_DIRTY,
                                                    CXL_CMD_CTRL_PAS_REALM,
-                                                   writeback_base,
+                                                   writeback_hpa,
                                                    RQWNBN_WRITEBACK_SEED_VALUE,
                                                    NULL);
   if (status != ACS_STATUS_PASS)
@@ -635,15 +635,14 @@ exercise_rule(TEST_CONTEXT *context)
   }
 
   /*
-   * Follow the setup with Realm reads from the running TDI before forcing
-   * ERROR. This verifies both pages remain accessible through the TDI path.
+   * Follow the setup with Realm internal reads from the running TDI before
+   * forcing ERROR. Internal accesses use host-visible HPAs and are resolved
+   * by the device; they are not direct-media backdoor observations.
    */
-  status = val_cxl_exerciser_execute_cmd_with_ctrl(context->endpoint_bdf,
-                                                   CXL_CMD_OP_BACKDOOR_READ64,
-                                                   CXL_CMD_CTRL_PAS_REALM,
-                                                   snoop_base,
-                                                   0u,
-                                                   &observed);
+  status = val_cxl_exerciser_dcm_internal_read64(context->endpoint_bdf,
+                                                 snoop_hpa,
+                                                 REALM_PAS,
+                                                 &observed);
   if (status != ACS_STATUS_PASS)
   {
     val_print(ACS_PRINT_INFO, " RQWNBN: device Realm read stimulus unavailable", 0);
@@ -660,12 +659,10 @@ exercise_rule(TEST_CONTEXT *context)
     goto cleanup;
   }
 
-  status = val_cxl_exerciser_execute_cmd_with_ctrl(context->endpoint_bdf,
-                                                   CXL_CMD_OP_BACKDOOR_READ64,
-                                                   CXL_CMD_CTRL_PAS_REALM,
-                                                   writeback_base,
-                                                   0u,
-                                                   &observed);
+  status = val_cxl_exerciser_dcm_internal_read64(context->endpoint_bdf,
+                                                 writeback_hpa,
+                                                 REALM_PAS,
+                                                 &observed);
   if (status != ACS_STATUS_PASS)
   {
     val_print(ACS_PRINT_INFO,
@@ -756,7 +753,7 @@ exercise_rule(TEST_CONTEXT *context)
   status = val_cxl_exerciser_execute_cmd_with_ctrl(context->endpoint_bdf,
                                                    CXL_CMD_OP_DCM_CACHE_WRITEBACK,
                                                    CXL_CMD_CTRL_PAS_REALM,
-                                                   writeback_base,
+                                                   writeback_hpa,
                                                    0u,
                                                    NULL);
   (void)val_cxl_aer_read_uncorr(context->root_bdf,
@@ -811,7 +808,7 @@ cleanup:
   {
     if (val_cxl_exerciser_execute_cmd(context->endpoint_bdf,
                                       CXL_CMD_OP_DCM_SET_REALM_ASSIGNMENT,
-                                      snoop_base,
+                                      snoop_hpa,
                                       0u,
                                       NULL) != ACS_STATUS_PASS)
     {
@@ -823,7 +820,7 @@ cleanup:
   {
     if (val_cxl_exerciser_execute_cmd(context->endpoint_bdf,
                                       CXL_CMD_OP_DCM_SET_REALM_ASSIGNMENT,
-                                      writeback_base,
+                                      writeback_hpa,
                                       0u,
                                       NULL) != ACS_STATUS_PASS)
     {

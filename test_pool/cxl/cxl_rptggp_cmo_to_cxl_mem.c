@@ -201,6 +201,7 @@ verify_device_readback(const RPTGGP_CONTEXT *context,
 {
   CXL_COMPONENT_TABLE *table = val_cxl_component_table_ptr();
   uint32_t instance;
+  uint64_t dpa;
   uint64_t readback = 0u;
   uint32_t readback32;
 
@@ -226,28 +227,14 @@ verify_device_readback(const RPTGGP_CONTEXT *context,
   if (val_exerciser_init_by_bdf(instance))
     return ACS_STATUS_SKIP;
 
+  if (val_cxl_hpa_to_dpa(context->endpoint_index, pa, &dpa) != ACS_STATUS_PASS)
+    return ACS_STATUS_ERR;
+
   val_print(ACS_PRINT_INFO, " RPTGGP: exerciser BDF 0x%x", instance);
-  val_print(ACS_PRINT_INFO, " RPTGGP: backdoor read PA 0x%llx", pa);
+  val_print(ACS_PRINT_INFO, " RPTGGP: backdoor read DPA 0x%llx", dpa);
 
-  /* Program a CXL backdoor read command for the target PA. */
-  if (val_exerciser_set_param_by_bdf(EXERCISER_CXL_CMD_OP,
-                                     CXL_CMD_OP_BACKDOOR_READ64,
-                                     0u,
-                                     instance))
-    return ACS_STATUS_FAIL;
-
-  if (val_exerciser_set_param_by_bdf(EXERCISER_CXL_CMD_ADDR, pa, 0u, instance))
-    return ACS_STATUS_FAIL;
-
-  /* Trigger the command and wait for completion. */
-  if (val_exerciser_ops_by_bdf(CXL_CMD_START, 0u, instance))
-    return ACS_STATUS_FAIL;
-
-  /* Fetch the device media value and compare with expected data. */
-  if (val_exerciser_get_param_by_bdf(EXERCISER_CXL_CMD_DATA0,
-                                     &readback,
-                                     NULL,
-                                     instance))
+  /* Backdoor media operations bypass HDM and therefore use translated DPA. */
+  if (val_cxl_exerciser_backdoor_read64(instance, dpa, &readback) != ACS_STATUS_PASS)
     return ACS_STATUS_FAIL;
 
   readback32 = (uint32_t)readback;

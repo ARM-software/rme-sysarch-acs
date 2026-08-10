@@ -3315,6 +3315,171 @@ val_cxl_get_component_decoder(uint32_t component_index,
   return 0;
 }
 
+static uint32_t
+val_cxl_hdm_interleave_ways(uint32_t iw, uint32_t *ways)
+{
+  if (ways == NULL)
+    return ACS_STATUS_ERR;
+
+  if (iw <= 4u) {
+    *ways = 1u << iw;
+    return ACS_STATUS_PASS;
+  }
+
+  if ((iw >= 8u) && (iw <= 10u)) {
+    *ways = 3u << (iw - 8u);
+    return ACS_STATUS_PASS;
+  }
+
+  return ACS_STATUS_ERR;
+}
+
+static uint32_t
+val_cxl_hdm_remove_interleave(uint64_t hpa_offset,
+                              uint32_t ig,
+                              uint32_t iw,
+                              uint64_t *dpa_offset)
+{
+  uint32_t low_bits;
+  uint64_t low_mask;
+  uint64_t upper;
+
+  if ((dpa_offset == NULL) || (ig > 6u))
+    return ACS_STATUS_ERR;
+
+  low_bits = ig + 8u;
+  low_mask = (1ULL << low_bits) - 1ULL;
+
+  if (iw <= 4u) {
+    *dpa_offset = (hpa_offset & low_mask) |
+                  ((hpa_offset >> iw) & ~low_mask);
+    return ACS_STATUS_PASS;
+  }
+
+  if ((iw >= 8u) && (iw <= 10u)) {
+    upper = hpa_offset >> (low_bits + (iw - 8u));
+    upper /= 3u;
+    *dpa_offset = (hpa_offset & low_mask) | (upper << low_bits);
+    return ACS_STATUS_PASS;
+  }
+
+  return ACS_STATUS_ERR;
+}
+
+/**
+  @brief  Translate an HPA through a CXL.mem endpoint HDM decoder to DPA.
+
+  The endpoint decoder removes its interleave selection bits and accumulates
+  the DPA consumed by earlier committed decoders, including each decoder's
+  DPA Skip. This helper is intended for direct device-media test operations;
+  normal host accesses must continue to use the original HPA.
+
+  @param  component_index  Endpoint index in the CXL component table.
+  @param  hpa              Host physical address covered by an endpoint decoder.
+  @param  dpa              Receives the corresponding device physical address.
+
+  @return ACS_STATUS_PASS on success, ACS_STATUS_FAIL when no active decoder
+          claims the HPA, or ACS_STATUS_ERR for malformed decoder programming.
+**/
+uint32_t
+val_cxl_hpa_to_dpa(uint32_t component_index,
+                   uint64_t hpa,
+                   uint64_t *dpa)
+{
+  const CXL_COMPONENT_ENTRY *component;
+  uint64_t cap_base;
+  uint64_t dpa_base;
+  uint32_t decoder_index;
+  uint32_t status;
+
+  if (dpa == NULL)
+    return ACS_STATUS_ERR;
+
+  *dpa = 0u;
+  component = val_cxl_get_component_entry(component_index);
+  if ((component == NULL) ||
+      (component->role != CXL_COMPONENT_ROLE_ENDPOINT) ||
+      (component->component_reg_base == 0u) ||
+      (component->hdm_decoder_count == 0u))
+    return ACS_STATUS_ERR;
+
+  status = val_cxl_find_capability(component->component_reg_base,
+                                   CXL_CAPID_HDM_DECODER,
+                                   &cap_base);
+  if (status != ACS_STATUS_PASS)
+    return status;
+
+  dpa_base = 0u;
+  for (decoder_index = 0u;
+       decoder_index < component->hdm_decoder_count;
+       ++decoder_index) {
+    uint32_t base_low;
+    uint32_t base_high;
+    uint32_t size_low;
+    uint32_t size_high;
+    uint32_t skip_low;
+    uint32_t skip_high;
+    uint32_t ctrl;
+    uint32_t ig;
+    uint32_t iw;
+    uint32_t ways;
+    uint64_t base;
+    uint64_t size;
+    uint64_t skip;
+    uint64_t decoded_length;
+
+    ctrl = val_mmio_read(cap_base + CXL_HDM_DECODER_CTRL(decoder_index));
+    if ((ctrl & CXL_HDM_COMMITTED_BIT) == 0u)
+      continue;
+
+    base_low = val_mmio_read(cap_base + CXL_HDM_DECODER_BASE_LOW(decoder_index));
+    base_high = val_mmio_read(cap_base + CXL_HDM_DECODER_BASE_HIGH(decoder_index));
+    size_low = val_mmio_read(cap_base + CXL_HDM_DECODER_SIZE_LOW(decoder_index));
+    size_high = val_mmio_read(cap_base + CXL_HDM_DECODER_SIZE_HIGH(decoder_index));
+    skip_low = val_mmio_read(cap_base + CXL_HDM_DECODER_TARGET_LOW(decoder_index));
+    skip_high = val_mmio_read(cap_base + CXL_HDM_DECODER_TARGET_HIGH(decoder_index));
+
+    base = val_cxl_decode_hdm_value(base_low, base_high);
+    size = val_cxl_decode_hdm_value(size_low, size_high);
+    skip = ((uint64_t)skip_high << 32) |
+           ((uint64_t)skip_low & CXL_HDM_DPA_SKIP_LOW_MASK);
+    ig = (ctrl >> CXL_HDM_DECODER_IG_SHIFT) & CXL_HDM_DECODER_IG_MASK;
+    iw = (ctrl >> CXL_HDM_DECODER_IW_SHIFT) & CXL_HDM_DECODER_IW_MASK;
+
+    if ((size == 0u) ||
+        (val_cxl_hdm_interleave_ways(iw, &ways) != ACS_STATUS_PASS) ||
+        ((size % ways) != 0u) ||
+        (dpa_base > (~0ULL - skip)))
+      return ACS_STATUS_ERR;
+
+    dpa_base += skip;
+    decoded_length = size / ways;
+
+    if ((hpa >= base) && ((hpa - base) < size)) {
+      uint64_t dpa_offset;
+
+      if (val_cxl_hdm_remove_interleave(hpa - base,
+                                        ig,
+                                        iw,
+                                        &dpa_offset) != ACS_STATUS_PASS)
+        return ACS_STATUS_ERR;
+
+      if ((dpa_offset >= decoded_length) ||
+          (dpa_base > (~0ULL - dpa_offset)))
+        return ACS_STATUS_ERR;
+
+      *dpa = dpa_base + dpa_offset;
+      return ACS_STATUS_PASS;
+    }
+
+    if (dpa_base > (~0ULL - decoded_length))
+      return ACS_STATUS_ERR;
+    dpa_base += decoded_length;
+  }
+
+  return ACS_STATUS_FAIL;
+}
+
 /**
   @brief  Return the number of CFMWS windows for a host.
 
