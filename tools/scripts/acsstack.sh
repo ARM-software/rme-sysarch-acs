@@ -413,10 +413,6 @@ rdv3_apply_patches() {
     }
 
     apply_patch "tf-a" "${PATCH_DIR}/tfa/tfa_rdv3.patch" 1
-    apply_patch \
-        "build-scripts" \
-        "${PATCH_DIR}/build-scripts/build-script-rdv3.patch" \
-        1
     apply_patch "uefi/edk2" "${PATCH_DIR}/edk2/edk2_rdv3.patch" 1
 
     popd >/dev/null
