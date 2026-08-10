@@ -479,7 +479,7 @@ val_el3_branch_asm:
        msr    spsel, #1
        mov    sp, x11
        msr    sp_el0, x10
-       br    x8
+       ret   x8
 
 /**
  * @brief  This function is called to handle the fault
