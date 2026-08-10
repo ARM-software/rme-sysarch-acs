@@ -583,6 +583,52 @@ pal_exerciser_ops (
 }
 
 /**
+  @brief  Ask a TDI to originate a permission-checked device-to-host snoop.
+
+  @param  Bdf        Exerciser endpoint BDF identifying the TDI.
+  @param  TargetPa   Target host physical address.
+  @param  PasRealm   Nonzero to request Realm Access PAS.
+  @param  Result     Model result flags: VALID plus EMITTED or BLOCKED.
+
+  @return 0 when the model returned a valid result, nonzero otherwise.
+**/
+UINT32
+pal_cda_tdi_snoop_attempt (
+  UINT32 Bdf,
+  UINT64 TargetPa,
+  UINT32 PasRealm,
+  UINT32 *Result
+  )
+{
+  UINT64 RawResult;
+
+  if (Result == NULL)
+    return 1;
+
+  if ((pal_exerciser_set_param(EXERCISER_CXL_CMD_CTRL,
+                               (PasRealm != 0u) ? CXL_CMD_CTRL_PAS_REALM : 0u,
+                               0u,
+                               Bdf) != 0u) ||
+      (pal_exerciser_set_param(EXERCISER_CXL_CMD_OP,
+                               CXL_CMD_OP_TDI_SNOOP,
+                               0u,
+                               Bdf) != 0u) ||
+      (pal_exerciser_set_param(EXERCISER_CXL_CMD_ADDR,
+                               TargetPa,
+                               0u,
+                               Bdf) != 0u) ||
+      (pal_exerciser_ops(CXL_CMD_START, 0u, Bdf) != 0u) ||
+      (pal_exerciser_get_param(EXERCISER_CXL_CMD_DATA0,
+                               &RawResult,
+                               NULL,
+                               Bdf) != 0u))
+    return 1;
+
+  *Result = (UINT32)RawResult;
+  return 0;
+}
+
+/**
   @brief   This API returns test specific data from the PCIe stimulus generation hardware
   @param   type         - data type for which the data needs to be returned
   @param   data         - test specific data to be be filled by pal layer

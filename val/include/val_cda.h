@@ -32,6 +32,7 @@ uint32_t cda_rwfylw_dev_prop_lock_entry(uint32_t num_pe);
 uint32_t cda_rfzbmw_external_dcm_ide_gate_entry(uint32_t num_pe);
 uint32_t cda_rwwbpm_internal_dcm_run_gate_entry(uint32_t num_pe);
 uint32_t cda_rqrmsc_dcm_ats_dependency_entry(uint32_t num_pe);
+uint32_t cda_rfrfjg_tdi_snoop_access_entry(uint32_t num_pe);
 
 uint32_t val_cda_find_downstream_chi_c2c_exerciser_endpoint(uint32_t root_bdf,
                                                             uint32_t *endpoint_bdf_out);
@@ -53,5 +54,9 @@ uint32_t val_cda_program_rid_range(uint64_t cfg_va,
                                    uint32_t rid_base,
                                    uint32_t rid_limit,
                                    uint32_t rid_range_valid);
+uint32_t val_cda_tdi_snoop_attempt(uint32_t endpoint_bdf,
+                                   uint64_t target_pa,
+                                   uint32_t access_pas,
+                                   uint32_t *result);
 
 #endif

@@ -770,7 +770,11 @@ typedef enum {
 #define CXL_CMD_OP_DCM_SET_REALM_ASSIGNMENT  0x6u
 #define CXL_CMD_OP_DCM_CACHE_DIRTY           0x7u
 #define CXL_CMD_OP_DCM_CACHE_WRITEBACK       0x8u
+#define CXL_CMD_OP_TDI_SNOOP                  0x9u
 #define CXL_CMD_CTRL_PAS_REALM               (1u << 8)
+#define CXL_TDI_SNOOP_RESULT_VALID            (1u << 0)
+#define CXL_TDI_SNOOP_RESULT_EMITTED          (1u << 1)
+#define CXL_TDI_SNOOP_RESULT_BLOCKED          (1u << 2)
 
 typedef enum {
   ACCESS_TYPE_RD = 0x0,
@@ -828,6 +832,8 @@ uint32_t pal_exerciser_get_param(EXERCISER_PARAM_TYPE type, uint64_t *value1, ui
 uint32_t pal_exerciser_set_state(EXERCISER_STATE state, uint64_t *value, uint32_t bdf);
 uint32_t pal_exerciser_get_state(EXERCISER_STATE *state, uint32_t bdf);
 uint32_t pal_exerciser_ops(EXERCISER_OPS ops, uint64_t param, uint32_t instance);
+uint32_t pal_cda_tdi_snoop_attempt(uint32_t bdf, uint64_t target_pa,
+                                   uint32_t pas_realm, uint32_t *result);
 uint32_t pal_exerciser_get_data(EXERCISER_DATA_TYPE type, exerciser_data_t *data, uint32_t bdf,
                                 uint64_t ecam);
 

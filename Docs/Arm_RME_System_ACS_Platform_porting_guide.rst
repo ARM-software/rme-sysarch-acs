@@ -470,8 +470,34 @@ This command runs only the RME module and skips RME test mec_effect_of_popa_cmo.
    * - ``void pal_driver_uart_pl011_putc(int c);``
      - Yes
      - Yes
+   * - ``uint32_t pal_cda_tdi_snoop_attempt(uint32_t bdf, uint64_t target_pa, uint32_t pas_realm, uint32_t *result);``
+     - Platform-specific
+     - Platform-specific
 
 Note: Platform-specific means the partner must provide their implementation for that PAL API.
+
+
+RFRFJG TDI snoop observation hook
+---------------------------------
+
+``pal_cda_tdi_snoop_attempt`` asks the endpoint TDI identified by ``bdf`` to
+attempt a device-to-host snoop to ``target_pa`` using Non-secure PAS when
+``pas_realm`` is zero or Realm PAS otherwise. The request must carry the
+selected PAS and TDI attribution, and it must be subject to the TDI's normal
+direct-access permission checks.
+
+On success the hook returns zero and sets ``result`` to
+``CXL_TDI_SNOOP_RESULT_VALID`` plus exactly one of:
+
+- ``CXL_TDI_SNOOP_RESULT_EMITTED`` after an upstream snoop transaction was
+  actually emitted.
+- ``CXL_TDI_SNOOP_RESULT_BLOCKED`` when the permission check prevented the
+  transaction from being emitted.
+
+A nonzero return indicates that the hook is unavailable or did not provide a
+valid observation. RFRFJG skips when the positive-control invocation shows
+that this platform capability is unavailable, but fails if a forbidden snoop
+is reported as emitted.
 
 
 4. Prerequisites

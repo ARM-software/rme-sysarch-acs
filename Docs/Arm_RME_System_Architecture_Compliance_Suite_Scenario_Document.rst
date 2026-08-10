@@ -1643,6 +1643,25 @@ Testcase checklist
 
   * -
 
+      `cda_rfrfjg_tdi_snoop_access <../test_pool/cda/cda_rfrfjg_tdi_snoop_access.c>`_
+
+    -
+
+      RFRFJG: A TDI must not issue a snoop request to a physical address unless it is permitted to directly access that physical address.
+
+    -
+
+      1. Select a CHI-C2C-capable CXL root port and downstream exerciser endpoint, program the endpoint decoder for a CFMWS window, and select two DCM pages.
+      2. Program the RME-CDA RID range to admit the selected endpoint, enable the TDISP and link-stream-lock controls, transition the endpoint TDI to RUN, and establish the coherent-link IDE stream.
+      3. Assign page A to Realm while page B remains unassigned, then request Realm-PAS snoops attributed to that TDI.
+      4. Verify the platform hook reports that the snoop to page A was emitted and that the snoop to page B was blocked without emitting a transaction.
+      5. Move the Realm assignment from page A to page B and repeat both checks to verify that the current Realm assignment controls access.
+      6. Clear Realm assignments, disable IDE, stop the TDISP session, and restore the decoder and RME-CDA controls.
+
+      Note: The device-to-host snoop carries the selected PAS and TDI attribution and is subject to the originating TDI's physical-address permission check.
+
+  * -
+
       `cxl_rwyvcq_link_unlock_reject <../test_pool/cxl/cxl_rwyvcq_link_unlock_reject.c>`_
 
     -

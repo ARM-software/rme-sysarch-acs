@@ -37,6 +37,51 @@
 #define RMECDA_CTL4_RID_RANGE_VALID_MASK  0x1u
 
 /**
+  @brief  Attempt an attributed, permission-checked TDI snoop request.
+
+  @param  endpoint_bdf  Endpoint BDF identifying the originating TDI.
+  @param  target_pa     Target host physical address.
+  @param  access_pas    NONSECURE_PAS or REALM_PAS.
+  @param  result        Result flags returned by the platform hook.
+
+  @return ACS_STATUS_PASS when a valid result was returned.
+          ACS_STATUS_SKIP when the platform hook is unavailable.
+          ACS_STATUS_ERR for invalid arguments or malformed hook output.
+**/
+uint32_t
+val_cda_tdi_snoop_attempt(uint32_t endpoint_bdf,
+                          uint64_t target_pa,
+                          uint32_t access_pas,
+                          uint32_t *result)
+{
+  uint32_t pas_realm;
+
+  if (result == NULL)
+    return ACS_STATUS_ERR;
+
+  if (access_pas == NONSECURE_PAS)
+    pas_realm = 0u;
+  else if (access_pas == REALM_PAS)
+    pas_realm = 1u;
+  else
+    return ACS_STATUS_ERR;
+
+  *result = 0u;
+  if (pal_cda_tdi_snoop_attempt(endpoint_bdf,
+                                target_pa,
+                                pas_realm,
+                                result) != 0u)
+    return ACS_STATUS_SKIP;
+
+  if (((*result & CXL_TDI_SNOOP_RESULT_VALID) == 0u) ||
+      (((*result & CXL_TDI_SNOOP_RESULT_EMITTED) != 0u) ==
+       ((*result & CXL_TDI_SNOOP_RESULT_BLOCKED) != 0u)))
+    return ACS_STATUS_ERR;
+
+  return ACS_STATUS_PASS;
+}
+
+/**
   @brief  Find a CHI-C2C exerciser endpoint downstream of a root port.
 
   @param  root_bdf          Root port BDF.

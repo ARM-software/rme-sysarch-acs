@@ -92,10 +92,6 @@ MODULE_TEST_DISPATCHER_s g_module_test_table[MODULE_SENTINEL] = {
         .entry_fn = cda_rqrmsc_dcm_ats_dependency_entry,
         .test_text = "cda_rqrmsc_dcm_ats_dependency",
       },
-      [CDA_ENTRY_CDA_RFZBMW_EXTERNAL_DCM_IDE_GATE_ENTRY] = {
-        .entry_fn = cda_rfzbmw_external_dcm_ide_gate_entry,
-        .test_text = "cda_rfzbmw_external_dcm_ide_gate",
-      },
       [CDA_ENTRY_CDA_RWWBPM_INTERNAL_DCM_RUN_GATE_ENTRY] = {
         .entry_fn = cda_rwwbpm_internal_dcm_run_gate_entry,
         .test_text = "cda_rwwbpm_internal_dcm_run_gate",
@@ -119,6 +115,14 @@ MODULE_TEST_DISPATCHER_s g_module_test_table[MODULE_SENTINEL] = {
       [CDA_ENTRY_CDA_RWFYLW_DEV_PROP_LOCK_ENTRY] = {
         .entry_fn = cda_rwfylw_dev_prop_lock_entry,
         .test_text = "cda_rwfylw_dev_prop_lock",
+      },
+      [CDA_ENTRY_CDA_RFRFJG_TDI_SNOOP_ACCESS_ENTRY] = {
+        .entry_fn = cda_rfrfjg_tdi_snoop_access_entry,
+        .test_text = "cda_rfrfjg_tdi_snoop_access",
+      },
+      [CDA_ENTRY_CDA_RFZBMW_EXTERNAL_DCM_IDE_GATE_ENTRY] = {
+        .entry_fn = cda_rfzbmw_external_dcm_ide_gate_entry,
+        .test_text = "cda_rfzbmw_external_dcm_ide_gate",
       },
     },
   },

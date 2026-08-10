@@ -524,6 +524,48 @@ uint32_t pal_exerciser_ops(EXERCISER_OPS Ops, uint64_t Param, uint32_t Bdf)
 }
 
 /**
+  @brief  Ask a TDI to originate a permission-checked device-to-host snoop.
+
+  @param  Bdf        Exerciser endpoint BDF identifying the TDI.
+  @param  TargetPa   Target host physical address.
+  @param  PasRealm   Nonzero to request Realm Access PAS.
+  @param  Result     Model result flags: VALID plus EMITTED or BLOCKED.
+
+  @return 0 when the model returned a valid result, nonzero otherwise.
+**/
+uint32_t
+pal_cda_tdi_snoop_attempt(uint32_t Bdf, uint64_t TargetPa,
+                          uint32_t PasRealm, uint32_t *Result)
+{
+    uint64_t raw_result;
+
+    if (Result == NULL)
+        return 1;
+
+    if ((pal_exerciser_set_param(EXERCISER_CXL_CMD_CTRL,
+                                 (PasRealm != 0u) ? CXL_CMD_CTRL_PAS_REALM : 0u,
+                                 0u,
+                                 Bdf) != 0u) ||
+        (pal_exerciser_set_param(EXERCISER_CXL_CMD_OP,
+                                 CXL_CMD_OP_TDI_SNOOP,
+                                 0u,
+                                 Bdf) != 0u) ||
+        (pal_exerciser_set_param(EXERCISER_CXL_CMD_ADDR,
+                                 TargetPa,
+                                 0u,
+                                 Bdf) != 0u) ||
+        (pal_exerciser_ops(CXL_CMD_START, 0u, Bdf) != 0u) ||
+        (pal_exerciser_get_param(EXERCISER_CXL_CMD_DATA0,
+                                 &raw_result,
+                                 NULL,
+                                 Bdf) != 0u))
+        return 1;
+
+    *Result = (uint32_t)raw_result;
+    return 0;
+}
+
+/**
   @brief   This API sets the state of the PCIe stimulus generation hardware
   @param   State        - State that needs to be set for the stimulus hadrware
   @param   Value        - Additional information associated with the state
