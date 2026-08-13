@@ -302,6 +302,9 @@ fvp_run() {
     local env="$1"
     fvp_preflight
 
+    # FVP resolves paths embedded in the PCIe hierarchy relative to its cwd.
+    cd "$REPO_ROOT"
+
     log "Running AEM FVP-A env: $env"
     case "$env" in
         bm)
