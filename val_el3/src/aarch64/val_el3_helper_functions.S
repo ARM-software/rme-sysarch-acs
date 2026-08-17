@@ -173,8 +173,19 @@ val_el3_acs_ldr_pas_filter:
        mov    sp, x11
        msr    sp_el0, x10
 
+       /* Preserve the result pointer across a nested data-abort handler. */
+       ldr    x10, =SHARED_OFFSET_ARG2
+       str    x1, [x10]
        ldr    x1, [x0]
        dsb    sy
+       /* A recovered fault clears exception_expected and produces no data. */
+       ldr    x10, =SHARED_OFFSET_EXC_EXP
+       ldr    x10, [x10]
+       cbz    x10, 1f
+       ldr    x10, =SHARED_OFFSET_ARG2
+       ldr    x10, [x10]
+       str    x1, [x10]
+1:
        ldr    x0, =PLAT_SHARED_ADDRESS
        str    xzr, [x0, #0x18]
        ldr    x2, [x0, #0x8]

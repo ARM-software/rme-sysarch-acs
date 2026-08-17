@@ -69,6 +69,7 @@
   ../test_pool/cda/cda_rdmspt_rid_range_check.c
   ../test_pool/cda/cda_rqrmsc_dcm_ats_dependency.c
   ../test_pool/cda/cda_rfrfjg_tdi_snoop_access.c
+  ../test_pool/cda/cda_rvhzcr_external_pas_check.c
   ../test_pool/da/da_attribute_rmeda_ctl_registers.c
   ../test_pool/da/da_autonomous_rootport_request_ns_pas.c
   ../test_pool/da/da_ctl_regs_rmsd_write_protect_property.c

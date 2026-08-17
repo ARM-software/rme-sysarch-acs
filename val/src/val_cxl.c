@@ -3785,6 +3785,56 @@ val_cxl_program_component_decoder(uint32_t component_index,
 }
 
 /**
+  @brief   Disable and clear an HDM decoder for a discovered CXL component.
+
+  @param  component_index  Index within the CXL component table.
+  @param  decoder_index    Decoder slot to disable.
+
+  @return ACS_STATUS_PASS when the decoder is disabled and cleared.
+**/
+uint32_t
+val_cxl_disable_component_decoder(uint32_t component_index,
+                                  uint32_t decoder_index)
+{
+  CXL_COMPONENT_ENTRY *component;
+  uint64_t cap_base;
+  uint64_t ctrl_addr;
+  uint32_t ctrl;
+  uint32_t attempt;
+
+  component = val_cxl_get_component_entry(component_index);
+  if ((component == NULL) ||
+      (decoder_index >= component->hdm_decoder_count))
+    return ACS_STATUS_ERR;
+
+  if (val_cxl_find_capability(component->component_reg_base,
+                              CXL_CAPID_HDM_DECODER,
+                              &cap_base) != ACS_STATUS_PASS)
+    return ACS_STATUS_ERR;
+
+  ctrl_addr = cap_base + CXL_HDM_DECODER_CTRL(decoder_index);
+  ctrl = val_mmio_read(ctrl_addr);
+  val_mmio_write(ctrl_addr, ctrl & ~CXL_HDM_COMMIT_BIT);
+
+  for (attempt = 0u; attempt < CXL_HDM_COMMIT_TIMEOUT_MS; ++attempt)
+  {
+    if ((val_mmio_read(ctrl_addr) & CXL_HDM_COMMITTED_BIT) == 0u)
+      break;
+    (void)val_time_delay_ms(1u);
+  }
+
+  if ((val_mmio_read(ctrl_addr) & CXL_HDM_COMMITTED_BIT) != 0u)
+    return ACS_STATUS_FAIL;
+
+  val_mmio_write(cap_base + CXL_HDM_DECODER_BASE_LOW(decoder_index), 0u);
+  val_mmio_write(cap_base + CXL_HDM_DECODER_BASE_HIGH(decoder_index), 0u);
+  val_mmio_write(cap_base + CXL_HDM_DECODER_SIZE_LOW(decoder_index), 0u);
+  val_mmio_write(cap_base + CXL_HDM_DECODER_SIZE_HIGH(decoder_index), 0u);
+
+  return ACS_STATUS_PASS;
+}
+
+/**
   @brief   Execute all CXL compliance tests registered for the suite.
 
   @param  num_pe  Number of processing elements available for test execution. Unused.

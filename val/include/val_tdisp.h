@@ -161,6 +161,10 @@ val_tdisp_vdm_get_dev_prop(val_spdm_context_t *context,
                            uint32_t *response_size);
 
 uint32_t
+val_tdisp_get_device_properties(uint32_t endpoint_bdf,
+                                uint32_t *properties_out);
+
+uint32_t
 val_tdisp_vdm_set_interface(val_spdm_context_t *context,
                             uint32_t session_id,
                             const pci_tdisp_interface_id_t *interface_id,

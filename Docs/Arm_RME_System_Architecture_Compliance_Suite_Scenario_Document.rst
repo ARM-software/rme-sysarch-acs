@@ -1609,6 +1609,26 @@ Testcase checklist
 
   * -
 
+      `cda_rvhzcr_external_pas_check <../test_pool/cda/cda_rvhzcr_external_pas_check.c>`_
+
+    -
+
+      RVHZCR: If PAS_CHECK==TRUE, device-side PAS protection checks apply both to internal access and external access to DCM.
+
+    -
+
+      1. Select a CHI-C2C-capable CXL root port that exposes the RME-CDA DVSEC and a downstream CHI-C2C exerciser endpoint, then program host and endpoint decoders for a host-visible DCM window.
+      2. Read the Arm TDISP device properties and skip the test unless PAS_CHECK is set.
+      3. Select a DCM page, map its HPA as Realm PAS, assign the page to Realm at the device, and seed its corresponding DPA media with a known value.
+      4. Transition the TDI to RUN, establish the coherent-link IDE stream, and verify an external Realm-PAS read through the HPA returns the known value.
+      5. Flush the host cacheline, stop the protected path, remove the device-side Realm association, and seed a different protected value while retaining the Realm GPT association.
+      6. Re-establish TDI RUN and IDE, then issue the same external Realm-PAS HPA read. Verify that the access faults or does not return the protected media value.
+      7. Stop the TDISP session, disable IDE, restore the GPT, decoder, and RME-CDA state, and clear any remaining DCM assignment.
+
+      Note: This scenario covers only the externally originated access requirement of RVHZCR. Internal access is device-local behavior and is not included in this System ACS verdict.
+
+  * -
+
       `cda_rfzbmw_external_dcm_ide_gate <../test_pool/cda/cda_rfzbmw_external_dcm_ide_gate.c>`_
 
     -

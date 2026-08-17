@@ -28,8 +28,10 @@
 #include "include/val_pcie.h"
 #include "include/val_pcie_spec.h"
 #include "include/val_pgt.h"
+#include "include/val_tdisp.h"
 
 #define RMECDA_CTL1_LINK_STR_LOCK_MASK  (1u << 1)
+#define RMECDA_CTL1_TDISP_EN_MASK       0x1u
 #define RMECDA_CTL3_RID_LIMIT_SHIFT       8u
 #define RMECDA_CTL3_RID_LIMIT_MASK        (0xFFFFu << RMECDA_CTL3_RID_LIMIT_SHIFT)
 #define RMECDA_CTL4_RID_BASE_SHIFT        8u
@@ -79,6 +81,268 @@ val_cda_tdi_snoop_attempt(uint32_t endpoint_bdf,
     return ACS_STATUS_ERR;
 
   return ACS_STATUS_PASS;
+}
+
+static void
+val_cda_init_dcm_window_context(uint32_t decoder_index,
+                                VAL_CDA_DCM_WINDOW_CONTEXT *context)
+{
+  val_memory_set(context, sizeof(*context), 0);
+  context->decoder_index = decoder_index;
+  context->host_index = CXL_COMPONENT_INVALID_INDEX;
+  context->root_index = CXL_COMPONENT_INVALID_INDEX;
+  context->endpoint_index = CXL_COMPONENT_INVALID_INDEX;
+}
+
+/**
+  @brief  Restore decoder and RME-CDA state saved for a DCM window.
+**/
+uint32_t
+val_cda_restore_dcm_window(const VAL_CDA_DCM_WINDOW_CONTEXT *context)
+{
+  uint32_t restore_status;
+  uint32_t readback;
+
+  if (context == NULL)
+    return ACS_STATUS_ERR;
+
+  restore_status = ACS_STATUS_PASS;
+
+  if ((context->rmecda_ctl1_valid != 0u) && (context->rmecda_cfg_va != 0u))
+  {
+    if ((val_memory_write_el3(context->rmecda_cfg_va +
+                              context->rmecda_cap_base +
+                              RMECDA_CTL1_OFFSET,
+                              context->rmecda_ctl1_orig) != ACS_STATUS_PASS) ||
+        (val_memory_read_el3(context->rmecda_cfg_va +
+                             context->rmecda_cap_base +
+                             RMECDA_CTL1_OFFSET,
+                             &readback) != ACS_STATUS_PASS) ||
+        (readback != context->rmecda_ctl1_orig))
+    {
+      restore_status = ACS_STATUS_ERR;
+    }
+  }
+
+  if ((context->endpoint_decoder_valid != 0u) &&
+      (((context->endpoint_decoder_size_orig == 0u) &&
+        (val_cxl_disable_component_decoder(context->endpoint_index,
+                                           context->decoder_index)
+         != ACS_STATUS_PASS)) ||
+       ((context->endpoint_decoder_size_orig != 0u) &&
+        (val_cxl_program_component_decoder(context->endpoint_index,
+                                           context->decoder_index,
+                                           context->endpoint_decoder_base_orig,
+                                           context->endpoint_decoder_size_orig)
+         != ACS_STATUS_PASS))))
+  {
+    restore_status = ACS_STATUS_ERR;
+  }
+
+  if ((context->host_decoder_valid != 0u) &&
+      (val_cxl_restore_host_decoder(context->host_index,
+                                    context->decoder_index,
+                                    context->host_decoder_base_orig,
+                                    context->host_decoder_size_orig,
+                                    1u,
+                                    context->host_target_low_orig,
+                                    context->host_target_high_orig)
+       != ACS_STATUS_PASS))
+  {
+    restore_status = ACS_STATUS_ERR;
+  }
+
+  return restore_status;
+}
+
+/**
+  @brief  Select a CHI-C2C CDA endpoint and prepare a host-visible DCM window.
+
+  The helper saves the existing decoder and RME-CDA state, enables CXL.mem,
+  routes one CFMWS window to the endpoint, and enables TDISP enforcement on
+  the selected Root Port. The caller must invoke val_cda_restore_dcm_window().
+**/
+uint32_t
+val_cda_prepare_dcm_window(uint32_t decoder_index,
+                           VAL_CDA_DCM_WINDOW_CONTEXT *context)
+{
+  return val_cda_prepare_dcm_window_with_dev_props(decoder_index, 0u, context);
+}
+
+/**
+  @brief  Prepare a DCM window for an endpoint with required device properties.
+
+  Endpoints that do not advertise every bit in required_dev_properties are
+  ignored before any decoder or RME-CDA state is changed.
+**/
+uint32_t
+val_cda_prepare_dcm_window_with_dev_props(
+                           uint32_t decoder_index,
+                           uint32_t required_dev_properties,
+                           VAL_CDA_DCM_WINDOW_CONTEXT *context)
+{
+  CXL_COMPONENT_TABLE *table;
+
+  if (context == NULL)
+    return ACS_STATUS_ERR;
+
+  val_cda_init_dcm_window_context(decoder_index, context);
+  table = val_cxl_component_table_ptr();
+  if ((table == NULL) || (table->num_entries == 0u))
+    return ACS_STATUS_SKIP;
+
+  for (uint32_t root_idx = 0u; root_idx < table->num_entries; ++root_idx)
+  {
+    VAL_CDA_DCM_WINDOW_CONTEXT candidate;
+    const CXL_COMPONENT_ENTRY *root_port;
+    const CXL_COMPONENT_ENTRY *endpoint;
+    uint32_t endpoint_bdf;
+    uint32_t dev_properties;
+    uint32_t ctl1_programmed;
+    uint32_t ctl1_readback;
+
+    val_cda_init_dcm_window_context(decoder_index, &candidate);
+    root_port = &table->component[root_idx];
+
+    if ((root_port->role != CXL_COMPONENT_ROLE_ROOT_PORT) ||
+        (root_port->chi_c2c_supported == 0u))
+      continue;
+
+    if (val_cda_find_downstream_chi_c2c_exerciser_endpoint(root_port->bdf,
+                                                            &endpoint_bdf)
+        != ACS_STATUS_PASS)
+      continue;
+
+    if (val_cxl_find_component_index_by_bdf(endpoint_bdf,
+                                             &candidate.endpoint_index)
+        != ACS_STATUS_PASS)
+      continue;
+
+    endpoint = &table->component[candidate.endpoint_index];
+    if ((endpoint->role != CXL_COMPONENT_ROLE_ENDPOINT) ||
+        (endpoint->chi_c2c_supported == 0u))
+      continue;
+
+    if (required_dev_properties != 0u)
+    {
+      if ((val_tdisp_get_device_properties(endpoint_bdf, &dev_properties)
+           != ACS_STATUS_PASS) ||
+          ((dev_properties & required_dev_properties) !=
+           required_dev_properties))
+        continue;
+    }
+
+    candidate.root_index = root_idx;
+    candidate.root_bdf = root_port->bdf;
+    candidate.endpoint_bdf = endpoint_bdf;
+    candidate.host_index = root_port->host_bridge_index;
+    if (candidate.host_index == CXL_COMPONENT_INVALID_INDEX)
+      continue;
+
+    if (val_pcie_find_cda_capability(candidate.root_bdf,
+                                     &candidate.rmecda_cap_base)
+        != PCIE_SUCCESS)
+      continue;
+
+    if (val_cxl_select_cfmws_window(candidate.host_index,
+                                    &candidate.window_base,
+                                    &candidate.window_size) != ACS_STATUS_PASS)
+      continue;
+
+    if ((val_cxl_get_decoder(candidate.host_index,
+                             decoder_index,
+                             &candidate.host_decoder_base_orig,
+                             &candidate.host_decoder_size_orig) != 0u) ||
+        (val_cxl_get_host_decoder_target(candidate.host_index,
+                                         decoder_index,
+                                         &candidate.host_target_low_orig,
+                                         &candidate.host_target_high_orig) != 0u))
+      continue;
+    candidate.host_decoder_valid = 1u;
+
+    if (val_cxl_get_component_decoder(candidate.endpoint_index,
+                                      decoder_index,
+                                      &candidate.endpoint_decoder_base_orig,
+                                      &candidate.endpoint_decoder_size_orig) != 0u)
+    {
+      (void)val_cda_restore_dcm_window(&candidate);
+      continue;
+    }
+    candidate.endpoint_decoder_valid = 1u;
+
+    if ((val_pcie_read_cfg(candidate.root_bdf,
+                           candidate.rmecda_cap_base + RMECDA_CTL1_OFFSET,
+                           &candidate.rmecda_ctl1_orig) != PCIE_SUCCESS) ||
+        ((candidate.rmecda_ctl1_orig &
+          (RMECDA_CTL1_TDISP_EN_MASK | RMECDA_CTL1_LINK_STR_LOCK_MASK)) != 0u))
+    {
+      (void)val_cda_restore_dcm_window(&candidate);
+      continue;
+    }
+
+    if (val_pcie_map_root_config(candidate.root_bdf,
+                                 &candidate.rmecda_cfg_va) != ACS_STATUS_PASS)
+    {
+      (void)val_cda_restore_dcm_window(&candidate);
+      continue;
+    }
+
+    if (val_memory_read_el3(candidate.rmecda_cfg_va +
+                            candidate.rmecda_cap_base +
+                            RMECDA_CTL1_OFFSET,
+                            &candidate.rmecda_ctl1_orig) != ACS_STATUS_PASS)
+    {
+      (void)val_cda_restore_dcm_window(&candidate);
+      continue;
+    }
+    candidate.rmecda_ctl1_valid = 1u;
+
+    if (val_cxl_enable_mem(candidate.endpoint_bdf) != ACS_STATUS_PASS)
+    {
+      (void)val_cda_restore_dcm_window(&candidate);
+      continue;
+    }
+
+    if ((val_cxl_program_host_decoder_for_root(candidate.root_bdf,
+                                               candidate.host_index,
+                                               decoder_index,
+                                               candidate.window_base,
+                                               candidate.window_size)
+         != ACS_STATUS_PASS) ||
+        (val_cxl_program_component_decoder(candidate.endpoint_index,
+                                           decoder_index,
+                                           candidate.window_base,
+                                           candidate.window_size)
+         != ACS_STATUS_PASS))
+    {
+      (void)val_cda_restore_dcm_window(&candidate);
+      continue;
+    }
+
+    ctl1_programmed = candidate.rmecda_ctl1_orig |
+                      RMECDA_CTL1_TDISP_EN_MASK |
+                      RMECDA_CTL1_LINK_STR_LOCK_MASK;
+    if ((val_memory_write_el3(candidate.rmecda_cfg_va +
+                              candidate.rmecda_cap_base +
+                              RMECDA_CTL1_OFFSET,
+                              ctl1_programmed) != ACS_STATUS_PASS) ||
+        (val_memory_read_el3(candidate.rmecda_cfg_va +
+                             candidate.rmecda_cap_base +
+                             RMECDA_CTL1_OFFSET,
+                             &ctl1_readback) != ACS_STATUS_PASS) ||
+        ((ctl1_readback &
+          (RMECDA_CTL1_TDISP_EN_MASK | RMECDA_CTL1_LINK_STR_LOCK_MASK)) !=
+         (RMECDA_CTL1_TDISP_EN_MASK | RMECDA_CTL1_LINK_STR_LOCK_MASK)))
+    {
+      (void)val_cda_restore_dcm_window(&candidate);
+      continue;
+    }
+
+    *context = candidate;
+    return ACS_STATUS_PASS;
+  }
+
+  return ACS_STATUS_SKIP;
 }
 
 /**

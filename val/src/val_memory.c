@@ -427,7 +427,7 @@ val_memory_read64_el3_protected(volatile uint64_t *address,
     return ACS_STATUS_ERR;
   }
 
-  fault_seen = (shared_data->exception_expected == CLEAR);
+  fault_seen = (shared_data->exception_generated == SET);
   *value_out = shared_data->shared_data_access[0].data;
   if (fault_seen_out != NULL)
     *fault_seen_out = fault_seen;

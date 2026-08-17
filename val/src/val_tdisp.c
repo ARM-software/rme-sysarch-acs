@@ -247,6 +247,92 @@ val_tdisp_vdm_get_dev_prop(val_spdm_context_t *context,
 }
 
 /**
+  @brief  Read the Arm TDISP device properties for an endpoint.
+
+  The helper owns the temporary SPDM session and validates the response before
+  returning the property bitmap.
+
+  @param  endpoint_bdf   Endpoint BDF identifying the TDI.
+  @param  properties_out Output device-property bitmap.
+
+  @return ACS_STATUS_PASS/SKIP/ERR from the request and session operations, or
+          ACS_STATUS_FAIL when the responder returns a malformed response.
+**/
+uint32_t
+val_tdisp_get_device_properties(uint32_t endpoint_bdf,
+                                uint32_t *properties_out)
+{
+#if ENABLE_SPDM
+  pci_tdisp_interface_id_t interface_id;
+  val_spdm_context_t spdm_ctx;
+  uint8_t response[VAL_TDISP_ARM_VDM_MAX_RSP_SIZE];
+  uint32_t response_size;
+  uint32_t session_id;
+  uint32_t status;
+
+  if (properties_out == NULL)
+    return ACS_STATUS_ERR;
+
+  *properties_out = 0u;
+  session_id = 0u;
+  response_size = (uint32_t)sizeof(response);
+  val_memory_set(&spdm_ctx, sizeof(spdm_ctx), 0);
+  val_memory_set(response, sizeof(response), 0);
+
+  interface_id.function_id = (uint32_t)PCIE_CREATE_BDF_PACKED(endpoint_bdf);
+  interface_id.reserved = 0ull;
+
+  status = val_spdm_session_open(endpoint_bdf, &spdm_ctx, &session_id);
+  if (status != ACS_STATUS_PASS)
+    return status;
+
+  status = val_tdisp_vdm_get_dev_prop(&spdm_ctx,
+                                      session_id,
+                                      &interface_id,
+                                      response,
+                                      &response_size);
+  if (status == ACS_STATUS_PASS)
+  {
+    if (response_size < (VAL_TDISP_ARM_VDM_BASE_SIZE + sizeof(uint32_t)))
+    {
+      val_print(ACS_PRINT_ERR, " TDISP: GET_DEV_PROP response too small", 0);
+      status = ACS_STATUS_FAIL;
+    }
+    else if ((response[VAL_TDISP_HDR_MSG_TYPE_OFF] != PCI_TDISP_VDM_RSP) ||
+             (response[VAL_TDISP_REQ_RESP_HDR_OFF +
+                       VAL_TDISP_REQ_RESP_TYPE_OFF] !=
+              VAL_TDISP_ARM_MSG_GET_DEV_PROP_RESP))
+    {
+      val_print(ACS_PRINT_ERR, " TDISP: invalid GET_DEV_PROP response", 0);
+      status = ACS_STATUS_FAIL;
+    }
+    else
+    {
+      *properties_out =
+        (uint32_t)response[VAL_TDISP_GET_DEV_PROP_PROP_OFF] |
+        ((uint32_t)response[VAL_TDISP_GET_DEV_PROP_PROP_OFF + 1u] << 8) |
+        ((uint32_t)response[VAL_TDISP_GET_DEV_PROP_PROP_OFF + 2u] << 16) |
+        ((uint32_t)response[VAL_TDISP_GET_DEV_PROP_PROP_OFF + 3u] << 24);
+    }
+  }
+
+  if (val_spdm_session_close(&spdm_ctx, session_id) != ACS_STATUS_PASS)
+  {
+    val_print(ACS_PRINT_ERR, " TDISP: SPDM session close failed", 0);
+    if (status == ACS_STATUS_PASS)
+      status = ACS_STATUS_FAIL;
+  }
+
+  return status;
+#else
+  (void)endpoint_bdf;
+  (void)properties_out;
+
+  return ACS_STATUS_SKIP;
+#endif
+}
+
+/**
   @brief  Send an Arm TDISP VDM SET_INTERFACE request.
 
   @param  context       SPDM context.

@@ -196,6 +196,8 @@ uint32_t val_cxl_program_component_decoder(uint32_t component_index,
                                            uint32_t decoder_index,
                                            uint64_t base,
                                            uint64_t length);
+uint32_t val_cxl_disable_component_decoder(uint32_t component_index,
+                                           uint32_t decoder_index);
 uint32_t val_cxl_create_component_table(void);
 void     val_cxl_free_component_table(void);
 CXL_COMPONENT_TABLE *

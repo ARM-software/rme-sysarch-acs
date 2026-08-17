@@ -259,83 +259,6 @@ restore_context_state(const RQRMSC_CONTEXT *context)
 }
 
 static uint32_t
-read_u32_le(const uint8_t *buffer,
-            uint32_t offset)
-{
-  return (uint32_t)buffer[offset] |
-         ((uint32_t)buffer[offset + 1u] << 8) |
-         ((uint32_t)buffer[offset + 2u] << 16) |
-         ((uint32_t)buffer[offset + 3u] << 24);
-}
-
-static uint32_t
-query_pas_check(uint32_t endpoint_bdf,
-                uint32_t *pas_check_out)
-{
-  pci_tdisp_interface_id_t interface_id;
-  val_spdm_context_t spdm_ctx;
-  uint8_t response[VAL_TDISP_ARM_VDM_MAX_RSP_SIZE];
-  uint32_t response_size;
-  uint32_t properties;
-  uint32_t session_id;
-  uint32_t status;
-
-  if (pas_check_out == NULL)
-    return ACS_STATUS_ERR;
-
-  *pas_check_out = 0u;
-  session_id = 0u;
-  response_size = (uint32_t)sizeof(response);
-
-  val_memory_set(&spdm_ctx, sizeof(spdm_ctx), 0);
-  val_memory_set(response, sizeof(response), 0);
-  interface_id.function_id = (uint32_t)PCIE_CREATE_BDF_PACKED(endpoint_bdf);
-  interface_id.reserved = 0ull;
-
-  status = val_spdm_session_open(endpoint_bdf, &spdm_ctx, &session_id);
-  if (status != ACS_STATUS_PASS)
-    return status;
-
-  status = val_tdisp_vdm_get_dev_prop(&spdm_ctx,
-                                      session_id,
-                                      &interface_id,
-                                      response,
-                                      &response_size);
-  if (status == ACS_STATUS_PASS)
-  {
-    if (response_size < (VAL_TDISP_ARM_VDM_BASE_SIZE + sizeof(uint32_t)))
-    {
-      val_print(ACS_PRINT_ERR, " RQRMSC: GET_DEV_PROP response too small", 0);
-      status = ACS_STATUS_FAIL;
-    }
-    else if ((response[VAL_TDISP_HDR_MSG_TYPE_OFF] != PCI_TDISP_VDM_RSP) ||
-             (response[VAL_TDISP_REQ_RESP_HDR_OFF +
-                       VAL_TDISP_REQ_RESP_TYPE_OFF] !=
-              VAL_TDISP_ARM_MSG_GET_DEV_PROP_RESP))
-    {
-      val_print(ACS_PRINT_ERR, " RQRMSC: invalid GET_DEV_PROP response", 0);
-      status = ACS_STATUS_FAIL;
-    }
-    else
-    {
-      properties = read_u32_le(response, VAL_TDISP_ARM_VDM_BASE_SIZE);
-      *pas_check_out =
-        ((properties & VAL_TDISP_DEV_PROP_PAS_CHECK) != 0u) ? 1u : 0u;
-      val_print(ACS_PRINT_INFO, " RQRMSC: TDISP properties 0x%x", properties);
-    }
-  }
-
-  if (val_spdm_session_close(&spdm_ctx, session_id) != ACS_STATUS_PASS)
-  {
-    val_print(ACS_PRINT_ERR, " RQRMSC: SPDM session close failed", 0);
-    if (status == ACS_STATUS_PASS)
-      status = ACS_STATUS_FAIL;
-  }
-
-  return status;
-}
-
-static uint32_t
 configure_smmu_identity_map(uint32_t endpoint_bdf,
                             uint64_t src_pa,
                             uint64_t dst_pa,
@@ -953,6 +876,7 @@ exercise_rule(RQRMSC_CONTEXT *context)
   uint32_t result;
   uint32_t status;
   uint32_t pas_check;
+  uint32_t properties;
   uint32_t src_gpt_set;
   uint32_t dst_gpt_set;
   uint32_t src_dpt_entry_added;
@@ -1013,12 +937,14 @@ exercise_rule(RQRMSC_CONTEXT *context)
   val_print(ACS_PRINT_INFO, " RQRMSC: DMA source PA 0x%llx", buffer_src_pa);
   val_print(ACS_PRINT_INFO, " RQRMSC: DMA destination PA 0x%llx", buffer_dst_pa);
 
-  status = query_pas_check(context->endpoint_bdf, &pas_check);
+  status = val_tdisp_get_device_properties(context->endpoint_bdf, &properties);
   if (status != ACS_STATUS_PASS)
   {
     result = status;
     goto cleanup;
   }
+  pas_check = ((properties & VAL_TDISP_DEV_PROP_PAS_CHECK) != 0u) ? 1u : 0u;
+  val_print(ACS_PRINT_INFO, " RQRMSC: TDISP properties 0x%x", properties);
 
   if (pas_check != 0u)
   {

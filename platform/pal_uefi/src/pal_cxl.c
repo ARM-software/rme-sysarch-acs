@@ -65,6 +65,8 @@ pal_cxl_default_chi_c2c_supported_bdf(UINT32 idx)
   {
   case 0u: return CXL_CHI_C2C_SUPPORTED_0_BDF_CT;
   case 1u: return CXL_CHI_C2C_SUPPORTED_1_BDF_CT;
+  case 2u: return CXL_CHI_C2C_SUPPORTED_2_BDF_CT;
+  case 3u: return CXL_CHI_C2C_SUPPORTED_3_BDF_CT;
   default: return ~0ULL;
   }
 }
