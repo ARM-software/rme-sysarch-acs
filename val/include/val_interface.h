@@ -65,7 +65,7 @@
 #define SKIP_TEST_SENTINEL      "SKIP_TEST_NONE"
 
 #define USER_SMC_IMM    0x100
-#define ARM_ACS_SMC_FID 0xC2000060
+#define ARM_ACS_SMC_FID 0xC7000030
 
 #define FILENAME                       (__builtin_strrchr("/" __FILE__, '/') + 1)
 #define val_print(level, string, data) val_log_context(level, string, data, FILENAME, __LINE__)

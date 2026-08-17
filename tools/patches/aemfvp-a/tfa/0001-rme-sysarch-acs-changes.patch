@@ -1,0 +1,110 @@
+From: Shyamanth RH <shyamanth.rh@arm.com>
+Date: Mon, 17 Aug 2026 00:00:00 +0000
+Subject: [PATCH] rme-sysarch-acs changes for TF-A v2.15
+
+Retain the platform memory mappings required by the suite. The ACS EL3
+implementation is linked separately after the normal TF-A build.
+
+Signed-off-by: Shyamanth RH <shyamanth.rh@arm.com>
+---
+ include/plat/arm/common/arm_def.h         | 13 ++++++++++---
+ plat/arm/board/fvp/fvp_common.c           |  2 ++
+ plat/arm/board/fvp/include/fvp_pas_def.h  |  4 ++--
+ plat/arm/board/fvp/include/platform_def.h |  8 ++++----
+ 4 files changed, 17 insertions(+), 8 deletions(-)
+diff --git a/include/plat/arm/common/arm_def.h b/include/plat/arm/common/arm_def.h
+index 715dea85f..38468ae60 100644
+--- a/include/plat/arm/common/arm_def.h
++++ b/include/plat/arm/common/arm_def.h
+@@ -312,15 +312,22 @@ MEASURED_BOOT
+ 					ARM_SHARED_RAM_SIZE,		\
+ 					MT_DEVICE | MT_RW | EL3_PAS)
+ 
++#define ARM_DRAM2_FLAT_SIZE		ULL(0x200000)
++
++#define ARM_MAP_DRAM2_FLAT	MAP_REGION_FLAT(			\
++					ARM_DRAM2_BASE,			\
++					ARM_DRAM2_FLAT_SIZE,		\
++					MT_MEMORY | MT_RW | MT_ROOT)
++
+ #define ARM_MAP_NS_DRAM1	MAP_REGION_FLAT(			\
+ 					ARM_NS_DRAM1_BASE,		\
+ 					ARM_NS_DRAM1_SIZE,		\
+ 					MT_MEMORY | MT_RW | MT_NS)
+ 
+ #define ARM_MAP_DRAM2		MAP_REGION_FLAT(			\
+-					ARM_DRAM2_BASE,			\
+-					ARM_DRAM2_SIZE,			\
+-					MT_MEMORY | MT_RW | MT_NS)
++					ARM_DRAM2_BASE + ARM_DRAM2_FLAT_SIZE, \
++					ARM_DRAM2_SIZE - ARM_DRAM2_FLAT_SIZE, \
++					MT_MEMORY | MT_RW | MT_REALM)
+ 
+ #define ARM_MAP_TSP_SEC_MEM	MAP_REGION_FLAT(			\
+ 					TSP_SEC_MEM_BASE,		\
+diff --git a/plat/arm/board/fvp/fvp_common.c b/plat/arm/board/fvp/fvp_common.c
+index af32ad20f..78b4b81a9 100644
+--- a/plat/arm/board/fvp/fvp_common.c
++++ b/plat/arm/board/fvp/fvp_common.c
+@@ -203,6 +203,8 @@ const mmap_region_t plat_arm_mmap[] = {
+ #ifdef IMAGE_BL31
+ const mmap_region_t plat_arm_mmap[] = {
+ 	ARM_MAP_SHARED_RAM,
++	ARM_MAP_DRAM2_FLAT,
++	ARM_MAP_DRAM2,
+ #if USE_DEBUGFS
+ 	/* Required by devfip, can be removed if devfip is not used */
+ 	V2M_MAP_FLASH0_RW,
+diff --git a/plat/arm/board/fvp/include/fvp_pas_def.h b/plat/arm/board/fvp/include/fvp_pas_def.h
+index 8ef783def..5c5f2d9b6 100644
+--- a/plat/arm/board/fvp/include/fvp_pas_def.h
++++ b/plat/arm/board/fvp/include/fvp_pas_def.h
+@@ -92,11 +92,11 @@
+ 
+ #define	ARM_PAS_KERNEL_1		GPT_MAP_REGION_GRANULE(ARM_PAS_4_BASE, \
+ 							       ARM_PAS_4_SIZE, \
+-							       GPT_GPI_NS)
++							       GPT_GPI_ANY)
+ 
+ #define ARM_PAS_PCI_MEM_1		GPT_MAP_REGION_GRANULE(PLAT_ARM_PCI_MEM_1_BASE, \
+ 							       PLAT_ARM_PCI_MEM_1_SIZE, \
+-							       GPT_GPI_NS)
++							       GPT_GPI_ANY)
+ 
+ #define	ARM_PAS_PCI_MEM_2		GPT_MAP_REGION_GRANULE(PLAT_ARM_PCI_MEM_2_BASE, \
+ 							       PLAT_ARM_PCI_MEM_2_SIZE, \
+diff --git a/plat/arm/board/fvp/include/platform_def.h b/plat/arm/board/fvp/include/platform_def.h
+index 08491255c..00dcfae70 100644
+--- a/plat/arm/board/fvp/include/platform_def.h
++++ b/plat/arm/board/fvp/include/platform_def.h
+@@ -222,7 +222,7 @@
+ #  define PLAT_SP_IMAGE_MMAP_REGIONS	31
+ #  define PLAT_SP_IMAGE_MAX_XLAT_TABLES	13
+ # else
+-#  define PLAT_ARM_MMAP_ENTRIES		9
++#  define PLAT_ARM_MMAP_ENTRIES		11
+ #  if USE_DEBUGFS
+ #   if ENABLE_RMM
+ #    define MAX_XLAT_TABLES		9
+@@ -231,7 +231,7 @@
+ #   endif
+ #  else
+ #   if ENABLE_RMM
+-#    define MAX_XLAT_TABLES		8
++#    define MAX_XLAT_TABLES		11
+ #   elif DRTM_SUPPORT
+ #    define MAX_XLAT_TABLES		8
+ #   else
+@@ -557,8 +557,8 @@ FVP_TRUSTED_SRAM_SIZE == 512
+  * Physical and virtual address space limits for MMU in AARCH64 & AARCH32 modes
+  */
+ #ifdef __aarch64__
+-#define PLAT_PHY_ADDR_SPACE_SIZE	(1ULL << 36)
+-#define PLAT_VIRT_ADDR_SPACE_SIZE	(1ULL << 36)
++#define PLAT_PHY_ADDR_SPACE_SIZE	(1ULL << 42)
++#define PLAT_VIRT_ADDR_SPACE_SIZE	(1ULL << 42)
+ #else
+ #define PLAT_PHY_ADDR_SPACE_SIZE	(1ULL << 32)
+ #define PLAT_VIRT_ADDR_SPACE_SIZE	(1ULL << 32)
+-- 
+2.43.0

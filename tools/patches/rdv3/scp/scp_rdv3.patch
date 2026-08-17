@@ -1,0 +1,322 @@
+From: Shyamanth RH <shyamanth.rh@arm.com>
+Date: Mon, 17 Aug 2026 00:00:00 +0000
+Subject: [PATCH] rdv3: defer MCP SCMI subscription until SCP is ready
+
+Keep the SCP and MCP SCMI payloads in the expected order and defer the MCP
+system-power notification subscription. This allows PSCI_SYSTEM_RESET to
+propagate reliably on RDV3.
+
+Signed-off-by: Shyamanth RH <shyamanth.rh@arm.com>
+---
+ product/neoverse-rd/rdv3/include/rsm_fw_mmap.h             | 20 +++---
+ product/neoverse-rd/rdv3/mcp_ramfw/CMakeLists.txt          |  3 +-
+ product/neoverse-rd/rdv3/mcp_ramfw/config_mcp_platform.c   | 35 ++++++++++
+ .../rdv3/mcp_ramfw/include/mcp_cfgd_timer.h                |  5 ++
+ .../rdv3/module/mcp_platform/CMakeLists.txt                |  2 +-
+ .../module/mcp_platform/include/mod_mcp_platform.h         | 15 +++++
+ .../rdv3/module/mcp_platform/src/mod_mcp_platform.c        | 75 +++++++++++++++++-----
+ 7 files changed, 126 insertions(+), 29 deletions(-)
+
+diff --git a/product/neoverse-rd/rdv3/include/rsm_fw_mmap.h b/product/neoverse-rd/rdv3/include/rsm_fw_mmap.h
+--- a/product/neoverse-rd/rdv3/include/rsm_fw_mmap.h
++++ b/product/neoverse-rd/rdv3/include/rsm_fw_mmap.h
+@@ -17,14 +17,14 @@
+ 
+ /*
+  *                                             [SCP_ATW0_SHARED_SRAM_RSM_BASE]
+- *  +---------------------------------------+  SCP_MCP_SCMI_MSG_PAYLOAD_BASE
+- *  |                                       |
+- *  |         SCP-MCP SCMI payload          |
+- *  | (SCP_MCP_SCMI_MSG_PAYLOAD_SIZE bytes) |
+- *  +---------------------------------------+  [SCP_RSE_SCMI_MSG_PAYLOAD_BASE]
++ *  +---------------------------------------+  SCP_RSE_SCMI_MSG_PAYLOAD_BASE
+  *  |                                       |
+  *  |         SCP-RSE SCMI payload          |
+  *  | (SCP_RSE_SCMI_MSG_PAYLOAD_SIZE bytes) |
++ *  +---------------------------------------+  [SCP_MCP_SCMI_MSG_PAYLOAD_BASE]
++ *  |                                       |
++ *  |         SCP-MCP SCMI payload          |
++ *  | (SCP_MCP_SCMI_MSG_PAYLOAD_SIZE bytes) |
+  *  +---------------------------------------+
+  *  |                                       |
+  *  |                                       |
+@@ -35,13 +35,13 @@
+  *                                              RSM_SHARED_SRAM_SIZE]
+  */
+ 
+-#define SCP_MCP_SCMI_MSG_PAYLOAD_OFFSET UINT32_C(0x0)
+-#define SCP_MCP_SCMI_MSG_PAYLOAD_SIZE   (128)
+-
+-#define SCP_RSE_SCMI_MSG_PAYLOAD_OFFSET \
+-    (SCP_MCP_SCMI_MSG_PAYLOAD_OFFSET + SCP_MCP_SCMI_MSG_PAYLOAD_SIZE)
++#define SCP_RSE_SCMI_MSG_PAYLOAD_OFFSET UINT32_C(0x0)
+ #define SCP_RSE_SCMI_MSG_PAYLOAD_SIZE   (128)
+ 
++#define SCP_MCP_SCMI_MSG_PAYLOAD_OFFSET \
++    (SCP_RSE_SCMI_MSG_PAYLOAD_OFFSET + SCP_RSE_SCMI_MSG_PAYLOAD_SIZE)
++#define SCP_MCP_SCMI_MSG_PAYLOAD_SIZE   (128)
++
+ // clang-format on
+ 
+ #endif /* RSM_FW_MMAP_H */
+diff --git a/product/neoverse-rd/rdv3/mcp_ramfw/CMakeLists.txt b/product/neoverse-rd/rdv3/mcp_ramfw/CMakeLists.txt
+--- a/product/neoverse-rd/rdv3/mcp_ramfw/CMakeLists.txt
++++ b/product/neoverse-rd/rdv3/mcp_ramfw/CMakeLists.txt
+@@ -51,7 +51,8 @@ target_sources(
+             "${CMAKE_CURRENT_SOURCE_DIR}/config_gtimer.c"
+             "${CMAKE_CURRENT_SOURCE_DIR}/config_mhu3.c"
+             "${CMAKE_CURRENT_SOURCE_DIR}/config_transport.c"
+-            "${CMAKE_CURRENT_SOURCE_DIR}/config_scmi")
++            "${CMAKE_CURRENT_SOURCE_DIR}/config_scmi"
++            "${CMAKE_CURRENT_SOURCE_DIR}/config_mcp_platform.c")
+ 
+ #
+ # Some of our firmware includes require CMSIS.
+diff --git a/product/neoverse-rd/rdv3/mcp_ramfw/config_mcp_platform.c b/product/neoverse-rd/rdv3/mcp_ramfw/config_mcp_platform.c
+new file mode 100644
+--- /dev/null
++++ b/product/neoverse-rd/rdv3/mcp_ramfw/config_mcp_platform.c
+@@ -0,0 +1,34 @@
++/*
++ * Arm SCP/MCP Software
++ * Copyright (c) 2024-2025, Arm Limited and Contributors. All rights reserved.
++ *
++ * SPDX-License-Identifier: BSD-3-Clause
++ *
++ * Description:
++ *     Configuration data for module 'mcp_platform'.
++ */
++
++#include "mcp_cfgd_timer.h"
++#include "mod_mcp_platform.h"
++
++#include <fwk_id.h>
++#include <fwk_module.h>
++#include <fwk_module_idx.h>
++
++#define SCP_BOOT_COMPLETE_TIMEOUT_US 100000
++
++#ifdef BUILD_HAS_SCMI_NOTIFICATIONS
++static const struct mod_mcp_platform_config platform_config_data = {
++    .timer_id = FWK_ID_SUB_ELEMENT_INIT(
++        FWK_MODULE_IDX_TIMER,
++        MCP_ALARM_ELEMENT_IDX,
++        MCP_CFGD_SCP_BOOT_COMPLETE_ALARM_IDX),
++    .scp_boot_complete_timeout_us = SCP_BOOT_COMPLETE_TIMEOUT_US,
++};
++#endif
++
++const struct fwk_module_config config_mcp_platform = {
++#ifdef BUILD_HAS_SCMI_NOTIFICATIONS
++    .data = &platform_config_data,
++#endif
++};
+diff --git a/product/neoverse-rd/rdv3/mcp_ramfw/include/mcp_cfgd_timer.h b/product/neoverse-rd/rdv3/mcp_ramfw/include/mcp_cfgd_timer.h
+--- a/product/neoverse-rd/rdv3/mcp_ramfw/include/mcp_cfgd_timer.h
++++ b/product/neoverse-rd/rdv3/mcp_ramfw/include/mcp_cfgd_timer.h
+@@ -11,8 +11,13 @@
+ #ifndef MCP_CFGD_TIMER_H
+ #define MCP_CFGD_TIMER_H
+ 
++#define MCP_ALARM_ELEMENT_IDX 0
++
+ /* Sub-element indexes (alarms) for MCP timer device */
+ enum mcp_cfgd_mod_timer_subelement_idx {
++#ifdef BUILD_HAS_SCMI_NOTIFICATIONS
++    MCP_CFGD_SCP_BOOT_COMPLETE_ALARM_IDX,
++#endif
+     MCP_CFGD_MOD_TIMER_SEIDX_ALARM_COUNT,
+ };
+ 
+diff --git a/product/neoverse-rd/rdv3/module/mcp_platform/CMakeLists.txt b/product/neoverse-rd/rdv3/module/mcp_platform/CMakeLists.txt
+--- a/product/neoverse-rd/rdv3/module/mcp_platform/CMakeLists.txt
++++ b/product/neoverse-rd/rdv3/module/mcp_platform/CMakeLists.txt
+@@ -34,4 +34,4 @@ target_sources(${SCP_MODULE_TARGET}
+                PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src/mod_mcp_platform.c")
+ 
+ target_link_libraries(${SCP_MODULE_TARGET}
+-    PRIVATE module-scmi module-scmi-sys-power)
++    PRIVATE module-timer module-scmi module-scmi-sys-power)
+diff --git a/product/neoverse-rd/rdv3/module/mcp_platform/include/mod_mcp_platform.h b/product/neoverse-rd/rdv3/module/mcp_platform/include/mod_mcp_platform.h
+--- a/product/neoverse-rd/rdv3/module/mcp_platform/include/mod_mcp_platform.h
++++ b/product/neoverse-rd/rdv3/module/mcp_platform/include/mod_mcp_platform.h
+@@ -11,6 +11,10 @@
+ #ifndef MOD_MCP_PLATFORM_H
+ #define MOD_MCP_PLATFORM_H
+ 
++#include <fwk_id.h>
++
++#include <stdint.h>
++
+ /*!
+  * \addtogroup GroupPLATFORMModule PLATFORM Product Modules
+  * @{
+@@ -32,6 +36,17 @@ enum mod_mcp_platform_api_idx {
+     /*! Number of exposed interfaces */
+     MOD_MCP_PLATFORM_API_COUNT
+ };
++
++/*!
++ * \brief MCP platform configuration data.
++ */
++struct mod_mcp_platform_config {
++    /*! Timer identifier */
++    fwk_id_t timer_id;
++
++    /*! Maximum time in microseconds to wait for SCP boot completion */
++    uint32_t scp_boot_complete_timeout_us;
++};
+ #endif
+ 
+ /*!
+diff --git a/product/neoverse-rd/rdv3/module/mcp_platform/src/mod_mcp_platform.c b/product/neoverse-rd/rdv3/module/mcp_platform/src/mod_mcp_platform.c
+--- a/product/neoverse-rd/rdv3/module/mcp_platform/src/mod_mcp_platform.c
++++ b/product/neoverse-rd/rdv3/module/mcp_platform/src/mod_mcp_platform.c
+@@ -6,11 +6,13 @@
+  */
+ 
+ #include "mcp_cfgd_scmi.h"
++#include "mcp_cfgd_timer.h"
+ #include "mod_mcp_platform.h"
+ #include "nrd_scmi.h"
+ 
+ #include <mod_scmi.h>
+ #include <mod_scmi_sys_power.h>
++#include <mod_timer.h>
+ 
+ #include <fwk_id.h>
+ #include <fwk_log.h>
+@@ -27,6 +29,12 @@
+ struct mcp_platform_ctx {
+     /*! SCMI protocol API */
+     const struct mod_scmi_from_protocol_req_api *scmi_protocol_req_api;
++
++    /*! Module configuration data */
++    const struct mod_mcp_platform_config *config;
++
++    /*! Alarm API used to defer the subscription until SCP is ready */
++    struct mod_timer_alarm_api *alarm_api;
+ };
+ 
+ /* Module context data */
+@@ -45,7 +53,15 @@ static const fwk_id_t mod_scmi_sys_power_notification_system_power_down =
+ static int mod_mcp_platform_init(
+     fwk_id_t module_id,
+     unsigned int element_count,
+-    const void *unused)
++    const void *data)
+ {
++    const struct mod_mcp_platform_config *config = data;
++
++    if ((config == NULL) || !fwk_id_type_is_valid(config->timer_id)) {
++        return FWK_E_DATA;
++    }
++
++    mcp_platform_ctx.config = config;
++
+     return FWK_SUCCESS;
+ }
+@@ -64,6 +80,17 @@ static int mod_mcp_platform_bind(fwk_id_t id, unsigned int round)
+         if (status != FWK_SUCCESS) {
+             return status;
+         }
++
++        status = fwk_module_bind(
++            mcp_platform_ctx.config->timer_id,
++            FWK_ID_API(FWK_MODULE_IDX_TIMER, MOD_TIMER_API_IDX_ALARM),
++            &mcp_platform_ctx.alarm_api);
++        if (status != FWK_SUCCESS) {
++            FWK_LOG_ERR(
++                MOD_NAME "Failed to bind to timer module: %s",
++                fwk_status_str(status));
++            return status;
++        }
+     }
+ 
+     return status;
+@@ -132,20 +159,15 @@ static int mod_mcp_platform_process_bind(
+ }
+ #endif
+ 
+-static int mod_mcp_platform_start(fwk_id_t id)
+-{
+ #ifdef BUILD_HAS_SCMI_NOTIFICATIONS
+-    /*
+-     * TODO: Need to sent the SCMI message only after SCP has completed the SCMI
+-     * initialization.
+-     */
++static void scp_boot_complete_timeout_callback(uintptr_t param)
++{
+     int status;
+-
+     fwk_id_t mcp_scmi_prot_id = FWK_ID_ELEMENT(
+         FWK_MODULE_IDX_SCMI, MCP_CFGD_MOD_SCMI_EIDX_SCP_SCMI_SEND);
+-    struct mcp_cfgd_scmi_sys_power_state_notify_payload mcp_scmi_payload;
+-
+-    mcp_scmi_payload.flags = 1;
++    struct mcp_cfgd_scmi_sys_power_state_notify_payload mcp_scmi_payload = {
++        .flags = 1,
++    };
+ 
+     status = mcp_platform_ctx.scmi_protocol_req_api->scmi_send_message(
+         MOD_SCMI_SYS_POWER_STATE_NOTIFY,
+@@ -155,12 +177,19 @@ static int mod_mcp_platform_start(fwk_id_t id)
+         (void *)&mcp_scmi_payload,
+         sizeof(mcp_scmi_payload),
+         false);
+-
+     if (status != FWK_SUCCESS) {
+-        FWK_LOG_ERR(MOD_NAME
+-                    "Failed to subscribe SCMI power state change notofication");
+-        return status;
++        FWK_LOG_ERR(
++            MOD_NAME "Failed to subscribe SCMI power state change notification");
++    } else {
++        FWK_LOG_INFO(MOD_NAME "Subscribed to SCMI power state notifications");
+     }
++}
++#endif
++
++static int mod_mcp_platform_start(fwk_id_t id)
++{
++#ifdef BUILD_HAS_SCMI_NOTIFICATIONS
++    int status;
+ 
+ #    ifdef BUILD_HAS_NOTIFICATION
+     status = fwk_notification_subscribe(
+@@ -172,6 +201,19 @@ static int mod_mcp_platform_start(fwk_id_t id)
+         return status;
+     }
+ #    endif
++
++    status = mcp_platform_ctx.alarm_api->start(
++        mcp_platform_ctx.config->timer_id,
++        mcp_platform_ctx.config->scp_boot_complete_timeout_us,
++        MOD_TIMER_ALARM_TYPE_ONCE,
++        scp_boot_complete_timeout_callback,
++        0);
++    if (status != FWK_SUCCESS) {
++        FWK_LOG_ERR(
++            MOD_NAME "Failed to configure timer alarm: %s",
++            fwk_status_str(status));
++        return status;
++    }
+ #endif
+ 
+     FWK_LOG_INFO(MOD_NAME "MCP RAM firmware initialized");
+@@ -211,6 +253,7 @@ static int mcp_platform_process_notification(
+ 
+ const struct fwk_module module_mcp_platform = {
+     .type = FWK_MODULE_TYPE_SERVICE,
++    .api_count = MOD_MCP_PLATFORM_API_COUNT,
+     .init = mod_mcp_platform_init,
+ #ifdef BUILD_HAS_SCMI_NOTIFICATIONS
+     .bind = mod_mcp_platform_bind,
+@@ -221,5 +264,3 @@ const struct fwk_module module_mcp_platform = {
+     .process_notification = mcp_platform_process_notification,
+ #endif
+ };
+-
+-const struct fwk_module_config config_mcp_platform = { 0 };
+-- 
+2.43.0
