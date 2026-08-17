@@ -74,4 +74,3 @@ run:
     bp.terminal_3:
       friendly: rmm
       logfile: fvp_log.3
-

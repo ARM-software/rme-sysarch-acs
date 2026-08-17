@@ -22,7 +22,10 @@ C_SOURCES = $(filter %.c,$(EXTRA_SOURCES))
 
 ASM_OBJS = $(ASM_SOURCES:%.S=%.o)
 C_OBJS = $(C_SOURCES:%.c=%.o)
-BL31_OBJS = $(wildcard $(BL31_OBJ_DIR)/*.o)
+# TF-A supplies a placeholder implementation when ENABLE_ACS_SMC=1. Keep the
+# TF-A build tree intact and omit that object while linking the ACS handler.
+BL31_OBJS = $(filter-out $(BL31_OBJ_DIR)/plat_acs_smc_handler.o, \
+              $(wildcard $(BL31_OBJ_DIR)/*.o))
 
 all: $(BL31_ELF) $(BL31_DUMP) $(BL31_BIN)
 
@@ -34,9 +37,6 @@ $(BL31_BIN): $(BL31_ELF)
 
 $(BL31_ELF): $(C_OBJS) $(ASM_OBJS) $(LINKERFILE)
 	$(LD) -o $@ $(LD_FLAGS) $(BL_LDFLAGS) -Map=$(BL31_MAP) --script $(LINKERFILE) $(C_OBJS) $(ASM_OBJS) $(BL31_OBJS) $(LD_PATHS)  $(LD_LIBS)
-
-$(LINKERFILE): $(BL31_LINKERFILE)
-	$(CPP_COMPILER) $(CPP_FLAGS) $(INCDIRS) $(BL_CPPFLAGS) $(LINKER_FLAGS) -Wp,-MD,$(LINKERFILE).d -MT $(LINKERFILE) -MP -o $@ $<
 
 $(ASM_OBJS): %.o : %.S
 	$(ASM_COMPILER) $(INCDIRS) $(ASM_FLAGS) -Wp,-MD,$*.d -MT $@ -MP -c $< -o $@

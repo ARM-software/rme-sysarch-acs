@@ -480,7 +480,7 @@ Note: Platform-specific means the partner must provide their implementation for 
 ACK test requires to execute the code at EL3 for GPT/MMU modification, so ensure that the following
 requirements are met.
 
-- When Non-secure EL2 executes 'smc' with SMC FID, 0xC2000060, EL3 Firmware is expected to branch to
+- When Non-secure EL2 executes 'smc' with SMC FID, 0xC7000030, EL3 Firmware is expected to branch to
   plat_arm_acs_smc_handler function which is predefined in ACK.
 - To generate binary file for EL3 code, follow the build steps in README of val_el3.
 - 2MB memory must be flat mapped in EL3-MMU with Root access PAS and GPI as ROOT/ALL_ACCESS, which
