@@ -48,6 +48,9 @@ uint32_t
 val_smmu_read_cfg(uint32_t offset, uint32_t index);
 
 uint32_t
+val_smmu_read_realm_cfg(uint32_t offset, uint32_t index, uint32_t *value);
+
+uint32_t
 val_smmu_read_dpt_base_cfg(uint64_t smmu_base, uint32_t *cfg);
 
 uint32_t

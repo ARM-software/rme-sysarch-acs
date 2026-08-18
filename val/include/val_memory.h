@@ -46,6 +46,8 @@ uint32_t val_memory_read_el3(uint64_t address, uint32_t *value);
 uint32_t val_memory_write_el3(uint64_t address, uint32_t value);
 uint32_t val_memory_map_realm_cacheable_alias(uint64_t phys,
                                               volatile uint64_t **virt_out);
+uint32_t val_memory_map_device_alias(uint64_t phys, uint32_t pas,
+                                     volatile uint64_t **virt_out);
 uint32_t val_memory_read64_el3_protected(volatile uint64_t *address,
                                          uint64_t *value_out,
                                          uint32_t *fault_seen_out);

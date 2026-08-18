@@ -46,25 +46,6 @@ typedef struct {
 } EXTERNAL_PATH_CONTEXT;
 
 static uint32_t
-seed_dcm_media(uint32_t endpoint_bdf,
-               uint64_t dpa,
-               uint64_t value)
-{
-  uint64_t observed;
-
-  /* Direct media access is used only to arrange and verify test data. */
-  if (val_cxl_exerciser_backdoor_write64(endpoint_bdf, dpa, value)
-      != ACS_STATUS_PASS)
-    return ACS_STATUS_SKIP;
-
-  if (val_cxl_exerciser_backdoor_read64(endpoint_bdf, dpa, &observed)
-      != ACS_STATUS_PASS)
-    return ACS_STATUS_FAIL;
-
-  return (observed == value) ? ACS_STATUS_PASS : ACS_STATUS_FAIL;
-}
-
-static uint32_t
 start_external_path(const VAL_CDA_DCM_WINDOW_CONTEXT *context,
                     EXTERNAL_PATH_CONTEXT *path)
 {
@@ -142,10 +123,11 @@ exercise_rule(VAL_CDA_DCM_WINDOW_CONTEXT *context)
   uint32_t realm_assigned;
   uint32_t gpt_realm;
   uint32_t fault_seen;
+  uint32_t observed_high;
+  uint32_t observed_low;
   uint32_t result;
   uint32_t status;
   uint64_t test_hpa;
-  uint64_t test_dpa;
   uint64_t observed;
 
   if (context == NULL)
@@ -168,12 +150,8 @@ exercise_rule(VAL_CDA_DCM_WINDOW_CONTEXT *context)
   if (status != ACS_STATUS_PASS)
     return status;
 
-  status = val_cxl_hpa_to_dpa(context->endpoint_index, test_hpa, &test_dpa);
-  if (status != ACS_STATUS_PASS)
-    return ACS_STATUS_SKIP;
-
   realm_alias = NULL;
-  if (val_memory_map_realm_cacheable_alias(test_hpa, &realm_alias)
+  if (val_memory_map_device_alias(test_hpa, REALM_PAS, &realm_alias)
       != ACS_STATUS_PASS)
     return ACS_STATUS_ERR;
 
@@ -211,14 +189,11 @@ exercise_rule(VAL_CDA_DCM_WINDOW_CONTEXT *context)
   }
   realm_assigned = 1u;
 
-  status = seed_dcm_media(context->endpoint_bdf, test_dpa, POSITIVE_VALUE);
-  if (status != ACS_STATUS_PASS)
-  {
-    result = status;
-    goto cleanup;
-  }
-
-  /* Positive control: a correctly associated external Realm read succeeds. */
+  /*
+   * Positive control: initialize and read DCM through the permitted external
+   * Realm HPA path. This exercises the same host decoder, protection and
+   * device path that the rule governs.
+   */
   status = start_external_path(context, &path);
   if (status != ACS_STATUS_PASS)
   {
@@ -226,16 +201,25 @@ exercise_rule(VAL_CDA_DCM_WINDOW_CONTEXT *context)
     goto cleanup;
   }
 
-  fault_seen = 0u;
-  observed = 0u;
-  status = val_memory_read64_el3_protected(realm_alias,
-                                           &observed,
-                                           &fault_seen);
-  if ((status != ACS_STATUS_PASS) || (fault_seen != 0u) ||
-      (observed != POSITIVE_VALUE))
+  if ((val_memory_write_el3((uint64_t)realm_alias,
+                            (uint32_t)POSITIVE_VALUE) != ACS_STATUS_PASS) ||
+      (val_memory_write_el3((uint64_t)realm_alias + sizeof(uint32_t),
+                            (uint32_t)(POSITIVE_VALUE >> 32)) != ACS_STATUS_PASS))
+  {
+    result = ACS_STATUS_ERR;
+    goto cleanup;
+  }
+
+  observed_low = 0u;
+  observed_high = 0u;
+  status = val_memory_read_el3((uint64_t)realm_alias, &observed_low);
+  if (status == ACS_STATUS_PASS)
+    status = val_memory_read_el3((uint64_t)realm_alias + sizeof(uint32_t),
+                                 &observed_high);
+  observed = ((uint64_t)observed_high << 32) | observed_low;
+  if ((status != ACS_STATUS_PASS) || (observed != POSITIVE_VALUE))
   {
     val_print(ACS_PRINT_ERR, " RVHZCR: read status %u", status);
-    val_print(ACS_PRINT_ERR, " RVHZCR: fault seen %u", fault_seen);
     val_print(ACS_PRINT_ERR, " RVHZCR: observed 0x%llx", observed);
     val_print(ACS_PRINT_ERR, " RVHZCR: expected 0x%llx", POSITIVE_VALUE);
     val_print(ACS_PRINT_ERR,
@@ -244,8 +228,15 @@ exercise_rule(VAL_CDA_DCM_WINDOW_CONTEXT *context)
     goto cleanup;
   }
 
-  /* Remove any cached copy before changing the DCM PAS association. */
-  if (val_data_cache_ops_by_pa_el3(test_hpa, REALM_PAS) != 0u)
+  /*
+   * Install the protected value while this HPA is still a permitted Realm
+   * location. The device-memory alias sends these writes directly to the
+   * target and does not retain a host cache copy across the state change.
+   */
+  if ((val_memory_write_el3((uint64_t)realm_alias,
+                            (uint32_t)PROTECTED_VALUE) != ACS_STATUS_PASS) ||
+      (val_memory_write_el3((uint64_t)realm_alias + sizeof(uint32_t),
+                            (uint32_t)(PROTECTED_VALUE >> 32)) != ACS_STATUS_PASS))
   {
     result = ACS_STATUS_ERR;
     goto cleanup;
@@ -262,13 +253,6 @@ exercise_rule(VAL_CDA_DCM_WINDOW_CONTEXT *context)
   if (status != ACS_STATUS_PASS)
     goto cleanup;
   realm_assigned = 0u;
-
-  status = seed_dcm_media(context->endpoint_bdf, test_dpa, PROTECTED_VALUE);
-  if (status != ACS_STATUS_PASS)
-  {
-    result = status;
-    goto cleanup;
-  }
 
   status = start_external_path(context, &path);
   if (status != ACS_STATUS_PASS)

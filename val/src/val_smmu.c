@@ -23,16 +23,55 @@
 #include "include/val_el32.h"
 #include "include/val_memory.h"
 
-/*
- * The VAL SMMU base passed to these helpers is the start of the SMMU register
- * frame. Root Page 0 registers are addressed directly from that base.
- */
-#define SMMU_R_PAGE_0_OFFSET       0u
-#define SMMU_R_CR0_OFFSET          (SMMU_R_PAGE_0_OFFSET + 0x020u)
-#define SMMU_R_CR0ACK_OFFSET       (SMMU_R_PAGE_0_OFFSET + 0x024u)
-#define SMMU_R_DPT_BASE_CFG_OFFSET (SMMU_R_PAGE_0_OFFSET + 0x208u)
+#define SMMU_ROOT_IDR0_OFFSET          0u
+#define SMMU_ROOT_IDR0_REALM_IMPL_MASK (1u << 0)
+#define SMMU_ROOT_IDR0_BA_REALM_SHIFT  22u
+#define SMMU_ROOT_IDR0_BA_REALM_MASK   0x3FFu
+#define SMMU_REALM_BASE_OFFSET         0x20000u
+#define SMMU_REALM_PAGE_SIZE           0x10000u
+#define SMMU_R_CR0_OFFSET              0x020u
+#define SMMU_R_CR0ACK_OFFSET           0x024u
+#define SMMU_R_DPT_BASE_CFG_OFFSET     0x208u
 #define SMMU_R_DPT_WALK_EN_MASK    (1u << 10)
 #define SMMU_DPT_CFG_SYNC_RETRIES  10000u
+
+/**
+  @brief Resolve the base address of SMMU Realm register page 0.
+
+  @param smmu_base       Base of the complete SMMU register frame
+  @param realm_page_base Receives the Realm page 0 base address
+
+  @return ACS_STATUS_PASS/ERR
+**/
+static uint32_t
+val_smmu_get_realm_page0_base(uint64_t smmu_base,
+                              uint64_t *realm_page_base)
+{
+  uint64_t root_page_offset;
+  uint32_t ba_realm;
+  uint32_t root_idr0;
+
+  if ((smmu_base == 0u) || (realm_page_base == NULL))
+    return ACS_STATUS_ERR;
+
+  root_page_offset = val_get_smmu_root_reg_offset();
+  if ((shared_data != NULL) && (shared_data->cfg_smmu_root_reg_offset != 0u))
+    root_page_offset = shared_data->cfg_smmu_root_reg_offset;
+
+  if (val_memory_read_el3(smmu_base + root_page_offset + SMMU_ROOT_IDR0_OFFSET,
+                          &root_idr0) != ACS_STATUS_PASS)
+    return ACS_STATUS_ERR;
+
+  if ((root_idr0 & SMMU_ROOT_IDR0_REALM_IMPL_MASK) == 0u)
+    return ACS_STATUS_ERR;
+
+  ba_realm = (root_idr0 >> SMMU_ROOT_IDR0_BA_REALM_SHIFT) &
+             SMMU_ROOT_IDR0_BA_REALM_MASK;
+  *realm_page_base = smmu_base + SMMU_REALM_BASE_OFFSET +
+                     ((uint64_t)ba_realm * SMMU_REALM_PAGE_SIZE);
+
+  return ACS_STATUS_PASS;
+}
 
 /**
   @brief  This API reads 32-bit data from a register of an SMMU controller
@@ -56,6 +95,32 @@ val_smmu_read_cfg(uint32_t offset, uint32_t index)
 }
 
 /**
+  @brief Read a 32-bit register from SMMU Realm register page 0.
+
+  @param offset  Realm page-relative register offset
+  @param index   SMMU controller index
+  @param value   Receives the register value
+
+  @return ACS_STATUS_PASS/ERR
+**/
+uint32_t
+val_smmu_read_realm_cfg(uint32_t offset, uint32_t index, uint32_t *value)
+{
+  uint64_t realm_page_base;
+  uint64_t smmu_base;
+
+  if (value == NULL)
+    return ACS_STATUS_ERR;
+
+  smmu_base = val_smmu_get_info(SMMU_CTRL_BASE, index);
+  if (val_smmu_get_realm_page0_base(smmu_base, &realm_page_base)
+      != ACS_STATUS_PASS)
+    return ACS_STATUS_ERR;
+
+  return val_memory_read_el3(realm_page_base + offset, value);
+}
+
+/**
   @brief  Read SMMU_R_DPT_BASE_CFG using EL3 access.
   @param  smmu_base  SMMU controller base address
   @param  cfg        On return, DPT base config value
@@ -64,10 +129,16 @@ val_smmu_read_cfg(uint32_t offset, uint32_t index)
 uint32_t
 val_smmu_read_dpt_base_cfg(uint64_t smmu_base, uint32_t *cfg)
 {
+  uint64_t realm_page_base;
+
   if ((smmu_base == 0u) || (cfg == NULL))
     return ACS_STATUS_ERR;
 
-  return val_memory_read_el3(smmu_base + SMMU_R_DPT_BASE_CFG_OFFSET, cfg);
+  if (val_smmu_get_realm_page0_base(smmu_base, &realm_page_base)
+      != ACS_STATUS_PASS)
+    return ACS_STATUS_ERR;
+
+  return val_memory_read_el3(realm_page_base + SMMU_R_DPT_BASE_CFG_OFFSET, cfg);
 }
 
 /**
@@ -79,17 +150,21 @@ val_smmu_read_dpt_base_cfg(uint64_t smmu_base, uint32_t *cfg)
 uint32_t
 val_smmu_write_root_cr0_sync(uint64_t smmu_base, uint32_t value)
 {
+  uint64_t realm_page_base;
   uint32_t ack;
 
-  if (smmu_base == 0u)
+  if (val_smmu_get_realm_page0_base(smmu_base, &realm_page_base)
+      != ACS_STATUS_PASS)
     return ACS_STATUS_ERR;
 
-  if (val_memory_write_el3(smmu_base + SMMU_R_CR0_OFFSET, value) != ACS_STATUS_PASS)
+  if (val_memory_write_el3(realm_page_base + SMMU_R_CR0_OFFSET, value)
+      != ACS_STATUS_PASS)
     return ACS_STATUS_ERR;
 
   for (uint32_t retry = 0u; retry < SMMU_DPT_CFG_SYNC_RETRIES; ++retry)
   {
-    if (val_memory_read_el3(smmu_base + SMMU_R_CR0ACK_OFFSET, &ack) != ACS_STATUS_PASS)
+    if (val_memory_read_el3(realm_page_base + SMMU_R_CR0ACK_OFFSET, &ack)
+        != ACS_STATUS_PASS)
       return ACS_STATUS_ERR;
 
     if (ack == value)
@@ -109,13 +184,16 @@ val_smmu_write_root_cr0_sync(uint64_t smmu_base, uint32_t value)
 uint32_t
 val_smmu_write_dpt_base_cfg(uint64_t smmu_base, uint32_t cfg)
 {
+  uint64_t realm_page_base;
   uint32_t cr0;
   uint32_t readback;
 
-  if (smmu_base == 0u)
+  if (val_smmu_get_realm_page0_base(smmu_base, &realm_page_base)
+      != ACS_STATUS_PASS)
     return ACS_STATUS_ERR;
 
-  if (val_memory_read_el3(smmu_base + SMMU_R_CR0_OFFSET, &cr0) != ACS_STATUS_PASS)
+  if (val_memory_read_el3(realm_page_base + SMMU_R_CR0_OFFSET, &cr0)
+      != ACS_STATUS_PASS)
     return ACS_STATUS_ERR;
 
   if ((cr0 & SMMU_R_DPT_WALK_EN_MASK) != 0u)
@@ -127,11 +205,11 @@ val_smmu_write_dpt_base_cfg(uint64_t smmu_base, uint32_t cfg)
     }
   }
 
-  if (val_memory_write_el3(smmu_base + SMMU_R_DPT_BASE_CFG_OFFSET, cfg)
+  if (val_memory_write_el3(realm_page_base + SMMU_R_DPT_BASE_CFG_OFFSET, cfg)
       != ACS_STATUS_PASS)
     return ACS_STATUS_ERR;
 
-  if (val_memory_read_el3(smmu_base + SMMU_R_DPT_BASE_CFG_OFFSET, &readback)
+  if (val_memory_read_el3(realm_page_base + SMMU_R_DPT_BASE_CFG_OFFSET, &readback)
       != ACS_STATUS_PASS)
     return ACS_STATUS_ERR;
 

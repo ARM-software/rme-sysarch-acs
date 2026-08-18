@@ -247,6 +247,17 @@ uint32_t pal_exerciser_set_param(EXERCISER_PARAM_TYPE Type, uint64_t Value1, uin
         pal_mmio_write(Base + SEC_SID_CTL, (uint32_t)(Value1 & 0x3u));
         return 0;
 
+      case EXERCISER_ATS_REQUEST_ATTRIBUTES:
+        if ((Value1 & ~(ATS_REQUEST_ATTR_T | ATS_REQUEST_ATTR_XT)) != 0u)
+            return 1;
+        Data = pal_mmio_read(Base + ATSCTL) & ~ATS_REQUEST_ATTR_REG_MASK;
+        if ((Value1 & ATS_REQUEST_ATTR_T) != 0u)
+            Data |= ATS_REQUEST_T_MASK;
+        if ((Value1 & ATS_REQUEST_ATTR_XT) != 0u)
+            Data |= ATS_REQUEST_XT_MASK;
+        pal_mmio_write(Base + ATSCTL, Data);
+        return 0;
+
       default:
           return 1;
   }
@@ -361,6 +372,8 @@ uint32_t pal_exerciser_get_param(EXERCISER_PARAM_TYPE Type, uint64_t *Value1, ui
           return pal_mmio_read(Base + MSICTL) | MASK_BIT;
       case ATS_RES_ATTRIBUTES:
           *Value1 = pal_mmio_read64(Base + ATS_ADDR);
+          if (Value2 != NULL)
+              *Value2 = pal_mmio_read(Base + ATS_REPLY);
           return 0;
       case EXERCISER_CXL_CMD_DATA0:
           *Value1 = (uint64_t)pal_mmio_read(Base + CXL_CMD_DATA0_LO);
@@ -477,11 +490,15 @@ uint32_t pal_exerciser_ops(EXERCISER_OPS Ops, uint64_t Param, uint32_t Bdf)
 
     case ATS_TXN_REQ:
         pal_mmio_write(Base + DMA_BUS_ADDR, Param);
-        pal_mmio_write(Base + ATSCTL, ATS_TRIGGER);
+        pal_mmio_write(Base + ATSCTL,
+                       (pal_mmio_read(Base + ATSCTL) & ATS_REQUEST_ATTR_REG_MASK) |
+                       ATS_TRIGGER);
         return !(pal_mmio_read(Base + ATSCTL) & ATS_STATUS);
 
     case ATS_INV_CACHE:
-        pal_mmio_write(Base + ATSCTL, ATS_INV);
+        pal_mmio_write(Base + ATSCTL,
+                       (pal_mmio_read(Base + ATSCTL) & ATS_REQUEST_ATTR_REG_MASK) |
+                       ATS_INV);
         return 0;
 
     case CXL_CMD_START:

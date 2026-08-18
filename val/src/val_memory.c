@@ -390,6 +390,47 @@ val_memory_map_realm_cacheable_alias(uint64_t phys, volatile uint64_t **virt_out
 }
 
 /**
+  @brief  Map a physical address as a device-memory alias for EL3 access.
+
+  @param  phys      Physical address to map.
+  @param  pas       PAS_ATTR value to use for the EL3 mapping.
+  @param  virt_out  Output pointer that receives the virtual alias.
+
+  @return ACS_STATUS_PASS on success, ACS_STATUS_ERR on failure.
+**/
+uint32_t
+val_memory_map_device_alias(uint64_t phys, uint32_t pas,
+                            volatile uint64_t **virt_out)
+{
+  uint64_t page_size;
+  uint64_t va;
+  uint32_t attr;
+
+  if ((phys == 0u) || (virt_out == NULL))
+    return ACS_STATUS_ERR;
+
+  page_size = (uint64_t)val_memory_page_size();
+  if (page_size == 0u)
+    return ACS_STATUS_ERR;
+
+  va = val_get_free_va(page_size);
+  if (va == 0u)
+    return ACS_STATUS_ERR;
+
+  attr = LOWER_ATTRS(PGT_ENTRY_ACCESS |
+                     SHAREABLE_ATTR(OUTER_SHAREABLE) |
+                     GET_ATTR_INDEX(DEV_MEM_nGnRnE) |
+                     PGT_ENTRY_AP_RW |
+                     PAS_ATTR(pas));
+
+  if (val_add_mmu_entry_el3(va, phys, attr))
+    return ACS_STATUS_ERR;
+
+  *virt_out = (volatile uint64_t *)va;
+  return ACS_STATUS_PASS;
+}
+
+/**
   @brief  Perform a protected EL3 64-bit read that can recover from a fault.
 
   @param  address         Address to read.

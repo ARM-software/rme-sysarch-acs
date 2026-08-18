@@ -361,6 +361,65 @@ val_exerciser_ops_by_bdf(EXERCISER_OPS ops, uint64_t param, uint32_t bdf)
     return pal_exerciser_ops(ops, param, bdf);
 }
 
+/**
+  @brief Issue an ATS translation request and return the complete response.
+
+  @param bdf      Exerciser BDF
+  @param iova     Address to translate
+  @param length   Requested access length
+  @param request_attributes  ATS T/XT request attributes
+  @param result   Translation completion information
+
+  @return ACS_STATUS_PASS when the request was issued and its response read,
+          or ACS_STATUS_ERR when the exerciser interface could not be used.
+**/
+uint32_t
+val_exerciser_ats_translate_by_bdf(uint32_t bdf,
+                                   uint64_t iova,
+                                   uint32_t length,
+                                   uint32_t request_attributes,
+                                   VAL_ATS_TRANSLATION_RESULT *result)
+{
+    uint64_t response_attributes;
+    uint32_t request_status;
+
+    if ((iova == 0u) || (length == 0u) || (result == NULL) ||
+        ((request_attributes & ~VAL_ATS_REQUEST_ATTR_MASK) != 0u))
+        return ACS_STATUS_ERR;
+
+    val_memory_set(result, sizeof(*result), 0);
+
+    if (val_exerciser_set_param_by_bdf(EXERCISER_ATS_REQUEST_ATTRIBUTES,
+                                       request_attributes,
+                                       0u,
+                                       bdf) != 0u)
+        return ACS_STATUS_ERR;
+
+    if (val_exerciser_set_param_by_bdf(DMA_ATTRIBUTES,
+                                       iova,
+                                       length,
+                                       bdf) != 0u)
+        return ACS_STATUS_ERR;
+
+    (void)val_exerciser_ops_by_bdf(ATS_INV_CACHE, 0u, bdf);
+
+    request_status = val_exerciser_ops_by_bdf(ATS_TXN_REQ, iova, bdf);
+
+    response_attributes = 0u;
+    if (val_exerciser_get_param_by_bdf(ATS_RES_ATTRIBUTES,
+                                       &result->translated_pa,
+                                       &response_attributes,
+                                       bdf) != 0u)
+        return ACS_STATUS_ERR;
+
+    result->response_attributes = (uint32_t)response_attributes;
+    result->completion_success = (request_status == 0u) ? 1u : 0u;
+    result->te =
+        ((result->response_attributes & VAL_ATS_TE_OR_GLOBAL_MASK) != 0u) ? 1u : 0u;
+
+    return ACS_STATUS_PASS;
+}
+
 uint32_t
 val_cxl_exerciser_execute_cmd_with_ctrl(uint32_t bdf, uint32_t opcode,
                                         uint32_t ctrl,

@@ -1342,6 +1342,28 @@ Testcase checklist
 
   * -
 
+      `cda_ryjvjr_ats_te_pas <../test_pool/cda/cda_ryjvjr_ats_te_pas.c>`_
+
+    -
+
+      RYJVJR: An SMMU in an RME-CDA system supports populating the TE Memory Attribute bit in ATS Translation Completions with the PA space resolved by translation.
+
+    -
+
+      1. Select a CHI-C2C-capable CXL root port that exposes the RME-CDA DVSEC and locate a downstream CHI-C2C exerciser endpoint. Skip the test if no such endpoint is available.
+      2. Locate the SMMUv3 instance and StreamID associated with the endpoint. Require SMMU_R_IDR0.ATS and SMMU_R_IDR3.XT to be implemented.
+      3. Enable endpoint ATS, enable the SMMU, and allocate separate Non-secure and Realm output pages with distinct IOVAs.
+      4. Install a Realm stage-2 translation context mapping the first IOVA to the Non-secure page and the second IOVA to the Realm page.
+      5. Configure the Realm DPT region containing the first output PA with AC=0b01 so that it resolves to the Non-secure PA space. Grant read and write access and invalidate cached DPT state.
+      6. Establish the endpoint TDI in RUN state and establish the CXL IDE link.
+      7. Issue an unconstrained Realm-tagged ATS Translation Request for the first IOVA. Require a successful completion with non-zero permissions and the expected translated PA, and verify that TE is clear because translation resolved to the Non-secure PA space.
+      8. Reprogram the DPT region containing the second output PA with AC=0b00 so that it resolves to the Realm PA space, invalidate the DPT and exerciser ATC, and issue a request with the same Realm attributes for the second IOVA. Require a successful completion with non-zero permissions and the expected translated PA, and verify that TE is set. Reprogramming between requests keeps the test independent of the implemented DPT block granularity.
+      9. Stop the TDI session and restore the IDE, ATS, SMMU, DPT, GPT, and allocated-memory state.
+
+      Note: The request attributes are identical for both translations and do not constrain the output PA space. ATS Translation Completion bit[6] carries the SMMU-resolved TE value for a Realm stream. The same bit position carries the PCIe Global attribute in contexts where TE is not applicable.
+
+  * -
+
       `cxl_rgtvgz_tdisp_enable_link_gate <../test_pool/cxl/cxl_rgtvgz_tdisp_enable_link_gate.c>`_
 
     -

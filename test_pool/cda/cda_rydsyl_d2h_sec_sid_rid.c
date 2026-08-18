@@ -910,13 +910,13 @@ check_implicit_sec_sid_and_rid(uint32_t endpoint_bdf,
   smmu_rlm_mapped = 1u;
 
   /*
-   * Use translated requests and the endpoint's own requester identity.  The
-   * test deliberately does not override RID from the exerciser; the host port
-   * RID window was programmed to admit only the selected TDI Requester ID.
+   * Use a normal untranslated request and the endpoint's own requester
+   * identity. The host port RID window admits only the selected TDI, while the
+   * SMMU context selected by the TDI security state performs translation.
    */
   if (val_exerciser_set_param_by_bdf(CFG_TXN_ATTRIBUTES,
                                      TXN_ADDR_TYPE,
-                                     AT_TRANSLATED,
+                                     AT_UNTRANSLATED,
                                      endpoint_bdf))
   {
     result = ACS_STATUS_SKIP;
@@ -1188,7 +1188,7 @@ check_non_run_realm_dma_rejected(uint32_t endpoint_bdf,
 
   if (val_exerciser_set_param_by_bdf(CFG_TXN_ATTRIBUTES,
                                      TXN_ADDR_TYPE,
-                                     AT_TRANSLATED,
+                                     AT_UNTRANSLATED,
                                      endpoint_bdf))
   {
     result = ACS_STATUS_SKIP;

@@ -55,6 +55,7 @@
 #define PASID_VAL     0x020
 #define ATSCTL        0x024
 #define ATS_ADDR      0x028
+#define ATS_REPLY     0x038
 #define TXN_TRACE     0x40
 #define TXN_CTRL_BASE 0x44
 #define SEC_SID_CTL   0x48
@@ -128,6 +129,11 @@
 #define ATS_TRIGGER    1
 #define ATS_INV        (1 << 5)
 #define ATS_STATUS     (1ul << 7)
+#define ATS_REQUEST_ATTR_T       (1u << 0)
+#define ATS_REQUEST_ATTR_XT      (1u << 1)
+#define ATS_REQUEST_T_MASK       (1u << 10)
+#define ATS_REQUEST_XT_MASK      (1u << 11)
+#define ATS_REQUEST_ATTR_REG_MASK (ATS_REQUEST_T_MASK | ATS_REQUEST_XT_MASK)
 #define TXN_INVALID    0xFFFFFFFF
 #define TXN_START      1
 #define TXN_STOP       0
@@ -168,7 +174,8 @@ typedef enum {
     EXERCISER_CXL_CMD_ADDR = 0x12,
     EXERCISER_CXL_CMD_DATA0 = 0x13,
     EXERCISER_CXL_CMD_CTRL = 0x14,
-    EXERCISER_SEC_SID = 0x15
+    EXERCISER_SEC_SID = 0x15,
+    EXERCISER_ATS_REQUEST_ATTRIBUTES = 0x16
 } EXERCISER_PARAM_TYPE;
 
 typedef enum {
