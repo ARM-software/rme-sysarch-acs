@@ -42,9 +42,6 @@
 #define RMECDA_CTL1_LINK_LOCK_MASK  (1u << 1)
 #define PGT_STAGE2_RME_NS_MASK      (1ull << 55)
 
-/* DPT AC=01 selects Non-secure output PA space for a Realm DPT entry. */
-#define DPT_RDWR_NS_ACCESS_ENTRY   (DPT_RDWR_ACCESS_ENTRY | (1u << 2))
-
 #if ENABLE_SPDM
 
 typedef struct {

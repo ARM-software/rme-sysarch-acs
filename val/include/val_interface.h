@@ -137,7 +137,7 @@ uint32_t val_rlm_smmu_init(uint64_t num_smmu, uint64_t *smmu_base_arr);
 uint32_t val_smmu_rlm_map_el3(smmu_master_attributes_t *smmu_attr, pgt_descriptor_t *pgt_attr);
 uint32_t val_smmu_gpt_invalidate_el3(smmu_master_attributes_t *smmu_attr);
 void val_register_create_info_table(uint64_t *register_info_table);
-uint32_t val_dpt_add_entry(uint64_t translated_addr, uint32_t smmu_index);
+uint32_t val_dpt_add_entry(uint64_t translated_addr, uint64_t smmu_index_and_access);
 uint32_t val_dpt_invalidate_all(uint64_t smmu_index);
 uint32_t val_rlm_pgt_create(memory_region_descriptor_t *mem_desc, pgt_descriptor_t *pgt_desc);
 uint32_t val_rlm_pgt_destroy(pgt_descriptor_t *pgt_desc);

@@ -1364,6 +1364,28 @@ Testcase checklist
 
   * -
 
+      `cda_rshsxk_d2h_gpc_dpt <../test_pool/cda/cda_rshsxk_d2h_gpc_dpt.c>`_
+
+    -
+
+      RSHSXK: For a device-to-host request that specifies a PA and is sent on the CHI REQ channel or a non-coherent channel, the host enforces the GPC and, when SEC_SID is Realm, the DPT. The host is permitted to omit these checks when the PA is within the DCM range of the requesting device.
+
+    -
+
+      1. Select a CHI-C2C-capable CXL root port that exposes the RME-CDA DVSEC and locate a downstream CHI-C2C exerciser endpoint. Skip the test if no such endpoint is available.
+      2. Save the root-port RME-CDA controls, program the permitted RID range for the endpoint, enable TDISP enforcement, and set LINK_STR_LOCK.
+      3. Transition the TDI to RUN and establish the CXL IDE stream.
+      4. Reserve adjacent source and destination pages from ACS host memory and verify that their PA range does not overlap any advertised CFMWS window. This prevents the optional DCM-range exemption from applying. Configure stage-1 and Realm stage-2 identity mappings for the endpoint StreamID, mark both output pages as Realm in GPT, grant both pages read/write access in DPT, and invalidate cached SMMU policy state.
+      5. Configure the endpoint to issue AT=Translated requests that specify the host-buffer PAs and use its natural Requester ID. Initialize the host source and destination with different patterns, perform DMA to the device from the source, then perform device-to-host DMA to the destination without overriding SEC_SID. Program AT=Translated for every DMA because the transaction attribute applies to one request.
+      6. Positive GPC control: with matching Realm GPT state and read/write DPT permissions, require the DMA operations to complete and require the source and destination host buffers to match.
+      7. GPC negative check: reset the destination to a sentinel pattern, change only the destination GPT entry to Non-secure, invalidate SMMU GPT state, and repeat the device-to-host DMA. Restore the Realm GPT entry before observation and require the complete destination sentinel to remain unchanged.
+      8. DPT check: configure a valid Realm SEC_SID and reinitialize both host buffers. Set their GPT entries to match the Non-secure PAS of the translated requests and program read/write DPT entries whose AC field selects Non-secure output PA space, then perform a new source-to-device and device-to-destination DMA round trip. Restore the Realm GPT entries before observation and require the buffers to match. For the negative check, reset the destination sentinel, restore its matching Non-secure GPT entry, change only its DPT entry to no-access, invalidate policy state, and repeat the D2H DMA. Restore GPT and DPT permission before observation and require the complete destination sentinel to remain unchanged.
+      9. Disable IDE, stop and close the TDISP session, restore the permitted RID range and RMECDA controls, restore DPT and GPT state, destroy the SMMU mappings, and disable the endpoint SMMU context.
+
+      Note: This CDA scenario is applicable only to CHI-C2C-capable devices. It uses ACS-owned HCM pages rather than DCM, so an accepted request cannot be explained by the rule's optional DCM-range check exemption.
+
+  * -
+
       `cxl_rgtvgz_tdisp_enable_link_gate <../test_pool/cxl/cxl_rgtvgz_tdisp_enable_link_gate.c>`_
 
     -
