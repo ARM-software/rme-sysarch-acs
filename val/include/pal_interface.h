@@ -640,6 +640,7 @@ uint64_t pal_time_delay_ms(uint64_t time_ms);
 void pal_mem_allocate_shared(uint32_t num_pe, uint32_t sizeofentry);
 void pal_mem_free_shared(void);
 uint64_t pal_mem_get_shared_addr(void);
+uint32_t pal_exit_acs(void);
 
 uint8_t pal_mmio_read8(uint64_t addr);
 uint16_t pal_mmio_read16(uint64_t addr);

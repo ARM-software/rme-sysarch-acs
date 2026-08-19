@@ -77,6 +77,7 @@ void UserCallSMC(uint64_t smc_fid, uint64_t service, uint64_t arg0, uint64_t arg
 uint32_t val_configure_acs(void);
 void val_allocate_shared_mem(void);
 void val_free_shared_mem(void);
+uint32_t val_exit_acs(void);
 void val_print_raw(uint64_t uart_address, uint32_t level, char8_t *string, uint64_t data);
 void val_log_context(uint32_t level, char8_t *string, uint64_t data, const char *file, int line);
 void val_set_test_data(uint32_t index, uint64_t addr, uint64_t test_data);

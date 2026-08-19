@@ -349,7 +349,5 @@ print_test_status:
   val_print(ACS_PRINT_ALWAYS, "\n********* RME tests complete. Reset the system *********\n\n", 0);
 
   val_pe_context_restore(AA64WriteSp(g_stack_pointer));
-  while (1);
-
-  return 0;
+  return val_exit_acs();
 }

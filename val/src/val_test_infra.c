@@ -928,6 +928,16 @@ void val_free_shared_mem(void)
 }
 
 /**
+  @brief  Exit ACS execution through the platform-specific termination hook.
+
+  @return Platform exit status.
+**/
+uint32_t val_exit_acs(void)
+{
+  return pal_exit_acs();
+}
+
+/**
   @brief  This function sets the address of the test entry and the test
           argument to the shared address space which is picked up by the
           secondary PE identified by index.
