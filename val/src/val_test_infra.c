@@ -655,7 +655,7 @@ void val_log_context(uint32_t level, char8_t *string, uint64_t data, const char 
     /* Print file name and line number for ERR and WARN */
     if (level == ACS_PRINT_ERR || level == ACS_PRINT_WARN)
     {
-      pal_print("[FILE: %a]", (uint64_t)file);
+      pal_print("  [FILE: %s]", (uint64_t)file);
       pal_print("  [LINE: %d]", line);
     }
   }
@@ -1428,7 +1428,7 @@ uint32_t val_configure_acs(void)
    **/
   if (val_pcie_create_device_bdf_table())
   {
-    val_print(ACS_PRINT_WARN, " Create BDF Table Failed \n", 0);
+    val_print(ACS_PRINT_WARN, " Create BDF Table Failed", 0);
   }
 
   /* Print CXL support summary once after PCIe BDF table is built */

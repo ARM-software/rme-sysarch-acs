@@ -97,7 +97,7 @@ payload(void)
 
     /* Create the list of valid Pcie Device Functions */
     if (val_pcie_create_device_bdf_table()) {
-        val_print(ACS_PRINT_WARN, " Create BDF Table Failed...", 0);
+        val_print(ACS_PRINT_WARN, "Create BDF Table Failed ", 0);
         val_set_status(index, "SKIP", 2);
         return;
     }

@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2023-2025, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2023-2026, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -75,7 +75,7 @@ reset_done:
 
   smmu_index = 0;
   if (val_smmu_get_info(SMMU_CTRL_ARCH_MAJOR_REV, smmu_index) == 2) {
-      val_print(ACS_PRINT_WARN, "Not valid for SMMU v2           ", 0);
+      val_print(ACS_PRINT_WARN, "Not valid for SMMU v2", 0);
       val_set_status(index, "SKIP", 02);
       return;
   }
@@ -121,4 +121,3 @@ legacy_tz_enable_before_resetv_entry(uint32_t num_pe)
 
   return  status;
 }
-

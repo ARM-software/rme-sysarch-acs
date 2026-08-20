@@ -3003,11 +3003,11 @@ val_cxl_create_info_table(uint64_t *cxl_info_table)
   uint32_t num_entries = g_cxl_info_table->num_entries;
 
   val_print(ACS_PRINT_ALWAYS,
-            " CXL_INFO: Number of CXL host bridges : %4u\n",
+            "\n CXL_INFO: Number of CXL host bridges : %4u",
             num_entries);
 
   if (num_entries == 0) {
-    val_print(ACS_PRINT_WARN, " CXL_INFO: No CXL host bridges found\n", 0);
+    val_print(ACS_PRINT_WARN, " CXL_INFO: No CXL host bridges found ", 0);
     return;
   }
 

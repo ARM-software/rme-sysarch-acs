@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022-2023, 2025, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2023, 2025-2026, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -281,7 +281,7 @@ val_iovirt_create_info_table(uint64_t *iovirt_info_table)
 
   g_num_smmus = val_iovirt_get_smmu_info(SMMU_NUM_CTRL, 0);
   val_print(ACS_PRINT_ALWAYS,
-            "\n SMMU_INFO: Number of SMMU CTRL       :    %x ", g_num_smmus);
+            "\n SMMU_INFO: Number of SMMU CTRL       :    %x", g_num_smmus);
 }
 
 void

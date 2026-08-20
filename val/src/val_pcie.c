@@ -440,7 +440,7 @@ val_pcie_create_info_table(uint64_t *pcie_info_table)
   pal_pcie_create_info_table(g_pcie_info_table);
 
   val_print(ACS_PRINT_ALWAYS,
-        " PCIE_INFO: Number of ECAM regions    :    %lx",
+        "\n PCIE_INFO: Number of ECAM regions    :    %lx",
         val_pcie_get_info(PCIE_INFO_NUM_ECAM, 0));
 
   val_pcie_enumerate();
@@ -525,7 +525,7 @@ val_pcie_create_device_bdf_table()
   num_ecam = val_pcie_get_info(PCIE_INFO_NUM_ECAM, 0);
   if (num_ecam == 0)
   {
-      val_print(ACS_PRINT_ERR, " No ECAMs discovered              ", 0);
+      val_print(ACS_PRINT_ERR, " No ECAMs discovered ", 0);
       return 1;
   }
 
@@ -2780,7 +2780,7 @@ uint32_t val_pcie_write_detect_bitfield_check(uint32_t bdf, uint64_t *bitfield_e
   {
       val_print(ACS_PRINT_ALWAYS, "\n\t\tWARN:  PCIe Capability 0x%x", id);
       val_print(ACS_PRINT_ALWAYS, " not found for BDF 0x%x", bdf);
-      val_print(ACS_PRINT_WARN, " ", 0);
+      val_print(ACS_PRINT_WARN, "", 0);
       return status;
   }
 

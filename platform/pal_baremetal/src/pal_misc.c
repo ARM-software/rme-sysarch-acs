@@ -232,7 +232,7 @@ pal_mmio_write(uint64_t addr, uint32_t data)
 {
 
   if (addr & 0x3) {
-      print(ACS_PRINT_WARN, "  Error-Input address is not aligned. Masking the last 2 bits ");
+      print(ACS_PRINT_WARN, "  Error-Input address is not aligned. Masking the last 2 bits");
       addr = addr & ~(0x3);  //make sure addr is aligned to 4 bytes
   }
 

@@ -55,7 +55,7 @@ acs_apply_el3_params(void)
 
   if (!g_el3_param_addr) {
     val_print(ACS_PRINT_WARN,
-              "EL3 param magic set but param address is 0, ignoring\n", 0);
+              "EL3 param magic set but param address is 0, ignoring", 0);
     return;
   }
 
@@ -64,7 +64,7 @@ acs_apply_el3_params(void)
   /* Optional: version check (kept minimal, versioned for future proofing) */
   if ((params->version < 0x1) || (params->version > ACS_EL3_PARAM_VERSION)) {
     val_print(ACS_PRINT_WARN,
-              "Unsupported EL3 param version %ld, ignoring\n", params->version);
+              "Unsupported EL3 param version %ld, ignoring", params->version);
     return;
   }
 

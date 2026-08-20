@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022-2023, 2025, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2023, 2025-2026, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -231,7 +231,7 @@ uint32_t ArmGicSetItsTables(uint32_t its_index)
       }
     } else {
       val_print(ACS_PRINT_WARN, " ITS : Multilevel table not supported and single level table", 0);
-      val_print(ACS_PRINT_WARN, " size exceeded limit settings support only upto 24 bit ", 0);
+      val_print(ACS_PRINT_WARN, " size exceeded limit settings support only upto 24 bit", 0);
       val_print(ACS_PRINT_WARN, " (if entry_size is 8 bytes)", 0);
       TableSize = max_page_size*ARM_GITS_BASER_MAX_PAGES;
     }

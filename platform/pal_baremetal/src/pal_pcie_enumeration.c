@@ -658,7 +658,7 @@ void pal_pcie_enumerate(void)
     uint32_t hb_count = 0, count;
     if (g_pcie_info_table->num_entries == 0)
     {
-         print(ACS_PRINT_TEST, "Skipping Enumeration", 0);
+         print(ACS_PRINT_WARN, "Skipping Enumeration ", 0);
          return;
     }
 

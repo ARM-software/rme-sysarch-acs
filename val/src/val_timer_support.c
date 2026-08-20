@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022, 2025, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022, 2025-2026, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -72,11 +72,11 @@ val_timer_ArmArchTimerReadReg(
     case CnthCtl:
     case CnthpCval:
       val_print(ACS_PRINT_WARN,
-        "The register is related to Hypervisor Mode. Can't perform requested operation\n ", 0);
+        "The register is related to Hypervisor Mode. Can't perform requested operation", 0);
       break;
 
     default:
-      val_print(ACS_PRINT_WARN, "Unknown ARM Generic Timer register %x. \n ", Reg);
+      val_print(ACS_PRINT_WARN, "Unknown ARM Generic Timer register %x.", Reg);
     }
 
     return 0xFFFFFFFF;
@@ -92,7 +92,7 @@ val_timer_ArmArchTimerWriteReg(
     switch (Reg) {
 
     case CntPct:
-      val_print(ACS_PRINT_WARN, "Can't write to Read Only Register: CNTPCT \n", 0);
+      val_print(ACS_PRINT_WARN, "Can't write to Read Only Register: CNTPCT", 0);
       break;
 
     case CntkCtl:
@@ -116,7 +116,7 @@ val_timer_ArmArchTimerWriteReg(
       break;
 
     case CntvCt:
-       val_print(ACS_PRINT_WARN, "Can't write to Read Only Register: CNTVCT \n", 0);
+       val_print(ACS_PRINT_WARN, "Can't write to Read Only Register: CNTVCT", 0);
       break;
 
     case CntpCval:
@@ -146,10 +146,10 @@ val_timer_ArmArchTimerWriteReg(
     case CnthCtl:
     case CnthpCval:
       val_print(ACS_PRINT_WARN,
-        "The register is related to Hypervisor Mode. Can't perform requested operation\n ", 0);
+        "The register is related to Hypervisor Mode. Can't perform requested operation", 0);
       break;
 
     default:
-      val_print(ACS_PRINT_WARN, "Unknown ARM Generic Timer register %x. \n ", Reg);
+      val_print(ACS_PRINT_WARN, "Unknown ARM Generic Timer register %x.", Reg);
     }
 }
