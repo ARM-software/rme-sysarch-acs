@@ -1231,16 +1231,16 @@ Testcase checklist
 
       1. Select a CHI-C2C-capable CXL root port that exposes the RME-CDA DVSEC and locate a downstream CHI-C2C exerciser endpoint. Skip the test if no such endpoint is available.
       2. Program the host and endpoint CXL.mem decoders, program the RMECDA RID range for the endpoint Requester ID, enable RMECDA_CTL1.TDISP_EN, and set RMECDA_CTL1.LINK_STR_LOCK.
-      3. Select and log a DCM PA from the programmed CXL.mem window to confirm that the endpoint is exercised in the CDA/CHI-C2C topology.
+      3. Select a DCM HPA from the programmed CXL.mem window and translate it through the endpoint HDM decoder to obtain the corresponding DPA. The HPA is used by the transaction under test; the DPA is used only to initialize and observe device media.
       4. Query the endpoint PAS_CHECK property through TDISP GET_DEV_PROP. If PAS_CHECK==TRUE, skip the ATS dependency checks because the rule permits device-side PAS checks for direct DCM access.
       5. For PAS_CHECK==FALSE, verify ATS capability is present and enable ATS for the endpoint.
-      6. Allocate separate ACS-owned source and destination DMA pages. Mark both pages Non-secure in GPT, map both through the Realm SMMU stage-2 context, and install read/write DPT entries for both translated PAs.
-      7. Positive check: prepare different source and destination patterns, issue AT=Translated DMA TO_DEVICE from the source page and AT=Translated DMA FROM_DEVICE to the destination page, and verify that the source and destination pages compare equal.
-      8. Negative check: seed the device with a non-source pattern through permitted DMA, deny the translated source page in DPT, invalidate DPT, and retry the translated source load.
-      9. Verify that the denied source load is rejected or that a following device-to-host DMA does not make the destination page match the source page. If the direct AT=Translated exerciser stimulus ignores the DPT deny, record the FVP stimulus limitation after the positive translated path has completed.
-      10. Restore ATS, RMECDA, HDM decoder, GPT, SMMU, and DPT state and free the DMA pages.
+      6. Allocate an ACS-owned source page and a separate page-aligned IOVA. Configure the Realm SMMU stage-2 tables so the source IOVA resolves to the Non-secure source PA and the DCM IOVA resolves to the selected DCM HPA with Realm output PAS.
+      7. Establish TDISP RUN and CXL IDE. Load a known value into the exerciser using an ATS translation and an ATC-backed DMA from the Non-secure source page.
+      8. ATS-dependency negative check: invalidate the endpoint ATC and issue an untranslated DMA with the DCM IOVA while its SMMU mapping and GPC permission remain valid. Verify through the DPA observation backdoor that DCM remains unchanged.
+      9. Positive check: issue ATS_TXN_REQ for the DCM IOVA and verify that the response is successful, grants access, returns the selected DCM HPA, and reports Realm output PAS. Issue DMA with USE_ATC_ENTRY using the original DCM IOVA, then read the corresponding DPA through the media observation backdoor and verify the known value reached DCM.
+      10. Host-GPC negative check: seed a different baseline at the DCM DPA, assign the DCM HPA to Non-secure PAS in GPT, invalidate the SMMU GPC cache and endpoint ATC, and issue a Realm ATS_TXN_REQ again for the same DCM IOVA. Fail if ATS returns a usable translation. Attempt an ATC-backed DMA and verify that DCM remains unchanged, then restore all modified state.
 
-      Note: This CDA scenario is applicable only to CHI-C2C-capable devices. The executable DMA check uses ACS-owned source and destination pages so the test does not depend on implementation-defined exerciser-internal DMA buffer placement.
+      Note: This CDA scenario is applicable only to CHI-C2C-capable devices. Direct DPA operations are test observation hooks and are not the DCM accesses being checked for compliance.
 
   * -
 
@@ -1683,8 +1683,8 @@ Testcase checklist
 
       1. Select a CHI-C2C-capable CXL root port that exposes the RME-CDA DVSEC and a downstream CHI-C2C exerciser endpoint, program host and endpoint decoders for a CXL.mem window, and derive the selected DCM page's DPA from the endpoint decoder.
       2. Establish an SPDM session, transition the endpoint TDI to RUN, establish CXL IDE, and enable RMECDA_CTL1.TDISP_EN and RMECDA_CTL1.LINK_STR_LOCK.
-      3. Assign a selected host-visible DCM page to Realm and seed its corresponding device media through the direct-DPA backdoor with a known baseline value.
-      4. Issue an external access that specifies PAS==Realm while IDE is active and verify the Realm-assigned DCM contents change.
+      3. Assign a selected host-visible DCM page to Realm.
+      4. Issue an external write followed by a read that specifies PAS==Realm while IDE is active and verify the read returns the written value.
       5. Disable the IDE stream while keeping the TDI in RUN, restore a known baseline value at the same Realm-assigned DCM page, and re-issue the same external PAS==Realm access.
       6. Verify that the IDE-disabled external PAS==Realm access is rejected or leaves the Realm-assigned DCM contents unchanged, then stop the TDISP session before cleanup.
 
@@ -1698,12 +1698,12 @@ Testcase checklist
 
     -
 
-      1. Select a CHI-C2C-capable CXL root port and a downstream CHI-C2C exerciser endpoint, select a CFMWS window, and program the endpoint HDM decoder. Use the host-visible DCM HPA for internal device accesses and derive its DPA only for direct-media setup and observation.
-      2. Verify RMECDA_CTL1.TDISP_EN and RMECDA_CTL1.LINK_STR_LOCK are set, enabling them through Root config access with readback if required, and transition the endpoint TDI to RUN.
-      3. Assign the selected host-visible DCM location to Realm.
-      4. Seed the corresponding device media through its DPA backdoor, then issue an HPA-based internal device access that specifies PAS==Realm and verify through DPA media readback that the contents changed.
-      5. Transition the TDI out of RUN with STOP_INTERFACE, restore the media baseline through the DPA backdoor, and re-issue the same HPA-based internal PAS==Realm access.
-      6. Verify that the non-RUN internal PAS==Realm access is rejected or leaves the Realm-assigned DCM contents unchanged.
+      1. Select a CHI-C2C-capable CXL root port and downstream exerciser, select a CFMWS location, and program the host and endpoint HDM decoders. Use the host-visible DCM HPA for the access under test and derive its DPA only for direct-media setup and observation.
+      2. Configure SMMU stage-2 mappings for a Non-secure source page and the Realm DCM HPA, install the required DPT entries, enable ATS, and program the endpoint RID range.
+      3. Establish IDE and transition the endpoint TDI to RUN, assign the selected DCM HPA to Realm, and seed a baseline value through the DPA backdoor.
+      4. Cache the source and DCM translations with ATS, use ATC-backed DMA to load a host-owned value into the exerciser and write it to the DCM HPA with Realm PAS, then verify through DPA media readback that the write succeeded in RUN.
+      5. While still in RUN, prepare a different source value and cache the translations needed for an identical negative transaction. Restore a known media baseline and transition the TDI out of RUN with STOP_INTERFACE.
+      6. Re-issue the ATC-backed Realm write to the DCM HPA and verify that the non-RUN access is rejected or leaves the Realm-assigned DCM contents unchanged.
 
   * -
 

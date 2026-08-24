@@ -60,8 +60,9 @@ typedef struct {
     uint32_t initialized;
 } EXERCISER_INFO_BLOCK;
 
-#define VAL_ATS_TE_OR_GLOBAL_MASK  (1u << 6)
-#define VAL_ATS_PERMISSION_MASK    0x3Fu
+#define VAL_ATS_GLOBAL_MASK         (1u << 6)
+#define VAL_ATS_TE_MASK             (1u << 9)
+#define VAL_ATS_PERMISSION_MASK     0x3Fu
 #define VAL_ATS_REQUEST_T           (1u << 0)
 #define VAL_ATS_REQUEST_XT          (1u << 1)
 #define VAL_ATS_REQUEST_ATTR_MASK   (VAL_ATS_REQUEST_T | VAL_ATS_REQUEST_XT)
@@ -151,6 +152,10 @@ uint32_t val_exerciser_ats_translate_by_bdf(uint32_t bdf,
                                             uint32_t length,
                                             uint32_t request_attributes,
                                             VAL_ATS_TRANSLATION_RESULT *result);
+uint32_t val_exerciser_dma_with_atc_by_bdf(uint32_t bdf,
+                                           uint64_t iova,
+                                           uint32_t length,
+                                           EXERCISER_DMA_ATTR direction);
 uint32_t val_exerciser_get_data(EXERCISER_DATA_TYPE type,
                                 exerciser_data_t *data, uint32_t instance);
 uint32_t val_exerciser_execute_tests(uint32_t level);

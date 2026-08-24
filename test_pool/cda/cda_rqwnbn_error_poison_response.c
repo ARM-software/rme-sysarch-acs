@@ -236,6 +236,7 @@ prepare_context(TEST_CONTEXT *context)
     const CXL_COMPONENT_ENTRY *root_port;
     const CXL_COMPONENT_ENTRY *endpoint;
     uint32_t endpoint_bdf;
+    uint32_t dev_properties;
     uint32_t status;
     uint32_t ctl1_programmed;
     uint32_t ctl1_readback;
@@ -288,6 +289,12 @@ prepare_context(TEST_CONTEXT *context)
                 (uint64_t)endpoint_bdf);
       continue;
     }
+
+    /* Cache-line setup uses direct coherent Realm host accesses. */
+    if ((val_tdisp_get_device_properties(endpoint_bdf, &dev_properties)
+         != ACS_STATUS_PASS) ||
+        ((dev_properties & VAL_TDISP_DEV_PROP_PAS_CHECK) == 0u))
+      continue;
 
     candidate.root_index = root_idx;
     candidate.root_bdf = root_port->bdf;
@@ -509,12 +516,14 @@ prepare_context(TEST_CONTEXT *context)
 static uint32_t
 exercise_rule(TEST_CONTEXT *context)
 {
-  volatile uint64_t *realm_alias;
+  volatile uint64_t *snoop_realm_alias;
+  volatile uint64_t *writeback_realm_alias;
   PCIE_ENDPOINT_CFG endpoint_cfg;
   val_spdm_context_t spdm_ctx;
   pci_tdisp_interface_id_t interface_id;
   uint32_t session_id;
   uint32_t session_open;
+  uint32_t ide_enabled;
   uint32_t tdi_in_error;
   uint32_t snoop_realm_assigned;
   uint32_t writeback_realm_assigned;
@@ -540,8 +549,12 @@ exercise_rule(TEST_CONTEXT *context)
   val_print(ACS_PRINT_INFO, " RQWNBN: snoop DCM HPA 0x%llx", snoop_hpa);
   val_print(ACS_PRINT_INFO, " RQWNBN: writeback DCM HPA 0x%llx", writeback_hpa);
 
-  realm_alias = NULL;
-  if (val_memory_map_realm_cacheable_alias(snoop_hpa, &realm_alias) != ACS_STATUS_PASS)
+  snoop_realm_alias = NULL;
+  writeback_realm_alias = NULL;
+  if ((val_memory_map_realm_cacheable_alias(snoop_hpa,
+                                             &snoop_realm_alias) != ACS_STATUS_PASS) ||
+      (val_memory_map_realm_cacheable_alias(writeback_hpa,
+                                             &writeback_realm_alias) != ACS_STATUS_PASS))
     return ACS_STATUS_ERR;
 
   val_memory_set(&endpoint_cfg, sizeof(endpoint_cfg), 0);
@@ -554,6 +567,7 @@ exercise_rule(TEST_CONTEXT *context)
   val_memory_set(&spdm_ctx, sizeof(spdm_ctx), 0);
   session_id = 0u;
   session_open = 0u;
+  ide_enabled = 0u;
   tdi_in_error = 0u;
   snoop_realm_assigned = 0u;
   writeback_realm_assigned = 0u;
@@ -601,82 +615,57 @@ exercise_rule(TEST_CONTEXT *context)
   }
   session_open = 1u;
 
-  /*
-   * Ask the exerciser/model to create a dirty cached copy for the Realm DCM
-   * pages while the TDI is in RUN. The final host read after ERROR observes
-   * snoop poison; the explicit writeback command observes writeback poison.
-   */
-  status = val_cxl_exerciser_execute_cmd_with_ctrl(context->endpoint_bdf,
-                                                   CXL_CMD_OP_DCM_CACHE_DIRTY,
-                                                   CXL_CMD_CTRL_PAS_REALM,
-                                                   snoop_hpa,
-                                                   RQWNBN_SNOOP_SEED_VALUE,
-                                                   NULL);
+  status = val_cxl_ide_establish_link(context->root_index,
+                                      context->endpoint_index,
+                                      &spdm_ctx,
+                                      session_id);
   if (status != ACS_STATUS_PASS)
   {
-    val_print(ACS_PRINT_INFO, " RQWNBN: snoop cache-dirty stimulus unavailable", 0);
-    result = ACS_STATUS_SKIP;
+    val_print(ACS_PRINT_INFO, " RQWNBN: IDE establish unavailable", 0);
+    result = (status == ACS_STATUS_SKIP) ? ACS_STATUS_SKIP : ACS_STATUS_FAIL;
+    goto cleanup;
+  }
+  ide_enabled = 1u;
+
+  /*
+   * Create each Realm cache line with a normal cacheable HPA access while the
+   * TDI is in RUN and IDE is secure. CACHE_DIRTY only changes the state of an
+   * existing line; it does not allocate the line or write Data0 as payload.
+   */
+  if ((val_cda_seed_realm_cache_line(snoop_realm_alias,
+                                     RQWNBN_SNOOP_SEED_VALUE) != ACS_STATUS_PASS) ||
+      (val_cda_seed_realm_cache_line(writeback_realm_alias,
+                                     RQWNBN_WRITEBACK_SEED_VALUE) != ACS_STATUS_PASS))
+  {
+    val_print(ACS_PRINT_ERR, " RQWNBN: failed to create Realm cache lines", 0);
+    result = ACS_STATUS_FAIL;
     goto cleanup;
   }
 
-  status = val_cxl_exerciser_execute_cmd_with_ctrl(context->endpoint_bdf,
-                                                   CXL_CMD_OP_DCM_CACHE_DIRTY,
-                                                   CXL_CMD_CTRL_PAS_REALM,
-                                                   writeback_hpa,
-                                                   RQWNBN_WRITEBACK_SEED_VALUE,
-                                                   NULL);
+  status = val_cxl_exerciser_execute_cmd(context->endpoint_bdf,
+                                         CXL_CMD_OP_DCM_CACHE_DIRTY,
+                                         snoop_hpa,
+                                         0u,
+                                         NULL);
   if (status != ACS_STATUS_PASS)
   {
     val_print(ACS_PRINT_INFO,
-              " RQWNBN: writeback cache-dirty stimulus unavailable",
+              " RQWNBN: required Realm cache-line stimulus unavailable",
               0);
     result = ACS_STATUS_SKIP;
     goto cleanup;
   }
 
-  /*
-   * Follow the setup with Realm internal reads from the running TDI before
-   * forcing ERROR. Internal accesses use host-visible HPAs and are resolved
-   * by the device; they are not direct-media backdoor observations.
-   */
-  status = val_cxl_exerciser_dcm_internal_read64(context->endpoint_bdf,
-                                                 snoop_hpa,
-                                                 REALM_PAS,
-                                                 &observed);
-  if (status != ACS_STATUS_PASS)
-  {
-    val_print(ACS_PRINT_INFO, " RQWNBN: device Realm read stimulus unavailable", 0);
-    result = ACS_STATUS_SKIP;
-    goto cleanup;
-  }
-
-  if (observed != RQWNBN_SNOOP_SEED_VALUE)
-  {
-    val_print(ACS_PRINT_INFO,
-              " RQWNBN: snoop page Realm read observed 0x%llx",
-              observed);
-    result = ACS_STATUS_SKIP;
-    goto cleanup;
-  }
-
-  status = val_cxl_exerciser_dcm_internal_read64(context->endpoint_bdf,
-                                                 writeback_hpa,
-                                                 REALM_PAS,
-                                                 &observed);
+  status = val_cxl_exerciser_execute_cmd(context->endpoint_bdf,
+                                         CXL_CMD_OP_DCM_CACHE_DIRTY,
+                                         writeback_hpa,
+                                         0u,
+                                         NULL);
   if (status != ACS_STATUS_PASS)
   {
     val_print(ACS_PRINT_INFO,
-              " RQWNBN: writeback page Realm read stimulus unavailable",
+              " RQWNBN: required Realm cache-line stimulus unavailable",
               0);
-    result = ACS_STATUS_SKIP;
-    goto cleanup;
-  }
-
-  if (observed != RQWNBN_WRITEBACK_SEED_VALUE)
-  {
-    val_print(ACS_PRINT_INFO,
-              " RQWNBN: writeback page Realm read observed 0x%llx",
-              observed);
     result = ACS_STATUS_SKIP;
     goto cleanup;
   }
@@ -693,7 +682,7 @@ exercise_rule(TEST_CONTEXT *context)
   val_cxl_aer_clear(context->root_bdf, context->aer_offset);
   observed = 0u;
   host_fault = 0u;
-  status = val_memory_read64_el3_protected(realm_alias, &observed, &host_fault);
+  status = val_memory_read64_el3_protected(snoop_realm_alias, &observed, &host_fault);
   (void)val_cxl_aer_read_uncorr(context->root_bdf,
                                 context->aer_offset,
                                 &aer_uncorr);
@@ -750,12 +739,11 @@ exercise_rule(TEST_CONTEXT *context)
   }
 
   val_cxl_aer_clear(context->root_bdf, context->aer_offset);
-  status = val_cxl_exerciser_execute_cmd_with_ctrl(context->endpoint_bdf,
-                                                   CXL_CMD_OP_DCM_CACHE_WRITEBACK,
-                                                   CXL_CMD_CTRL_PAS_REALM,
-                                                   writeback_hpa,
-                                                   0u,
-                                                   NULL);
+  status = val_cxl_exerciser_execute_cmd(context->endpoint_bdf,
+                                         CXL_CMD_OP_DCM_CACHE_WRITEBACK,
+                                         writeback_hpa,
+                                         0u,
+                                         NULL);
   (void)val_cxl_aer_read_uncorr(context->root_bdf,
                                 context->aer_offset,
                                 &aer_uncorr);
@@ -764,10 +752,9 @@ exercise_rule(TEST_CONTEXT *context)
             aer_uncorr);
 
   /*
-   * The explicit writeback trigger is exerciser/model-specific. If it is
-   * implemented and completes without poison, the rule check fails. If the
-   * trigger itself is unavailable, keep the mandatory snoop result and report
-   * the writeback stimulus limitation.
+   * If the platform provides an explicit writeback trigger and it completes
+   * without poison, the rule check fails. If the trigger is unavailable, keep
+   * the mandatory snoop result and report the writeback stimulus limitation.
    */
   if ((aer_uncorr & AER_POISONED_TLP) == 0u)
   {
@@ -795,6 +782,15 @@ cleanup:
 
   if (session_open != 0u)
   {
+    if ((ide_enabled != 0u) &&
+        (val_cxl_ide_disable_link(context->root_index,
+                                  context->endpoint_index,
+                                  &spdm_ctx,
+                                  session_id) != ACS_STATUS_PASS))
+    {
+      val_print(ACS_PRINT_WARN, " RQWNBN: IDE cleanup failed", 0);
+    }
+
     if (val_tdisp_stop_if_needed(&spdm_ctx,
                                  session_id,
                                  &interface_id,

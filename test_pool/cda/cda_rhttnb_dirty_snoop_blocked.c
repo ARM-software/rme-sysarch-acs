@@ -181,6 +181,7 @@ prepare_context(TEST_CONTEXT *context)
     const CXL_COMPONENT_ENTRY *root_port;
     const CXL_COMPONENT_ENTRY *endpoint;
     uint32_t endpoint_bdf;
+    uint32_t dev_properties;
     uint32_t status;
     uint32_t ctl1_programmed;
     uint32_t ctl1_readback;
@@ -233,6 +234,12 @@ prepare_context(TEST_CONTEXT *context)
                 (uint64_t)endpoint_bdf);
       continue;
     }
+
+    /* This test seeds the cache through a direct coherent Realm host access. */
+    if ((val_tdisp_get_device_properties(endpoint_bdf, &dev_properties)
+         != ACS_STATUS_PASS) ||
+        ((dev_properties & VAL_TDISP_DEV_PROP_PAS_CHECK) == 0u))
+      continue;
 
     candidate.root_index = root_idx;
     candidate.root_bdf = root_port->bdf;
@@ -491,11 +498,7 @@ exercise_rule(TEST_CONTEXT *context)
   realm_assigned = 0u;
   result = ACS_STATUS_FAIL;
 
-  /*
-   * Associate the CFMWS-backed page with this TDI. External Realm DCM accesses
-   * are IDE-gated, so the test uses the exerciser's PAS=Realm path to create
-   * the TDI-side cached copy and reserves the host access for the final snoop.
-   */
+  /* Associate the CFMWS-backed page with this TDI. */
   status = val_cxl_exerciser_execute_cmd(context->endpoint_bdf,
                                          CXL_CMD_OP_DCM_SET_REALM_ASSIGNMENT,
                                          test_hpa,
@@ -532,44 +535,27 @@ exercise_rule(TEST_CONTEXT *context)
   ide_enabled = 1u;
 
   /*
-   * Ask the exerciser/model to create a dirty cached copy for the Realm DCM
-   * page while the TDI is in RUN and the IDE stream is active. RHTTNB then
-   * disables IDE to make the host-to-device snoop non-forwardable.
+   * Populate the Realm line through the normal coherent HPA path. CACHE_DIRTY
+   * only changes the state of an existing line; it neither allocates a line nor
+   * uses DATA0 as line contents.
    */
-  status = val_cxl_exerciser_execute_cmd_with_ctrl(context->endpoint_bdf,
-                                                   CXL_CMD_OP_DCM_CACHE_DIRTY,
-                                                   CXL_CMD_CTRL_PAS_REALM,
-                                                   test_hpa,
-                                                   RHTTNB_SEED_VALUE,
-                                                   NULL);
+  status = val_cda_seed_realm_cache_line(realm_alias, RHTTNB_SEED_VALUE);
+  if (status != ACS_STATUS_PASS)
+  {
+    val_print(ACS_PRINT_ERR, " RHTTNB: failed to seed Realm cache line", 0);
+    result = status;
+    goto cleanup;
+  }
+
+  /* Mark the populated line dirty before making its snoop path unavailable. */
+  status = val_cxl_exerciser_execute_cmd(context->endpoint_bdf,
+                                         CXL_CMD_OP_DCM_CACHE_DIRTY,
+                                         test_hpa,
+                                         0u,
+                                         NULL);
   if (status != ACS_STATUS_PASS)
   {
     val_print(ACS_PRINT_INFO, " RHTTNB: DCM cache-dirty stimulus unavailable", 0);
-    result = ACS_STATUS_SKIP;
-    goto cleanup;
-  }
-
-  /*
-   * Follow the setup with a Realm internal read from the running TDI before
-   * disabling IDE. The device resolves the host-visible HPA and returns its
-   * cached value through the architectural internal-access stimulus.
-   */
-  status = val_cxl_exerciser_dcm_internal_read64(context->endpoint_bdf,
-                                                 test_hpa,
-                                                 REALM_PAS,
-                                                 &observed);
-  if (status != ACS_STATUS_PASS)
-  {
-    val_print(ACS_PRINT_INFO, " RHTTNB: device Realm read stimulus unavailable", 0);
-    result = ACS_STATUS_SKIP;
-    goto cleanup;
-  }
-
-  if (observed != RHTTNB_SEED_VALUE)
-  {
-    val_print(ACS_PRINT_INFO,
-              " RHTTNB: device Realm read observed 0x%llx",
-              observed);
     result = ACS_STATUS_SKIP;
     goto cleanup;
   }

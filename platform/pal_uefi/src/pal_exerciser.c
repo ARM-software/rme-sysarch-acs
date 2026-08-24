@@ -264,6 +264,16 @@ UINT32 pal_exerciser_set_param (
                 }
                 pal_mmio_write(Base + DMACTL1, Data);
                 return 0;
+            case TXN_ATC_ENTRY:
+                Data = pal_mmio_read(Base + DMACTL1);
+                if (Value2 == ATC_ENTRY_ENABLE)
+                    Data |= DMA_USE_ATC_ENTRY_MASK;
+                else if (Value2 == ATC_ENTRY_DISABLE)
+                    Data &= ~DMA_USE_ATC_ENTRY_MASK;
+                else
+                    return 1;
+                pal_mmio_write(Base + DMACTL1, Data);
+                return 0;
             default:
                 return 1;
           }
@@ -296,7 +306,7 @@ UINT32 pal_exerciser_set_param (
         return 0;
 
     case EXERCISER_CXL_CMD_CTRL:
-        pal_mmio_write(Base + CXL_CMD_CTRL, (UINT32)Value1);
+        /* The current command interface has no separate control register. */
         return 0;
 
     case EXERCISER_SEC_SID:
@@ -376,7 +386,7 @@ pal_exerciser_get_param (
           *Value1 |= ((UINT64)pal_mmio_read(Base + CXL_CMD_DATA0_HI)) << 32;
           return 0;
       case EXERCISER_CXL_CMD_CTRL:
-          *Value1 = pal_mmio_read(Base + CXL_CMD_CTRL);
+          *Value1 = 0u;
           return 0;
       case CFG_TXN_ATTRIBUTES:
       case TRANSACTION_TYPE:
@@ -560,20 +570,24 @@ pal_exerciser_ops (
         return 0;
 
     case CXL_CMD_START:
-        UINT32 cmd_ctrl;
-        UINT32 prev_status;
+        UINT32 cmd;
+        UINT32 status;
 
-        prev_status = pal_mmio_read(Base + CXL_CMD_STATUS);
-        rme_print(ACS_PRINT_DEBUG, L" CXL_CMD_START prev status 0x%x", prev_status);
-        cmd_ctrl = pal_mmio_read(Base + CXL_CMD_CTRL) & ~CXL_CMD_CTRL_GO;
-        pal_mmio_write(Base + CXL_CMD_CTRL, cmd_ctrl | CXL_CMD_CTRL_GO);
-        rme_print(ACS_PRINT_DEBUG, L" CXL_CMD_CTRL write 0x%x", cmd_ctrl | CXL_CMD_CTRL_GO);
+        cmd = pal_mmio_read(Base + CXL_CMD_OP);
+        status = cmd & CXL_CMD_STATUS_MASK;
+        if (status == CXL_CMD_STATUS_ERR)
+            pal_mmio_write(Base + CXL_CMD_OP,
+                           (cmd & CXL_CMD_OP_MASK) | CXL_CMD_CLEAR_ERR);
+
+        cmd &= CXL_CMD_OP_MASK;
+        pal_mmio_write(Base + CXL_CMD_OP, cmd | CXL_CMD_TRIGGER);
         for (UINT32 idx = 0u; idx < 10000u; ++idx)
         {
-            data = pal_mmio_read(Base + CXL_CMD_STATUS);
-            if ((data & CXL_CMD_STATUS_ERR) != 0u)
+            data = pal_mmio_read(Base + CXL_CMD_OP);
+            status = data & CXL_CMD_STATUS_MASK;
+            if (status == CXL_CMD_STATUS_ERR)
                 return 1;
-            if ((data & CXL_CMD_STATUS_DONE) != 0u)
+            if (status == CXL_CMD_STATUS_DONE)
                 return 0;
         }
         return 1;

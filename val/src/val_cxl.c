@@ -647,31 +647,47 @@ val_cxl_ide_disable_link(uint32_t root_index,
     return ACS_STATUS_FAIL;
 
   status = val_cxl_ide_get_status(endpoint_index, &endpoint_ide_status);
-  if (status != ACS_STATUS_PASS)
-    return status;
-
-  rx_state = endpoint_ide_status & CXL_IDE_STATUS_FIELD_MASK;
-  tx_state = (endpoint_ide_status >> CXL_IDE_STATUS_TX_SHIFT) & CXL_IDE_STATUS_FIELD_MASK;
-  if ((rx_state != CXL_IDE_STATE_INSECURE) || (tx_state != CXL_IDE_STATE_INSECURE))
+  if (status == ACS_STATUS_SKIP)
   {
-    val_print(ACS_PRINT_ERR, " CXL: EP IDE status after stop 0x%x",
-              (uint64_t)endpoint_ide_status);
-    val_print(ACS_PRINT_ERR, " CXL: EP BDF 0x%x", (uint64_t)endpoint->bdf);
-    return ACS_STATUS_FAIL;
+    val_print(ACS_PRINT_DEBUG,
+              " Endpoint lacks IDE capability - skipping post-stop status check (BDF 0x%x)",
+              (uint64_t)endpoint->bdf);
+  }
+  else if (status != ACS_STATUS_PASS)
+    return status;
+  else
+  {
+    rx_state = endpoint_ide_status & CXL_IDE_STATUS_FIELD_MASK;
+    tx_state = (endpoint_ide_status >> CXL_IDE_STATUS_TX_SHIFT) & CXL_IDE_STATUS_FIELD_MASK;
+    if ((rx_state != CXL_IDE_STATE_INSECURE) || (tx_state != CXL_IDE_STATE_INSECURE))
+    {
+      val_print(ACS_PRINT_ERR, " CXL: EP IDE status after stop 0x%x",
+                (uint64_t)endpoint_ide_status);
+      val_print(ACS_PRINT_ERR, " CXL: EP BDF 0x%x", (uint64_t)endpoint->bdf);
+      return ACS_STATUS_FAIL;
+    }
   }
 
   status = val_cxl_ide_get_status(root_index, &root_ide_status);
-  if (status != ACS_STATUS_PASS)
-    return status;
-
-  rx_state = root_ide_status & CXL_IDE_STATUS_FIELD_MASK;
-  tx_state = (root_ide_status >> CXL_IDE_STATUS_TX_SHIFT) & CXL_IDE_STATUS_FIELD_MASK;
-  if ((rx_state != CXL_IDE_STATE_INSECURE) || (tx_state != CXL_IDE_STATE_INSECURE))
+  if (status == ACS_STATUS_SKIP)
   {
-    val_print(ACS_PRINT_ERR, " CXL: RP IDE status after stop 0x%x",
-              (uint64_t)root_ide_status);
-    val_print(ACS_PRINT_ERR, " CXL: RP BDF 0x%x", (uint64_t)root_port->bdf);
-    return ACS_STATUS_FAIL;
+    val_print(ACS_PRINT_DEBUG,
+              " Root port lacks IDE capability - skipping post-stop status check (BDF 0x%x)",
+              (uint64_t)root_port->bdf);
+  }
+  else if (status != ACS_STATUS_PASS)
+    return status;
+  else
+  {
+    rx_state = root_ide_status & CXL_IDE_STATUS_FIELD_MASK;
+    tx_state = (root_ide_status >> CXL_IDE_STATUS_TX_SHIFT) & CXL_IDE_STATUS_FIELD_MASK;
+    if ((rx_state != CXL_IDE_STATE_INSECURE) || (tx_state != CXL_IDE_STATE_INSECURE))
+    {
+      val_print(ACS_PRINT_ERR, " CXL: RP IDE status after stop 0x%x",
+                (uint64_t)root_ide_status);
+      val_print(ACS_PRINT_ERR, " CXL: RP BDF 0x%x", (uint64_t)root_port->bdf);
+      return ACS_STATUS_FAIL;
+    }
   }
 
   return ACS_STATUS_PASS;

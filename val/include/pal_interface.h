@@ -728,7 +728,13 @@ typedef enum {
   TXN_REQ_ID       = 0x0,
   TXN_ADDR_TYPE    = 0x1,
   TXN_REQ_ID_VALID = 0x2,
+  TXN_ATC_ENTRY    = 0x3,
 } EXERCISER_TXN_ATTR;
+
+typedef enum {
+  ATC_ENTRY_DISABLE = 0x0,
+  ATC_ENTRY_ENABLE  = 0x1
+} EXERCISER_TXN_ATC_ENTRY;
 
 typedef enum {
   AT_UNTRANSLATED = 0x0,
@@ -764,12 +770,12 @@ typedef enum {
 } EXERCISER_OPS;
 
 #define CXL_CMD_OP_BACKDOOR_READ64           0x1u
-#define CXL_CMD_OP_BISNP                     0x2u
-#define CXL_CMD_OP_BACKDOOR_WRITE64          0x3u
-#define CXL_CMD_OP_DCM_INTERNAL_READ64        0x4u
-#define CXL_CMD_OP_DCM_INTERNAL_WRITE64       0x5u
+#define CXL_CMD_OP_BACKDOOR_WRITE64          0x2u
+#define CXL_CMD_OP_BISNP                     0x3u
+#define CXL_CMD_OP_DCM_CACHE_DIRTY           0x4u
+#define CXL_CMD_OP_DCM_INTERNAL_READ64        0x5u
 #define CXL_CMD_OP_DCM_SET_REALM_ASSIGNMENT  0x6u
-#define CXL_CMD_OP_DCM_CACHE_DIRTY           0x7u
+#define CXL_CMD_OP_DCM_INTERNAL_WRITE64       0x7u
 #define CXL_CMD_OP_DCM_CACHE_WRITEBACK       0x8u
 #define CXL_CMD_OP_TDI_SNOOP                  0x9u
 #define CXL_CMD_CTRL_PAS_REALM               (1u << 8)

@@ -83,6 +83,58 @@ val_cda_tdi_snoop_attempt(uint32_t endpoint_bdf,
   return ACS_STATUS_PASS;
 }
 
+/**
+  @brief  Prepare a Realm Location through the normal coherent HPA path.
+
+  @param  realm_alias  Cacheable Realm mapping of the target HPA.
+  @param  value        Value to write to the target Location.
+
+  @return ACS_STATUS_PASS when the write, readback, and cache maintenance complete.
+**/
+uint32_t
+val_cda_seed_realm_cache_line(volatile uint64_t *realm_alias, uint64_t value)
+{
+  uint64_t address;
+  uint64_t observed;
+  uint32_t observed_high;
+  uint32_t observed_low;
+
+  if (realm_alias == NULL)
+    return ACS_STATUS_ERR;
+
+  address = (uint64_t)realm_alias;
+  if ((val_memory_write_el3(address, (uint32_t)value) != ACS_STATUS_PASS) ||
+      (val_memory_write_el3(address + sizeof(uint32_t),
+                            (uint32_t)(value >> 32)) != ACS_STATUS_PASS))
+  {
+    return ACS_STATUS_ERR;
+  }
+
+  /* Push the Realm write to the coherent device and remove the PE copy. */
+  if (val_data_cache_ops_by_va_el3(address, CLEAN_AND_INVALIDATE) != 0u)
+    return ACS_STATUS_ERR;
+
+  /*
+   * Read the value back through the coherent target after evicting the PE's
+   * write. Whether this access allocates a target-side cache line is an
+   * implementation property and must be confirmed by the caller's stimulus.
+   */
+  if ((val_memory_read_el3(address, &observed_low) != ACS_STATUS_PASS) ||
+      (val_memory_read_el3(address + sizeof(uint32_t),
+                           &observed_high) != ACS_STATUS_PASS))
+    return ACS_STATUS_ERR;
+
+  observed = ((uint64_t)observed_high << 32) | observed_low;
+  if (observed != value)
+    return ACS_STATUS_ERR;
+
+  /* Remove the PE copy so later accesses observe target cache state. */
+  if (val_data_cache_ops_by_va_el3(address, CLEAN_AND_INVALIDATE) != 0u)
+    return ACS_STATUS_ERR;
+
+  return ACS_STATUS_PASS;
+}
+
 static void
 val_cda_init_dcm_window_context(uint32_t decoder_index,
                                 VAL_CDA_DCM_WINDOW_CONTEXT *context)

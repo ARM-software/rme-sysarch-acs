@@ -415,9 +415,52 @@ val_exerciser_ats_translate_by_bdf(uint32_t bdf,
     result->response_attributes = (uint32_t)response_attributes;
     result->completion_success = (request_status == 0u) ? 1u : 0u;
     result->te =
-        ((result->response_attributes & VAL_ATS_TE_OR_GLOBAL_MASK) != 0u) ? 1u : 0u;
+        ((result->response_attributes & VAL_ATS_TE_MASK) != 0u) ? 1u : 0u;
 
     return ACS_STATUS_PASS;
+}
+
+/**
+  @brief Perform DMA using a translation cached by an earlier ATS request.
+
+  The DMA address remains the original IOVA. The exerciser obtains the output
+  address and permissions from its ATC and emits a PCIe Translated request.
+
+  @param bdf        Exerciser BDF
+  @param iova       Original address used for the ATS request
+  @param length     DMA transfer length
+  @param direction  Exerciser DMA direction
+
+  @return ACS_STATUS_PASS when DMA completes, ACS_STATUS_FAIL when the
+          transaction is rejected, or ACS_STATUS_ERR for invalid input/setup.
+**/
+uint32_t
+val_exerciser_dma_with_atc_by_bdf(uint32_t bdf,
+                                  uint64_t iova,
+                                  uint32_t length,
+                                  EXERCISER_DMA_ATTR direction)
+{
+    uint32_t dma_status;
+
+    if ((iova == 0u) || (length == 0u))
+        return ACS_STATUS_ERR;
+
+    if ((val_exerciser_set_param_by_bdf(DMA_ATTRIBUTES,
+                                        iova,
+                                        length,
+                                        bdf) != 0u) ||
+        (val_exerciser_set_param_by_bdf(CFG_TXN_ATTRIBUTES,
+                                        TXN_ADDR_TYPE,
+                                        AT_UNTRANSLATED,
+                                        bdf) != 0u) ||
+        (val_exerciser_set_param_by_bdf(CFG_TXN_ATTRIBUTES,
+                                        TXN_ATC_ENTRY,
+                                        ATC_ENTRY_ENABLE,
+                                        bdf) != 0u))
+        return ACS_STATUS_ERR;
+
+    dma_status = val_exerciser_ops_by_bdf(START_DMA, direction, bdf);
+    return (dma_status == 0u) ? ACS_STATUS_PASS : ACS_STATUS_FAIL;
 }
 
 uint32_t

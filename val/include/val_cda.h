@@ -84,6 +84,8 @@ uint32_t val_cda_tdi_snoop_attempt(uint32_t endpoint_bdf,
                                    uint64_t target_pa,
                                    uint32_t access_pas,
                                    uint32_t *result);
+uint32_t val_cda_seed_realm_cache_line(volatile uint64_t *realm_alias,
+                                       uint64_t value);
 uint32_t val_cda_prepare_dcm_window(uint32_t decoder_index,
                                     VAL_CDA_DCM_WINDOW_CONTEXT *context);
 uint32_t val_cda_prepare_dcm_window_with_dev_props(

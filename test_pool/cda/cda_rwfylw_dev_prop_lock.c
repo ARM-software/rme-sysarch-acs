@@ -49,10 +49,6 @@
 #define PCI_TDISP_INTERFACE_STATE_CONFIG_LOCKED 1u
 #endif
 
-#ifndef PCI_TDISP_INTERFACE_INFO_NO_UPDATE_AFTER_LOCK
-#define PCI_TDISP_INTERFACE_INFO_NO_UPDATE_AFTER_LOCK 0x1u
-#endif
-
 #if ENABLE_SPDM
 
 typedef struct {
@@ -374,33 +370,6 @@ clear_rmecda_protection(const RWFYLW_CONTEXT *context)
 }
 
 static uint32_t
-enable_rmecda_protection(const RWFYLW_CONTEXT *context)
-{
-  uint32_t value;
-  uint32_t readback;
-
-  if (context == NULL)
-    return ACS_STATUS_ERR;
-
-  /*
-   * Preserve unrelated CTL1 fields from firmware and only force the protection
-   * bits needed for the observable RME-sensitive register lock check.
-   */
-  value = context->rmecda_ctl1_orig | RWFYLW_RMECDA_CTL1_PROTECT_MASK;
-  if (write_rmecda_ctl1(context, value, &readback) != ACS_STATUS_PASS)
-    return ACS_STATUS_ERR;
-
-  val_print(ACS_PRINT_DEBUG, " RWFYLW: RMECDA_CTL1 protected readback 0x%x",
-            readback);
-
-  if ((readback & RWFYLW_RMECDA_CTL1_PROTECT_MASK) !=
-      RWFYLW_RMECDA_CTL1_PROTECT_MASK)
-    return ACS_STATUS_SKIP;
-
-  return ACS_STATUS_PASS;
-}
-
-static uint32_t
 restore_rmecda_ctl1(const RWFYLW_CONTEXT *context)
 {
   uint32_t readback;
@@ -557,48 +526,6 @@ get_dev_prop_snapshot(val_spdm_context_t *spdm_ctx,
 }
 
 static uint32_t
-get_no_update_after_lock(val_spdm_context_t *spdm_ctx,
-                         uint32_t session_id,
-                         const pci_tdisp_interface_id_t *interface_id,
-                         uint32_t *no_update_out)
-{
-  uint8_t report[VAL_TDISP_ARM_VDM_MAX_RSP_SIZE];
-  uint32_t report_size;
-  uint16_t interface_info;
-  uint32_t status;
-
-  if ((spdm_ctx == NULL) || (session_id == 0u) ||
-      (interface_id == NULL) || (no_update_out == NULL))
-    return ACS_STATUS_ERR;
-
-  *no_update_out = 0u;
-  val_memory_set(report, sizeof(report), 0);
-  report_size = (uint32_t)sizeof(report);
-
-  status = val_spdm_send_pci_tdisp_get_interface_report(spdm_ctx,
-                                                        session_id,
-                                                        interface_id,
-                                                        report,
-                                                        &report_size);
-  if (status != ACS_STATUS_PASS)
-    return status;
-
-  if (report_size < sizeof(uint16_t))
-  {
-    val_print(ACS_PRINT_ERR, " RWFYLW: interface report too small", 0);
-    return ACS_STATUS_FAIL;
-  }
-
-  interface_info = (uint16_t)report[0] | ((uint16_t)report[1] << 8);
-  *no_update_out =
-    ((interface_info & PCI_TDISP_INTERFACE_INFO_NO_UPDATE_AFTER_LOCK) != 0u)
-      ? 1u : 0u;
-
-  val_print(ACS_PRINT_INFO, " RWFYLW: interface_info 0x%x", interface_info);
-  return ACS_STATUS_PASS;
-}
-
-static uint32_t
 open_tdisp_session(uint32_t endpoint_bdf,
                    val_spdm_context_t *spdm_ctx,
                    uint32_t *session_id_out,
@@ -692,8 +619,7 @@ lock_tdisp_interface(val_spdm_context_t *spdm_ctx,
 
 static uint32_t
 validate_locked_dev_prop(const RWFYLW_DEV_PROP *before,
-                         const RWFYLW_DEV_PROP *after,
-                         uint32_t no_update_after_lock)
+                         const RWFYLW_DEV_PROP *after)
 {
   const uint8_t *before_list;
   const uint8_t *after_list;
@@ -724,20 +650,14 @@ validate_locked_dev_prop(const RWFYLW_DEV_PROP *before,
   if (before->register_list_size == 0u)
   {
     /*
-     * The register list is implementation-defined. A zero-length list can be
-     * compliant only when the device also reports that host-visible interface
-     * state cannot be updated after LOCK_INTERFACE, which covers devices whose
-     * RME-sensitive registers are DSM-owned or globally locked by TDISP.
+     * ACS programmed the endpoint HDM decoder before lock, proving that the
+     * device exposes host-writable RME-sensitive state. Such state cannot be
+     * treated as DSM-exclusive and must be advertised for DSM verification.
      */
-    if (no_update_after_lock == 0u)
-    {
-      val_print(ACS_PRINT_ERR,
-                " RWFYLW: empty register-list without no-update-after-lock",
-                0);
-      return ACS_STATUS_FAIL;
-    }
-
-    return ACS_STATUS_PASS;
+    val_print(ACS_PRINT_ERR,
+              " RWFYLW: programmable HDM decoder is not advertised by DSM",
+              0);
+    return ACS_STATUS_FAIL;
   }
 
   before_list = &before->response[RWFYLW_GET_DEV_PROP_REG_LIST_OFF];
@@ -833,7 +753,6 @@ payload(void)
   uint32_t session_id;
   uint32_t session_open;
   uint32_t locked;
-  uint32_t no_update_after_lock;
   uint32_t status;
   uint32_t cleanup_status;
   uint32_t pe_index = val_get_primary_pe_index();
@@ -841,7 +760,6 @@ payload(void)
   session_id = 0u;
   session_open = 0u;
   locked = 0u;
-  no_update_after_lock = 0u;
   cleanup_status = ACS_STATUS_PASS;
   val_memory_set(&spdm_ctx, sizeof(spdm_ctx), 0);
   val_memory_set(&interface_id, sizeof(interface_id), 0);
@@ -872,9 +790,9 @@ payload(void)
   }
 
   /*
-   * Install a consistent address-decoder state before enabling RME-CDA
-   * protection.  The endpoint decoder is then treated as an RME-sensitive
-   * configuration register for the remaining checks.
+   * Install a consistent address-decoder state while the interface is
+   * unlocked. The endpoint decoder is host writable and therefore forms part
+   * of the RME-sensitive configuration checked after LOCK_INTERFACE.
    */
   status = program_consistent_decoders(&context);
   if (status != ACS_STATUS_PASS)
@@ -884,17 +802,6 @@ payload(void)
     status = ACS_STATUS_SKIP;
     goto cleanup;
   }
-
-  status = enable_rmecda_protection(&context);
-  if (status != ACS_STATUS_PASS)
-  {
-    val_print(ACS_PRINT_INFO, " RWFYLW: cannot enable RMECDA protection", 0);
-    goto cleanup;
-  }
-
-  status = verify_endpoint_decoder_immutable(&context);
-  if (status != ACS_STATUS_PASS)
-    goto cleanup;
 
   status = open_tdisp_session(context.endpoint_bdf,
                               &spdm_ctx,
@@ -931,24 +838,8 @@ payload(void)
   if (status != ACS_STATUS_PASS)
     goto cleanup;
 
-  /*
-   * If the implementation does not expose a GET_DEV_PROP register list, use the
-   * standard TDISP interface report as the generic observable that updates are
-   * prohibited after LOCK_INTERFACE.
-   */
-  if (before_lock.register_list_size == 0u)
-  {
-    status = get_no_update_after_lock(&spdm_ctx,
-                                      session_id,
-                                      &interface_id,
-                                      &no_update_after_lock);
-    if (status != ACS_STATUS_PASS)
-      goto cleanup;
-  }
-
   status = validate_locked_dev_prop(&before_lock,
-                                    &after_lock,
-                                    no_update_after_lock);
+                                    &after_lock);
   if (status != ACS_STATUS_PASS)
     goto cleanup;
 

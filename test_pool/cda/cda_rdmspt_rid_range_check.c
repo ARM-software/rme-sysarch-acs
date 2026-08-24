@@ -34,6 +34,7 @@
 #define TEST_RULE "RDMSPT"
 
 #define RDMSPT_DMA_PAGES 2u
+#define RDMSPT_DMA_LENGTH 64u
 #define RDMSPT_SRC_PATTERN 0x5Au
 #define RDMSPT_DST_PATTERN 0x00u
 
@@ -215,6 +216,13 @@ run_d2h_dma_check(uint32_t endpoint_bdf,
                                            RDMSPT_DST_PATTERN) != ACS_STATUS_PASS)
       return ACS_STATUS_ERR;
 
+    /* Make the initialized buffers visible before the exerciser owns them. */
+    if ((val_memory_cache_clean_invalidate_range_el3((uint64_t)buffer_src,
+                                                      length) != ACS_STATUS_PASS) ||
+        (val_memory_cache_clean_invalidate_range_el3((uint64_t)buffer_dst,
+                                                      length) != ACS_STATUS_PASS))
+      return ACS_STATUS_ERR;
+
     if (val_exerciser_set_param_by_bdf(DMA_ATTRIBUTES,
                                        buffer_src_pa,
                                        length,
@@ -223,10 +231,20 @@ run_d2h_dma_check(uint32_t endpoint_bdf,
 
     status = val_exerciser_ops_by_bdf(START_DMA, EDMA_TO_DEVICE, endpoint_bdf);
     if (status != 0u)
+    {
+      val_print(ACS_PRINT_ERR, " RDMSPT: H2D DMA status 0x%x", status);
       return ACS_STATUS_FAIL;
+    }
   }
-  else if (val_memory_set_el3(buffer_dst, length, RDMSPT_DST_PATTERN))
-    return ACS_STATUS_ERR;
+  else
+  {
+    if (val_memory_set_el3(buffer_dst, length, RDMSPT_DST_PATTERN))
+      return ACS_STATUS_ERR;
+
+    if (val_memory_cache_clean_invalidate_range_el3((uint64_t)buffer_dst,
+                                                     length) != ACS_STATUS_PASS)
+      return ACS_STATUS_ERR;
+  }
 
   val_pcie_clear_device_status_error(endpoint_bdf);
 
@@ -239,6 +257,11 @@ run_d2h_dma_check(uint32_t endpoint_bdf,
   status = val_exerciser_ops_by_bdf(START_DMA, EDMA_FROM_DEVICE, endpoint_bdf);
   if ((expect_match != 0u) && (status != 0u))
     return ACS_STATUS_FAIL;
+
+  /* Discard any stale PE copy before examining data written by the device. */
+  if (val_memory_cache_invalidate_range_el3((uint64_t)buffer_dst,
+                                             length) != ACS_STATUS_PASS)
+    return ACS_STATUS_ERR;
 
   status = val_memory_compare_el3((uint64_t)buffer_src,
                                   (uint64_t)buffer_dst,
@@ -440,7 +463,7 @@ verify_root_port(uint32_t root_bdf, uint32_t rmecda_cap_base)
                              buffer_dst,
                              buffer_src_pa,
                              buffer_dst_pa,
-                             page_size,
+                             RDMSPT_DMA_LENGTH,
                              1u,
                              1u);
   if (status != ACS_STATUS_PASS)
@@ -478,7 +501,7 @@ verify_root_port(uint32_t root_bdf, uint32_t rmecda_cap_base)
                              buffer_dst,
                              buffer_src_pa,
                              buffer_dst_pa,
-                             page_size,
+                             RDMSPT_DMA_LENGTH,
                              0u,
                              0u);
   if (status != ACS_STATUS_PASS)

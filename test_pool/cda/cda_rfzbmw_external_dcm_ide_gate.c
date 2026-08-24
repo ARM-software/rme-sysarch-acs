@@ -28,6 +28,7 @@
 #include "val/include/val_pcie_spec.h"
 #include "val/include/val_pe.h"
 #include "val/include/val_spdm.h"
+#include "val/include/val_tdisp.h"
 
 #define TEST_NAME "cda_rfzbmw_external_dcm_ide_gate"
 #define TEST_DESC "External Realm DCM access requires TDISP IDE"
@@ -509,25 +510,19 @@ stop_tdisp_session(uint32_t endpoint_bdf,
 }
 
 static uint32_t
-access_realm_dcm_allowed(uint32_t endpoint_bdf,
-                         uint64_t dpa,
-                         volatile uint64_t *mapped)
+access_realm_dcm_allowed(volatile uint64_t *mapped,
+                         uint32_t pattern)
 {
-  uint64_t baseline = 0u;
-  uint64_t observed = 0u;
-  uint32_t pattern;
   uint32_t access_status;
+  uint32_t host_readback;
 
   if (mapped == NULL)
     return ACS_STATUS_ERR;
 
-  if (val_cxl_exerciser_backdoor_read64(endpoint_bdf, dpa, &baseline) != ACS_STATUS_PASS)
-    return ACS_STATUS_ERR;
-
-  pattern = (uint32_t)baseline ^ 0xA5A5A5A5u;
-  if (pattern == (uint32_t)baseline)
-    pattern ^= 0x1u;
-
+  /*
+   * Exercise the coherent host path only. The endpoint may satisfy this access
+   * from its cache, so a direct-DPA media read is not a valid completion check.
+   */
   val_memory_clear_el3_access_state();
   shared_data->num_access = 2;
   shared_data->shared_data_access[0].addr = (uint64_t)mapped;
@@ -538,19 +533,27 @@ access_realm_dcm_allowed(uint32_t endpoint_bdf,
   shared_data->shared_data_access[1].access_type = READ_DATA;
 
   access_status = val_pe_access_mut_el3();
+  host_readback = (uint32_t)shared_data->shared_data_access[1].data;
   val_memory_clear_el3_access_state();
 
-  if (val_cxl_exerciser_backdoor_read64(endpoint_bdf, dpa, &observed) != ACS_STATUS_PASS)
-    return ACS_STATUS_ERR;
-
   if (access_status != 0u)
+  {
+    val_print(ACS_PRINT_DEBUG,
+              " RFZBMW: Realm host access status 0x%x",
+              access_status);
     return ACS_STATUS_FAIL;
+  }
 
-  if ((uint32_t)shared_data->shared_data_access[1].data != pattern)
+  if (host_readback != pattern)
+  {
+    val_print(ACS_PRINT_DEBUG,
+              " RFZBMW: Realm host readback 0x%x",
+              host_readback);
+    val_print(ACS_PRINT_DEBUG,
+              " RFZBMW: expected host value 0x%x",
+              pattern);
     return ACS_STATUS_FAIL;
-
-  if ((uint32_t)observed != pattern)
-    return ACS_STATUS_FAIL;
+  }
 
   return ACS_STATUS_PASS;
 }
@@ -607,6 +610,7 @@ prepare_context(TEST_CONTEXT *context)
     const CXL_COMPONENT_ENTRY *root_port;
     const CXL_COMPONENT_ENTRY *endpoint;
     uint32_t endpoint_bdf;
+    uint32_t dev_properties;
     uint32_t status;
     uint64_t host_comp_base;
     uint64_t endpoint_comp_base;
@@ -637,6 +641,12 @@ prepare_context(TEST_CONTEXT *context)
 
     endpoint = &table->component[candidate.endpoint_index];
     if (endpoint->chi_c2c_supported == 0u)
+      continue;
+
+    /* The access under test is a direct coherent Realm host access. */
+    if ((val_tdisp_get_device_properties(endpoint_bdf, &dev_properties)
+         != ACS_STATUS_PASS) ||
+        ((dev_properties & VAL_TDISP_DEV_PROP_PAS_CHECK) == 0u))
       continue;
 
     candidate.root_index = root_idx;
@@ -897,8 +907,9 @@ exercise_rule(TEST_CONTEXT *context)
     goto cleanup;
   }
 
-  if ((root_ide_supported == 0u) || (root_ide_active == 0u) ||
-      (endpoint_ide_supported == 0u) || (endpoint_ide_active == 0u))
+  if (((root_ide_supported == 0u) && (endpoint_ide_supported == 0u)) ||
+      ((root_ide_supported != 0u) && (root_ide_active == 0u)) ||
+      ((endpoint_ide_supported != 0u) && (endpoint_ide_active == 0u)))
   {
     val_print(ACS_PRINT_INFO, " RFZBMW: IDE not active after establish", 0);
     result = ACS_STATUS_SKIP;
@@ -918,20 +929,13 @@ exercise_rule(TEST_CONTEXT *context)
   }
   realm_assigned = 1u;
 
-  status = seed_device_media(context->endpoint_bdf, test_dpa, POSITIVE_BASELINE_VALUE);
-  if (status != ACS_STATUS_PASS)
-  {
-    result = status;
-    goto cleanup;
-  }
-
   /*
    * Positive branch: with TDI in RUN and the link protected by IDE, an
-   * external Realm access to the Realm-assigned DCM page must succeed.
+   * external Realm write followed by a read of the same DCM Location must
+   * complete and return the written value.
    */
-  status = access_realm_dcm_allowed(context->endpoint_bdf,
-                                    test_dpa,
-                                    realm_alias);
+  status = access_realm_dcm_allowed(realm_alias,
+                                    (uint32_t)POSITIVE_BASELINE_VALUE);
   if (status != ACS_STATUS_PASS)
   {
     val_print(ACS_PRINT_ERR,

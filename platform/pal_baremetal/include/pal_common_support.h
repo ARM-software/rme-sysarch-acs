@@ -719,12 +719,12 @@ typedef enum {
 } EXERCISER_OPS;
 
 #define CXL_CMD_OP_BACKDOOR_READ64           0x1u
-#define CXL_CMD_OP_BISNP                     0x2u
-#define CXL_CMD_OP_BACKDOOR_WRITE64          0x3u
-#define CXL_CMD_OP_DCM_INTERNAL_READ64        0x4u
-#define CXL_CMD_OP_DCM_INTERNAL_WRITE64       0x5u
+#define CXL_CMD_OP_BACKDOOR_WRITE64          0x2u
+#define CXL_CMD_OP_BISNP                     0x3u
+#define CXL_CMD_OP_DCM_CACHE_DIRTY           0x4u
+#define CXL_CMD_OP_DCM_INTERNAL_READ64        0x5u
 #define CXL_CMD_OP_DCM_SET_REALM_ASSIGNMENT  0x6u
-#define CXL_CMD_OP_DCM_CACHE_DIRTY           0x7u
+#define CXL_CMD_OP_DCM_INTERNAL_WRITE64       0x7u
 #define CXL_CMD_OP_DCM_CACHE_WRITEBACK       0x8u
 #define CXL_CMD_OP_TDI_SNOOP                  0x9u
 #define CXL_CMD_CTRL_PAS_REALM               (1u << 8)

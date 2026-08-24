@@ -21,7 +21,6 @@
 #include "val/include/val_cda.h"
 #include "val/include/val_cxl.h"
 #include "val/include/val_cxl_spec.h"
-#include "val/include/val_dpt.h"
 #include "val/include/val_el32.h"
 #include "val/include/val_exerciser.h"
 #include "val/include/val_iovirt.h"
@@ -47,14 +46,17 @@
 #define RMECDA_CTL1_TDISP_EN_MASK 0x1u
 #define RMECDA_CTL1_LINK_STR_LOCK_MASK (1u << 1)
 
-#define RQRMSC_SRC_PATTERN         0xA5u
-#define RQRMSC_DST_PATTERN         0x5Au
-#define RQRMSC_DEVICE_SEED_PATTERN 0x3Cu
+#define PGT_STAGE2_RME_NS_MASK (1ull << 55)
+#define DMA_TEST_LENGTH ((uint32_t)sizeof(uint64_t))
+
+#define RQRMSC_WRITE_VALUE    0xA5C35A96F00F6996ull
+#define RQRMSC_DENIED_BASELINE 0x3CC35AA55AC39669ull
 
 #if ENABLE_SPDM
 
 typedef struct {
   /* Host bridge and decoder window used to expose DCM through CXL.mem. */
+  uint32_t root_index;
   uint32_t host_index;
   uint32_t root_bdf;
   uint32_t endpoint_index;
@@ -84,6 +86,14 @@ typedef struct {
   uint32_t ats_cap_base;
 } RQRMSC_CONTEXT;
 
+typedef struct {
+  val_spdm_context_t spdm_ctx;
+  pci_tdisp_interface_id_t interface_id;
+  uint32_t session_id;
+  uint32_t session_active;
+  uint32_t ide_active;
+} RQRMSC_LINK_CONTEXT;
+
 static void
 init_context(RQRMSC_CONTEXT *context)
 {
@@ -91,6 +101,7 @@ init_context(RQRMSC_CONTEXT *context)
     return;
 
   val_memory_set(context, sizeof(*context), 0);
+  context->root_index = CXL_COMPONENT_INVALID_INDEX;
   context->host_index = CXL_COMPONENT_INVALID_INDEX;
   context->endpoint_index = CXL_COMPONENT_INVALID_INDEX;
 }
@@ -259,12 +270,14 @@ restore_context_state(const RQRMSC_CONTEXT *context)
 }
 
 static uint32_t
-configure_smmu_identity_map(uint32_t endpoint_bdf,
-                            uint64_t src_pa,
-                            uint64_t dst_pa,
-                            uint64_t page_size,
-                            smmu_master_attributes_t *master_out,
-                            pgt_descriptor_t *pgt_desc_out)
+configure_smmu_map(uint32_t endpoint_bdf,
+                   uint64_t source_iova,
+                   uint64_t source_pa,
+                   uint64_t dcm_iova,
+                   uint64_t dcm_hpa,
+                   uint64_t page_size,
+                   smmu_master_attributes_t *master_out,
+                   pgt_descriptor_t *pgt_desc_out)
 {
   memory_region_descriptor_t mem_desc[3];
   pgt_descriptor_t pgt_desc;
@@ -276,7 +289,9 @@ configure_smmu_identity_map(uint32_t endpoint_bdf,
   uint32_t oas;
 
   if ((master_out == NULL) || (pgt_desc_out == NULL) ||
-      (src_pa == 0u) || (dst_pa == 0u) || (page_size == 0u))
+      (source_iova == 0u) || (source_pa == 0u) ||
+      (dcm_iova == 0u) || (dcm_hpa == 0u) ||
+      (source_iova == dcm_iova) || (page_size == 0u))
     return ACS_STATUS_ERR;
 
   val_memory_set(master_out, sizeof(*master_out), 0);
@@ -315,13 +330,15 @@ configure_smmu_identity_map(uint32_t endpoint_bdf,
   val_print(ACS_PRINT_DEBUG, " RQRMSC: SMMU OAS %u", (uint64_t)oas);
 
   val_memory_set(mem_desc, sizeof(mem_desc), 0);
-  mem_desc[0].virtual_address = src_pa;
-  mem_desc[0].physical_address = src_pa;
+  mem_desc[0].virtual_address = source_iova;
+  mem_desc[0].physical_address = source_pa;
   mem_desc[0].length = page_size;
-  mem_desc[0].attributes = PGT_STAGE2_AP_RW;
-  mem_desc[1].virtual_address = dst_pa;
-  mem_desc[1].physical_address = dst_pa;
+  /* The host source remains in Non-secure PAS after stage-2 translation. */
+  mem_desc[0].attributes = PGT_STAGE2_AP_RW | PGT_STAGE2_RME_NS_MASK;
+  mem_desc[1].virtual_address = dcm_iova;
+  mem_desc[1].physical_address = dcm_hpa;
   mem_desc[1].length = page_size;
+  /* RME_NS clear selects Realm as the DCM translation output PAS. */
   mem_desc[1].attributes = PGT_STAGE2_AP_RW;
   mem_desc[2].length = 0u;
 
@@ -338,19 +355,17 @@ configure_smmu_identity_map(uint32_t endpoint_bdf,
             (uint64_t)pgt_desc.vtcr.tsz);
   val_print(ACS_PRINT_DEBUG, " RQRMSC: VTCR tg log2 %u",
             (uint64_t)pgt_desc.vtcr.tg_size_log2);
-  val_print(ACS_PRINT_DEBUG, " RQRMSC: SMMU src map 0x%llx", src_pa);
-  val_print(ACS_PRINT_DEBUG, " RQRMSC: SMMU dst map 0x%llx", dst_pa);
+  val_print(ACS_PRINT_DEBUG, " RQRMSC: source IOVA 0x%llx", source_iova);
+  val_print(ACS_PRINT_DEBUG, " RQRMSC: source PA 0x%llx", source_pa);
+  val_print(ACS_PRINT_DEBUG, " RQRMSC: DCM IOVA 0x%llx", dcm_iova);
+  val_print(ACS_PRINT_DEBUG, " RQRMSC: DCM HPA 0x%llx", dcm_hpa);
   val_print(ACS_PRINT_DEBUG, " RQRMSC: SMMU map length 0x%llx", page_size);
 
   if (val_smmu_enable(smmu_index))
     return ACS_STATUS_ERR;
 
   master_out->smmu_index = smmu_index;
-  /*
-   * Use the endpoint StreamID from IOVIRT, matching the established ACS DPT
-   * tests.  The FVP SMMU identify path supplies this requester identity for
-   * exerciser translated traffic.
-   */
+  /* Use the IOVIRT StreamID that identifies this endpoint to the SMMU. */
   master_out->streamid = endpoint_streamid;
   master_out->stage2 = 1u;
 
@@ -398,156 +413,131 @@ configure_smmu_identity_map(uint32_t endpoint_bdf,
 }
 
 static uint32_t
-run_translated_dma(uint32_t endpoint_bdf,
-                   uint64_t translated_addr,
-                   uint32_t length,
-                   uint32_t direction)
+establish_realm_link(const RQRMSC_CONTEXT *context,
+                     RQRMSC_LINK_CONTEXT *link)
 {
-  uint32_t result;
   uint32_t status;
 
-  if ((translated_addr == 0u) || (length == 0u))
+  if ((context == NULL) || (link == NULL))
     return ACS_STATUS_ERR;
 
-  /*
-   * RQRMSC requires PAS_CHECK==FALSE device requests to use host-side
-   * translation and GPC before reaching DCM.  For the CHI-C2C exerciser in this
-   * FVP, the explicit BAR ATS trigger is gated by an internal model parameter
-   * even though the PCIe ATS capability is advertised.  Use an AT=Translated DMA
-   * request as the closest ACS-visible stimulus for a translated device access.
-   * This proves the translated access path works; direct translated DMA in this
-   * FVP does not provide a reliable negative ATS/DPT-denial stimulus.
-   */
-  (void)val_exerciser_ops_by_bdf(ATS_INV_CACHE, 0u, endpoint_bdf);
-  val_pcie_clear_device_status_error(endpoint_bdf);
+  val_memory_set(link, sizeof(*link), 0);
+  status = val_tdisp_establish_run(context->endpoint_bdf,
+                                   &link->spdm_ctx,
+                                   &link->session_id,
+                                   &link->interface_id);
+  if (status != ACS_STATUS_PASS)
+    return status;
+  link->session_active = 1u;
 
-  if (val_exerciser_set_param_by_bdf(CFG_TXN_ATTRIBUTES,
-                                     TXN_ADDR_TYPE,
-                                     AT_TRANSLATED,
-                                     endpoint_bdf))
+  status = val_cxl_ide_establish_link(context->root_index,
+                                      context->endpoint_index,
+                                      &link->spdm_ctx,
+                                      link->session_id);
+  if (status != ACS_STATUS_PASS)
+    return status;
+
+  link->ide_active = 1u;
+  return ACS_STATUS_PASS;
+}
+
+static uint32_t
+cleanup_realm_link(const RQRMSC_CONTEXT *context,
+                   RQRMSC_LINK_CONTEXT *link)
+{
+  uint32_t result;
+
+  if ((context == NULL) || (link == NULL))
     return ACS_STATUS_ERR;
 
-  result = ACS_STATUS_ERR;
-  if (val_exerciser_set_param_by_bdf(DMA_ATTRIBUTES,
-                                     translated_addr,
-                                     length,
-                                     endpoint_bdf))
+  result = ACS_STATUS_PASS;
+  if (link->ide_active != 0u)
   {
-    goto cleanup;
+    if (val_cxl_ide_disable_link(context->root_index,
+                                 context->endpoint_index,
+                                 &link->spdm_ctx,
+                                 link->session_id) != ACS_STATUS_PASS)
+      result = ACS_STATUS_FAIL;
+    link->ide_active = 0u;
   }
 
-  status = val_exerciser_ops_by_bdf(START_DMA, direction, endpoint_bdf);
-  result = (status == 0u) ? ACS_STATUS_PASS : ACS_STATUS_FAIL;
-
-cleanup:
-  (void)val_exerciser_set_param_by_bdf(CFG_TXN_ATTRIBUTES,
-                                       TXN_ADDR_TYPE,
-                                       AT_UNTRANSLATED,
-                                       endpoint_bdf);
+  if (link->session_active != 0u)
+  {
+    (void)val_spdm_send_pci_tdisp_stop_interface(&link->spdm_ctx,
+                                                  link->session_id,
+                                                  &link->interface_id);
+    if (val_spdm_session_close(&link->spdm_ctx,
+                               link->session_id) != ACS_STATUS_PASS)
+      result = ACS_STATUS_FAIL;
+    link->session_active = 0u;
+  }
 
   return result;
 }
 
 static uint32_t
-load_device_with_pattern(uint32_t endpoint_bdf,
-                         uint8_t *buffer_va,
-                         uint64_t buffer_pa,
-                         uint32_t length,
-                         uint32_t pattern)
+cache_ats_translation(uint32_t endpoint_bdf,
+                      uint64_t iova,
+                      uint64_t expected_pa,
+                      uint32_t expected_te,
+                      uint32_t page_size)
 {
-  if ((buffer_va == NULL) || (buffer_pa == 0u) || (length == 0u))
-    return ACS_STATUS_ERR;
-
-  if (val_memory_set_el3(buffer_va, length, (uint8_t)pattern))
-    return ACS_STATUS_ERR;
-
-  return run_translated_dma(endpoint_bdf,
-                            buffer_pa,
-                            length,
-                            EDMA_TO_DEVICE);
-}
-
-static uint32_t
-store_device_to_buffer(uint32_t endpoint_bdf,
-                       uint8_t *buffer_va,
-                       uint64_t buffer_pa,
-                       uint32_t length,
-                       uint32_t pattern)
-{
-  if ((buffer_va == NULL) || (buffer_pa == 0u) || (length == 0u))
-    return ACS_STATUS_ERR;
-
-  if (val_memory_set_el3(buffer_va, length, (uint8_t)pattern))
-    return ACS_STATUS_ERR;
-
-  return run_translated_dma(endpoint_bdf,
-                            buffer_pa,
-                            length,
-                            EDMA_FROM_DEVICE);
-}
-
-static uint32_t
-run_translated_dma_compare(uint32_t endpoint_bdf,
-                           uint8_t *buffer_src,
-                           uint8_t *buffer_dst,
-                           uint64_t buffer_src_pa,
-                           uint64_t buffer_dst_pa,
-                           uint32_t length,
-                           uint32_t require_to_device_success,
-                           uint32_t *to_device_status,
-                           uint32_t *compare_match)
-{
-  uint32_t compare_status;
+  VAL_ATS_TRANSLATION_RESULT response;
   uint32_t status;
 
-  if ((buffer_src == NULL) || (buffer_dst == NULL) ||
-      (buffer_src_pa == 0u) || (buffer_dst_pa == 0u) ||
-      (to_device_status == NULL) || (compare_match == NULL) ||
-      (length == 0u))
-    return ACS_STATUS_ERR;
-
-  *to_device_status = ACS_STATUS_ERR;
-  *compare_match = 0u;
-
-  /*
-   * Use only the generic exerciser DMA contract: first load the device from a
-   * host source buffer, then store the device contents into a host destination
-   * buffer, and compare the two host buffers.  The test never assumes where or
-   * how the exerciser stores its internal DMA payload.
-   */
-  if (val_memory_prepare_dma_buffers_el3(buffer_src,
-                                         buffer_dst,
-                                         length,
-                                         RQRMSC_SRC_PATTERN,
-                                         RQRMSC_DST_PATTERN) != ACS_STATUS_PASS)
-    return ACS_STATUS_ERR;
-
-  status = run_translated_dma(endpoint_bdf,
-                              buffer_src_pa,
-                              length,
-                              EDMA_TO_DEVICE);
-  if (status == ACS_STATUS_ERR)
-    return ACS_STATUS_ERR;
-
-  *to_device_status = status;
-  if ((require_to_device_success != 0u) && (status != ACS_STATUS_PASS))
-    return ACS_STATUS_FAIL;
-
-  status = run_translated_dma(endpoint_bdf,
-                              buffer_dst_pa,
-                              length,
-                              EDMA_FROM_DEVICE);
+  status = val_exerciser_ats_translate_by_bdf(endpoint_bdf,
+                                               iova,
+                                               page_size,
+                                               VAL_ATS_REQUEST_T,
+                                               &response);
   if (status != ACS_STATUS_PASS)
     return status;
 
-  compare_status = val_memory_compare_el3((uint64_t)buffer_src,
-                                          (uint64_t)buffer_dst,
-                                          length);
-  if (compare_status == ACS_STATUS_ERR)
+  if ((response.completion_success == 0u) ||
+      (response.translated_pa != expected_pa) ||
+      (response.te != expected_te) ||
+      ((response.response_attributes & VAL_ATS_PERMISSION_MASK) == 0u))
+  {
+    val_print(ACS_PRINT_ERR, " RQRMSC: ATS PA 0x%llx", response.translated_pa);
+    val_print(ACS_PRINT_ERR, " RQRMSC: ATS TE %u", (uint64_t)response.te);
+    val_print(ACS_PRINT_ERR,
+              " RQRMSC: ATS attributes 0x%x",
+              (uint64_t)response.response_attributes);
+    return ACS_STATUS_FAIL;
+  }
+
+  return ACS_STATUS_PASS;
+}
+
+static uint32_t
+run_dma_without_ats(uint32_t endpoint_bdf,
+                    uint64_t iova,
+                    uint32_t length,
+                    EXERCISER_DMA_ATTR direction)
+{
+  uint32_t dma_status;
+
+  if ((iova == 0u) || (length == 0u))
     return ACS_STATUS_ERR;
 
-  *compare_match = (compare_status == 0u) ? 1u : 0u;
-  return ACS_STATUS_PASS;
+  /* Remove any earlier translation and issue an ordinary untranslated DMA. */
+  (void)val_exerciser_ops_by_bdf(ATS_INV_CACHE, 0u, endpoint_bdf);
+  if ((val_exerciser_set_param_by_bdf(CFG_TXN_ATTRIBUTES,
+                                      TXN_ATC_ENTRY,
+                                      ATC_ENTRY_DISABLE,
+                                      endpoint_bdf) != 0u) ||
+      (val_exerciser_set_param_by_bdf(CFG_TXN_ATTRIBUTES,
+                                      TXN_ADDR_TYPE,
+                                      AT_UNTRANSLATED,
+                                      endpoint_bdf) != 0u) ||
+      (val_exerciser_set_param_by_bdf(DMA_ATTRIBUTES,
+                                      iova,
+                                      length,
+                                      endpoint_bdf) != 0u))
+    return ACS_STATUS_ERR;
+
+  dma_status = val_exerciser_ops_by_bdf(START_DMA, direction, endpoint_bdf);
+  return (dma_status == 0u) ? ACS_STATUS_PASS : ACS_STATUS_FAIL;
 }
 
 static uint32_t
@@ -611,6 +601,7 @@ prepare_context(RQRMSC_CONTEXT *context)
       continue;
 
     candidate.root_bdf = root_port->bdf;
+    candidate.root_index = root_idx;
     candidate.endpoint_bdf = endpoint->bdf;
     candidate.host_index = root_port->host_bridge_index;
 
@@ -759,19 +750,16 @@ prepare_context(RQRMSC_CONTEXT *context)
     endpoint_rid = (uint32_t)PCIE_CREATE_BDF_PACKED(candidate.endpoint_bdf);
     val_print(ACS_PRINT_DEBUG, " RQRMSC: endpoint RID 0x%x",
               (uint64_t)endpoint_rid);
-    val_print(ACS_PRINT_DEBUG, " RQRMSC: programming RID base 0x%x", 0u);
+    val_print(ACS_PRINT_DEBUG, " RQRMSC: programming RID base 0x%x",
+              (uint64_t)endpoint_rid);
     val_print(ACS_PRINT_DEBUG, " RQRMSC: programming RID limit 0x%x",
               (uint64_t)endpoint_rid);
-    /*
-     * RQRMSC is an ATS/GPC dependency check, not a RID-window check.  Keep the
-     * link locked while admitting the endpoint and low synthetic identities so
-     * this test does not conflate ATS/GPC failures with RDMSPT/RYDSYL coverage.
-     */
+    /* Admit only the endpoint identity so RID filtering cannot mask this check. */
     status = val_cda_program_rid_range(candidate.rmecda_cfg_va,
                                        candidate.rmecda_cap_base,
                                        candidate.rmecda_ctl3_orig,
                                        candidate.rmecda_ctl4_orig,
-                                       0u,
+                                       endpoint_rid,
                                        endpoint_rid,
                                        1u);
     if (status != ACS_STATUS_PASS)
@@ -860,52 +848,60 @@ prepare_context(RQRMSC_CONTEXT *context)
 static uint32_t
 exercise_rule(RQRMSC_CONTEXT *context)
 {
+  RQRMSC_LINK_CONTEXT link;
   smmu_master_attributes_t master;
   pgt_descriptor_t pgt_desc;
-  VAL_SMMU_DPT_CFG_STATE dpt_cfg_state;
-  uint64_t dcm_window_pa;
+  VAL_ATS_TRANSLATION_RESULT denied_response;
   uint8_t *buffer_base_va;
-  uint8_t *buffer_src_va;
-  uint8_t *buffer_dst_va;
-  uint64_t buffer_src_pa;
-  uint64_t buffer_dst_pa;
-  uint64_t dpt_coverage_pa;
+  uint8_t *source_va;
+  uint64_t dcm_dpa;
+  uint64_t dcm_hpa;
+  uint64_t dcm_iova;
+  uint64_t observed;
+  uint64_t source_pa;
+  uint32_t dcm_gpt_set;
+  uint32_t link_active;
   uint32_t page_size;
-  uint32_t compare_match;
-  uint32_t dma_to_status;
-  uint32_t result;
-  uint32_t status;
-  uint32_t pas_check;
   uint32_t properties;
-  uint32_t src_gpt_set;
-  uint32_t dst_gpt_set;
-  uint32_t src_dpt_entry_added;
-  uint32_t dst_dpt_entry_added;
-  uint32_t dpt_deny_limited;
-  uint32_t smmu_active;
+  uint32_t result;
   uint32_t rlm_pgt_created;
+  uint32_t smmu_active;
+  uint32_t source_gpt_set;
+  uint32_t status;
 
   if (context == NULL)
     return ACS_STATUS_ERR;
 
+  val_memory_set(&link, sizeof(link), 0);
   val_memory_set(&master, sizeof(master), 0);
   val_memory_set(&pgt_desc, sizeof(pgt_desc), 0);
-  val_memory_set(&dpt_cfg_state, sizeof(dpt_cfg_state), 0);
+  val_memory_set(&denied_response, sizeof(denied_response), 0);
   master.smmu_index = ACS_INVALID_INDEX;
   buffer_base_va = NULL;
-  buffer_src_va = NULL;
-  buffer_dst_va = NULL;
-  buffer_src_pa = 0u;
-  buffer_dst_pa = 0u;
-  src_gpt_set = 0u;
-  dst_gpt_set = 0u;
-  src_dpt_entry_added = 0u;
-  dst_dpt_entry_added = 0u;
-  dpt_deny_limited = 0u;
-  smmu_active = 0u;
+  source_va = NULL;
+  dcm_dpa = 0u;
+  dcm_hpa = 0u;
+  dcm_iova = 0u;
+  source_pa = 0u;
+  dcm_gpt_set = 0u;
+  link_active = 0u;
   rlm_pgt_created = 0u;
+  smmu_active = 0u;
+  source_gpt_set = 0u;
   result = ACS_STATUS_FAIL;
-  val_memory_clear_el3_access_state();
+
+  status = val_tdisp_get_device_properties(context->endpoint_bdf, &properties);
+  if (status != ACS_STATUS_PASS)
+    return status;
+
+  val_print(ACS_PRINT_INFO, " RQRMSC: TDISP properties 0x%x", properties);
+  if ((properties & VAL_TDISP_DEV_PROP_PAS_CHECK) != 0u)
+  {
+    val_print(ACS_PRINT_INFO,
+              " RQRMSC: PAS_CHECK is implemented; ATS dependency is not required",
+              0);
+    return ACS_STATUS_SKIP;
+  }
 
   page_size = val_memory_page_size();
   if (page_size == 0u)
@@ -913,51 +909,39 @@ exercise_rule(RQRMSC_CONTEXT *context)
 
   status = val_cda_select_dcm_page(context->window_base,
                                    context->window_size,
-                                   &dcm_window_pa);
+                                   &dcm_hpa);
   if (status != ACS_STATUS_PASS)
     return status;
 
-  val_print(ACS_PRINT_INFO, " RQRMSC: DCM window PA 0x%llx", dcm_window_pa);
+  if (val_cxl_hpa_to_dpa(context->endpoint_index,
+                         dcm_hpa,
+                         &dcm_dpa) != ACS_STATUS_PASS)
+  {
+    val_print(ACS_PRINT_INFO, " RQRMSC: cannot derive DCM DPA", 0);
+    return ACS_STATUS_SKIP;
+  }
 
+  /*
+   * The second page provides a stable IOVA only. Mapping that IOVA to DCM
+   * makes translation observable and prevents accidental direct-HPA access.
+   */
   buffer_base_va = (uint8_t *)val_memory_alloc_pages(2u);
   if (buffer_base_va == NULL)
     return ACS_STATUS_ERR;
 
-  buffer_src_va = buffer_base_va;
-  buffer_dst_va = buffer_base_va + page_size;
-  buffer_src_pa = (uint64_t)val_memory_virt_to_phys(buffer_src_va);
-  buffer_dst_pa = (uint64_t)val_memory_virt_to_phys(buffer_dst_va);
-  if ((buffer_src_pa == 0u) || (buffer_dst_pa == 0u) ||
-      (buffer_src_pa == buffer_dst_pa))
+  source_va = buffer_base_va;
+  source_pa = (uint64_t)val_memory_virt_to_phys(source_va);
+  dcm_iova = (uint64_t)val_memory_virt_to_phys(buffer_base_va + page_size);
+  if ((source_pa == 0u) || (dcm_iova == 0u) ||
+      (source_pa == dcm_iova) || (dcm_iova == dcm_hpa))
   {
     result = ACS_STATUS_ERR;
     goto cleanup;
   }
 
-  val_print(ACS_PRINT_INFO, " RQRMSC: DMA source PA 0x%llx", buffer_src_pa);
-  val_print(ACS_PRINT_INFO, " RQRMSC: DMA destination PA 0x%llx", buffer_dst_pa);
-
-  status = val_tdisp_get_device_properties(context->endpoint_bdf, &properties);
-  if (status != ACS_STATUS_PASS)
-  {
-    result = status;
-    goto cleanup;
-  }
-  pas_check = ((properties & VAL_TDISP_DEV_PROP_PAS_CHECK) != 0u) ? 1u : 0u;
-  val_print(ACS_PRINT_INFO, " RQRMSC: TDISP properties 0x%x", properties);
-
-  if (pas_check != 0u)
-  {
-    val_print(ACS_PRINT_INFO,
-              " RQRMSC: PAS_CHECK==TRUE permits direct device-side PAS checks",
-              0);
-    result = ACS_STATUS_SKIP;
-    goto cleanup;
-  }
-
-  val_print(ACS_PRINT_INFO,
-            " RQRMSC: PAS_CHECK==FALSE, checking ATS/GPC dependency",
-            0);
+  val_print(ACS_PRINT_INFO, " RQRMSC: DCM HPA 0x%llx", dcm_hpa);
+  val_print(ACS_PRINT_INFO, " RQRMSC: DCM DPA 0x%llx", dcm_dpa);
+  val_print(ACS_PRINT_INFO, " RQRMSC: DCM IOVA 0x%llx", dcm_iova);
 
   status = val_pcie_enable_ats(context->endpoint_bdf,
                                &context->ats_cap_base,
@@ -967,7 +951,7 @@ exercise_rule(RQRMSC_CONTEXT *context)
     if (status == ACS_STATUS_SKIP)
     {
       val_print(ACS_PRINT_ERR,
-                " RQRMSC: PAS_CHECK==FALSE endpoint lacks ATS capability",
+                " RQRMSC: PAS_CHECK==FALSE endpoint lacks ATS",
                 0);
       result = ACS_STATUS_FAIL;
     }
@@ -978,48 +962,33 @@ exercise_rule(RQRMSC_CONTEXT *context)
     goto cleanup;
   }
   context->ats_ctrl_valid = 1u;
-  val_print(ACS_PRINT_DEBUG, " RQRMSC: ATS cap base 0x%x",
-            (uint64_t)context->ats_cap_base);
-  val_print(ACS_PRINT_DEBUG, " RQRMSC: ATS ctrl original 0x%x",
-            (uint64_t)context->ats_ctrl_orig);
 
   val_memory_clear_el3_access_state();
-  if (val_add_gpt_entry_el3(buffer_src_pa, GPT_NONSECURE))
+  if (val_add_gpt_entry_el3(source_pa, GPT_ANY) != 0u)
   {
     result = ACS_STATUS_ERR;
     goto cleanup;
   }
-  src_gpt_set = 1u;
+  source_gpt_set = 1u;
 
-  if (val_add_gpt_entry_el3(buffer_dst_pa, GPT_NONSECURE))
+  if ((val_memory_map_el3_data((uint64_t)source_va,
+                               page_size,
+                               NONSECURE_PAS) != ACS_STATUS_PASS) ||
+      (val_add_gpt_entry_el3(dcm_hpa, GPT_ANY) != 0u))
   {
     result = ACS_STATUS_ERR;
     goto cleanup;
   }
-  dst_gpt_set = 1u;
+  dcm_gpt_set = 1u;
 
-  if (val_memory_map_el3_data((uint64_t)buffer_src_va,
+  status = configure_smmu_map(context->endpoint_bdf,
+                              source_pa,
+                              source_pa,
+                              dcm_iova,
+                              dcm_hpa,
                               page_size,
-                              NONSECURE_PAS) != ACS_STATUS_PASS)
-  {
-    result = ACS_STATUS_ERR;
-    goto cleanup;
-  }
-
-  if (val_memory_map_el3_data((uint64_t)buffer_dst_va,
-                              page_size,
-                              NONSECURE_PAS) != ACS_STATUS_PASS)
-  {
-    result = ACS_STATUS_ERR;
-    goto cleanup;
-  }
-
-  status = configure_smmu_identity_map(context->endpoint_bdf,
-                                       buffer_src_pa,
-                                       buffer_dst_pa,
-                                       page_size,
-                                       &master,
-                                       &pgt_desc);
+                              &master,
+                              &pgt_desc);
   if (status != ACS_STATUS_PASS)
   {
     result = status;
@@ -1028,271 +997,223 @@ exercise_rule(RQRMSC_CONTEXT *context)
   smmu_active = 1u;
   rlm_pgt_created = 1u;
 
-  if (val_smmu_gpt_invalidate_el3(&master))
+  if (val_smmu_gpt_invalidate_el3(&master) != 0u)
   {
     result = ACS_STATUS_ERR;
     goto cleanup;
   }
 
-  dpt_coverage_pa = (buffer_src_pa > buffer_dst_pa) ? buffer_src_pa : buffer_dst_pa;
-  status = val_smmu_configure_dpt_coverage(master.smmu_index,
-                                           dpt_coverage_pa,
-                                           &dpt_cfg_state);
+  /*
+   * Realm DCM traffic requires the TDI in RUN and an active IDE stream.
+   * ATS is issued only after both conditions have been established.
+   */
+  status = establish_realm_link(context, &link);
+  link_active = link.session_active;
+  if (status != ACS_STATUS_PASS)
+  {
+    val_print(ACS_PRINT_INFO, " RQRMSC: Realm link setup unavailable", 0);
+    result = status;
+    goto cleanup;
+  }
+
+  /*
+   * Direct DPA access is used only to initialize and observe media. The access
+   * under test below uses an IOVA through ATS, the ATC, GPC, and HDM decoding.
+   */
+  if ((val_cxl_exerciser_backdoor_write64(context->endpoint_bdf,
+                                           dcm_dpa,
+                                           RQRMSC_DENIED_BASELINE)
+       != ACS_STATUS_PASS) ||
+      (val_cxl_exerciser_backdoor_read64(context->endpoint_bdf,
+                                          dcm_dpa,
+                                          &observed)
+       != ACS_STATUS_PASS))
+  {
+    val_print(ACS_PRINT_INFO, " RQRMSC: DCM observation unavailable", 0);
+    result = ACS_STATUS_SKIP;
+    goto cleanup;
+  }
+
+  if (observed != RQRMSC_DENIED_BASELINE)
+  {
+    val_print(ACS_PRINT_ERR, " RQRMSC: initial DCM value 0x%llx", observed);
+    result = ACS_STATUS_FAIL;
+    goto cleanup;
+  }
+
+  /*
+   * Load the exerciser payload from a host page through a valid Non-secure ATC
+   * entry. The test does not depend on where the device stores that payload.
+   */
+  *(uint64_t *)source_va = RQRMSC_WRITE_VALUE;
+  if ((val_memory_cache_clean_invalidate_range_el3((uint64_t)source_va,
+                                                    DMA_TEST_LENGTH)
+       != ACS_STATUS_PASS) ||
+      (cache_ats_translation(context->endpoint_bdf,
+                             source_pa,
+                             source_pa,
+                             0u,
+                             page_size) != ACS_STATUS_PASS) ||
+      (val_exerciser_dma_with_atc_by_bdf(context->endpoint_bdf,
+                                         source_pa,
+                                         DMA_TEST_LENGTH,
+                                         EDMA_TO_DEVICE) != ACS_STATUS_PASS))
+  {
+    val_print(ACS_PRINT_ERR, " RQRMSC: source DMA setup failed", 0);
+    result = ACS_STATUS_FAIL;
+    goto cleanup;
+  }
+
+  /*
+   * Negative case 1: attempt the DCM write without translating its IOVA by
+   * ATS. The SMMU mapping and GPC permission are valid, so rejection is due to
+   * the missing ATS-derived translation rather than a translation/GPC fault.
+   */
+  (void)run_dma_without_ats(context->endpoint_bdf,
+                            dcm_iova,
+                            DMA_TEST_LENGTH,
+                            EDMA_FROM_DEVICE);
+
+  if ((val_cxl_exerciser_backdoor_read64(context->endpoint_bdf,
+                                          dcm_dpa,
+                                          &observed) != ACS_STATUS_PASS) ||
+      (observed != RQRMSC_DENIED_BASELINE))
+  {
+    val_print(ACS_PRINT_ERR,
+              " RQRMSC: no-ATS access modified DCM to 0x%llx",
+              observed);
+    result = ACS_STATUS_FAIL;
+    goto cleanup;
+  }
+  val_print(ACS_PRINT_INFO,
+            " RQRMSC: direct DCM write without ATS was blocked",
+            0);
+
+  /*
+   * Positive case: cache the Realm translation, submit DMA with the original
+   * DCM IOVA, and verify that the corresponding DPA media was modified.
+   */
+  if ((cache_ats_translation(context->endpoint_bdf,
+                             dcm_iova,
+                             dcm_hpa,
+                             1u,
+                             page_size) != ACS_STATUS_PASS) ||
+      (val_exerciser_dma_with_atc_by_bdf(context->endpoint_bdf,
+                                         dcm_iova,
+                                         DMA_TEST_LENGTH,
+                                         EDMA_FROM_DEVICE) != ACS_STATUS_PASS))
+  {
+    val_print(ACS_PRINT_ERR, " RQRMSC: ATS-backed DCM write failed", 0);
+    result = ACS_STATUS_FAIL;
+    goto cleanup;
+  }
+
+  if ((val_cxl_exerciser_backdoor_read64(context->endpoint_bdf,
+                                          dcm_dpa,
+                                          &observed) != ACS_STATUS_PASS) ||
+      (observed != RQRMSC_WRITE_VALUE))
+  {
+    val_print(ACS_PRINT_ERR, " RQRMSC: positive DCM value 0x%llx", observed);
+    result = ACS_STATUS_FAIL;
+    goto cleanup;
+  }
+  val_print(ACS_PRINT_INFO, " RQRMSC: ATS-backed DCM write completed", 0);
+
+  /*
+   * Negative case 2: make the Realm translation fail its host-side GPC check.
+   * A Realm output PA cannot access a GPT entry assigned to Non-secure PAS, so
+   * ATS must not return usable permissions and DCM must remain unchanged.
+   */
+  if ((val_cxl_exerciser_backdoor_write64(context->endpoint_bdf,
+                                           dcm_dpa,
+                                           RQRMSC_DENIED_BASELINE)
+       != ACS_STATUS_PASS) ||
+      (val_add_gpt_entry_el3(dcm_hpa, GPT_NONSECURE) != 0u) ||
+      (val_smmu_gpt_invalidate_el3(&master) != 0u))
+  {
+    result = ACS_STATUS_ERR;
+    goto cleanup;
+  }
+
+  status = val_exerciser_ats_translate_by_bdf(context->endpoint_bdf,
+                                               dcm_iova,
+                                               page_size,
+                                               VAL_ATS_REQUEST_T,
+                                               &denied_response);
   if (status != ACS_STATUS_PASS)
   {
     result = status;
     goto cleanup;
   }
 
-  /*
-   * RME translated-request checks consult the DPT after stage-2 translation.
-   * Install read/write DPT entries for both translated host buffers before
-   * issuing DMA; otherwise a compliant path can reject the request before the
-   * GPC path is tested.
-   */
-  if (val_dpt_add_entry(buffer_src_pa,
-                        ((((uint64_t)master.smmu_index) << 32) |
-                         DPT_RDWR_ACCESS_ENTRY)))
+  if ((denied_response.completion_success != 0u) &&
+      ((denied_response.response_attributes & VAL_ATS_PERMISSION_MASK) != 0u))
   {
-    val_print(ACS_PRINT_ERR, " RQRMSC: source DPT entry add failed", 0);
-    result = ACS_STATUS_ERR;
-    goto cleanup;
-  }
-  src_dpt_entry_added = 1u;
-
-  if (val_dpt_add_entry(buffer_dst_pa,
-                        ((((uint64_t)master.smmu_index) << 32) |
-                         DPT_RDWR_ACCESS_ENTRY)))
-  {
-    val_print(ACS_PRINT_ERR, " RQRMSC: destination DPT entry add failed", 0);
-    result = ACS_STATUS_ERR;
-    goto cleanup;
-  }
-  dst_dpt_entry_added = 1u;
-
-  if (val_dpt_invalidate_all(master.smmu_index))
-  {
-    val_print(ACS_PRINT_ERR, " RQRMSC: DPT invalidate failed", 0);
-    result = ACS_STATUS_ERR;
-    goto cleanup;
-  }
-
-  /*
-   * Positive check: use the generic exerciser DMA contract.  Load the device
-   * from a translated source buffer, store the device contents into a translated
-   * destination buffer, and compare the two host buffers.
-   */
-  status = run_translated_dma_compare(context->endpoint_bdf,
-                                      buffer_src_va,
-                                      buffer_dst_va,
-                                      buffer_src_pa,
-                                      buffer_dst_pa,
-                                      page_size,
-                                      1u,
-                                      &dma_to_status,
-                                      &compare_match);
-  if (status != ACS_STATUS_PASS)
-  {
-    val_print(ACS_PRINT_ERR, " RQRMSC: positive translated DMA failed", 0);
+    val_print(ACS_PRINT_ERR,
+              " RQRMSC: denied ATS returned PA 0x%llx",
+              denied_response.translated_pa);
+    val_print(ACS_PRINT_ERR,
+              " RQRMSC: denied ATS attributes 0x%x",
+              (uint64_t)denied_response.response_attributes);
     result = ACS_STATUS_FAIL;
     goto cleanup;
   }
 
-  if (compare_match == 0u)
+  val_print(ACS_PRINT_INFO,
+            " RQRMSC: GPC denial prevented a usable ATS translation",
+            0);
+
+  /* Media integrity is definitive even if the exerciser reports stale status. */
+  (void)val_exerciser_dma_with_atc_by_bdf(context->endpoint_bdf,
+                                          dcm_iova,
+                                          DMA_TEST_LENGTH,
+                                          EDMA_FROM_DEVICE);
+
+  if ((val_cxl_exerciser_backdoor_read64(context->endpoint_bdf,
+                                          dcm_dpa,
+                                          &observed) != ACS_STATUS_PASS) ||
+      (observed != RQRMSC_DENIED_BASELINE))
   {
-    val_print(ACS_PRINT_ERR, " RQRMSC: positive DMA source/destination mismatch", 0);
+    val_print(ACS_PRINT_ERR, " RQRMSC: denied DCM value 0x%llx", observed);
     result = ACS_STATUS_FAIL;
     goto cleanup;
   }
 
-  val_print(ACS_PRINT_INFO, " RQRMSC: positive translated DMA compare matched", 0);
-
-  /*
-   * Negative check: first load the device from an allowed buffer with a pattern
-   * that is different from the source pattern and store that payload into the
-   * destination buffer.  Then deny the translated source page in DPT and try the
-   * source-to-device DMA again.  If the source deny is effective, the destination
-   * must not match the source pattern.  If the denied load unexpectedly succeeds,
-   * store from the device once more and detect whether the denied source reached
-   * the destination.
-   *
-   * Do not change the GPT for either buffer here: these pages are owned by the
-   * UEFI allocator, and changing heap-backed pages to Realm can make later UEFI
-   * Print/Pool allocations fault.
-   *
-   * The CHI-C2C FVP direct AT=Translated DMA path is not an explicit ATS
-   * transaction and may not consume the DPT deny.  Keep the check for platforms
-   * that reject or suppress the transfer, but report this model limitation as a
-   * warning instead of a device rule failure when the positive translated path
-   * has already been proven above.
-   */
-  status = load_device_with_pattern(context->endpoint_bdf,
-                                    buffer_dst_va,
-                                    buffer_dst_pa,
-                                    page_size,
-                                    RQRMSC_DEVICE_SEED_PATTERN);
-  if (status != ACS_STATUS_PASS)
-  {
-    val_print(ACS_PRINT_ERR, " RQRMSC: device seed DMA failed", 0);
-    result = ACS_STATUS_FAIL;
-    goto cleanup;
-  }
-
-  status = store_device_to_buffer(context->endpoint_bdf,
-                                  buffer_dst_va,
-                                  buffer_dst_pa,
-                                  page_size,
-                                  RQRMSC_DST_PATTERN);
-  if (status != ACS_STATUS_PASS)
-  {
-    val_print(ACS_PRINT_ERR, " RQRMSC: device seed store failed", 0);
-    result = ACS_STATUS_FAIL;
-    goto cleanup;
-  }
-
-  if (val_dpt_add_entry(buffer_src_pa,
-                        ((((uint64_t)master.smmu_index) << 32) |
-                         DPT_NO_ACCESS_ENTRY)))
-  {
-    val_print(ACS_PRINT_ERR, " RQRMSC: source DPT deny entry add failed", 0);
-    result = ACS_STATUS_ERR;
-    goto cleanup;
-  }
-
-  if (val_dpt_invalidate_all(master.smmu_index))
-  {
-    val_print(ACS_PRINT_ERR, " RQRMSC: DPT deny invalidate failed", 0);
-    result = ACS_STATUS_ERR;
-    goto cleanup;
-  }
-
-  if (val_memory_set_el3(buffer_src_va, page_size, RQRMSC_SRC_PATTERN))
-  {
-    result = ACS_STATUS_ERR;
-    goto cleanup;
-  }
-
-  dma_to_status = run_translated_dma(context->endpoint_bdf,
-                                     buffer_src_pa,
-                                     page_size,
-                                     EDMA_TO_DEVICE);
-  if (dma_to_status == ACS_STATUS_ERR)
-  {
-    val_print(ACS_PRINT_ERR, " RQRMSC: DPT-denied DMA probe failed", 0);
-    result = ACS_STATUS_ERR;
-    goto cleanup;
-  }
-
-  if (dma_to_status == ACS_STATUS_PASS)
-  {
-    status = store_device_to_buffer(context->endpoint_bdf,
-                                    buffer_dst_va,
-                                    buffer_dst_pa,
-                                    page_size,
-                                    RQRMSC_DST_PATTERN);
-    if (status != ACS_STATUS_PASS)
-    {
-      val_print(ACS_PRINT_ERR, " RQRMSC: DPT-denied device store failed", 0);
-      result = ACS_STATUS_FAIL;
-      goto cleanup;
-    }
-  }
-
-  status = val_memory_compare_el3((uint64_t)buffer_src_va,
-                                  (uint64_t)buffer_dst_va,
-                                  page_size);
-  if (status == ACS_STATUS_ERR)
-  {
-    result = ACS_STATUS_ERR;
-    goto cleanup;
-  }
-  compare_match = (status == 0u) ? 1u : 0u;
-
-  if (compare_match != 0u)
-  {
-    if (dma_to_status == ACS_STATUS_PASS)
-    {
-      val_print(ACS_PRINT_WARN,
-                " RQRMSC: direct translated DMA ignored source DPT deny",
-                0);
-      val_print(ACS_PRINT_WARN,
-                " RQRMSC: negative DPT denial not enforceable in this FVP path",
-                0);
-      dpt_deny_limited = 1u;
-    }
-    else
-    {
-      val_print(ACS_PRINT_ERR,
-                " RQRMSC: source matched destination after rejected source load",
-                0);
-      result = ACS_STATUS_FAIL;
-      goto cleanup;
-    }
-  }
-
-  if (dpt_deny_limited != 0u)
-  {
-    val_print(ACS_PRINT_INFO,
-              " RQRMSC: positive translated access completed; negative path limited",
-              0);
-  }
-  else if (dma_to_status == ACS_STATUS_PASS)
-  {
-    val_print(ACS_PRINT_INFO,
-              " RQRMSC: DPT-denied translated DMA completed non-destructively",
-              0);
-  }
-  else
-  {
-    val_print(ACS_PRINT_INFO,
-              " RQRMSC: DPT-denied translated DMA rejected as expected",
-              0);
-  }
-
+  val_print(ACS_PRINT_INFO,
+            " RQRMSC: DCM unchanged after denied translation",
+            0);
   result = ACS_STATUS_PASS;
 
 cleanup:
-  val_memory_clear_el3_access_state();
   (void)val_exerciser_set_param_by_bdf(CFG_TXN_ATTRIBUTES,
-                                       TXN_ADDR_TYPE,
-                                       AT_UNTRANSLATED,
+                                       TXN_ATC_ENTRY,
+                                       ATC_ENTRY_DISABLE,
                                        context->endpoint_bdf);
+  (void)val_exerciser_set_param_by_bdf(EXERCISER_ATS_REQUEST_ATTRIBUTES,
+                                       0u,
+                                       0u,
+                                       context->endpoint_bdf);
+  (void)val_exerciser_ops_by_bdf(ATS_INV_CACHE, 0u, context->endpoint_bdf);
 
-  if (src_gpt_set != 0u)
-    (void)val_add_gpt_entry_el3(buffer_src_pa, GPT_ANY);
-
-  if (dst_gpt_set != 0u)
-    (void)val_add_gpt_entry_el3(buffer_dst_pa, GPT_ANY);
-
-  if (src_dpt_entry_added != 0u)
-  {
-    (void)val_dpt_add_entry(buffer_src_pa,
-                            ((((uint64_t)master.smmu_index) << 32) |
-                             DPT_RDWR_ACCESS_ENTRY));
-  }
-
-  if (dst_dpt_entry_added != 0u)
-  {
-    (void)val_dpt_add_entry(buffer_dst_pa,
-                            ((((uint64_t)master.smmu_index) << 32) |
-                             DPT_RDWR_ACCESS_ENTRY));
-  }
-
-  if ((src_dpt_entry_added != 0u) || (dst_dpt_entry_added != 0u))
-    (void)val_dpt_invalidate_all(master.smmu_index);
-
-  if (val_smmu_restore_dpt_coverage(&dpt_cfg_state) != ACS_STATUS_PASS)
-    result = ACS_STATUS_ERR;
+  if ((link_active != 0u) &&
+      (cleanup_realm_link(context, &link) != ACS_STATUS_PASS))
+    result = ACS_STATUS_FAIL;
 
   if (pgt_desc.pgt_base != 0u)
-  {
-    if (val_add_gpt_entry_el3(pgt_desc.pgt_base, GPT_ANY))
-      result = ACS_STATUS_ERR;
-  }
+    (void)val_add_gpt_entry_el3(pgt_desc.pgt_base, GPT_ANY);
+
+  if ((dcm_gpt_set != 0u) &&
+      (val_add_gpt_entry_el3(dcm_hpa, GPT_ANY) != 0u))
+    result = ACS_STATUS_FAIL;
+  if ((source_gpt_set != 0u) &&
+      (val_add_gpt_entry_el3(source_pa, GPT_ANY) != 0u))
+    result = ACS_STATUS_FAIL;
+
+  if ((smmu_active != 0u) && (val_smmu_gpt_invalidate_el3(&master) != 0u))
+    result = ACS_STATUS_FAIL;
 
   if (rlm_pgt_created != 0u)
     val_rlm_pgt_destroy(&pgt_desc);
-
   if (smmu_active != 0u)
     (void)val_smmu_disable(master.smmu_index);
 

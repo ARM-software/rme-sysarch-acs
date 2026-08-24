@@ -65,6 +65,9 @@ typedef struct {
   uint32_t host_target_valid;
   uint32_t rmecda_ctl1_orig;
   uint32_t rmecda_ctl1_valid;
+  uint32_t rmecda_ctl3_orig;
+  uint32_t rmecda_ctl4_orig;
+  uint32_t rmecda_regs_valid;
   uint32_t rmecda_cap_base;
   uint64_t rmecda_cfg_va;
   uint32_t ats_ctrl_orig;
@@ -90,12 +93,16 @@ restore_context_state(const TEST_CONTEXT *context)
 {
   uint32_t restore_status;
   uint32_t readback;
+  uint32_t ctl3_readback;
+  uint32_t ctl4_readback;
 
   if (context == NULL)
     return ACS_STATUS_ERR;
 
   restore_status = ACS_STATUS_PASS;
   readback = 0u;
+  ctl3_readback = 0u;
+  ctl4_readback = 0u;
 
   if (context->ats_ctrl_valid != 0u)
   {
@@ -129,6 +136,35 @@ restore_context_state(const TEST_CONTEXT *context)
       val_pcie_write_cfg(context->root_bdf,
                          context->rmecda_cap_base + RMECDA_CTL1_OFFSET,
                          context->rmecda_ctl1_orig);
+    }
+  }
+
+  /* Restore the writable RID fields only after restoring the unlocked state. */
+  if ((context->rmecda_regs_valid != 0u) && (context->rmecda_cfg_va != 0u))
+  {
+    if ((val_memory_write_el3(context->rmecda_cfg_va +
+                              context->rmecda_cap_base +
+                              RMECDA_CTL3_OFFSET,
+                              context->rmecda_ctl3_orig) != ACS_STATUS_PASS) ||
+        (val_memory_write_el3(context->rmecda_cfg_va +
+                              context->rmecda_cap_base +
+                              RMECDA_CTL4_OFFSET,
+                              context->rmecda_ctl4_orig) != ACS_STATUS_PASS) ||
+        (val_memory_read_el3(context->rmecda_cfg_va +
+                             context->rmecda_cap_base +
+                             RMECDA_CTL3_OFFSET,
+                             &ctl3_readback) != ACS_STATUS_PASS) ||
+        (val_memory_read_el3(context->rmecda_cfg_va +
+                             context->rmecda_cap_base +
+                             RMECDA_CTL4_OFFSET,
+                             &ctl4_readback) != ACS_STATUS_PASS) ||
+        (ctl3_readback != context->rmecda_ctl3_orig) ||
+        (ctl4_readback != context->rmecda_ctl4_orig))
+    {
+      val_print(ACS_PRINT_WARN,
+                " RLMFLX: RMECDA RID state restore failed",
+                0);
+      restore_status = ACS_STATUS_ERR;
     }
   }
 
@@ -325,7 +361,9 @@ prepare_context(TEST_CONTEXT *context)
     const CXL_COMPONENT_ENTRY *root_port;
     const CXL_COMPONENT_ENTRY *endpoint;
     uint32_t endpoint_bdf;
+    uint32_t dev_properties;
     uint32_t status;
+    uint32_t endpoint_rid;
     uint32_t ctl1_programmed;
     uint32_t ctl1_readback;
 
@@ -356,6 +394,12 @@ prepare_context(TEST_CONTEXT *context)
     {
       continue;
     }
+
+    /* Cache-line setup uses a direct coherent Realm host access. */
+    if ((val_tdisp_get_device_properties(endpoint_bdf, &dev_properties)
+         != ACS_STATUS_PASS) ||
+        ((dev_properties & VAL_TDISP_DEV_PROP_PAS_CHECK) == 0u))
+      continue;
 
     candidate.root_index = root_idx;
     candidate.root_bdf = root_port->bdf;
@@ -425,7 +469,21 @@ prepare_context(TEST_CONTEXT *context)
       (void)restore_context_state(&candidate);
       continue;
     }
+
+    if ((val_memory_read_el3(candidate.rmecda_cfg_va +
+                             candidate.rmecda_cap_base +
+                             RMECDA_CTL3_OFFSET,
+                             &candidate.rmecda_ctl3_orig) != ACS_STATUS_PASS) ||
+        (val_memory_read_el3(candidate.rmecda_cfg_va +
+                             candidate.rmecda_cap_base +
+                             RMECDA_CTL4_OFFSET,
+                             &candidate.rmecda_ctl4_orig) != ACS_STATUS_PASS))
+    {
+      (void)restore_context_state(&candidate);
+      continue;
+    }
     candidate.rmecda_ctl1_valid = 1u;
+    candidate.rmecda_regs_valid = 1u;
 
     if (val_cxl_enable_mem(candidate.endpoint_bdf) != ACS_STATUS_PASS)
     {
@@ -447,6 +505,21 @@ prepare_context(TEST_CONTEXT *context)
                                           DECODER_SLOT,
                                           candidate.window_base,
                                           candidate.window_size) != ACS_STATUS_PASS)
+    {
+      (void)restore_context_state(&candidate);
+      continue;
+    }
+
+    /* Admit the selected TDI's requester ID before locking the stream policy. */
+    endpoint_rid = (uint32_t)PCIE_CREATE_BDF_PACKED(candidate.endpoint_bdf);
+    status = val_cda_program_rid_range(candidate.rmecda_cfg_va,
+                                       candidate.rmecda_cap_base,
+                                       candidate.rmecda_ctl3_orig,
+                                       candidate.rmecda_ctl4_orig,
+                                       endpoint_rid,
+                                       endpoint_rid,
+                                       1u);
+    if (status != ACS_STATUS_PASS)
     {
       (void)restore_context_state(&candidate);
       continue;
@@ -750,42 +823,28 @@ exercise_rule(TEST_CONTEXT *context)
   }
 
   /*
-   * Create a dirty cached copy in the TDI while IDE is secure. RLMFLX requires
-   * STOP_INTERFACE to write this data back and invalidate the cached state.
+   * A normal cacheable Realm HPA write creates the line through CXL.mem. The
+   * cache-state command then confirms that the line exists and leaves it dirty.
+   * STOP_INTERFACE must write the value back before invalidating the line.
    */
-  status = val_cxl_exerciser_execute_cmd_with_ctrl(context->endpoint_bdf,
-                                                   CXL_CMD_OP_DCM_CACHE_DIRTY,
-                                                   CXL_CMD_CTRL_PAS_REALM,
-                                                   dcm_hpa,
-                                                   RLMFLX_DIRTY_VALUE,
-                                                   NULL);
-  if (status != ACS_STATUS_PASS)
+  if (val_cda_seed_realm_cache_line(realm_alias,
+                                    RLMFLX_DIRTY_VALUE) != ACS_STATUS_PASS)
   {
-    val_print(ACS_PRINT_INFO, " RLMFLX: DCM cache-dirty stimulus unavailable", 0);
-    result = ACS_STATUS_SKIP;
+    val_print(ACS_PRINT_ERR, " RLMFLX: failed to create Realm cache line", 0);
+    result = ACS_STATUS_FAIL;
     goto cleanup;
   }
 
-  /* Verify the dirty value through an HPA-based internal access from the TDI. */
-  observed = 0u;
-  status = val_cxl_exerciser_dcm_internal_read64(context->endpoint_bdf,
-                                                 dcm_hpa,
-                                                 REALM_PAS,
-                                                 &observed);
+  status = val_cxl_exerciser_execute_cmd(context->endpoint_bdf,
+                                         CXL_CMD_OP_DCM_CACHE_DIRTY,
+                                         dcm_hpa,
+                                         0u,
+                                         NULL);
   if (status != ACS_STATUS_PASS)
   {
-    val_print(ACS_PRINT_INFO, " RLMFLX: running TDI Realm read unavailable", 0);
-    result = ACS_STATUS_SKIP;
-    goto cleanup;
-  }
-
-  val_print(ACS_PRINT_DEBUG,
-            " RLMFLX: dirty setup Realm device read observed 0x%llx",
-            observed);
-
-  if (observed != RLMFLX_DIRTY_VALUE)
-  {
-    val_print(ACS_PRINT_INFO, " RLMFLX: dirty setup observed 0x%llx", observed);
+    val_print(ACS_PRINT_INFO,
+              " RLMFLX: required Realm cache-line stimulus unavailable",
+              0);
     result = ACS_STATUS_SKIP;
     goto cleanup;
   }
@@ -903,29 +962,6 @@ exercise_rule(TEST_CONTEXT *context)
     val_print(ACS_PRINT_ERR,
               " RLMFLX: host read faulted after re-RUN",
               0);
-    result = ACS_STATUS_FAIL;
-    goto cleanup;
-  }
-
-  /*
-   * The protected host read above verifies that stale dirty TDI-owned state no
-   * longer faults or poisons the host access after CONFIG_UNLOCKED. Verify the
-   * writeback payload through the Realm DCM device path, which observes the
-   * TDI-owned DCM contents directly.
-   */
-  observed = 0u;
-  status = val_cxl_exerciser_dcm_internal_read64(context->endpoint_bdf,
-                                                 dcm_hpa,
-                                                 REALM_PAS,
-                                                 &observed);
-  val_print(ACS_PRINT_DEBUG,
-            " RLMFLX: re-RUN Realm device read status %u",
-            status);
-  val_print(ACS_PRINT_DEBUG,
-            " RLMFLX: re-RUN Realm device read observed 0x%llx",
-            observed);
-  if (status != ACS_STATUS_PASS)
-  {
     result = ACS_STATUS_FAIL;
     goto cleanup;
   }

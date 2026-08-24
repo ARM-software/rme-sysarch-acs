@@ -219,7 +219,13 @@ typedef enum {
     TXN_REQ_ID     = 0x0,
     TXN_ADDR_TYPE  = 0x1,
     TXN_REQ_ID_VALID    = 0x2,
+    TXN_ATC_ENTRY       = 0x3,
 } EXERCISER_TXN_ATTR;
+
+typedef enum {
+    ATC_ENTRY_DISABLE = 0x0,
+    ATC_ENTRY_ENABLE  = 0x1
+} EXERCISER_TXN_ATC_ENTRY;
 
 typedef enum {
     AT_UNTRANSLATED = 0x0,
