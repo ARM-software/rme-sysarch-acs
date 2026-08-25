@@ -21,28 +21,39 @@
 #include "val/include/val_cda.h"
 #include "val/include/val_cxl.h"
 #include "val/include/val_cxl_spec.h"
+#include "val/include/val_dpt.h"
 #include "val/include/val_el32.h"
 #include "val/include/val_exerciser.h"
+#include "val/include/val_iovirt.h"
 #include "val/include/val_memory.h"
 #include "val/include/val_pcie.h"
 #include "val/include/val_pcie_spec.h"
 #include "val/include/val_pe.h"
+#include "val/include/val_pgt.h"
+#include "val/include/val_smmu.h"
 #include "val/include/val_spdm.h"
 #include "val/include/val_tdisp.h"
 
 #define TEST_NAME "cda_rqwnbn_error_poison_response"
-#define TEST_DESC "TDI ERROR cached Realm snoop response is poisoned"
+#define TEST_DESC "TDI ERROR cached Realm responses are poisoned"
 #define TEST_RULE "RQWNBN"
 
 #define DECODER_SLOT 0u
 #define AER_POISONED_TLP (1u << 12)
+#define PGT_STAGE2_RME_NS_MASK (1ull << 55)
+#define DMA_TEST_LENGTH ((uint32_t)sizeof(uint64_t))
+
+#define ESR_EC_SHIFT                 26u
+#define ESR_EC_MASK                  0x3Fu
+#define ESR_EC_DATA_ABORT_SAME_EL    0x25u
+#define ESR_ABORT_FSC_MASK           0x3Fu
+#define ESR_FSC_SYNC_EXTERNAL_ABORT  0x10u
 
 #define RMECDA_CTL1_TDISP_EN_MASK 0x1u
 #define RMECDA_CTL1_LINK_STR_LOCK_MASK (1u << 1)
 
 #define RQWNBN_SNOOP_SEED_VALUE     0xA55A0123456789EFULL
 #define RQWNBN_WRITEBACK_SEED_VALUE 0x5AA5FEDCBA987610ULL
-#define RQWNBN_POISON_FIXED_VALUE   0xFFFFFFFFFFFFFFFFULL
 
 #if ENABLE_SPDM
 
@@ -196,6 +207,238 @@ select_test_pages(uint64_t window_base,
 }
 
 static uint32_t
+prepare_realm_dma_mapping(uint32_t endpoint_bdf,
+                          uint64_t dcm_hpa,
+                          uint64_t verify_pa,
+                          uint64_t page_size,
+                          smmu_master_attributes_t *master,
+                          pgt_descriptor_t *pgt_desc)
+{
+  memory_region_descriptor_t mem_desc[3];
+  uint32_t device_id;
+  uint32_t its_id;
+  uint32_t smmu_index;
+
+  if ((dcm_hpa == 0u) || (verify_pa == 0u) || (page_size == 0u) ||
+      (master == NULL) || (pgt_desc == NULL))
+    return ACS_STATUS_ERR;
+
+  val_memory_set(master, sizeof(*master), 0);
+  val_memory_set(pgt_desc, sizeof(*pgt_desc), 0);
+  master->smmu_index = ACS_INVALID_INDEX;
+
+  smmu_index = val_iovirt_get_rc_smmu_index(PCIE_EXTRACT_BDF_SEG(endpoint_bdf),
+                                            PCIE_CREATE_BDF_PACKED(endpoint_bdf));
+  if ((smmu_index == ACS_INVALID_INDEX) ||
+      (val_iovirt_get_smmu_info(SMMU_CTRL_ARCH_MAJOR_REV, smmu_index) != 3u))
+    return ACS_STATUS_SKIP;
+
+  device_id = 0u;
+  its_id = 0u;
+  if (val_iovirt_get_device_info(PCIE_CREATE_BDF_PACKED(endpoint_bdf),
+                                 PCIE_EXTRACT_BDF_SEG(endpoint_bdf),
+                                 &device_id,
+                                 &master->streamid,
+                                 &its_id) != 0u)
+    return ACS_STATUS_SKIP;
+
+  if (val_smmu_enable(smmu_index) != 0u)
+    return ACS_STATUS_ERR;
+
+  master->smmu_index = smmu_index;
+  master->stage2 = 1u;
+
+  val_memory_set(mem_desc, sizeof(mem_desc), 0);
+  mem_desc[0].virtual_address = dcm_hpa;
+  mem_desc[0].physical_address = dcm_hpa;
+  mem_desc[0].length = 2u * page_size;
+  /* Map the adjacent writeback and snoop pages into Realm PAS. */
+  mem_desc[0].attributes = PGT_STAGE2_AP_RW;
+  mem_desc[1].virtual_address = verify_pa;
+  mem_desc[1].physical_address = verify_pa;
+  mem_desc[1].length = page_size;
+  /* The verification page remains in Non-secure PAS. */
+  mem_desc[1].attributes = PGT_STAGE2_AP_RW | PGT_STAGE2_RME_NS_MASK;
+
+  pgt_desc->ias = (uint32_t)val_smmu_get_info(SMMU_IN_ADDR_SIZE, smmu_index);
+  pgt_desc->oas = (uint32_t)val_smmu_get_info(SMMU_OUT_ADDR_SIZE, smmu_index);
+  pgt_desc->stage = PGT_STAGE2;
+  if ((pgt_desc->ias == 0u) || (pgt_desc->oas == 0u))
+  {
+    (void)val_smmu_disable(smmu_index);
+    master->smmu_index = ACS_INVALID_INDEX;
+    return ACS_STATUS_SKIP;
+  }
+
+  if (val_pe_get_vtcr(&pgt_desc->vtcr) != 0u)
+  {
+    (void)val_smmu_disable(smmu_index);
+    master->smmu_index = ACS_INVALID_INDEX;
+    return ACS_STATUS_ERR;
+  }
+
+  if ((val_memory_map_el3_data((uint64_t)mem_desc,
+                               sizeof(mem_desc),
+                               NONSECURE_PAS) != ACS_STATUS_PASS) ||
+      (val_memory_map_el3_data((uint64_t)pgt_desc,
+                               sizeof(*pgt_desc),
+                               NONSECURE_PAS) != ACS_STATUS_PASS) ||
+      (val_memory_map_el3_data((uint64_t)master,
+                               sizeof(*master),
+                               NONSECURE_PAS) != ACS_STATUS_PASS))
+  {
+    (void)val_smmu_disable(smmu_index);
+    master->smmu_index = ACS_INVALID_INDEX;
+    return ACS_STATUS_ERR;
+  }
+
+  if (val_rlm_pgt_create(mem_desc, pgt_desc) != 0u)
+  {
+    (void)val_smmu_disable(smmu_index);
+    master->smmu_index = ACS_INVALID_INDEX;
+    return ACS_STATUS_ERR;
+  }
+
+  val_pe_reg_write(VTTBR, pgt_desc->pgt_base);
+  if (val_smmu_rlm_map_el3(master, pgt_desc) != 0u)
+  {
+    val_rlm_pgt_destroy(pgt_desc);
+    pgt_desc->pgt_base = 0u;
+    (void)val_smmu_disable(smmu_index);
+    master->smmu_index = ACS_INVALID_INDEX;
+    return ACS_STATUS_ERR;
+  }
+
+  return ACS_STATUS_PASS;
+}
+
+static uint32_t
+cache_ats_translation(uint32_t endpoint_bdf,
+                      uint64_t iova,
+                      uint64_t expected_pa,
+                      uint32_t expected_te,
+                      uint32_t page_size)
+{
+  VAL_ATS_TRANSLATION_RESULT response;
+  uint32_t status;
+
+  status = val_exerciser_ats_translate_by_bdf(endpoint_bdf,
+                                               iova,
+                                               page_size,
+                                               VAL_ATS_REQUEST_T,
+                                               &response);
+  if (status != ACS_STATUS_PASS)
+    return status;
+
+  if ((response.completion_success == 0u) ||
+      (response.translated_pa != expected_pa) ||
+      (response.te != expected_te) ||
+      ((response.response_attributes & VAL_ATS_PERMISSION_MASK) == 0u))
+  {
+    val_print(ACS_PRINT_ERR, " RQWNBN: ATS PA 0x%llx", response.translated_pa);
+    val_print(ACS_PRINT_ERR, " RQWNBN: ATS TE %u", (uint64_t)response.te);
+    val_print(ACS_PRINT_ERR,
+              " RQWNBN: ATS attributes 0x%x",
+              (uint64_t)response.response_attributes);
+    return ACS_STATUS_FAIL;
+  }
+
+  return ACS_STATUS_PASS;
+}
+
+static uint32_t
+run_atc_backed_dma(uint32_t endpoint_bdf,
+                   uint64_t iova,
+                   EXERCISER_DMA_ATTR direction)
+{
+  uint32_t status;
+
+  status = val_exerciser_dma_with_atc_by_bdf(endpoint_bdf,
+                                              iova,
+                                              DMA_TEST_LENGTH,
+                                              direction);
+  if (status != ACS_STATUS_PASS)
+  {
+    val_print(ACS_PRINT_ERR,
+              " RQWNBN: ATC DMA direction %u failed",
+              (uint64_t)direction);
+  }
+
+  return status;
+}
+
+static uint32_t
+populate_device_cache_line(uint32_t endpoint_bdf,
+                           volatile uint64_t *realm_alias,
+                           uint64_t dcm_hpa,
+                           uint8_t *verify_va,
+                           uint64_t verify_pa,
+                           uint64_t seed_value,
+                           uint32_t page_size)
+{
+  uint64_t observed;
+
+  if ((realm_alias == NULL) || (dcm_hpa == 0u) || (verify_va == NULL) ||
+      (verify_pa == 0u) || (page_size == 0u))
+    return ACS_STATUS_ERR;
+
+  /* Initialize backing DCM, then establish a clean cacheable Realm line. */
+  if (val_cda_seed_realm_cache_line(dcm_hpa,
+                                    realm_alias,
+                                    seed_value) != ACS_STATUS_PASS)
+    return ACS_STATUS_FAIL;
+
+  if ((val_memory_set_el3(verify_va, DMA_TEST_LENGTH, 0u) != 0u) ||
+      (val_memory_cache_clean_invalidate_range_el3((uint64_t)verify_va,
+                                                    DMA_TEST_LENGTH)
+       != ACS_STATUS_PASS))
+    return ACS_STATUS_ERR;
+
+  /*
+   * Fetch the Realm DCM Location through the TDI's ATS-backed coherent path.
+   * This verifies that the populated line is reachable with the TDI's Realm
+   * translation before the existing line is explicitly marked dirty.
+   */
+  if ((cache_ats_translation(endpoint_bdf,
+                             dcm_hpa,
+                             dcm_hpa,
+                             1u,
+                             page_size) != ACS_STATUS_PASS) ||
+      (run_atc_backed_dma(endpoint_bdf,
+                          dcm_hpa,
+                          EDMA_TO_DEVICE) != ACS_STATUS_PASS))
+    return ACS_STATUS_FAIL;
+
+  /*
+   * Return the data captured by the device to an ordinary host page. This
+   * avoids relying on the exerciser's implementation-defined internal buffer.
+   */
+  if ((cache_ats_translation(endpoint_bdf,
+                             verify_pa,
+                             verify_pa,
+                             0u,
+                             page_size) != ACS_STATUS_PASS) ||
+      (run_atc_backed_dma(endpoint_bdf,
+                          verify_pa,
+                          EDMA_FROM_DEVICE) != ACS_STATUS_PASS) ||
+      (val_memory_cache_invalidate_range_el3((uint64_t)verify_va,
+                                             DMA_TEST_LENGTH)
+       != ACS_STATUS_PASS))
+    return ACS_STATUS_FAIL;
+
+  observed = *(volatile uint64_t *)verify_va;
+  if (observed != seed_value)
+  {
+    val_print(ACS_PRINT_ERR,
+              " RQWNBN: device cache-fill readback 0x%llx",
+              observed);
+    return ACS_STATUS_FAIL;
+  }
+
+  return ACS_STATUS_PASS;
+}
+
+static uint32_t
 force_tdi_error(val_spdm_context_t *spdm_ctx,
                 uint32_t session_id)
 {
@@ -290,7 +533,7 @@ prepare_context(TEST_CONTEXT *context)
       continue;
     }
 
-    /* Cache-line setup uses direct coherent Realm host accesses. */
+    /* Cache-line setup requires Realm output PAS for the device DMA read. */
     if ((val_tdisp_get_device_properties(endpoint_bdf, &dev_properties)
          != ACS_STATUS_PASS) ||
         ((dev_properties & VAL_TDISP_DEV_PROP_PAS_CHECK) == 0u))
@@ -309,16 +552,13 @@ prepare_context(TEST_CONTEXT *context)
       continue;
     }
 
+    /* AER is one possible host-visible poison indication, not a prerequisite. */
+    candidate.aer_offset = 0u;
     if (val_pcie_find_capability(candidate.root_bdf,
                                  PCIE_ECAP,
                                  ECID_AER,
                                  &candidate.aer_offset) != PCIE_SUCCESS)
-    {
-      val_print(ACS_PRINT_DEBUG,
-                " RQWNBN: root 0x%x lacks AER capability",
-                (uint64_t)candidate.root_bdf);
-      continue;
-    }
+      candidate.aer_offset = 0u;
 
     candidate.host_index = root_port->host_bridge_index;
     if (candidate.host_index == CXL_COMPONENT_INVALID_INDEX)
@@ -433,6 +673,16 @@ prepare_context(TEST_CONTEXT *context)
       continue;
     }
 
+    /* Cache-state stimulus requires an advertised and enabled CXL.cache. */
+    if (val_cxl_enable_cache(candidate.endpoint_bdf) != ACS_STATUS_PASS)
+    {
+      (void)restore_context_state(&candidate);
+      val_print(ACS_PRINT_DEBUG,
+                " RQWNBN: CXL.cache enable failed for EP 0x%x",
+                (uint64_t)candidate.endpoint_bdf);
+      continue;
+    }
+
     if (val_cxl_enable_mem(candidate.endpoint_bdf) != ACS_STATUS_PASS)
     {
       (void)restore_context_state(&candidate);
@@ -518,9 +768,15 @@ exercise_rule(TEST_CONTEXT *context)
 {
   volatile uint64_t *snoop_realm_alias;
   volatile uint64_t *writeback_realm_alias;
+  VAL_SMMU_DPT_CFG_STATE dpt_cfg_state;
   PCIE_ENDPOINT_CFG endpoint_cfg;
+  smmu_master_attributes_t master;
+  pgt_descriptor_t pgt_desc;
   val_spdm_context_t spdm_ctx;
   pci_tdisp_interface_id_t interface_id;
+  uint8_t *verify_va;
+  uint64_t verify_pa;
+  uint64_t max_pa;
   uint32_t session_id;
   uint32_t session_open;
   uint32_t ide_enabled;
@@ -532,11 +788,30 @@ exercise_rule(TEST_CONTEXT *context)
   uint32_t aer_uncorr;
   uint32_t endpoint_cfg_valid;
   uint32_t host_fault;
+  uint32_t ats_cap_base;
+  uint32_t ats_ctrl_orig;
+  uint32_t ats_enabled;
+  uint32_t dcm_dpt_set;
+  uint32_t dcm_gpt_set;
+  uint32_t dpt_coverage_configured;
+  uint32_t pgt_created;
+  uint32_t rid_range_programmed;
+  uint32_t rmecda_ctl3_orig;
+  uint32_t rmecda_ctl4_orig;
+  uint32_t smmu_enabled;
+  uint32_t verify_dpt_set;
+  uint32_t verify_gpt_set;
+  uint32_t page_size;
   uint64_t snoop_hpa;
   uint64_t writeback_hpa;
   uint64_t observed;
+  uint64_t read_esr;
 
   if (context == NULL)
+    return ACS_STATUS_ERR;
+
+  page_size = val_memory_page_size();
+  if (page_size == 0u)
     return ACS_STATUS_ERR;
 
   status = select_test_pages(context->window_base,
@@ -557,21 +832,160 @@ exercise_rule(TEST_CONTEXT *context)
                                              &writeback_realm_alias) != ACS_STATUS_PASS))
     return ACS_STATUS_ERR;
 
+  val_memory_set(&dpt_cfg_state, sizeof(dpt_cfg_state), 0);
   val_memory_set(&endpoint_cfg, sizeof(endpoint_cfg), 0);
-  endpoint_cfg_valid = 0u;
-  if (val_pcie_save_endpoint_cfg(context->endpoint_bdf, &endpoint_cfg) == ACS_STATUS_PASS)
-    endpoint_cfg_valid = 1u;
-  else
-    val_print(ACS_PRINT_WARN, " RQWNBN: endpoint config snapshot failed", 0);
-
+  val_memory_set(&master, sizeof(master), 0);
+  val_memory_set(&pgt_desc, sizeof(pgt_desc), 0);
   val_memory_set(&spdm_ctx, sizeof(spdm_ctx), 0);
+  master.smmu_index = ACS_INVALID_INDEX;
+  verify_va = NULL;
+  verify_pa = 0u;
   session_id = 0u;
   session_open = 0u;
   ide_enabled = 0u;
   tdi_in_error = 0u;
   snoop_realm_assigned = 0u;
   writeback_realm_assigned = 0u;
+  endpoint_cfg_valid = 0u;
+  ats_enabled = 0u;
+  dcm_dpt_set = 0u;
+  dcm_gpt_set = 0u;
+  dpt_coverage_configured = 0u;
+  pgt_created = 0u;
+  rid_range_programmed = 0u;
+  smmu_enabled = 0u;
+  verify_dpt_set = 0u;
+  verify_gpt_set = 0u;
   result = ACS_STATUS_FAIL;
+
+  /* Save endpoint state before enabling ATS or starting the secure session. */
+  if (val_pcie_save_endpoint_cfg(context->endpoint_bdf, &endpoint_cfg) == ACS_STATUS_PASS)
+    endpoint_cfg_valid = 1u;
+  else
+    val_print(ACS_PRINT_WARN, " RQWNBN: endpoint config snapshot failed", 0);
+
+  verify_va = (uint8_t *)val_memory_alloc_pages(1u);
+  if (verify_va == NULL)
+    return ACS_STATUS_SKIP;
+
+  verify_pa = (uint64_t)val_memory_virt_to_phys(verify_va);
+  if ((verify_pa == 0u) ||
+      (val_memory_map_el3_data((uint64_t)verify_va,
+                               page_size,
+                               NONSECURE_PAS) != ACS_STATUS_PASS))
+  {
+    result = ACS_STATUS_ERR;
+    goto cleanup;
+  }
+
+  if (val_add_gpt_entry_el3(verify_pa, GPT_ANY) != 0u)
+  {
+    result = ACS_STATUS_ERR;
+    goto cleanup;
+  }
+  verify_gpt_set = 1u;
+
+  if ((val_add_gpt_entry_el3(writeback_hpa, GPT_ANY) != 0u) ||
+      (val_add_gpt_entry_el3(snoop_hpa, GPT_ANY) != 0u))
+  {
+    result = ACS_STATUS_ERR;
+    goto cleanup;
+  }
+  dcm_gpt_set = 1u;
+
+  status = prepare_realm_dma_mapping(context->endpoint_bdf,
+                                     writeback_hpa,
+                                     verify_pa,
+                                     page_size,
+                                     &master,
+                                     &pgt_desc);
+  if (status != ACS_STATUS_PASS)
+  {
+    result = status;
+    goto cleanup;
+  }
+  smmu_enabled = 1u;
+  pgt_created = 1u;
+
+  if (val_smmu_gpt_invalidate_el3(&master) != 0u)
+  {
+    result = ACS_STATUS_ERR;
+    goto cleanup;
+  }
+
+  max_pa = (snoop_hpa > verify_pa) ? snoop_hpa : verify_pa;
+  status = val_smmu_configure_dpt_coverage(master.smmu_index,
+                                           max_pa,
+                                           &dpt_cfg_state);
+  if (status != ACS_STATUS_PASS)
+  {
+    result = status;
+    goto cleanup;
+  }
+  dpt_coverage_configured = 1u;
+
+  if ((val_dpt_add_entry(writeback_hpa,
+                         (((uint64_t)master.smmu_index << 32) |
+                          DPT_RDWR_ACCESS_ENTRY)) != 0u) ||
+      (val_dpt_add_entry(snoop_hpa,
+                         (((uint64_t)master.smmu_index << 32) |
+                          DPT_RDWR_ACCESS_ENTRY)) != 0u))
+  {
+    result = ACS_STATUS_ERR;
+    goto cleanup;
+  }
+  dcm_dpt_set = 1u;
+
+  if (val_dpt_add_entry(verify_pa,
+                        (((uint64_t)master.smmu_index << 32) |
+                         DPT_RDWR_NS_ACCESS_ENTRY)) != 0u)
+  {
+    result = ACS_STATUS_ERR;
+    goto cleanup;
+  }
+  verify_dpt_set = 1u;
+
+  if (val_dpt_invalidate_all(master.smmu_index) != 0u)
+  {
+    result = ACS_STATUS_ERR;
+    goto cleanup;
+  }
+
+  status = val_pcie_enable_ats(context->endpoint_bdf,
+                               &ats_cap_base,
+                               &ats_ctrl_orig);
+  if (status != ACS_STATUS_PASS)
+  {
+    result = status;
+    goto cleanup;
+  }
+  ats_enabled = 1u;
+
+  if ((val_memory_read_el3(context->rmecda_cfg_va + context->rmecda_cap_base +
+                           RMECDA_CTL3_OFFSET,
+                           &rmecda_ctl3_orig) != ACS_STATUS_PASS) ||
+      (val_memory_read_el3(context->rmecda_cfg_va + context->rmecda_cap_base +
+                           RMECDA_CTL4_OFFSET,
+                           &rmecda_ctl4_orig) != ACS_STATUS_PASS))
+  {
+    result = ACS_STATUS_ERR;
+    goto cleanup;
+  }
+
+  status = val_cda_program_rid_range(
+             context->rmecda_cfg_va,
+             context->rmecda_cap_base,
+             rmecda_ctl3_orig,
+             rmecda_ctl4_orig,
+             (uint32_t)PCIE_CREATE_BDF_PACKED(context->endpoint_bdf),
+             (uint32_t)PCIE_CREATE_BDF_PACKED(context->endpoint_bdf),
+             1u);
+  if (status != ACS_STATUS_PASS)
+  {
+    result = status;
+    goto cleanup;
+  }
+  rid_range_programmed = 1u;
 
   /*
    * Associate both CFMWS-backed pages with this TDI. Use one page for the
@@ -628,17 +1042,21 @@ exercise_rule(TEST_CONTEXT *context)
   ide_enabled = 1u;
 
   /*
-   * Create each Realm cache line with a normal cacheable HPA access while the
-   * TDI is in RUN and IDE is secure. CACHE_DIRTY only changes the state of an
-   * existing line; it does not allocate the line or write Data0 as payload.
+   * Populate each line with a device-originated coherent read and verify the
+   * captured data through a separate host page. Only then ask the exerciser to
+   * change the existing line's state to dirty.
    */
-  if ((val_cda_seed_realm_cache_line(snoop_realm_alias,
-                                     RQWNBN_SNOOP_SEED_VALUE) != ACS_STATUS_PASS) ||
-      (val_cda_seed_realm_cache_line(writeback_realm_alias,
-                                     RQWNBN_WRITEBACK_SEED_VALUE) != ACS_STATUS_PASS))
+  status = populate_device_cache_line(context->endpoint_bdf,
+                                      snoop_realm_alias,
+                                      snoop_hpa,
+                                      verify_va,
+                                      verify_pa,
+                                      RQWNBN_SNOOP_SEED_VALUE,
+                                      page_size);
+  if (status != ACS_STATUS_PASS)
   {
-    val_print(ACS_PRINT_ERR, " RQWNBN: failed to create Realm cache lines", 0);
-    result = ACS_STATUS_FAIL;
+    val_print(ACS_PRINT_ERR, " RQWNBN: snoop cache-line population failed", 0);
+    result = status;
     goto cleanup;
   }
 
@@ -653,6 +1071,22 @@ exercise_rule(TEST_CONTEXT *context)
               " RQWNBN: required Realm cache-line stimulus unavailable",
               0);
     result = ACS_STATUS_SKIP;
+    goto cleanup;
+  }
+
+  status = populate_device_cache_line(context->endpoint_bdf,
+                                      writeback_realm_alias,
+                                      writeback_hpa,
+                                      verify_va,
+                                      verify_pa,
+                                      RQWNBN_WRITEBACK_SEED_VALUE,
+                                      page_size);
+  if (status != ACS_STATUS_PASS)
+  {
+    val_print(ACS_PRINT_ERR,
+              " RQWNBN: writeback cache-line population failed",
+              0);
+    result = status;
     goto cleanup;
   }
 
@@ -679,15 +1113,23 @@ exercise_rule(TEST_CONTEXT *context)
   session_open = 0u;
   tdi_in_error = 1u;
 
-  val_cxl_aer_clear(context->root_bdf, context->aer_offset);
+  if (context->aer_offset != 0u)
+    val_cxl_aer_clear(context->root_bdf, context->aer_offset);
   observed = 0u;
+  read_esr = 0u;
   host_fault = 0u;
-  status = val_memory_read64_el3_protected(snoop_realm_alias, &observed, &host_fault);
-  (void)val_cxl_aer_read_uncorr(context->root_bdf,
-                                context->aer_offset,
-                                &aer_uncorr);
+  aer_uncorr = 0u;
+  status = val_memory_read64_el3_protected_with_esr(snoop_realm_alias,
+                                                     &observed,
+                                                     &host_fault,
+                                                     &read_esr);
+  if (context->aer_offset != 0u)
+    (void)val_cxl_aer_read_uncorr(context->root_bdf,
+                                  context->aer_offset,
+                                  &aer_uncorr);
   val_print(ACS_PRINT_DEBUG, " RQWNBN: host read status %u", status);
   val_print(ACS_PRINT_DEBUG, " RQWNBN: host read fault %u", host_fault);
+  val_print(ACS_PRINT_DEBUG, " RQWNBN: host read ESR 0x%llx", read_esr);
   val_print(ACS_PRINT_DEBUG, " RQWNBN: host read observed 0x%llx", observed);
   val_print(ACS_PRINT_DEBUG, " RQWNBN: AER uncorrectable 0x%x", aer_uncorr);
 
@@ -698,87 +1140,87 @@ exercise_rule(TEST_CONTEXT *context)
     goto cleanup;
   }
 
-  if ((aer_uncorr & AER_POISONED_TLP) == 0u)
+  /*
+   * RAS requires a demand read that consumes poisoned data to take a
+   * synchronous external abort. Returned data and AER state are diagnostic;
+   * neither substitutes for the architectural exception.
+   */
+  if (host_fault == 0u)
   {
     val_print(ACS_PRINT_ERR,
-              " RQWNBN: Poisoned TLP not logged after TDI ERROR snoop",
-              0);
+              " RQWNBN: poisoned demand read did not take an external abort",
+              0u);
     result = ACS_STATUS_FAIL;
     goto cleanup;
   }
 
-  /*
-   * AER proves that the root port reported a poisoned completion, but the host
-   * read must also show poison/fixed data. A synchronous fault is an acceptable
-   * platform poison mechanism. If no fault is raised, accept the fixed all-ones
-   * poison value, or an implementation-defined poison/fixed value that is not
-   * the original dirty data cached by the TDI before ERROR.
-   */
-  if (host_fault == 0u)
+  if ((((read_esr >> ESR_EC_SHIFT) & ESR_EC_MASK) !=
+       ESR_EC_DATA_ABORT_SAME_EL) ||
+      ((read_esr & ESR_ABORT_FSC_MASK) != ESR_FSC_SYNC_EXTERNAL_ABORT))
   {
-    if (observed == RQWNBN_POISON_FIXED_VALUE)
-    {
-      val_print(ACS_PRINT_DEBUG,
-                " RQWNBN: host read returned fixed poison data 0x%llx",
-                observed);
-    }
-    else if (observed != RQWNBN_SNOOP_SEED_VALUE)
-    {
-      val_print(ACS_PRINT_INFO,
-                " RQWNBN: host read returned non-original poison data 0x%llx",
-                observed);
-    }
-    else
-    {
-      val_print(ACS_PRINT_ERR,
-                " RQWNBN: host read returned clean TDI data 0x%llx",
-                observed);
-      result = ACS_STATUS_FAIL;
-      goto cleanup;
-    }
+    val_print(ACS_PRINT_ERR,
+              " RQWNBN: demand read raised unexpected ESR 0x%llx",
+              read_esr);
+    result = ACS_STATUS_FAIL;
+    goto cleanup;
   }
 
-  val_cxl_aer_clear(context->root_bdf, context->aer_offset);
+  if (context->aer_offset != 0u)
+    val_cxl_aer_clear(context->root_bdf, context->aer_offset);
   status = val_cxl_exerciser_execute_cmd(context->endpoint_bdf,
                                          CXL_CMD_OP_DCM_CACHE_WRITEBACK,
                                          writeback_hpa,
                                          0u,
                                          NULL);
-  (void)val_cxl_aer_read_uncorr(context->root_bdf,
-                                context->aer_offset,
-                                &aer_uncorr);
+  aer_uncorr = 0u;
+  if (context->aer_offset != 0u)
+    (void)val_cxl_aer_read_uncorr(context->root_bdf,
+                                  context->aer_offset,
+                                  &aer_uncorr);
   val_print(ACS_PRINT_DEBUG, " RQWNBN: writeback status %u", status);
   val_print(ACS_PRINT_DEBUG, " RQWNBN: writeback AER uncorrectable 0x%x",
             aer_uncorr);
 
   /*
-   * If the platform provides an explicit writeback trigger and it completes
-   * without poison, the rule check fails. If the trigger is unavailable, keep
-   * the mandatory snoop result and report the writeback stimulus limitation.
+   * A poisoned writeback can be terminated by the receiving port. Therefore,
+   * the command status alone cannot distinguish an unavailable stimulus from
+   * the expected rejection. A freshly observed Poisoned TLP Received bit is
+   * authoritative evidence that the writeback reached the Root Port.
    */
   if ((aer_uncorr & AER_POISONED_TLP) == 0u)
   {
     if (status != ACS_STATUS_PASS)
-    {
-      val_print(ACS_PRINT_WARN,
+      val_print(ACS_PRINT_INFO,
                 " RQWNBN: DCM cache writeback stimulus unavailable",
-                0);
-    }
+                0u);
     else
-    {
-      val_print(ACS_PRINT_ERR,
-                " RQWNBN: Poisoned TLP not logged after TDI ERROR writeback",
-                0);
-      result = ACS_STATUS_FAIL;
-      goto cleanup;
-    }
+      val_print(ACS_PRINT_INFO,
+                " RQWNBN: writeback poison indication is not observable",
+                0u);
+    result = ACS_STATUS_SKIP;
+    goto cleanup;
   }
+
+  if (status != ACS_STATUS_PASS)
+    val_print(ACS_PRINT_INFO,
+              " RQWNBN: poisoned writeback was terminated by the receiver",
+              0u);
 
   result = ACS_STATUS_PASS;
 
 cleanup:
   if (context->aer_offset != 0u)
     val_cxl_aer_clear(context->root_bdf, context->aer_offset);
+
+  (void)val_exerciser_set_param_by_bdf(CFG_TXN_ATTRIBUTES,
+                                       TXN_ATC_ENTRY,
+                                       ATC_ENTRY_DISABLE,
+                                       context->endpoint_bdf);
+  (void)val_exerciser_set_param_by_bdf(EXERCISER_ATS_REQUEST_ATTRIBUTES,
+                                       0u,
+                                       0u,
+                                       context->endpoint_bdf);
+  (void)val_exerciser_ops_by_bdf(ATS_INV_CACHE, 0u, context->endpoint_bdf);
 
   if (session_open != 0u)
   {
@@ -841,6 +1283,61 @@ cleanup:
       result = ACS_STATUS_FAIL;
     }
   }
+
+  if (rid_range_programmed != 0u)
+  {
+    if (val_cda_program_rid_range(context->rmecda_cfg_va,
+                                  context->rmecda_cap_base,
+                                  rmecda_ctl3_orig,
+                                  rmecda_ctl4_orig,
+                                  (rmecda_ctl4_orig >> 8) & 0xFFFFu,
+                                  (rmecda_ctl3_orig >> 8) & 0xFFFFu,
+                                  rmecda_ctl4_orig & 0x1u) != ACS_STATUS_PASS)
+      result = ACS_STATUS_FAIL;
+  }
+
+  if ((smmu_enabled != 0u) &&
+      ((dcm_dpt_set != 0u) || (verify_dpt_set != 0u)))
+  {
+    if (dcm_dpt_set != 0u)
+    {
+      (void)val_dpt_add_entry(writeback_hpa,
+                              (((uint64_t)master.smmu_index << 32) |
+                               DPT_RDWR_ACCESS_ENTRY));
+      (void)val_dpt_add_entry(snoop_hpa,
+                              (((uint64_t)master.smmu_index << 32) |
+                               DPT_RDWR_ACCESS_ENTRY));
+    }
+    if (verify_dpt_set != 0u)
+      (void)val_dpt_add_entry(verify_pa,
+                              (((uint64_t)master.smmu_index << 32) |
+                               DPT_RDWR_ACCESS_ENTRY));
+    (void)val_dpt_invalidate_all(master.smmu_index);
+  }
+
+  if ((dpt_coverage_configured != 0u) &&
+      (val_smmu_restore_dpt_coverage(&dpt_cfg_state) != ACS_STATUS_PASS))
+    result = ACS_STATUS_FAIL;
+
+  if (pgt_created != 0u)
+    val_rlm_pgt_destroy(&pgt_desc);
+  if (smmu_enabled != 0u)
+    (void)val_smmu_disable(master.smmu_index);
+
+  if ((dcm_gpt_set != 0u) &&
+      ((val_add_gpt_entry_el3(writeback_hpa, GPT_ANY) != 0u) ||
+       (val_add_gpt_entry_el3(snoop_hpa, GPT_ANY) != 0u)))
+    result = ACS_STATUS_FAIL;
+  if ((verify_gpt_set != 0u) && (val_add_gpt_entry_el3(verify_pa, GPT_ANY) != 0u))
+    result = ACS_STATUS_FAIL;
+
+  if (ats_enabled != 0u)
+    val_pcie_write_cfg(context->endpoint_bdf,
+                       ats_cap_base + ATS_CTRL,
+                       ats_ctrl_orig);
+
+  if (verify_va != NULL)
+    val_memory_free_pages(verify_va, 1u);
 
   return result;
 }

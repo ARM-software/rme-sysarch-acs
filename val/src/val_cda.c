@@ -84,52 +84,77 @@ val_cda_tdi_snoop_attempt(uint32_t endpoint_bdf,
 }
 
 /**
-  @brief  Prepare a Realm Location through the normal coherent HPA path.
+  @brief  Seed a Realm Location and establish a clean coherent cache line.
 
-  @param  realm_alias  Cacheable Realm mapping of the target HPA.
-  @param  value        Value to write to the target Location.
+  @param  target_hpa   Host physical address of the target DCM Location.
+  @param  realm_alias  Cacheable Realm mapping of target_hpa.
+  @param  value        Value used to initialize the target Location.
 
-  @return ACS_STATUS_PASS when the write, readback, and cache maintenance complete.
+  @return ACS_STATUS_PASS when initialization and cache population complete.
 **/
 uint32_t
-val_cda_seed_realm_cache_line(volatile uint64_t *realm_alias, uint64_t value)
+val_cda_seed_realm_cache_line(uint64_t target_hpa,
+                              volatile uint64_t *realm_alias,
+                              uint64_t value)
 {
-  uint64_t address;
+  volatile uint64_t *seed_alias;
   uint64_t observed;
   uint32_t observed_high;
   uint32_t observed_low;
 
-  if (realm_alias == NULL)
+  if ((target_hpa == 0u) || (realm_alias == NULL))
     return ACS_STATUS_ERR;
 
-  address = (uint64_t)realm_alias;
-  if ((val_memory_write_el3(address, (uint32_t)value) != ACS_STATUS_PASS) ||
-      (val_memory_write_el3(address + sizeof(uint32_t),
-                            (uint32_t)(value >> 32)) != ACS_STATUS_PASS))
-  {
-    return ACS_STATUS_ERR;
-  }
-
-  /* Push the Realm write to the coherent device and remove the PE copy. */
-  if (val_data_cache_ops_by_va_el3(address, CLEAN_AND_INVALIDATE) != 0u)
+  /* Initialize backing DCM without creating dirty cache state. */
+  seed_alias = NULL;
+  if (val_memory_map_realm_noncacheable_alias(target_hpa, &seed_alias) !=
+      ACS_STATUS_PASS)
     return ACS_STATUS_ERR;
 
-  /*
-   * Read the value back through the coherent target after evicting the PE's
-   * write. Whether this access allocates a target-side cache line is an
-   * implementation property and must be confirmed by the caller's stimulus.
-   */
-  if ((val_memory_read_el3(address, &observed_low) != ACS_STATUS_PASS) ||
-      (val_memory_read_el3(address + sizeof(uint32_t),
+  if ((val_memory_write_el3((uint64_t)seed_alias,
+                            (uint32_t)value) != ACS_STATUS_PASS) ||
+      (val_memory_write_el3((uint64_t)seed_alias + sizeof(uint32_t),
+                            (uint32_t)(value >> 32)) != ACS_STATUS_PASS) ||
+      (val_memory_read_el3((uint64_t)seed_alias,
+                           &observed_low) != ACS_STATUS_PASS) ||
+      (val_memory_read_el3((uint64_t)seed_alias + sizeof(uint32_t),
                            &observed_high) != ACS_STATUS_PASS))
     return ACS_STATUS_ERR;
 
   observed = ((uint64_t)observed_high << 32) | observed_low;
   if (observed != value)
+  {
+    val_print(ACS_PRINT_ERR,
+              " CDA: Realm backing seed readback 0x%llx",
+              observed);
+    val_print(ACS_PRINT_ERR,
+              " CDA: expected Realm backing value 0x%llx",
+              value);
+    return ACS_STATUS_ERR;
+  }
+
+  /* Read through the cacheable alias to establish a clean coherent line. */
+  if ((val_memory_read_el3((uint64_t)realm_alias,
+                           &observed_low) != ACS_STATUS_PASS) ||
+      (val_memory_read_el3((uint64_t)realm_alias + sizeof(uint32_t),
+                           &observed_high) != ACS_STATUS_PASS))
     return ACS_STATUS_ERR;
 
-  /* Remove the PE copy so later accesses observe target cache state. */
-  if (val_data_cache_ops_by_va_el3(address, CLEAN_AND_INVALIDATE) != 0u)
+  observed = ((uint64_t)observed_high << 32) | observed_low;
+  if (observed != value)
+  {
+    val_print(ACS_PRINT_ERR,
+              " CDA: Realm cache-line fill readback 0x%llx",
+              observed);
+    val_print(ACS_PRINT_ERR,
+              " CDA: expected Realm cache-line value 0x%llx",
+              value);
+    return ACS_STATUS_ERR;
+  }
+
+  /* Remove only the PE copy; the coherent target retains the clean line. */
+  if (val_data_cache_ops_by_va_el3((uint64_t)realm_alias,
+                                   CLEAN_AND_INVALIDATE) != 0u)
     return ACS_STATUS_ERR;
 
   return ACS_STATUS_PASS;

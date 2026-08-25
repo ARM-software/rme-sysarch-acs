@@ -133,6 +133,7 @@
 
 /* ---- CXL DVSEC Device Control ---- */
 #define CXL_DVSEC_CTRL_OFFSET           0x0C
+#define CXL_DVSEC_CACHE_ENABLE          (1u << 0)
 #define CXL_DVSEC_MEM_ENABLE            (1u << 2)
 
 /* ---- Arm RME-CDA DVSEC register layout ---- */

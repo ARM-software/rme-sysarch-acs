@@ -286,6 +286,7 @@ val_memory_clear_el3_access_state(void)
   shared_data->exception_expected = CLEAR;
   shared_data->exception_generated = CLEAR;
   shared_data->access_mut = CLEAR;
+  shared_data->esr_value = 0u;
   shared_data->pas_filter_flag = CLEAR;
   shared_data->arg1 = 0u;
   shared_data->num_access = 0u;
@@ -351,15 +352,18 @@ val_memory_write_el3(uint64_t address, uint32_t value)
 }
 
 /**
-  @brief  Map a physical address as a cacheable Realm PAS alias for EL3 access.
+  @brief  Map a physical address with the requested Realm PAS memory type.
 
   @param  phys      Physical address to map.
+  @param  memory_type  Translation-table memory attribute index.
   @param  virt_out  Output pointer that receives the virtual alias.
 
   @return ACS_STATUS_PASS on success, ACS_STATUS_ERR on failure.
 **/
-uint32_t
-val_memory_map_realm_cacheable_alias(uint64_t phys, volatile uint64_t **virt_out)
+static uint32_t
+val_memory_map_realm_alias(uint64_t phys,
+                           uint64_t memory_type,
+                           volatile uint64_t **virt_out)
 {
   uint64_t page_size;
   uint64_t va;
@@ -378,7 +382,7 @@ val_memory_map_realm_cacheable_alias(uint64_t phys, volatile uint64_t **virt_out
 
   attr = LOWER_ATTRS(PGT_ENTRY_ACCESS |
                      SHAREABLE_ATTR(OUTER_SHAREABLE) |
-                     GET_ATTR_INDEX(WRITE_BACK_NT) |
+                     GET_ATTR_INDEX(memory_type) |
                      PGT_ENTRY_AP_RW |
                      PAS_ATTR(REALM_PAS));
 
@@ -387,6 +391,22 @@ val_memory_map_realm_cacheable_alias(uint64_t phys, volatile uint64_t **virt_out
 
   *virt_out = (volatile uint64_t *)va;
   return ACS_STATUS_PASS;
+}
+
+uint32_t
+val_memory_map_realm_cacheable_alias(uint64_t phys, volatile uint64_t **virt_out)
+{
+  return val_memory_map_realm_alias(phys, WRITE_BACK_NT, virt_out);
+}
+
+/**
+  @brief  Map a physical address as a non-cacheable Realm PAS alias.
+**/
+uint32_t
+val_memory_map_realm_noncacheable_alias(uint64_t phys,
+                                         volatile uint64_t **virt_out)
+{
+  return val_memory_map_realm_alias(phys, NON_CACHEABLE, virt_out);
 }
 
 /**
@@ -436,15 +456,18 @@ val_memory_map_device_alias(uint64_t phys, uint32_t pas,
   @param  address         Address to read.
   @param  value_out       Output pointer that receives read data if the access completes.
   @param  fault_seen_out  Optional output flag set when EL3 recovered from a fault.
+  @param  esr_out         Optional output containing ESR_EL3 for a recovered fault.
 
   @return ACS_STATUS_PASS when the protected access path ran, ACS_STATUS_ERR on setup failure.
 **/
 uint32_t
-val_memory_read64_el3_protected(volatile uint64_t *address,
-                                uint64_t *value_out,
-                                uint32_t *fault_seen_out)
+val_memory_read64_el3_protected_with_esr(volatile uint64_t *address,
+                                         uint64_t *value_out,
+                                         uint32_t *fault_seen_out,
+                                         uint64_t *esr_out)
 {
   uint32_t fault_seen;
+  uint64_t esr;
 
   if ((address == NULL) || (value_out == NULL))
     return ACS_STATUS_ERR;
@@ -469,12 +492,26 @@ val_memory_read64_el3_protected(volatile uint64_t *address,
   }
 
   fault_seen = (shared_data->exception_generated == SET);
+  esr = shared_data->esr_value;
   *value_out = shared_data->shared_data_access[0].data;
   if (fault_seen_out != NULL)
     *fault_seen_out = fault_seen;
+  if (esr_out != NULL)
+    *esr_out = esr;
 
   val_memory_clear_el3_access_state();
   return ACS_STATUS_PASS;
+}
+
+uint32_t
+val_memory_read64_el3_protected(volatile uint64_t *address,
+                                uint64_t *value_out,
+                                uint32_t *fault_seen_out)
+{
+  return val_memory_read64_el3_protected_with_esr(address,
+                                                   value_out,
+                                                   fault_seen_out,
+                                                   NULL);
 }
 
 /**

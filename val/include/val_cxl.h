@@ -299,6 +299,7 @@ uint32_t val_cxl_select_cfmws_window(uint32_t host_index,
                                      uint64_t *base,
                                      uint64_t *size);
 uint32_t val_cxl_enable_mem(uint32_t bdf);
+uint32_t val_cxl_enable_cache(uint32_t bdf);
 uint32_t val_cxl_aer_clear(uint32_t bdf, uint32_t aer_offset);
 uint32_t val_cxl_aer_read_uncorr(uint32_t bdf,
                                  uint32_t aer_offset,

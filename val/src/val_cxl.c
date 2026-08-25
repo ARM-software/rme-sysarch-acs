@@ -2771,6 +2771,57 @@ val_cxl_enable_mem(uint32_t bdf)
 }
 
 /**
+  @brief   Enable CXL.cache in the CXL Device DVSEC control register.
+
+  @param  bdf  PCIe identifier of the device to program.
+
+  @return ACS_STATUS_PASS when enabled or already set.
+          ACS_STATUS_SKIP when the device does not advertise CXL.cache.
+          ACS_STATUS_FAIL when enable is not set after programming.
+          ACS_STATUS_ERR on config space access failures.
+**/
+uint32_t
+val_cxl_enable_cache(uint32_t bdf)
+{
+  uint32_t dvsec_offset;
+  uint32_t hdr2;
+  uint32_t ctrl;
+  uint32_t status;
+  uint16_t cxl_cap;
+
+  status = val_pcie_find_vendor_dvsec(bdf,
+                                      CXL_DVSEC_VENDOR_ID,
+                                      CXL_DVSEC_ID_DEVICE,
+                                      &dvsec_offset);
+  if (status != ACS_STATUS_PASS) {
+    val_print(ACS_PRINT_ERR, " CXL: CXL Device DVSEC missing", 0);
+    return status;
+  }
+
+  if (val_pcie_read_cfg(bdf, dvsec_offset + CXL_DVSEC_HDR2_OFFSET, &hdr2))
+    return ACS_STATUS_ERR;
+
+  cxl_cap = (uint16_t)((hdr2 >> CXL_DVSEC_CXL_CAPABILITY_SHIFT) &
+                       CXL_DVSEC_CXL_CAPABILITY_MASK);
+  if ((cxl_cap & CXL_DVSEC_CXL_CAP_CACHE_CAPABLE) == 0u)
+    return ACS_STATUS_SKIP;
+
+  if (val_pcie_read_cfg(bdf, dvsec_offset + CXL_DVSEC_CTRL_OFFSET, &ctrl))
+    return ACS_STATUS_ERR;
+
+  if ((ctrl & CXL_DVSEC_CACHE_ENABLE) == 0u) {
+    ctrl |= CXL_DVSEC_CACHE_ENABLE;
+    val_pcie_write_cfg(bdf, dvsec_offset + CXL_DVSEC_CTRL_OFFSET, ctrl);
+  }
+
+  if (val_pcie_read_cfg(bdf, dvsec_offset + CXL_DVSEC_CTRL_OFFSET, &ctrl))
+    return ACS_STATUS_ERR;
+
+  return ((ctrl & CXL_DVSEC_CACHE_ENABLE) != 0u) ?
+         ACS_STATUS_PASS : ACS_STATUS_FAIL;
+}
+
+/**
   @brief   Best-effort reset to clear CXL TSP configuration lock state.
 
   The helper resets the endpoint (preferring FLR, falling back to Secondary Bus

@@ -485,6 +485,12 @@ prepare_context(TEST_CONTEXT *context)
     candidate.rmecda_ctl1_valid = 1u;
     candidate.rmecda_regs_valid = 1u;
 
+    if (val_cxl_enable_cache(candidate.endpoint_bdf) != ACS_STATUS_PASS)
+    {
+      (void)restore_context_state(&candidate);
+      continue;
+    }
+
     if (val_cxl_enable_mem(candidate.endpoint_bdf) != ACS_STATUS_PASS)
     {
       (void)restore_context_state(&candidate);
@@ -823,11 +829,13 @@ exercise_rule(TEST_CONTEXT *context)
   }
 
   /*
-   * A normal cacheable Realm HPA write creates the line through CXL.mem. The
-   * cache-state command then confirms that the line exists and leaves it dirty.
-   * STOP_INTERFACE must write the value back before invalidating the line.
+   * Initialize backing DCM through a non-cacheable Realm mapping, then use a
+   * cacheable Realm read to populate a clean line through CXL.mem. The cache
+   * command marks that existing line dirty. STOP_INTERFACE must write the value
+   * back before invalidating the line.
    */
-  if (val_cda_seed_realm_cache_line(realm_alias,
+  if (val_cda_seed_realm_cache_line(dcm_hpa,
+                                    realm_alias,
                                     RLMFLX_DIRTY_VALUE) != ACS_STATUS_PASS)
   {
     val_print(ACS_PRINT_ERR, " RLMFLX: failed to create Realm cache line", 0);
@@ -928,10 +936,9 @@ exercise_rule(TEST_CONTEXT *context)
   second_ide_enabled = 1u;
 
   /*
-   * Earlier negative CDA tests can leave stale data for the same DCM Location
-   * in the PE cache. Use invalidate-only on the mapped Realm VA so the host
-   * read below fetches from the device writeback path without cleaning stale PE
-   * data over the dirty value that STOP_INTERFACE had to preserve.
+   * Invalidate the PE copy so the read fetches data written back by the device.
+   * Invalidate-only avoids cleaning PE data over the value that STOP_INTERFACE
+   * had to preserve.
    */
   if (val_data_cache_ops_by_va_el3((uint64_t)realm_alias, INVALIDATE) != 0u)
   {

@@ -35,7 +35,12 @@
 #define TEST_RULE "RHTTNB"
 
 #define DECODER_SLOT 0u
-#define AER_POISONED_TLP (1u << 12)
+
+#define ESR_EC_SHIFT                 26u
+#define ESR_EC_MASK                  0x3Fu
+#define ESR_EC_DATA_ABORT_SAME_EL    0x25u
+#define ESR_ABORT_FSC_MASK           0x3Fu
+#define ESR_FSC_SYNC_EXTERNAL_ABORT  0x10u
 
 #define RMECDA_CTL1_TDISP_EN_MASK 0x1u
 #define RMECDA_CTL1_LINK_STR_LOCK_MASK (1u << 1)
@@ -254,16 +259,13 @@ prepare_context(TEST_CONTEXT *context)
       continue;
     }
 
+    /* AER is useful diagnostic information, but is not the poison response. */
+    candidate.aer_offset = 0u;
     if (val_pcie_find_capability(candidate.root_bdf,
                                  PCIE_ECAP,
                                  ECID_AER,
                                  &candidate.aer_offset) != PCIE_SUCCESS)
-    {
-      val_print(ACS_PRINT_DEBUG,
-                " RHTTNB: root 0x%x lacks AER capability",
-                (uint64_t)candidate.root_bdf);
-      continue;
-    }
+      candidate.aer_offset = 0u;
 
     candidate.host_index = root_port->host_bridge_index;
     if (candidate.host_index == CXL_COMPONENT_INVALID_INDEX)
@@ -378,6 +380,12 @@ prepare_context(TEST_CONTEXT *context)
       continue;
     }
 
+    if (val_cxl_enable_cache(candidate.endpoint_bdf) != ACS_STATUS_PASS)
+    {
+      (void)restore_context_state(&candidate);
+      continue;
+    }
+
     if (val_cxl_enable_mem(candidate.endpoint_bdf) != ACS_STATUS_PASS)
     {
       (void)restore_context_state(&candidate);
@@ -464,16 +472,20 @@ exercise_rule(TEST_CONTEXT *context)
   volatile uint64_t *realm_alias;
   val_spdm_context_t spdm_ctx;
   pci_tdisp_interface_id_t interface_id;
+  PCIE_ENDPOINT_CFG endpoint_cfg;
   uint32_t session_id;
   uint32_t session_open;
   uint32_t ide_enabled;
   uint32_t realm_assigned;
+  uint32_t endpoint_cfg_valid;
+  uint32_t cache_dirty;
   uint32_t result;
   uint32_t status;
   uint32_t aer_uncorr;
   uint32_t host_fault;
   uint64_t test_hpa;
   uint64_t observed;
+  uint64_t read_esr;
   uint8_t tdi_state;
 
   if (context == NULL)
@@ -492,11 +504,19 @@ exercise_rule(TEST_CONTEXT *context)
     return ACS_STATUS_ERR;
 
   val_memory_set(&spdm_ctx, sizeof(spdm_ctx), 0);
+  val_memory_set(&endpoint_cfg, sizeof(endpoint_cfg), 0);
   session_id = 0u;
   session_open = 0u;
   ide_enabled = 0u;
   realm_assigned = 0u;
+  endpoint_cfg_valid = 0u;
+  cache_dirty = 0u;
   result = ACS_STATUS_FAIL;
+
+  if (val_pcie_save_endpoint_cfg(context->endpoint_bdf, &endpoint_cfg) == ACS_STATUS_PASS)
+    endpoint_cfg_valid = 1u;
+  else
+    val_print(ACS_PRINT_WARN, " RHTTNB: endpoint config snapshot failed", 0);
 
   /* Associate the CFMWS-backed page with this TDI. */
   status = val_cxl_exerciser_execute_cmd(context->endpoint_bdf,
@@ -535,11 +555,13 @@ exercise_rule(TEST_CONTEXT *context)
   ide_enabled = 1u;
 
   /*
-   * Populate the Realm line through the normal coherent HPA path. CACHE_DIRTY
-   * only changes the state of an existing line; it neither allocates a line nor
-   * uses DATA0 as line contents.
+   * Initialize backing DCM without creating dirty state, then populate a clean
+   * Realm line through the coherent HPA path. CACHE_DIRTY changes only the
+   * state of this existing line and does not supply its contents.
    */
-  status = val_cda_seed_realm_cache_line(realm_alias, RHTTNB_SEED_VALUE);
+  status = val_cda_seed_realm_cache_line(test_hpa,
+                                         realm_alias,
+                                         RHTTNB_SEED_VALUE);
   if (status != ACS_STATUS_PASS)
   {
     val_print(ACS_PRINT_ERR, " RHTTNB: failed to seed Realm cache line", 0);
@@ -559,6 +581,7 @@ exercise_rule(TEST_CONTEXT *context)
     result = ACS_STATUS_SKIP;
     goto cleanup;
   }
+  cache_dirty = 1u;
 
   status = val_cxl_ide_disable_link(context->root_index,
                                     context->endpoint_index,
@@ -586,15 +609,23 @@ exercise_rule(TEST_CONTEXT *context)
     goto cleanup;
   }
 
-  val_cxl_aer_clear(context->root_bdf, context->aer_offset);
+  if (context->aer_offset != 0u)
+    val_cxl_aer_clear(context->root_bdf, context->aer_offset);
   observed = 0u;
   host_fault = 0u;
-  status = val_memory_read64_el3_protected(realm_alias, &observed, &host_fault);
-  (void)val_cxl_aer_read_uncorr(context->root_bdf,
-                                context->aer_offset,
-                                &aer_uncorr);
+  read_esr = 0u;
+  aer_uncorr = 0u;
+  status = val_memory_read64_el3_protected_with_esr(realm_alias,
+                                                     &observed,
+                                                     &host_fault,
+                                                     &read_esr);
+  if (context->aer_offset != 0u)
+    (void)val_cxl_aer_read_uncorr(context->root_bdf,
+                                  context->aer_offset,
+                                  &aer_uncorr);
   val_print(ACS_PRINT_DEBUG, " RHTTNB: host read status %u", status);
   val_print(ACS_PRINT_DEBUG, " RHTTNB: host read fault %u", host_fault);
+  val_print(ACS_PRINT_DEBUG, " RHTTNB: host read ESR 0x%llx", read_esr);
   val_print(ACS_PRINT_DEBUG, " RHTTNB: host read observed 0x%llx", observed);
   val_print(ACS_PRINT_DEBUG, " RHTTNB: AER uncorrectable 0x%x", aer_uncorr);
 
@@ -605,23 +636,28 @@ exercise_rule(TEST_CONTEXT *context)
     goto cleanup;
   }
 
-  if ((aer_uncorr & AER_POISONED_TLP) == 0u)
-  {
-    val_print(ACS_PRINT_ERR,
-              " RHTTNB: Poisoned TLP not logged for blocked dirty snoop",
-              0);
-    result = ACS_STATUS_FAIL;
-    goto cleanup;
-  }
-
   /*
    * RHTTNB requires poison and fixed data when the host port cannot forward a
-   * snoop for a location it tracks as potentially device-owned dirty. A
-   * synchronous fault is acceptable as the platform poison mechanism; otherwise
-   * the host read must return all-ones fixed poison data or another
-   * implementation-defined poison/fixed value, not the dirty TDI value.
+   * snoop for a location it tracks as potentially device-owned dirty. Consuming
+   * the poison may raise a synchronous external abort. If the access completes,
+   * it must return fixed poison data rather than the dirty TDI value. AER is
+   * diagnostic because this coherent poison response is not necessarily a PCIe
+   * Poisoned TLP event.
    */
-  if (host_fault == 0u)
+  if (host_fault != 0u)
+  {
+    if ((((read_esr >> ESR_EC_SHIFT) & ESR_EC_MASK) !=
+         ESR_EC_DATA_ABORT_SAME_EL) ||
+        ((read_esr & ESR_ABORT_FSC_MASK) != ESR_FSC_SYNC_EXTERNAL_ABORT))
+    {
+      val_print(ACS_PRINT_ERR,
+                " RHTTNB: blocked snoop raised unexpected ESR 0x%llx",
+                read_esr);
+      result = ACS_STATUS_FAIL;
+      goto cleanup;
+    }
+  }
+  else
   {
     if (observed == RHTTNB_POISON_FIXED_VALUE)
     {
@@ -685,6 +721,19 @@ cleanup:
                                       NULL) != ACS_STATUS_PASS)
     {
       val_print(ACS_PRINT_WARN, " RHTTNB: failed to clear DCM assignment", 0);
+    }
+  }
+
+  if (cache_dirty != 0u)
+  {
+    /* Discard test-owned cache state so the next CDA test starts independently. */
+    if (val_cxl_unlock_tsp_best_effort(context->root_bdf,
+                                       context->endpoint_bdf,
+                                       (endpoint_cfg_valid != 0u) ?
+                                       &endpoint_cfg : NULL) != ACS_STATUS_PASS)
+    {
+      val_print(ACS_PRINT_WARN, " RHTTNB: endpoint reset cleanup failed", 0);
+      result = ACS_STATUS_FAIL;
     }
   }
 

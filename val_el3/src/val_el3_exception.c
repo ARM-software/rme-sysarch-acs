@@ -49,6 +49,8 @@ void val_el3_ack_handler(void)
 
   uint64_t *elr_ptr;
   uint64_t *spsr_ptr;
+  uint64_t esr;
+  uint64_t far;
 
   elr_ptr = (uint64_t *) SHARED_OFFSET_ELR;
   spsr_ptr = (uint64_t *) SHARED_OFFSET_SPSR;
@@ -56,9 +58,14 @@ void val_el3_ack_handler(void)
 
   if (shared_data->exception_expected == SET && shared_data->access_mut == CLEAR) {
     INFO("The Fault is encountered\n");
-    if (val_el3_read_esr_el3() == GPF_ESR_READ || val_el3_read_esr_el3() == GPF_ESR_WRITE) {
+    esr = val_el3_read_esr_el3();
+    far = val_el3_read_far();
+    INFO("Expected fault ESR_EL3 = 0x%lx\n", esr);
+    INFO("Expected fault FAR_EL3 = 0x%lx\n", far);
+    shared_data->esr_value = esr;
+    shared_data->exception_generated = SET;
+    if (esr == GPF_ESR_READ || esr == GPF_ESR_WRITE) {
         INFO("The GPF was expected, encountered and handled\n");
-        shared_data->exception_generated = SET;
         shared_data->exception_expected = CLEAR;
         VERBOSE("Saved elr = %lx\n", *(elr_ptr));
         VERBOSE("Saved spsr = %lx\n", *(spsr_ptr));
@@ -66,8 +73,8 @@ void val_el3_ack_handler(void)
         VERBOSE("Current spsr = %lx\n", val_el3_read_spsr_el3());
         val_el3_asm_eret();
     } else {
-        VERBOSE("The fault is not GPF, ESR_EL3 = 0x%lx\n", val_el3_read_esr_el3());
-        VERBOSE("FAR_EL3 = 0x%lx\n", val_el3_read_far());
+        VERBOSE("The expected fault is not GPF, ESR_EL3 = 0x%lx\n", esr);
+        VERBOSE("FAR_EL3 = 0x%lx\n", far);
         VERBOSE("Saved elr = %lx\n", *(elr_ptr));
         VERBOSE("Saved spsr = %lx\n", *(spsr_ptr));
         VERBOSE("Current elr = %lx\n", val_el3_read_elr_el3());
