@@ -72,6 +72,7 @@
   ../test_pool/cda/cda_rvhzcr_external_pas_check.c
   ../test_pool/cda/cda_ryjvjr_ats_te_pas.c
   ../test_pool/cda/cda_rshsxk_d2h_gpc_dpt.c
+  ../test_pool/cda/cda_rjsyps_d2h_snp_range.c
   ../test_pool/da/da_attribute_rmeda_ctl_registers.c
   ../test_pool/da/da_autonomous_rootport_request_ns_pas.c
   ../test_pool/da/da_ctl_regs_rmsd_write_protect_property.c

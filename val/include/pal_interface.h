@@ -777,6 +777,9 @@ typedef enum {
 #define CXL_SNOOP_RESULT_VALID                (1u << 0)
 #define CXL_SNOOP_RESULT_EMITTED              (1u << 1)
 #define CXL_SNOOP_RESULT_BLOCKED              (1u << 2)
+/* Normalized PAL observations, not architectural host-port register bits. */
+#define CXL_SNOOP_RESULT_HOST_ACCEPTED         (1u << 3)
+#define CXL_SNOOP_RESULT_HOST_REJECTED         (1u << 4)
 
 typedef enum {
   ACCESS_TYPE_RD = 0x0,

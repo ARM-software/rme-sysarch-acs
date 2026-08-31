@@ -554,9 +554,10 @@ uint32_t pal_exerciser_ops(EXERCISER_OPS Ops, uint64_t Param, uint32_t Bdf)
   @param  Bdf        Exerciser endpoint BDF identifying the TDI.
   @param  TargetHpa  Target host physical address.
   @param  PasRealm   Nonzero to request Realm Access PAS.
-  @param  Result     Request result flags: VALID plus EMITTED or BLOCKED.
+  @param  Result     Request result flags: VALID plus EMITTED or BLOCKED, and
+                     the observed host response when the request was emitted.
 
-  @return 0 when the model returned a valid result, nonzero otherwise.
+  @return 0 when the platform returned a valid result, nonzero otherwise.
 **/
 uint32_t
 pal_cda_tdi_snoop_attempt(uint32_t Bdf, uint64_t TargetHpa,

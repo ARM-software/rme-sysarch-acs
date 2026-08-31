@@ -132,6 +132,10 @@ MODULE_TEST_DISPATCHER_s g_module_test_table[MODULE_SENTINEL] = {
         .entry_fn = cda_rshsxk_d2h_gpc_dpt_entry,
         .test_text = "cda_rshsxk_d2h_gpc_dpt",
       },
+      [CDA_ENTRY_CDA_RJSYPS_D2H_SNP_RANGE_ENTRY] = {
+        .entry_fn = cda_rjsyps_d2h_snp_range_entry,
+        .test_text = "cda_rjsyps_d2h_snp_range",
+      },
       [CDA_ENTRY_CDA_RFZBMW_EXTERNAL_DCM_IDE_GATE_ENTRY] = {
         .entry_fn = cda_rfzbmw_external_dcm_ide_gate_entry,
         .test_text = "cda_rfzbmw_external_dcm_ide_gate",

@@ -59,6 +59,7 @@ uint32_t cda_rfrfjg_tdi_snoop_access_entry(uint32_t num_pe);
 uint32_t cda_rvhzcr_external_pas_check_entry(uint32_t num_pe);
 uint32_t cda_ryjvjr_ats_te_pas_entry(uint32_t num_pe);
 uint32_t cda_rshsxk_d2h_gpc_dpt_entry(uint32_t num_pe);
+uint32_t cda_rjsyps_d2h_snp_range_entry(uint32_t num_pe);
 
 uint32_t val_cda_find_downstream_chi_c2c_exerciser_endpoint(uint32_t root_bdf,
                                                             uint32_t *endpoint_bdf_out);

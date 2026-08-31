@@ -1726,6 +1726,23 @@ Testcase checklist
 
   * -
 
+      `cda_rjsyps_d2h_snp_range <../test_pool/cda/cda_rjsyps_d2h_snp_range.c>`_
+
+    -
+
+      RJSYPS: The host port applies the DCM Access PAS policy to device-to-host CHI SNP requests and rejects requests whose PA is outside the attached device's DCM range.
+
+    -
+
+      1. Select a CHI-C2C-capable root port and downstream exerciser, then program the host and endpoint HDM decoders for a CFMWS-backed DCM window.
+      2. Select an address inside the DCM window and an allocated Non-secure host-memory address outside that window.
+      3. Establish the TDI RUN state and coherent-link IDE stream, associate the in-range DCM page with Realm, and give that page conflicting Non-secure GPT state.
+      4. Issue a Realm device-to-host SNP to the in-range DCM PA and verify from the coherent response that the request succeeds without applying GPC or DPT checks.
+      5. Issue a Non-secure device-to-host SNP to the out-of-range host PA. Verify from the coherent error response that the host rejects it despite the address having matching Non-secure GPC state.
+      6. Clear the DCM assignment and restore the TDISP, IDE, GPT, and decoder state.
+
+  * -
+
       `cxl_rwyvcq_link_unlock_reject <../test_pool/cxl/cxl_rwyvcq_link_unlock_reject.c>`_
 
     -

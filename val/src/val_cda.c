@@ -44,7 +44,8 @@
   @param  endpoint_bdf  Endpoint BDF identifying the originating TDI.
   @param  target_hpa    Target host physical address.
   @param  access_pas    NONSECURE_PAS or REALM_PAS.
-  @param  result        Result flags returned by the platform hook.
+  @param  result        Result flags returned by the platform hook. An emitted
+                        request may additionally report the observed host response.
 
   @return ACS_STATUS_PASS when a valid result was returned.
           ACS_STATUS_SKIP when the platform hook is unavailable.
@@ -56,6 +57,7 @@ val_cda_tdi_snoop_attempt(uint32_t endpoint_bdf,
                           uint32_t access_pas,
                           uint32_t *result)
 {
+  uint32_t host_response;
   uint32_t pas_realm;
 
   if (result == NULL)
@@ -78,6 +80,13 @@ val_cda_tdi_snoop_attempt(uint32_t endpoint_bdf,
   if (((*result & CXL_SNOOP_RESULT_VALID) == 0u) ||
       (((*result & CXL_SNOOP_RESULT_EMITTED) != 0u) ==
        ((*result & CXL_SNOOP_RESULT_BLOCKED) != 0u)))
+    return ACS_STATUS_ERR;
+
+  host_response = *result & (CXL_SNOOP_RESULT_HOST_ACCEPTED |
+                             CXL_SNOOP_RESULT_HOST_REJECTED);
+  if ((host_response == (CXL_SNOOP_RESULT_HOST_ACCEPTED |
+                         CXL_SNOOP_RESULT_HOST_REJECTED)) ||
+      (((*result & CXL_SNOOP_RESULT_BLOCKED) != 0u) && (host_response != 0u)))
     return ACS_STATUS_ERR;
 
   return ACS_STATUS_PASS;
