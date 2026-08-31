@@ -361,6 +361,47 @@ val_exerciser_ops_by_bdf(EXERCISER_OPS ops, uint64_t param, uint32_t bdf)
     return pal_exerciser_ops(ops, param, bdf);
 }
 
+/** Start a new exerciser transaction-monitor capture. */
+uint32_t
+val_exerciser_start_transaction_monitor_by_bdf(uint32_t bdf)
+{
+    return (val_exerciser_ops_by_bdf(START_TXN_MONITOR, 0u, bdf) == 0u) ?
+           ACS_STATUS_PASS : ACS_STATUS_SKIP;
+}
+
+/** Stop an exerciser transaction-monitor capture. */
+uint32_t
+val_exerciser_stop_transaction_monitor_by_bdf(uint32_t bdf)
+{
+    return (val_exerciser_ops_by_bdf(STOP_TXN_MONITOR, 0u, bdf) == 0u) ?
+           ACS_STATUS_PASS : ACS_STATUS_ERR;
+}
+
+/** Read and remove one complete entry from the exerciser transaction trace. */
+uint32_t
+val_exerciser_get_transaction_record_by_bdf(
+                                uint32_t bdf,
+                                VAL_EXERCISER_TRANSACTION_RECORD *record)
+{
+    uint64_t attributes;
+    uint64_t address;
+
+    if (record == NULL)
+        return ACS_STATUS_ERR;
+
+    attributes = 0u;
+    address = 0u;
+    if (val_exerciser_get_param_by_bdf(TRANSACTION_RECORD,
+                                       &attributes,
+                                       &address,
+                                       bdf) != 0u)
+        return ACS_STATUS_SKIP;
+
+    record->attributes = (uint32_t)attributes;
+    record->address = address;
+    return ACS_STATUS_PASS;
+}
+
 /**
   @brief Issue an ATS translation request and return the complete response.
 

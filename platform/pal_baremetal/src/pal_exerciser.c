@@ -353,6 +353,9 @@ uint32_t pal_exerciser_get_param(EXERCISER_PARAM_TYPE Type, uint64_t *Value1, ui
 {
   uint32_t Status;
   uint32_t Temp;
+  uint32_t tx_attr;
+  uint32_t addr_low;
+  uint32_t addr_high;
   uint64_t Base;
 
   Base = pal_exerciser_get_ecsr_base(Bdf,0);
@@ -385,6 +388,19 @@ uint32_t pal_exerciser_get_param(EXERCISER_PARAM_TYPE Type, uint64_t *Value1, ui
       case EXERCISER_CXL_CMD_DATA0:
           *Value1 = (uint64_t)pal_mmio_read(Base + CXL_CMD_DATA0_LO);
           *Value1 |= ((uint64_t)pal_mmio_read(Base + CXL_CMD_DATA0_HI)) << 32;
+          return 0;
+      case TRANSACTION_RECORD:
+          if ((Value1 == NULL) || (Value2 == NULL))
+              return 1;
+          tx_attr = pal_mmio_read(Base + TXN_TRACE);
+          if (tx_attr == TXN_INVALID)
+              return 1;
+          addr_low = pal_mmio_read(Base + TXN_TRACE);
+          addr_high = pal_mmio_read(Base + TXN_TRACE);
+          (void)pal_mmio_read(Base + TXN_TRACE);
+          (void)pal_mmio_read(Base + TXN_TRACE);
+          *Value1 = tx_attr;
+          *Value2 = addr_low | ((uint64_t)addr_high << 32);
           return 0;
       default:
           return 1;
@@ -490,6 +506,14 @@ uint32_t pal_exerciser_ops(EXERCISER_OPS Ops, uint64_t Param, uint32_t Bdf)
 
     case TXN_NO_SNOOP_DISABLE:
         pal_mmio_write(Base + DMACTL1, (pal_mmio_read(Base + DMACTL1)) & NO_SNOOP_STOP_MASK);//disabling the NO SNOOP
+        return 0;
+
+    case START_TXN_MONITOR:
+        pal_mmio_write(Base + TXN_CTRL_BASE, TXN_START);
+        return 0;
+
+    case STOP_TXN_MONITOR:
+        pal_mmio_write(Base + TXN_CTRL_BASE, TXN_STOP);
         return 0;
 
     case ATS_TXN_REQ:

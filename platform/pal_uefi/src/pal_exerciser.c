@@ -386,6 +386,11 @@ pal_exerciser_get_param (
       case TRANSACTION_TYPE:
       case ADDRESS_ATTRIBUTES:
       case DATA_ATTRIBUTES:
+      case TRANSACTION_RECORD:
+          if ((Value1 == NULL) ||
+              ((Type == TRANSACTION_RECORD) && (Value2 == NULL)))
+              return 1;
+
           /* Get the first entry and check for validity */
           tx_attr = pal_mmio_read(Base + TXN_TRACE);
           if (tx_attr == TXN_INVALID)
@@ -420,6 +425,12 @@ pal_exerciser_get_param (
 
           else if (Type == DATA_ATTRIBUTES)
                *Value1 = data_low | ((UINT64)data_high << 32);
+
+          else if (Type == TRANSACTION_RECORD)
+          {
+              *Value1 = tx_attr;
+              *Value2 = addr_low | ((UINT64)addr_high << 32);
+          }
 
           return 0;
       default:

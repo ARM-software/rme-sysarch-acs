@@ -75,6 +75,11 @@ typedef struct {
 } VAL_ATS_TRANSLATION_RESULT;
 
 typedef struct {
+    uint32_t attributes;
+    uint64_t address;
+} VAL_EXERCISER_TRANSACTION_RECORD;
+
+typedef struct {
     uint32_t                num_exerciser;
     EXERCISER_INFO_BLOCK    e_info[MAX_EXERCISER_CARDS];
 } EXERCISER_INFO_TABLE;
@@ -147,6 +152,11 @@ uint32_t val_exerciser_set_state(EXERCISER_STATE state, uint64_t *value, uint32_
 uint32_t val_exerciser_get_state(EXERCISER_STATE *state, uint32_t instance);
 uint32_t val_exerciser_ops(EXERCISER_OPS ops, uint64_t param, uint32_t instance);
 uint32_t val_exerciser_ops_by_bdf(EXERCISER_OPS ops, uint64_t param, uint32_t bdf);
+uint32_t val_exerciser_start_transaction_monitor_by_bdf(uint32_t bdf);
+uint32_t val_exerciser_stop_transaction_monitor_by_bdf(uint32_t bdf);
+uint32_t val_exerciser_get_transaction_record_by_bdf(
+                                uint32_t bdf,
+                                VAL_EXERCISER_TRANSACTION_RECORD *record);
 uint32_t val_exerciser_ats_translate_by_bdf(uint32_t bdf,
                                             uint64_t iova,
                                             uint32_t length,

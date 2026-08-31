@@ -1319,6 +1319,26 @@ Testcase checklist
 
   * -
 
+      `cda_rstqhs_unknown_snoop_filter <../test_pool/cda/cda_rstqhs_unknown_snoop_filter.c>`_
+
+    -
+
+      RSTQHS: The host is permitted to forward a host-to-device snoop request to a coherent device only if the request specifies a Location known to be resident in the device cache, a Location the device is permitted to access, a MECID the device is permitted to use, or an address in the Non-secure PA space.
+
+    -
+
+      1. Select a CHI-C2C-capable root port with an RME-CDA DVSEC and a downstream CHI-C2C exerciser endpoint, then program a host-visible DCM window.
+      2. Select two adjacent DCM pages and change their GPT association to Realm PAS. Associate only the first page with the endpoint TDI; do not cache, associate, or provision a MECID for the second page.
+      3. Establish TDISP RUN and the coherent-link IDE stream so transport security does not independently prevent host-to-device snoops.
+      4. Map both pages for Realm host access. Associate one Realm DCM page with the TDI, start the exerciser transaction monitor, and read the permitted page through the coherent host path. Require the monitor to observe the resulting host-to-device snoop. This is a monitor-path calibration and is not the rule verdict.
+      5. Start a new transaction-monitor capture and read the unassociated DCM page through the same Realm host path.
+      6. Fail if the endpoint observes a coherent request for the unknown DCM page. Otherwise pass regardless of whether the initiating host read completes or faults; the verdict is based on whether the snoop was forwarded.
+      7. Clear the DCM association, stop TDISP and IDE, and restore GPT and decoder state.
+
+      Note: The related informational statement IKMFFT makes the host compliance mechanism implementation defined. The exerciser monitor only observes traffic received by the endpoint and does not report a private host-port decision. Platforms that cannot establish the required unknown-target conditions or observe incoming coherent traffic skip the test.
+
+  * -
+
       `cda_rhttnb_dirty_snoop_blocked <../test_pool/cda/cda_rhttnb_dirty_snoop_blocked.c>`_
 
     -
