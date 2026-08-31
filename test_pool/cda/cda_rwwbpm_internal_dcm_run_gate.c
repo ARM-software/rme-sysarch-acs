@@ -44,6 +44,7 @@
 #define DECODER_SLOT CXL_HDM_DECODER_SLOT_DEFAULT
 #define PGT_STAGE2_RME_NS_MASK (1ull << 55)
 #define DMA_TEST_LENGTH ((uint32_t)sizeof(uint64_t))
+#define SEC_SID_REALM_VALID ((1u << 31) | (1u << 1))
 
 #define RUN_BASELINE_VALUE  0x0123456789ABCDEFull
 #define RUN_WRITE_VALUE     0xF0E1D2C3B4A59687ull
@@ -714,6 +715,71 @@ run_atc_backed_dma(uint32_t endpoint_bdf,
 }
 
 static uint32_t
+run_direct_pa_dma(uint32_t endpoint_bdf,
+                  uint64_t physical_address,
+                  EXERCISER_DMA_ATTR direction)
+{
+  uint32_t status;
+
+  /*
+   * For PAS_CHECK==TRUE, submit the physical address directly and keep ATC
+   * use disabled; this path does not depend on a host-provided ATS result.
+   */
+  if ((val_exerciser_set_param_by_bdf(CFG_TXN_ATTRIBUTES,
+                                      TXN_ATC_ENTRY,
+                                      ATC_ENTRY_DISABLE,
+                                      endpoint_bdf) != 0u) ||
+      (val_exerciser_set_param_by_bdf(CFG_TXN_ATTRIBUTES,
+                                      TXN_ADDR_TYPE,
+                                      AT_TRANSLATED,
+                                      endpoint_bdf) != 0u) ||
+      (val_exerciser_set_param_by_bdf(DMA_ATTRIBUTES,
+                                      physical_address,
+                                      DMA_TEST_LENGTH,
+                                      endpoint_bdf) != 0u))
+    return ACS_STATUS_ERR;
+
+  status = val_exerciser_ops_by_bdf(START_DMA, direction, endpoint_bdf);
+  if (status != 0u)
+  {
+    val_print(ACS_PRINT_DEBUG,
+              " RWWBPM: direct PA DMA direction %u rejected",
+              (uint64_t)direction);
+    val_print(ACS_PRINT_DEBUG,
+              " RWWBPM: direct PA DMA status %u",
+              (uint64_t)status);
+    return ACS_STATUS_FAIL;
+  }
+
+  return ACS_STATUS_PASS;
+}
+
+static uint32_t
+run_internal_dma(uint32_t endpoint_bdf,
+                 uint64_t address,
+                 uint32_t expected_te,
+                 uint32_t page_size,
+                 EXERCISER_DMA_ATTR direction,
+                 uint32_t pas_check)
+{
+  uint32_t status;
+
+  if (pas_check != 0u)
+    return run_direct_pa_dma(endpoint_bdf, address, direction);
+
+  /* PAS_CHECK==FALSE requires a host-provided Realm translation. */
+  status = cache_ats_translation(endpoint_bdf,
+                                 address,
+                                 address,
+                                 expected_te,
+                                 page_size);
+  if (status != ACS_STATUS_PASS)
+    return status;
+
+  return run_atc_backed_dma(endpoint_bdf, address, direction);
+}
+
+static uint32_t
 exercise_rule(TEST_CONTEXT *context)
 {
   LINK_CONTEXT link;
@@ -731,8 +797,10 @@ exercise_rule(TEST_CONTEXT *context)
   uint32_t ats_enabled;
   uint32_t dcm_dpt_set;
   uint32_t dcm_gpt_set;
+  uint32_t device_properties;
   uint32_t endpoint_rid;
   uint32_t page_size;
+  uint32_t pas_check;
   uint32_t pgt_created;
   uint32_t realm_assigned;
   uint32_t result;
@@ -740,6 +808,7 @@ exercise_rule(TEST_CONTEXT *context)
   uint32_t rmecda_ctl3_orig;
   uint32_t rmecda_ctl4_orig;
   uint32_t smmu_enabled;
+  uint32_t sec_sid_programmed;
   uint32_t source_dpt_set;
   uint32_t source_gpt_set;
   uint32_t status;
@@ -765,10 +834,23 @@ exercise_rule(TEST_CONTEXT *context)
   pgt_created = 0u;
   realm_assigned = 0u;
   rid_range_programmed = 0u;
+  sec_sid_programmed = 0u;
   smmu_enabled = 0u;
   source_dpt_set = 0u;
   source_gpt_set = 0u;
   result = ACS_STATUS_FAIL;
+
+  status = val_tdisp_get_device_properties(context->endpoint_bdf,
+                                            &device_properties);
+  if (status != ACS_STATUS_PASS)
+  {
+    result = status;
+    goto cleanup;
+  }
+  pas_check = ((device_properties & VAL_TDISP_DEV_PROP_PAS_CHECK) != 0u) ? 1u : 0u;
+  val_print(ACS_PRINT_INFO,
+            " RWWBPM: endpoint PAS_CHECK %u",
+            (uint64_t)pas_check);
 
   page_size = val_memory_page_size();
   if (page_size == 0u)
@@ -856,15 +938,34 @@ exercise_rule(TEST_CONTEXT *context)
     goto cleanup;
   }
 
-  status = val_pcie_enable_ats(context->endpoint_bdf,
-                               &ats_cap_base,
-                               &ats_ctrl_orig);
-  if (status != ACS_STATUS_PASS)
+  if (pas_check == 0u)
   {
-    result = status;
-    goto cleanup;
+    status = val_pcie_enable_ats(context->endpoint_bdf,
+                                 &ats_cap_base,
+                                 &ats_ctrl_orig);
+    if (status != ACS_STATUS_PASS)
+    {
+      result = status;
+      goto cleanup;
+    }
+    ats_enabled = 1u;
   }
-  ats_enabled = 1u;
+  else
+  {
+    /*
+     * Preserve Realm PAS as the TDI leaves RUN so the negative transaction
+     * differs from the positive transaction only in its TDISP state.
+     */
+    if (val_exerciser_set_param_by_bdf(EXERCISER_SEC_SID,
+                                       SEC_SID_REALM_VALID,
+                                       0u,
+                                       context->endpoint_bdf) != 0u)
+    {
+      result = ACS_STATUS_SKIP;
+      goto cleanup;
+    }
+    sec_sid_programmed = 1u;
+  }
 
   if ((val_memory_read_el3(context->rmecda_cfg_va + context->rmecda_cap_base +
                            RMECDA_CTL3_OFFSET,
@@ -949,10 +1050,7 @@ exercise_rule(TEST_CONTEXT *context)
     goto cleanup;
   }
 
-  /*
-   * Load a host-owned source value into the exerciser through an ATC-backed
-   * read. The source translation resolves to Non-secure PAS (TE=0).
-   */
+  /* Load a host-owned source value into the exerciser. */
   *(uint64_t *)source_va = RUN_WRITE_VALUE;
   if (val_memory_cache_clean_invalidate_range_el3((uint64_t)source_va,
                                                    DMA_TEST_LENGTH)
@@ -962,32 +1060,25 @@ exercise_rule(TEST_CONTEXT *context)
     goto cleanup;
   }
 
-  if ((cache_ats_translation(context->endpoint_bdf,
-                             source_pa,
-                             source_pa,
-                             0u,
-                             page_size) != ACS_STATUS_PASS) ||
-      (run_atc_backed_dma(context->endpoint_bdf,
-                          source_pa,
-                          EDMA_TO_DEVICE) != ACS_STATUS_PASS))
+  if (run_internal_dma(context->endpoint_bdf,
+                       source_pa,
+                       0u,
+                       page_size,
+                       EDMA_TO_DEVICE,
+                       pas_check) != ACS_STATUS_PASS)
   {
     val_print(ACS_PRINT_ERR, " RWWBPM: source DMA failed in RUN", 0);
     result = ACS_STATUS_FAIL;
     goto cleanup;
   }
 
-  /*
-   * Translate the DCM HPA to Realm PAS (TE=1), then write the loaded value
-   * through the coherent device-to-host path using that cached translation.
-   */
-  if ((cache_ats_translation(context->endpoint_bdf,
-                             test_hpa,
-                             test_hpa,
-                             1u,
-                             page_size) != ACS_STATUS_PASS) ||
-      (run_atc_backed_dma(context->endpoint_bdf,
-                          test_hpa,
-                          EDMA_FROM_DEVICE) != ACS_STATUS_PASS))
+  /* Write the loaded value to the DCM HPA through the coherent path. */
+  if (run_internal_dma(context->endpoint_bdf,
+                       test_hpa,
+                       1u,
+                       page_size,
+                       EDMA_FROM_DEVICE,
+                       pas_check) != ACS_STATUS_PASS)
   {
     val_print(ACS_PRINT_ERR, " RWWBPM: Realm DCM DMA failed in RUN", 0);
     result = ACS_STATUS_FAIL;
@@ -1017,23 +1108,17 @@ exercise_rule(TEST_CONTEXT *context)
             " RWWBPM: Realm-assigned DCM access succeeded in RUN",
             0);
 
-  /*
-   * While still in RUN, load the negative-case value and leave a Realm DCM
-   * translation cached in the ATC. This makes the post-STOP DMA identical to
-   * the positive DCM transaction except for the TDI state.
-   */
+  /* Load the negative-case value while the TDI is still in RUN. */
   *(uint64_t *)source_va = STOP_WRITE_VALUE;
   if ((val_memory_cache_clean_invalidate_range_el3((uint64_t)source_va,
                                                     DMA_TEST_LENGTH)
        != ACS_STATUS_PASS) ||
-      (cache_ats_translation(context->endpoint_bdf,
-                             source_pa,
-                             source_pa,
-                             0u,
-                             page_size) != ACS_STATUS_PASS) ||
-      (run_atc_backed_dma(context->endpoint_bdf,
-                          source_pa,
-                          EDMA_TO_DEVICE) != ACS_STATUS_PASS))
+      (run_internal_dma(context->endpoint_bdf,
+                        source_pa,
+                        0u,
+                        page_size,
+                        EDMA_TO_DEVICE,
+                        pas_check) != ACS_STATUS_PASS))
   {
     val_print(ACS_PRINT_ERR, " RWWBPM: negative source DMA setup failed", 0);
     result = ACS_STATUS_FAIL;
@@ -1068,17 +1153,19 @@ exercise_rule(TEST_CONTEXT *context)
     goto cleanup;
   }
 
-  if (cache_ats_translation(context->endpoint_bdf,
-                            test_hpa,
-                            test_hpa,
-                            1u,
-                            page_size) != ACS_STATUS_PASS)
+  /* PAS_CHECK==FALSE needs the Realm DCM translation cached before STOP. */
+  if ((pas_check == 0u) &&
+      (cache_ats_translation(context->endpoint_bdf,
+                             test_hpa,
+                             test_hpa,
+                             1u,
+                             page_size) != ACS_STATUS_PASS))
   {
     result = ACS_STATUS_FAIL;
     goto cleanup;
   }
 
-  /* Leave RUN while retaining IDE and the Realm translation in the ATC. */
+  /* Leave RUN while retaining IDE and, when required, the Realm ATC entry. */
   if (stop_tdi_keep_ide(&link) != ACS_STATUS_PASS)
   {
     val_print(ACS_PRINT_ERR, " RWWBPM: STOP_INTERFACE failed", 0);
@@ -1086,7 +1173,11 @@ exercise_rule(TEST_CONTEXT *context)
     goto cleanup;
   }
 
-  status = run_atc_backed_dma(context->endpoint_bdf,
+  status = (pas_check != 0u) ?
+           run_direct_pa_dma(context->endpoint_bdf,
+                             test_hpa,
+                             EDMA_FROM_DEVICE) :
+           run_atc_backed_dma(context->endpoint_bdf,
                               test_hpa,
                               EDMA_FROM_DEVICE);
 
@@ -1133,15 +1224,25 @@ exercise_rule(TEST_CONTEXT *context)
   result = ACS_STATUS_PASS;
 
 cleanup:
+  if ((sec_sid_programmed != 0u) &&
+      (val_exerciser_set_param_by_bdf(EXERCISER_SEC_SID,
+                                      0u,
+                                      0u,
+                                      context->endpoint_bdf) != 0u))
+    result = ACS_STATUS_FAIL;
+
   (void)val_exerciser_set_param_by_bdf(CFG_TXN_ATTRIBUTES,
                                        TXN_ATC_ENTRY,
                                        ATC_ENTRY_DISABLE,
                                        context->endpoint_bdf);
-  (void)val_exerciser_set_param_by_bdf(EXERCISER_ATS_REQUEST_ATTRIBUTES,
-                                       0u,
-                                       0u,
-                                       context->endpoint_bdf);
-  (void)val_exerciser_ops_by_bdf(ATS_INV_CACHE, 0u, context->endpoint_bdf);
+  if (ats_enabled != 0u)
+  {
+    (void)val_exerciser_set_param_by_bdf(EXERCISER_ATS_REQUEST_ATTRIBUTES,
+                                         0u,
+                                         0u,
+                                         context->endpoint_bdf);
+    (void)val_exerciser_ops_by_bdf(ATS_INV_CACHE, 0u, context->endpoint_bdf);
+  }
 
   if (realm_assigned != 0u)
   {

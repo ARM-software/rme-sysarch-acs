@@ -1719,11 +1719,11 @@ Testcase checklist
     -
 
       1. Select a CHI-C2C-capable CXL root port and downstream exerciser, select a CFMWS location, and program the host and endpoint HDM decoders. Use the host-visible DCM HPA for the access under test and derive its DPA only for direct-media setup and observation.
-      2. Configure SMMU stage-2 mappings for a Non-secure source page and the Realm DCM HPA, install the required DPT entries, enable ATS, and program the endpoint RID range.
+      2. Query the endpoint PAS_CHECK property, configure SMMU stage-2 mappings for a Non-secure source page and the Realm DCM HPA, install the required DPT entries, and program the endpoint RID range. For PAS_CHECK==FALSE, enable ATS; for PAS_CHECK==TRUE, configure direct PA transactions with explicit Realm SEC_SID and ATC use disabled.
       3. Establish IDE and transition the endpoint TDI to RUN, assign the selected DCM HPA to Realm, and seed a baseline value through the DPA backdoor.
-      4. Cache the source and DCM translations with ATS, use ATC-backed DMA to load a host-owned value into the exerciser and write it to the DCM HPA with Realm PAS, then verify through DPA media readback that the write succeeded in RUN.
-      5. While still in RUN, prepare a different source value and cache the translations needed for an identical negative transaction. Restore a known media baseline and transition the TDI out of RUN with STOP_INTERFACE.
-      6. Re-issue the ATC-backed Realm write to the DCM HPA and verify that the non-RUN access is rejected or leaves the Realm-assigned DCM contents unchanged.
+      4. Load a host-owned value into the exerciser and write it to the DCM HPA with Realm PAS. Use ATS followed by ATC-backed DMA when PAS_CHECK==FALSE, or direct HPA DMA when PAS_CHECK==TRUE, then verify through DPA media readback that the write succeeded in RUN.
+      5. While still in RUN, prepare a different source value and, for PAS_CHECK==FALSE, cache the translation needed for the negative transaction. Restore a known media baseline and transition the TDI out of RUN with STOP_INTERFACE.
+      6. Re-issue the same Realm write path selected by PAS_CHECK and verify that the non-RUN access is rejected or leaves the Realm-assigned DCM contents unchanged.
 
   * -
 
