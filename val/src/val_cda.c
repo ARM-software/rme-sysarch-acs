@@ -42,7 +42,7 @@
   @brief  Attempt an attributed, permission-checked TDI snoop request.
 
   @param  endpoint_bdf  Endpoint BDF identifying the originating TDI.
-  @param  target_pa     Target host physical address.
+  @param  target_hpa    Target host physical address.
   @param  access_pas    NONSECURE_PAS or REALM_PAS.
   @param  result        Result flags returned by the platform hook.
 
@@ -52,7 +52,7 @@
 **/
 uint32_t
 val_cda_tdi_snoop_attempt(uint32_t endpoint_bdf,
-                          uint64_t target_pa,
+                          uint64_t target_hpa,
                           uint32_t access_pas,
                           uint32_t *result)
 {
@@ -70,14 +70,14 @@ val_cda_tdi_snoop_attempt(uint32_t endpoint_bdf,
 
   *result = 0u;
   if (pal_cda_tdi_snoop_attempt(endpoint_bdf,
-                                target_pa,
+                                target_hpa,
                                 pas_realm,
                                 result) != 0u)
     return ACS_STATUS_SKIP;
 
-  if (((*result & CXL_TDI_SNOOP_RESULT_VALID) == 0u) ||
-      (((*result & CXL_TDI_SNOOP_RESULT_EMITTED) != 0u) ==
-       ((*result & CXL_TDI_SNOOP_RESULT_BLOCKED) != 0u)))
+  if (((*result & CXL_SNOOP_RESULT_VALID) == 0u) ||
+      (((*result & CXL_SNOOP_RESULT_EMITTED) != 0u) ==
+       ((*result & CXL_SNOOP_RESULT_BLOCKED) != 0u)))
     return ACS_STATUS_ERR;
 
   return ACS_STATUS_PASS;

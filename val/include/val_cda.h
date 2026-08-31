@@ -81,7 +81,7 @@ uint32_t val_cda_program_rid_range(uint64_t cfg_va,
                                    uint32_t rid_limit,
                                    uint32_t rid_range_valid);
 uint32_t val_cda_tdi_snoop_attempt(uint32_t endpoint_bdf,
-                                   uint64_t target_pa,
+                                    uint64_t target_hpa,
                                    uint32_t access_pas,
                                    uint32_t *result);
 uint32_t val_cda_seed_realm_cache_line(uint64_t target_hpa,

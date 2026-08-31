@@ -1236,7 +1236,7 @@ Testcase checklist
       5. For PAS_CHECK==FALSE, verify ATS capability is present and enable ATS for the endpoint.
       6. Allocate an ACS-owned source page and a separate page-aligned IOVA. Configure the Realm SMMU stage-2 tables so the source IOVA resolves to the Non-secure source PA and the DCM IOVA resolves to the selected DCM HPA with Realm output PAS.
       7. Establish TDISP RUN and CXL IDE. Load a known value into the exerciser using an ATS translation and an ATC-backed DMA from the Non-secure source page.
-      8. ATS-dependency negative check: invalidate the endpoint ATC and issue an untranslated DMA with the DCM IOVA while its SMMU mapping and GPC permission remain valid. Verify through the DPA observation backdoor that DCM remains unchanged.
+      8. ATS-dependency negative check: invalidate the endpoint ATC and request an ATC-backed DMA with the DCM IOVA before issuing ATS for that IOVA. Verify that the device rejects the operation because no valid ATS-derived ATC entry exists, and verify through the DPA observation backdoor that DCM remains unchanged.
       9. Positive check: issue ATS_TXN_REQ for the DCM IOVA and verify that the response is successful, grants access, returns the selected DCM HPA, and reports Realm output PAS. Issue DMA with USE_ATC_ENTRY using the original DCM IOVA, then read the corresponding DPA through the media observation backdoor and verify the known value reached DCM.
       10. Host-GPC negative check: seed a different baseline at the DCM DPA, assign the DCM HPA to Non-secure PAS in GPT, invalidate the SMMU GPC cache and endpoint ATC, and issue a Realm ATS_TXN_REQ again for the same DCM IOVA. Fail if ATS returns a usable translation. Attempt an ATC-backed DMA and verify that DCM remains unchanged, then restore all modified state.
 
@@ -1717,7 +1717,7 @@ Testcase checklist
 
       1. Select a CHI-C2C-capable CXL root port and downstream exerciser endpoint, program the endpoint decoder for a CFMWS window, and select two DCM pages.
       2. Program the RME-CDA RID range to admit the selected endpoint, enable the TDISP and link-stream-lock controls, transition the endpoint TDI to RUN, and establish the coherent-link IDE stream.
-      3. Assign page A to Realm while page B remains unassigned, then request Realm-PAS snoops attributed to that TDI.
+      3. Assign page A to Realm while page B remains unassigned, then request Realm-PAS BISnp transactions attributed to that TDI.
       4. Verify the platform hook reports that the snoop to page A was emitted and that the snoop to page B was blocked without emitting a transaction.
       5. Move the Realm assignment from page A to page B and repeat both checks to verify that the current Realm assignment controls access.
       6. Clear Realm assignments, disable IDE, stop the TDISP session, and restore the decoder and RME-CDA controls.

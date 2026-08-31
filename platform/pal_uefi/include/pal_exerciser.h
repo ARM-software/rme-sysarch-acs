@@ -103,7 +103,8 @@
 #define ERR_CODE_SHIFT         20
 #define FATAL_SHIFT            31
 #define ERROR_INJECT_BIT       17
-#define CXL_CMD_CTRL_PAS_REALM (1u << 8)
+#define CXL_SEC_SID_REALM       (1u << 1)
+#define CXL_SEC_SID_VALID       (1u << 31)
 #define CXL_CMD_OP_MASK         0xFu
 #define CXL_CMD_STATUS_MASK     (0xFu << 8)
 #define CXL_CMD_STATUS_DONE     (0x1u << 8)
@@ -173,7 +174,6 @@ typedef enum {
     EXERCISER_CXL_CMD_OP = 0x11,
     EXERCISER_CXL_CMD_ADDR = 0x12,
     EXERCISER_CXL_CMD_DATA0 = 0x13,
-    EXERCISER_CXL_CMD_CTRL = 0x14,
     EXERCISER_SEC_SID = 0x15,
     EXERCISER_ATS_REQUEST_ATTRIBUTES = 0x16
 } EXERCISER_PARAM_TYPE;
@@ -227,14 +227,11 @@ typedef enum {
 #define CXL_CMD_OP_BACKDOOR_WRITE64          0x2u
 #define CXL_CMD_OP_BISNP                     0x3u
 #define CXL_CMD_OP_DCM_CACHE_DIRTY           0x4u
-#define CXL_CMD_OP_DCM_INTERNAL_READ64        0x5u
 #define CXL_CMD_OP_DCM_SET_REALM_ASSIGNMENT  0x6u
-#define CXL_CMD_OP_DCM_INTERNAL_WRITE64       0x7u
 #define CXL_CMD_OP_DCM_CACHE_WRITEBACK       0x8u
-#define CXL_CMD_OP_TDI_SNOOP                  0x9u
-#define CXL_TDI_SNOOP_RESULT_VALID            (1u << 0)
-#define CXL_TDI_SNOOP_RESULT_EMITTED          (1u << 1)
-#define CXL_TDI_SNOOP_RESULT_BLOCKED          (1u << 2)
+#define CXL_SNOOP_RESULT_VALID                (1u << 0)
+#define CXL_SNOOP_RESULT_EMITTED              (1u << 1)
+#define CXL_SNOOP_RESULT_BLOCKED              (1u << 2)
 
 typedef enum {
     ACCESS_TYPE_RD = 0x0,
@@ -325,7 +322,7 @@ UINT32 pal_exerciser_get_param(EXERCISER_PARAM_TYPE Type, UINT64 *Value1, UINT64
 UINT32 pal_exerciser_set_state(EXERCISER_STATE State, UINT64 *Value, UINT32 Bdf);
 UINT32 pal_exerciser_get_state(EXERCISER_STATE *State, UINT32 Bdf);
 UINT32 pal_exerciser_ops(EXERCISER_OPS Ops, UINT64 Param, UINT32 Bdf);
-UINT32 pal_cda_tdi_snoop_attempt(UINT32 Bdf, UINT64 TargetPa,
+UINT32 pal_cda_tdi_snoop_attempt(UINT32 Bdf, UINT64 TargetHpa,
                                  UINT32 PasRealm, UINT32 *Result);
 UINT32 pal_exerciser_get_data(EXERCISER_DATA_TYPE Type, exerciser_data_t *Data, UINT32 Bdf, UINT64 Ecam);
 

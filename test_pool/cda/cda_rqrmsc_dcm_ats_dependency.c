@@ -510,34 +510,28 @@ cache_ats_translation(uint32_t endpoint_bdf,
 }
 
 static uint32_t
-run_dma_without_ats(uint32_t endpoint_bdf,
-                    uint64_t iova,
-                    uint32_t length,
-                    EXERCISER_DMA_ATTR direction)
+verify_dma_rejected_without_atc(uint32_t endpoint_bdf,
+                                uint64_t iova,
+                                uint32_t length,
+                                EXERCISER_DMA_ATTR direction)
 {
   uint32_t dma_status;
 
   if ((iova == 0u) || (length == 0u))
     return ACS_STATUS_ERR;
 
-  /* Remove any earlier translation and issue an ordinary untranslated DMA. */
-  (void)val_exerciser_ops_by_bdf(ATS_INV_CACHE, 0u, endpoint_bdf);
-  if ((val_exerciser_set_param_by_bdf(CFG_TXN_ATTRIBUTES,
-                                      TXN_ATC_ENTRY,
-                                      ATC_ENTRY_DISABLE,
-                                      endpoint_bdf) != 0u) ||
-      (val_exerciser_set_param_by_bdf(CFG_TXN_ATTRIBUTES,
-                                      TXN_ADDR_TYPE,
-                                      AT_UNTRANSLATED,
-                                      endpoint_bdf) != 0u) ||
-      (val_exerciser_set_param_by_bdf(DMA_ATTRIBUTES,
-                                      iova,
-                                      length,
-                                      endpoint_bdf) != 0u))
+  /* An ATC-backed operation cannot proceed until ATS populates the ATC. */
+  if (val_exerciser_ops_by_bdf(ATS_INV_CACHE, 0u, endpoint_bdf) != 0u)
     return ACS_STATUS_ERR;
 
-  dma_status = val_exerciser_ops_by_bdf(START_DMA, direction, endpoint_bdf);
-  return (dma_status == 0u) ? ACS_STATUS_PASS : ACS_STATUS_FAIL;
+  dma_status = val_exerciser_dma_with_atc_by_bdf(endpoint_bdf,
+                                                  iova,
+                                                  length,
+                                                  direction);
+  if (dma_status == ACS_STATUS_PASS)
+    return ACS_STATUS_FAIL;
+
+  return (dma_status == ACS_STATUS_FAIL) ? ACS_STATUS_PASS : dma_status;
 }
 
 static uint32_t
@@ -1065,14 +1059,27 @@ exercise_rule(RQRMSC_CONTEXT *context)
   }
 
   /*
-   * Negative case 1: attempt the DCM write without translating its IOVA by
-   * ATS. The SMMU mapping and GPC permission are valid, so rejection is due to
-   * the missing ATS-derived translation rather than a translation/GPC fault.
+   * Negative case 1: invalidate the ATC and request the same ATC-backed DCM
+   * operation before issuing ATS for the DCM IOVA. The operation must be
+   * rejected locally because no ATS-derived translation is available.
    */
-  (void)run_dma_without_ats(context->endpoint_bdf,
-                            dcm_iova,
-                            DMA_TEST_LENGTH,
-                            EDMA_FROM_DEVICE);
+  status = verify_dma_rejected_without_atc(context->endpoint_bdf,
+                                            dcm_iova,
+                                            DMA_TEST_LENGTH,
+                                            EDMA_FROM_DEVICE);
+  if (status != ACS_STATUS_PASS)
+  {
+    if (status == ACS_STATUS_FAIL)
+      val_print(ACS_PRINT_ERR,
+                " RQRMSC: DCM write proceeded without a valid ATC entry",
+                0);
+    else
+      val_print(ACS_PRINT_ERR,
+                " RQRMSC: unable to verify rejection without an ATC entry",
+                0);
+    result = status;
+    goto cleanup;
+  }
 
   if ((val_cxl_exerciser_backdoor_read64(context->endpoint_bdf,
                                           dcm_dpa,
@@ -1086,7 +1093,7 @@ exercise_rule(RQRMSC_CONTEXT *context)
     goto cleanup;
   }
   val_print(ACS_PRINT_INFO,
-            " RQRMSC: direct DCM write without ATS was blocked",
+            " RQRMSC: DCM write without an ATS-derived ATC entry was blocked",
             0);
 
   /*

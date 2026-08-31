@@ -249,12 +249,9 @@ uint32_t pal_exerciser_set_param(EXERCISER_PARAM_TYPE Type, uint64_t Value1, uin
         pal_mmio_write(Base + CXL_CMD_DATA0_HI, (uint32_t)(Value1 >> 32));
         return 0;
 
-      case EXERCISER_CXL_CMD_CTRL:
-        /* The current command interface has no separate control register. */
-        return 0;
-
       case EXERCISER_SEC_SID:
-        pal_mmio_write(Base + SEC_SID_CTL, (uint32_t)(Value1 & 0x3u));
+        pal_mmio_write(Base + SEC_SID_CTL,
+                       (uint32_t)Value1 & (CXL_SEC_SID_VALID | CXL_SEC_SID_REALM));
         return 0;
 
       case EXERCISER_ATS_REQUEST_ATTRIBUTES:
@@ -388,9 +385,6 @@ uint32_t pal_exerciser_get_param(EXERCISER_PARAM_TYPE Type, uint64_t *Value1, ui
       case EXERCISER_CXL_CMD_DATA0:
           *Value1 = (uint64_t)pal_mmio_read(Base + CXL_CMD_DATA0_LO);
           *Value1 |= ((uint64_t)pal_mmio_read(Base + CXL_CMD_DATA0_HI)) << 32;
-          return 0;
-      case EXERCISER_CXL_CMD_CTRL:
-          *Value1 = 0u;
           return 0;
       default:
           return 1;
@@ -555,41 +549,53 @@ uint32_t pal_exerciser_ops(EXERCISER_OPS Ops, uint64_t Param, uint32_t Bdf)
 }
 
 /**
-  @brief  Ask a TDI to originate a permission-checked device-to-host snoop.
+  @brief  Ask a TDI to originate an attributed BISnp request.
 
   @param  Bdf        Exerciser endpoint BDF identifying the TDI.
-  @param  TargetPa   Target host physical address.
+  @param  TargetHpa  Target host physical address.
   @param  PasRealm   Nonzero to request Realm Access PAS.
-  @param  Result     Model result flags: VALID plus EMITTED or BLOCKED.
+  @param  Result     Request result flags: VALID plus EMITTED or BLOCKED.
 
   @return 0 when the model returned a valid result, nonzero otherwise.
 **/
 uint32_t
-pal_cda_tdi_snoop_attempt(uint32_t Bdf, uint64_t TargetPa,
+pal_cda_tdi_snoop_attempt(uint32_t Bdf, uint64_t TargetHpa,
                           uint32_t PasRealm, uint32_t *Result)
 {
-    uint64_t raw_result;
+    uint64_t raw_result = 0u;
+    uint32_t sec_sid;
+    uint32_t status;
 
     if (Result == NULL)
         return 1;
+    *Result = 0u;
 
-    if ((pal_exerciser_set_param(EXERCISER_CXL_CMD_CTRL,
-                                 (PasRealm != 0u) ? CXL_CMD_CTRL_PAS_REALM : 0u,
-                                 0u,
-                                 Bdf) != 0u) ||
-        (pal_exerciser_set_param(EXERCISER_CXL_CMD_OP,
-                                 CXL_CMD_OP_TDI_SNOOP,
-                                 0u,
-                                 Bdf) != 0u) ||
-        (pal_exerciser_set_param(EXERCISER_CXL_CMD_ADDR,
-                                 TargetPa,
-                                 0u,
-                                 Bdf) != 0u) ||
-        (pal_exerciser_ops(CXL_CMD_START, 0u, Bdf) != 0u) ||
-        (pal_exerciser_get_param(EXERCISER_CXL_CMD_DATA0,
-                                 &raw_result,
-                                 NULL,
-                                 Bdf) != 0u))
+    sec_sid = CXL_SEC_SID_VALID |
+              ((PasRealm != 0u) ? CXL_SEC_SID_REALM : 0u);
+    status = pal_exerciser_set_param(EXERCISER_SEC_SID,
+                                      sec_sid,
+                                      0u,
+                                      Bdf);
+    if (status == 0u)
+        status = pal_exerciser_set_param(EXERCISER_CXL_CMD_OP,
+                                         CXL_CMD_OP_BISNP,
+                                         0u,
+                                         Bdf);
+    if (status == 0u)
+        status = pal_exerciser_set_param(EXERCISER_CXL_CMD_ADDR,
+                                         TargetHpa,
+                                         0u,
+                                         Bdf);
+    if (status == 0u)
+        status = pal_exerciser_ops(CXL_CMD_START, 0u, Bdf);
+    if (status == 0u)
+        status = pal_exerciser_get_param(EXERCISER_CXL_CMD_DATA0,
+                                         &raw_result,
+                                         NULL,
+                                         Bdf);
+
+    (void)pal_exerciser_set_param(EXERCISER_SEC_SID, 0u, 0u, Bdf);
+    if (status != 0u)
         return 1;
 
     *Result = (uint32_t)raw_result;

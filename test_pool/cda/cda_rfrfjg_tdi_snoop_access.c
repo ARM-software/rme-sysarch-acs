@@ -443,11 +443,11 @@ prepare_context(TEST_CONTEXT *context)
 }
 
 static uint32_t
-set_realm_assignment(uint32_t endpoint_bdf, uint64_t target_pa, uint32_t assigned)
+set_realm_assignment(uint32_t endpoint_bdf, uint64_t target_hpa, uint32_t assigned)
 {
   return val_cxl_exerciser_execute_cmd(endpoint_bdf,
                                        CXL_CMD_OP_DCM_SET_REALM_ASSIGNMENT,
-                                       target_pa,
+                                       target_hpa,
                                        assigned,
                                        NULL);
 }
@@ -464,16 +464,16 @@ check_allowed_snoop(const TEST_CONTEXT *context, uint32_t page)
                                      &result);
   if (status == ACS_STATUS_SKIP)
   {
-    val_print(ACS_PRINT_INFO,
-              " RFRFJG: attributed TDI snoop hook unavailable",
+    val_print(ACS_PRINT_ERR,
+              " RFRFJG: attributed TDI snoop command failed",
               0);
-    return ACS_STATUS_SKIP;
+    return ACS_STATUS_FAIL;
   }
 
   if (status != ACS_STATUS_PASS)
     return ACS_STATUS_FAIL;
 
-  if ((result & CXL_TDI_SNOOP_RESULT_EMITTED) == 0u)
+  if ((result & CXL_SNOOP_RESULT_EMITTED) == 0u)
   {
     val_print(ACS_PRINT_INFO,
               " RFRFJG: positive-control TDI snoop blocked for PA 0x%llx",
@@ -500,7 +500,7 @@ check_forbidden_snoop(const TEST_CONTEXT *context, uint32_t page)
   if (status != ACS_STATUS_PASS)
     return ACS_STATUS_FAIL;
 
-  if ((result & CXL_TDI_SNOOP_RESULT_EMITTED) != 0u)
+  if ((result & CXL_SNOOP_RESULT_EMITTED) != 0u)
   {
     val_print(ACS_PRINT_ERR,
               " RFRFJG: TDI emitted snoop to unassigned PA 0x%llx",
@@ -508,7 +508,7 @@ check_forbidden_snoop(const TEST_CONTEXT *context, uint32_t page)
     return ACS_STATUS_FAIL;
   }
 
-  if ((result & CXL_TDI_SNOOP_RESULT_BLOCKED) == 0u)
+  if ((result & CXL_SNOOP_RESULT_BLOCKED) == 0u)
     return ACS_STATUS_FAIL;
 
   val_print(ACS_PRINT_INFO,
