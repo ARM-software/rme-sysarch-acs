@@ -60,6 +60,7 @@ uint32_t cda_rvhzcr_external_pas_check_entry(uint32_t num_pe);
 uint32_t cda_ryjvjr_ats_te_pas_entry(uint32_t num_pe);
 uint32_t cda_rshsxk_d2h_gpc_dpt_entry(uint32_t num_pe);
 uint32_t cda_rjsyps_d2h_snp_range_entry(uint32_t num_pe);
+uint32_t cda_rnsmgt_dependent_coverage_entry(uint32_t num_pe);
 uint32_t cda_rstqhs_unknown_snoop_filter_entry(uint32_t num_pe);
 uint32_t cda_rvpkvf_tdi_state_independent_entry(uint32_t num_pe);
 uint32_t cda_rhdxtm_dcm_scrub_entry(uint32_t num_pe);

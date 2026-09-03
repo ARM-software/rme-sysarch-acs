@@ -49,6 +49,8 @@ bool acs_is_module_enabled(const char8_t *module_id);
 #define IS_TEST_END(status)        (val_memory_compare("END", status, sizeof("END")) == 0)
 #define IS_RESULT_PENDING(status)  (val_memory_compare("PENDING", status, sizeof("PENDING")) == 0)
 #define IS_TEST_PASS(status)       (val_memory_compare("PASS", status, sizeof("PASS")) == 0)
+#define IS_TEST_PASS_PARTIAL(status) \
+        (val_memory_compare("PASS_PARTIAL", status, sizeof("PASS_PARTIAL")) == 0)
 #define IS_TEST_FAIL(status)       (val_memory_compare("FAIL", status, sizeof("FAIL")) == 0)
 #define IS_TEST_SKIP(status)       (val_memory_compare("SKIP", status, sizeof("SKIP")) == 0)
 #define IS_TEST_FAIL_SKIP(status)  (IS_TEST_FAIL(status) || IS_TEST_SKIP(status))
@@ -129,6 +131,7 @@ typedef enum {
     CDA_ENTRY_CDA_RYJVJR_ATS_TE_PAS_ENTRY,
     CDA_ENTRY_CDA_RSHSXK_D2H_GPC_DPT_ENTRY,
     CDA_ENTRY_CDA_RJSYPS_D2H_SNP_RANGE_ENTRY,
+    CDA_ENTRY_CDA_RNSMGT_DEPENDENT_COVERAGE_ENTRY,
     CDA_ENTRY_CDA_RSTQHS_UNKNOWN_SNOOP_FILTER_ENTRY,
     CDA_ENTRY_CDA_RVPKVF_TDI_STATE_INDEPENDENT_ENTRY,
     CDA_ENTRY_CDA_RHDXTM_DCM_SCRUB_ENTRY,
@@ -293,6 +296,8 @@ typedef enum {
 typedef struct {
     test_entry_fn entry_fn;
     char8_t      *test_text;
+    uint32_t      result;
+    uint32_t      executed;
 } MODULE_TEST_ENTRY_s;
 
 /* Aggregate test dispatch table sized to the sum of per-module entries */
@@ -308,6 +313,10 @@ extern uint32_t g_num_tests;
 /* Selection helper: returns non-zero if the test should be executed */
 int
 val_test_is_selected(char8_t *test_text);
+
+/* Return a completed entry result, or SKIP when the entry was not executed. */
+uint32_t
+val_get_module_test_result(MODULE_ID_e module_id, int entry_id);
 
 /* Execute a module's test entries using dispatcher table */
 uint32_t

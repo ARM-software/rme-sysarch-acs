@@ -136,6 +136,10 @@ MODULE_TEST_DISPATCHER_s g_module_test_table[MODULE_SENTINEL] = {
         .entry_fn = cda_rjsyps_d2h_snp_range_entry,
         .test_text = "cda_rjsyps_d2h_snp_range",
       },
+      [CDA_ENTRY_CDA_RNSMGT_DEPENDENT_COVERAGE_ENTRY] = {
+        .entry_fn = cda_rnsmgt_dependent_coverage_entry,
+        .test_text = "cda_rnsmgt_dependent_coverage",
+      },
       [CDA_ENTRY_CDA_RSTQHS_UNKNOWN_SNOOP_FILTER_ENTRY] = {
         .entry_fn = cda_rstqhs_unknown_snoop_filter_entry,
         .test_text = "cda_rstqhs_unknown_snoop_filter",
@@ -646,6 +650,22 @@ val_test_is_selected(char8_t *test_text)
 }
 
 uint32_t
+val_get_module_test_result(MODULE_ID_e module_id, int entry_id)
+{
+  MODULE_TEST_ENTRY_s *entry;
+
+  if (((int)module_id < 0) || (module_id >= MODULE_SENTINEL) || (entry_id < 0) ||
+      (entry_id >= MAX_TEST_ENTRY))
+    return ACS_STATUS_ERR;
+
+  entry = &g_module_test_table[module_id].entry[entry_id];
+  if ((entry->entry_fn == NULL) || (entry->executed == 0u))
+    return ACS_STATUS_SKIP;
+
+  return entry->result;
+}
+
+uint32_t
 val_execute_module_tests(MODULE_ID_e module_id,
                          int start_enum,
                          int end_enum,
@@ -653,17 +673,27 @@ val_execute_module_tests(MODULE_ID_e module_id,
                          uint32_t status)
 {
   int i;
+  uint32_t entry_status;
+  MODULE_TEST_ENTRY_s *entry;
 
   for (i = start_enum + 1; i < end_enum; i++)
   {
-    if (g_module_test_table[module_id].entry[i].entry_fn == NULL) {
+    entry = &g_module_test_table[module_id].entry[i];
+    entry->result = ACS_STATUS_SKIP;
+    entry->executed = 0u;
+
+    if (entry->entry_fn == NULL) {
         status |= ACS_STATUS_SKIP;
         continue;
     }
 
-    if (!val_test_is_selected(g_module_test_table[module_id].entry[i].test_text))
+    if (!val_test_is_selected(entry->test_text))
         continue;
-    status |= g_module_test_table[module_id].entry[i].entry_fn(num_pe);
+
+    entry_status = entry->entry_fn(num_pe);
+    entry->result = entry_status;
+    entry->executed = 1u;
+    status |= entry_status;
   }
 
   return status;
@@ -1163,12 +1193,12 @@ uint32_t val_check_for_error(uint32_t num_pe)
   {
     status = val_get_status(my_index);
     val_report_status(my_index, status);
-    if (val_memory_compare(status, "PASS", val_strnlen(status)) == 0)
+    if (IS_TEST_PASS(status) || IS_TEST_PASS_PARTIAL(status))
     {
       g_rme_tests_pass++;
       return ACS_STATUS_PASS;
     }
-    if (val_memory_compare(status, "SKIP", val_strnlen(status)) == 0)
+    if (IS_TEST_SKIP(status))
       return ACS_STATUS_SKIP;
 
     g_rme_tests_fail++;
@@ -1178,8 +1208,7 @@ uint32_t val_check_for_error(uint32_t num_pe)
   for (i = 0; i < num_pe; i++)
   {
     status = val_get_status(i);
-    if ((val_memory_compare(status, "FAIL", val_strnlen(status)) == 0)
-        || (val_memory_compare(status, "SKIP", val_strnlen(status)) == 0))
+    if (IS_TEST_FAIL(status) || IS_TEST_SKIP(status))
     {
       val_report_status(i, status);
       error_flag += 1;
@@ -1190,12 +1219,12 @@ uint32_t val_check_for_error(uint32_t num_pe)
   if (!error_flag)
     val_report_status(my_index, status);
 
-  if (val_memory_compare(status, "PASS", val_strnlen(status)) == 0)
+  if (IS_TEST_PASS(status) || IS_TEST_PASS_PARTIAL(status))
   {
     g_rme_tests_pass++;
     return ACS_STATUS_PASS;
   }
-  if (val_memory_compare(status, "SKIP", val_strnlen(status)) == 0)
+  if (IS_TEST_SKIP(status))
     return ACS_STATUS_SKIP;
 
   g_rme_tests_fail++;

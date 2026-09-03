@@ -1808,6 +1808,24 @@ Testcase checklist
 
   * -
 
+      `cda_rnsmgt_dependent_coverage <../test_pool/cda/cda_rnsmgt_dependent_coverage.c>`_
+
+    -
+
+      RNSMGT: A host port must be able to identify that a PA of a device-to-host access falls within the DCM range of the coherent device attached to that port.
+
+    -
+
+      1. Obtain the recorded results of RSHSXK and RJSYPS, which run earlier in the CDA module and exercise the host port's use of the requesting device's DCM range.
+      2. Pass when both prerequisite tests pass.
+      3. Report PASSED PARTIAL when one prerequisite passes and the other is skipped.
+      4. Skip when both prerequisite tests are skipped.
+      5. Fail for every other combination, including a failure from either prerequisite.
+
+      Note: This test performs no additional hardware stimulus. RNSMGT is covered indirectly by the architecturally observable behavior validated by RSHSXK and RJSYPS.
+
+  * -
+
       `cxl_rwyvcq_link_unlock_reject <../test_pool/cxl/cxl_rwyvcq_link_unlock_reject.c>`_
 
     -
