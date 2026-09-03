@@ -32,8 +32,6 @@
 #define TEST_RULE "RSTQHS"
 
 #define DECODER_SLOT 0u
-#define MAX_TRACE_RECORDS 32u
-
 #if ENABLE_SPDM
 
 typedef struct {
@@ -107,10 +105,9 @@ stop_realm_link(const VAL_CDA_DCM_WINDOW_CONTEXT *context,
 }
 
 /*
- * Capture the coherent traffic delivered to the endpoint while the host reads
- * target_hpa through a Realm mapping. Resolving the coherent host access can
- * require a snoop to a downstream device. The transaction monitor only
- * observes that traffic and does not influence the forwarding decision.
+ * Capture the coherent read received by the endpoint while the host accesses
+ * target_hpa through a Realm mapping. The exerciser transaction monitor
+ * observes its own incoming interface and does not influence host forwarding.
  */
 static uint32_t
 capture_host_snoop(uint32_t endpoint_bdf,
@@ -119,7 +116,6 @@ capture_host_snoop(uint32_t endpoint_bdf,
                    uint32_t require_operation_success,
                    uint32_t *observed)
 {
-  VAL_EXERCISER_TRANSACTION_RECORD record;
   uint64_t read_esr;
   uint64_t read_value;
   uint32_t fault_seen;
@@ -171,26 +167,11 @@ stop_monitor:
   if (status != ACS_STATUS_PASS)
     return status;
 
-  /* Drain this capture and look only for a coherent request to target_hpa. */
-  for (uint32_t index = 0u; index < MAX_TRACE_RECORDS; ++index)
-  {
-    if (val_exerciser_get_transaction_record_by_bdf(endpoint_bdf, &record)
-        != ACS_STATUS_PASS)
-      break;
-
-    val_print(ACS_PRINT_DEBUG,
-              " RSTQHS: trace attributes 0x%x",
-              (uint64_t)record.attributes);
-    val_print(ACS_PRINT_DEBUG,
-              " RSTQHS: trace address 0x%llx",
-              record.address);
-
-    if (((record.attributes & EXERCISER_TXN_ATTR_CACHE_MAINTENANCE) != 0u) &&
-        (record.address == target_hpa))
-      *observed = 1u;
-  }
-
-  return ACS_STATUS_PASS;
+  return val_exerciser_find_transaction_by_bdf(
+                                  endpoint_bdf,
+                                  target_hpa,
+                                  EXERCISER_TXN_ATTR_READ,
+                                  observed);
 }
 
 static uint32_t

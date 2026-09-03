@@ -504,32 +504,33 @@ val_tdisp_stop_to_config_unlocked(val_spdm_context_t *spdm_ctx,
 }
 
 /**
-  @brief  Open an SPDM session and move a TDI interface to RUN.
+  @brief  Open an SPDM session and lock a TDI interface.
 
-  @param  endpoint_bdf      TDI endpoint BDF.
-  @param  spdm_ctx          Caller-owned SPDM context.
-  @param  session_id_out    Output SPDM session identifier.
-  @param  interface_id_out  Output TDISP interface identifier.
-
-  @return ACS_STATUS_PASS if the TDI reached RUN. ACS_STATUS_SKIP when the TDI
-          flow is unsupported or does not reach the required state.
+  The optional report buffer is filled while the interface is CONFIG_LOCKED,
+  before START_INTERFACE. This lets callers consume reported MMIO ranges before
+  installing the final host access policy.
 **/
 uint32_t
-val_tdisp_establish_run(uint32_t endpoint_bdf,
-                        val_spdm_context_t *spdm_ctx,
-                        uint32_t *session_id_out,
-                        pci_tdisp_interface_id_t *interface_id_out)
+val_tdisp_lock_interface(uint32_t endpoint_bdf,
+                         uint64_t mmio_reporting_offset,
+                         val_spdm_context_t *spdm_ctx,
+                         uint32_t *session_id_out,
+                         pci_tdisp_interface_id_t *interface_id_out,
+                         uint8_t *start_nonce_out,
+                         uint8_t *interface_report,
+                         uint32_t *interface_report_size)
 {
 #if ENABLE_SPDM
   pci_tdisp_requester_capabilities_t req_caps;
   pci_tdisp_responder_capabilities_t rsp_caps;
   pci_tdisp_lock_interface_param_t lock_param;
-  uint8_t nonce[PCI_TDISP_START_INTERFACE_NONCE_SIZE];
   uint32_t session_id;
   uint32_t status;
   uint8_t tdi_state;
 
-  if ((spdm_ctx == NULL) || (session_id_out == NULL) || (interface_id_out == NULL))
+  if ((spdm_ctx == NULL) || (session_id_out == NULL) ||
+      (interface_id_out == NULL) || (start_nonce_out == NULL) ||
+      ((interface_report == NULL) != (interface_report_size == NULL)))
     return ACS_STATUS_ERR;
 
   *session_id_out = 0u;
@@ -537,7 +538,7 @@ val_tdisp_establish_run(uint32_t endpoint_bdf,
   val_memory_set(&req_caps, sizeof(req_caps), 0);
   val_memory_set(&rsp_caps, sizeof(rsp_caps), 0);
   val_memory_set(&lock_param, sizeof(lock_param), 0);
-  val_memory_set(nonce, sizeof(nonce), 0);
+  val_memory_set(start_nonce_out, PCI_TDISP_START_INTERFACE_NONCE_SIZE, 0);
 
   interface_id_out->function_id = (uint32_t)PCIE_CREATE_BDF_PACKED(endpoint_bdf);
   interface_id_out->reserved = 0ull;
@@ -560,17 +561,12 @@ val_tdisp_establish_run(uint32_t endpoint_bdf,
   if (status != ACS_STATUS_PASS)
     goto close_session;
 
-  lock_param.flags = 0u;
-  lock_param.default_stream_id = 0u;
-  lock_param.reserved = 0u;
-  lock_param.mmio_reporting_offset = 0ull;
-  lock_param.bind_p2p_address_mask = 0ull;
-
+  lock_param.mmio_reporting_offset = mmio_reporting_offset;
   status = val_spdm_send_pci_tdisp_lock_interface(spdm_ctx,
                                                   session_id,
                                                   interface_id_out,
                                                   &lock_param,
-                                                  nonce);
+                                                  start_nonce_out);
   if (status != ACS_STATUS_PASS)
     goto close_session;
 
@@ -579,41 +575,143 @@ val_tdisp_establish_run(uint32_t endpoint_bdf,
                                          interface_id_out,
                                          &tdi_state);
   if (status != ACS_STATUS_PASS)
-    goto close_session;
+    goto stop_interface;
 
   if (tdi_state != PCI_TDISP_INTERFACE_STATE_CONFIG_LOCKED)
   {
     val_print(ACS_PRINT_INFO, " TDISP: interface not CONFIG_LOCKED 0x%x", tdi_state);
     status = ACS_STATUS_SKIP;
-    goto close_session;
+    goto stop_interface;
   }
 
-  status = val_spdm_send_pci_tdisp_start_interface(spdm_ctx,
-                                                   session_id,
-                                                   interface_id_out,
-                                                   nonce);
-  if (status != ACS_STATUS_PASS)
-    goto close_session;
-
-  status = val_tdisp_get_interface_state(spdm_ctx,
-                                         session_id,
-                                         interface_id_out,
-                                         &tdi_state);
-  if (status != ACS_STATUS_PASS)
-    goto close_session;
-
-  if (tdi_state != PCI_TDISP_INTERFACE_STATE_RUN)
+  if (interface_report != NULL)
   {
-    val_print(ACS_PRINT_INFO, " TDISP: interface not RUN 0x%x", tdi_state);
-    status = ACS_STATUS_SKIP;
-    goto close_session;
+    status = val_spdm_send_pci_tdisp_get_interface_report(spdm_ctx,
+                                                           session_id,
+                                                           interface_id_out,
+                                                           interface_report,
+                                                           interface_report_size);
+    if (status != ACS_STATUS_PASS)
+      goto stop_interface;
   }
 
   *session_id_out = session_id;
   return ACS_STATUS_PASS;
 
+stop_interface:
+  (void)val_spdm_send_pci_tdisp_stop_interface(spdm_ctx,
+                                                session_id,
+                                                interface_id_out);
 close_session:
   (void)val_spdm_session_close(spdm_ctx, session_id);
+  return status;
+#else
+  (void)endpoint_bdf;
+  (void)mmio_reporting_offset;
+  (void)spdm_ctx;
+  (void)session_id_out;
+  (void)interface_id_out;
+  (void)start_nonce_out;
+  (void)interface_report;
+  (void)interface_report_size;
+
+  return ACS_STATUS_SKIP;
+#endif
+}
+
+/** Start a CONFIG_LOCKED TDI interface and verify that it reaches RUN. */
+uint32_t
+val_tdisp_start_locked_interface(val_spdm_context_t *spdm_ctx,
+                                 uint32_t session_id,
+                                 const pci_tdisp_interface_id_t *interface_id,
+                                 const uint8_t *start_nonce)
+{
+#if ENABLE_SPDM
+  uint8_t tdi_state;
+  uint32_t status;
+
+  if ((spdm_ctx == NULL) || (session_id == 0u) ||
+      (interface_id == NULL) || (start_nonce == NULL))
+    return ACS_STATUS_ERR;
+
+  status = val_spdm_send_pci_tdisp_start_interface(spdm_ctx,
+                                                   session_id,
+                                                   interface_id,
+                                                   start_nonce);
+  if (status != ACS_STATUS_PASS)
+    return status;
+
+  status = val_tdisp_get_interface_state(spdm_ctx,
+                                         session_id,
+                                         interface_id,
+                                         &tdi_state);
+  if (status != ACS_STATUS_PASS)
+    return status;
+
+  if (tdi_state != PCI_TDISP_INTERFACE_STATE_RUN)
+  {
+    val_print(ACS_PRINT_INFO, " TDISP: interface not RUN 0x%x", tdi_state);
+    return ACS_STATUS_SKIP;
+  }
+
+  return ACS_STATUS_PASS;
+#else
+  (void)spdm_ctx;
+  (void)session_id;
+  (void)interface_id;
+  (void)start_nonce;
+
+  return ACS_STATUS_SKIP;
+#endif
+}
+
+/**
+  @brief  Open an SPDM session and move a TDI interface to RUN.
+
+  @param  endpoint_bdf      TDI endpoint BDF.
+  @param  spdm_ctx          Caller-owned SPDM context.
+  @param  session_id_out    Output SPDM session identifier.
+  @param  interface_id_out  Output TDISP interface identifier.
+
+  @return ACS_STATUS_PASS if the TDI reached RUN. ACS_STATUS_SKIP when the TDI
+          flow is unsupported or does not reach the required state.
+**/
+uint32_t
+val_tdisp_establish_run(uint32_t endpoint_bdf,
+                        val_spdm_context_t *spdm_ctx,
+                        uint32_t *session_id_out,
+                        pci_tdisp_interface_id_t *interface_id_out)
+{
+#if ENABLE_SPDM
+  uint8_t nonce[PCI_TDISP_START_INTERFACE_NONCE_SIZE];
+  uint32_t status;
+
+  if ((spdm_ctx == NULL) || (session_id_out == NULL) || (interface_id_out == NULL))
+    return ACS_STATUS_ERR;
+
+  status = val_tdisp_lock_interface(endpoint_bdf,
+                                    0u,
+                                    spdm_ctx,
+                                    session_id_out,
+                                    interface_id_out,
+                                    nonce,
+                                    NULL,
+                                    NULL);
+  if (status != ACS_STATUS_PASS)
+    return status;
+
+  status = val_tdisp_start_locked_interface(spdm_ctx,
+                                             *session_id_out,
+                                             interface_id_out,
+                                             nonce);
+  if (status == ACS_STATUS_PASS)
+    return ACS_STATUS_PASS;
+
+  (void)val_spdm_send_pci_tdisp_stop_interface(spdm_ctx,
+                                                *session_id_out,
+                                                interface_id_out);
+  (void)val_spdm_session_close(spdm_ctx, *session_id_out);
+  *session_id_out = 0u;
   return status;
 #else
   (void)endpoint_bdf;
@@ -655,6 +753,35 @@ val_tdisp_stop_if_needed(val_spdm_context_t *spdm_ctx,
   (void)session_id;
   (void)interface_id;
   (void)tdi_in_error;
+
+  return ACS_STATUS_SKIP;
+#endif
+}
+
+/**
+  @brief  Close an active protected session to transition its TDI to ERROR.
+
+  TDISP requires loss of the secure session while an interface is CONFIG_LOCKED
+  or RUN to place that interface in ERROR. The session is no longer usable after
+  this call; the caller must recover the endpoint through its normal reset path.
+
+  @param  spdm_ctx    SPDM context owning the active session.
+  @param  session_id  Active SPDM session identifier.
+
+  @return ACS_STATUS_PASS when the session was closed successfully.
+**/
+uint32_t
+val_tdisp_close_session_to_error(val_spdm_context_t *spdm_ctx,
+                                 uint32_t session_id)
+{
+#if ENABLE_SPDM
+  if ((spdm_ctx == NULL) || (session_id == 0u))
+    return ACS_STATUS_ERR;
+
+  return val_spdm_session_close(spdm_ctx, session_id);
+#else
+  (void)spdm_ctx;
+  (void)session_id;
 
   return ACS_STATUS_SKIP;
 #endif

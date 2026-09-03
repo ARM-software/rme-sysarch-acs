@@ -1311,11 +1311,33 @@ Testcase checklist
       6. Initialize backing DCM through a non-cacheable Realm mapping and populate a clean line through a cacheable Realm read while the TDI is in RUN and IDE is active. Mark that existing line dirty before transitioning the TDI.
       7. Issue STOP_INTERFACE_REQUEST and verify that the TDI reaches CONFIG_UNLOCKED state.
       8. If the ATS stale-translation probe was available, remap the same IOVA to a different PA while the TDI is in CONFIG_UNLOCKED.
-      9. Close the first SPDM session, re-establish the TDI in RUN, and re-establish the CXL IDE link. Invalidate any host PE cacheline for the selected Realm DCM Location without cleaning stale PE data back to memory, clear the root-port AER Uncorrectable Status register, then issue a protected host read to the cacheable Realm alias. Fail if the read faults, because that indicates stale dirty TDI-owned state was not invalidated across CONFIG_UNLOCKED. Then issue an HPA-based internal Realm read from the TDI to the same DCM Location and fail if the dirty value is not present, which verifies that writeback/preservation completed before invalidation.
+      9. Close the first SPDM session, re-establish the TDI in RUN, and re-establish the CXL IDE link. Invalidate any host PE cacheline for the selected Realm DCM Location without cleaning stale PE data back to memory, clear the root-port AER Uncorrectable Status register, then issue a protected host read to the cacheable Realm alias. Fail if the read faults or reports an uncorrectable error, because that indicates stale dirty TDI-owned state was not invalidated across CONFIG_UNLOCKED. Do not require the backing DCM to retain the dirty value because the CONFIG_UNLOCKED transition also scrubs TDI-associated DCM in compliance with RHDXTM.
       10. If the ATS stale-translation probe was available, issue the ATS request again after re-entering RUN and fail if the returned translation is the old PA rather than the remapped PA.
       11. Clear AER status, stop and close any active TDISP session, clear the DCM assignment, restore ATS, RMECDA, HDM decoder, GPT, SMMU, and DPT state, and free any allocated ACS pages.
 
       Note: This CDA scenario is applicable only to CHI-C2C-capable devices. The dirty-cache check is mandatory; the ATC invalidation check is executed when the platform exerciser exposes a usable ATS request stimulus.
+
+  * -
+
+      `cda_rhdxtm_dcm_scrub <../test_pool/cda/cda_rhdxtm_dcm_scrub.c>`_
+
+    -
+
+      RHDXTM: When a TDI transitions to the CONFIG_UNLOCKED TDISP state, the coherent device must scrub all contents of DCM Locations associated with the TDI. Scrubbing can be implemented by coherently overwriting the contents or by resetting the associated memory-encryption context to a known default value after invalidating cached content.
+
+    -
+
+      1. Select a CHI-C2C-capable root port that exposes the RME-CDA DVSEC and any downstream CHI-C2C endpoint. Endpoint selection does not require PAL exerciser support.
+      2. Program a host-visible CFMWS-backed DCM window and begin the standard SPDM/TDISP lock sequence for the endpoint.
+      3. Read the TDISP DEVICE_INTERFACE_REPORT while the TDI is CONFIG_LOCKED. Locate the MMIO_RANGE whose range ID is 0xFFFF and select a page where that reported TDI-associated DCM range overlaps the host-visible DCM window.
+      4. Associate the selected HPA with Realm PAS in the host GPT, map it as non-cacheable Realm memory, transition the TDI to RUN, and establish the coherent-link IDE stream.
+      5. Write distinct address-dependent patterns at multiple cache-line-separated offsets through the architectural host-to-device HPA path and read them back. This proves that the Realm plaintext is present in the TDI-associated DCM before the transition under test.
+      6. Send STOP_INTERFACE_REQUEST while IDE remains active. Require the successful response and verify that the TDI reaches CONFIG_UNLOCKED; this is the synchronization point for the required scrub operation.
+      7. Close the first protected session, establish a fresh TDISP RUN session and IDE stream, and read the same DCM HPAs through the architectural Realm path. Require every read to complete so an access fault cannot be mistaken for scrubbing.
+      8. Fail if any sampled Location still contains its previous Realm plaintext. Do not require a fixed replacement value because RHDXTM permits either explicit overwrite or memory-encryption-context reset.
+      9. Stop the second TDISP session and restore the GPT, RME-CDA, and decoder state.
+
+      Note: This is a coherent-device compliance test that uses only standard host-visible HPA accesses and TDISP operations. It does not require exerciser DMA, direct-DPA media access, or implementation-defined endpoint commands.
 
   * -
 
@@ -1706,7 +1728,7 @@ Testcase checklist
       3. Assign a selected host-visible DCM page to Realm.
       4. Issue an external write followed by a read that specifies PAS==Realm while IDE is active and verify the read returns the written value.
       5. Disable the IDE stream while keeping the TDI in RUN, restore a known baseline value at the same Realm-assigned DCM page, and re-issue the same external PAS==Realm access.
-      6. Verify that the IDE-disabled external PAS==Realm access is rejected or leaves the Realm-assigned DCM contents unchanged, then stop the TDISP session before cleanup.
+      6. Verify that the IDE-disabled external PAS==Realm access is rejected. Stop the TDISP session before cleanup; any subsequent DCM media readback is diagnostic because the CONFIG_UNLOCKED transition can scrub the old contents.
 
   * -
 
@@ -1723,7 +1745,7 @@ Testcase checklist
       3. Establish IDE and transition the endpoint TDI to RUN, assign the selected DCM HPA to Realm, and seed a baseline value through the DPA backdoor.
       4. Load a host-owned value into the exerciser and write it to the DCM HPA with Realm PAS. Use ATS followed by ATC-backed DMA when PAS_CHECK==FALSE, or direct HPA DMA when PAS_CHECK==TRUE, then verify through DPA media readback that the write succeeded in RUN.
       5. While still in RUN, prepare a different source value and, for PAS_CHECK==FALSE, cache the translation needed for the negative transaction. Restore a known media baseline and transition the TDI out of RUN with STOP_INTERFACE.
-      6. Re-issue the same Realm write path selected by PAS_CHECK and verify that the non-RUN access is rejected or leaves the Realm-assigned DCM contents unchanged.
+      6. Re-issue the same Realm write path selected by PAS_CHECK and verify that the non-RUN access is rejected and that the requested write value did not reach DCM. Permit the old baseline to change because STOP_INTERFACE transitions the TDI to CONFIG_UNLOCKED and can independently scrub associated DCM.
 
   * -
 
@@ -1743,6 +1765,29 @@ Testcase checklist
       6. Clear Realm assignments, disable IDE, stop the TDISP session, and restore the decoder and RME-CDA controls.
 
       Note: The device-to-host snoop carries the selected PAS and TDI attribution and is subject to the originating TDI's physical-address permission check.
+
+  * -
+
+      `cda_rvpkvf_tdi_state_independent <../test_pool/cda/cda_rvpkvf_tdi_state_independent.c>`_
+
+    -
+
+      RVPKVF: The following operations must not be affected by the TDISP state of a TDI:
+
+      - Host-to-device requests on the CHI SNP channel.
+      - Device-to-host requests on the CHI SNP channel.
+      - Host-to-device requests on the CHI REQ channel.
+
+    -
+
+      1. Select a CHI-C2C-capable CXL root port and downstream exerciser endpoint, program a host-visible DCM window, and select three DCM pages. If an implementation-defined stimulus required by the test is unavailable, restore that endpoint and continue with the next eligible CHI-C2C endpoint. Skip the test only if no endpoint can provide all required stimuli.
+      2. Configure Realm SMMU and DPT mappings for the DCM pages, enable ATS for the endpoint, program the endpoint RID in the RME-CDA RID range, and associate the pages with the endpoint TDI.
+      3. Transition the TDI to RUN and establish the coherent-link IDE stream. Seed two DCM Locations, fetch each Location through an ATS-derived Realm translation, and copy the fetched data to a separate Non-secure verification page to confirm that the device-originated coherent read completed.
+      4. Mark the two populated device cache lines dirty. Reserve the third DCM page for repeatable device-to-host snoop and host CMO stimuli.
+      5. While the TDI is in RUN, issue a host demand read that requires a host-to-device snoop, dirty a PE cache line and clean it to generate a host-to-device request on the CHI REQ channel, then issue a TDI-attributed device-to-host Realm snoop. Use the exerciser's incoming coherent-transaction monitor to verify that the demand read and generated request reach the device interface, and verify that the device-to-host request is emitted. Match the generated request by its HPA because an upstream cache can consume the CMO and emit an ordinary cacheable writeback downstream. The test does not require a host-port monitoring interface.
+      6. Repopulate the PE cache line while Realm access remains permitted, then close the protected SPDM session to transition the TDI from RUN to ERROR without changing the DCM associations.
+      7. Repeat the host-to-device snoop with the second dirty device line, the host CMO with the staged PE line, and the device-to-host snoop. Verify through the exerciser interface that all three operation classes remain available in ERROR. A fault while consuming the ERROR-state snoop response is permitted because response poisoning is checked separately by RQWNBN.
+      8. Clear the DCM associations, reset the endpoint out of ERROR, and restore ATS, SMMU, DPT, GPT, RID-range, decoder, and RME-CDA state.
 
   * -
 

@@ -27,7 +27,9 @@
 #include "include/val_memory.h"
 #include "include/val_pcie.h"
 #include "include/val_pcie_spec.h"
+#include "include/val_pe.h"
 #include "include/val_pgt.h"
+#include "include/val_smmu.h"
 #include "include/val_tdisp.h"
 
 #define RMECDA_CTL1_LINK_STR_LOCK_MASK  (1u << 1)
@@ -37,6 +39,7 @@
 #define RMECDA_CTL4_RID_BASE_SHIFT        8u
 #define RMECDA_CTL4_RID_BASE_MASK         (0xFFFFu << RMECDA_CTL4_RID_BASE_SHIFT)
 #define RMECDA_CTL4_RID_RANGE_VALID_MASK  0x1u
+#define PGT_STAGE2_RME_NS_MASK            (1ull << 55)
 
 /**
   @brief  Attempt an attributed, permission-checked TDI snoop request.
@@ -169,6 +172,242 @@ val_cda_seed_realm_cache_line(uint64_t target_hpa,
   return ACS_STATUS_PASS;
 }
 
+/**
+  @brief  Configure identity stage-2 mappings for Realm and Non-secure DMA.
+
+  @param  endpoint_bdf  Endpoint BDF identifying the SMMU master.
+  @param  realm_base    Base IOVA and PA of the Realm DCM range.
+  @param  realm_length  Length of the Realm DCM range.
+  @param  ns_pa         IOVA and PA of one Non-secure verification page.
+  @param  page_size     Size of the Non-secure verification page.
+  @param  master        Returns the configured SMMU master attributes.
+  @param  pgt_desc      Returns the created Realm page-table descriptor.
+
+  @return ACS_STATUS_PASS when the mapping was installed, ACS_STATUS_SKIP when
+          no suitable SMMUv3 path exists, or ACS_STATUS_ERR on setup failure.
+**/
+uint32_t
+val_cda_prepare_realm_dma_mapping(uint32_t endpoint_bdf,
+                                  uint64_t realm_base,
+                                  uint64_t realm_length,
+                                  uint64_t ns_pa,
+                                  uint64_t page_size,
+                                  smmu_master_attributes_t *master,
+                                  pgt_descriptor_t *pgt_desc)
+{
+  memory_region_descriptor_t mem_desc[3];
+  uint32_t device_id;
+  uint32_t its_id;
+  uint32_t smmu_index;
+
+  if ((realm_base == 0u) || (realm_length == 0u) || (ns_pa == 0u) ||
+      (page_size == 0u) || (master == NULL) || (pgt_desc == NULL))
+    return ACS_STATUS_ERR;
+
+  val_memory_set(master, sizeof(*master), 0);
+  val_memory_set(pgt_desc, sizeof(*pgt_desc), 0);
+  master->smmu_index = ACS_INVALID_INDEX;
+
+  smmu_index = val_iovirt_get_rc_smmu_index(PCIE_EXTRACT_BDF_SEG(endpoint_bdf),
+                                            PCIE_CREATE_BDF_PACKED(endpoint_bdf));
+  if ((smmu_index == ACS_INVALID_INDEX) ||
+      (val_iovirt_get_smmu_info(SMMU_CTRL_ARCH_MAJOR_REV, smmu_index) != 3u))
+    return ACS_STATUS_SKIP;
+
+  device_id = 0u;
+  its_id = 0u;
+  if (val_iovirt_get_device_info(PCIE_CREATE_BDF_PACKED(endpoint_bdf),
+                                 PCIE_EXTRACT_BDF_SEG(endpoint_bdf),
+                                 &device_id,
+                                 &master->streamid,
+                                 &its_id) != 0u)
+    return ACS_STATUS_SKIP;
+
+  if (val_smmu_enable(smmu_index) != 0u)
+    return ACS_STATUS_ERR;
+
+  master->smmu_index = smmu_index;
+  master->stage2 = 1u;
+
+  val_memory_set(mem_desc, sizeof(mem_desc), 0);
+  mem_desc[0].virtual_address = realm_base;
+  mem_desc[0].physical_address = realm_base;
+  mem_desc[0].length = realm_length;
+  mem_desc[0].attributes = PGT_STAGE2_AP_RW;
+  mem_desc[1].virtual_address = ns_pa;
+  mem_desc[1].physical_address = ns_pa;
+  mem_desc[1].length = page_size;
+  mem_desc[1].attributes = PGT_STAGE2_AP_RW | PGT_STAGE2_RME_NS_MASK;
+
+  pgt_desc->ias = (uint32_t)val_smmu_get_info(SMMU_IN_ADDR_SIZE, smmu_index);
+  pgt_desc->oas = (uint32_t)val_smmu_get_info(SMMU_OUT_ADDR_SIZE, smmu_index);
+  pgt_desc->stage = PGT_STAGE2;
+  if ((pgt_desc->ias == 0u) || (pgt_desc->oas == 0u))
+  {
+    (void)val_smmu_disable(smmu_index);
+    master->smmu_index = ACS_INVALID_INDEX;
+    return ACS_STATUS_SKIP;
+  }
+
+  if (val_pe_get_vtcr(&pgt_desc->vtcr) != 0u)
+  {
+    (void)val_smmu_disable(smmu_index);
+    master->smmu_index = ACS_INVALID_INDEX;
+    return ACS_STATUS_ERR;
+  }
+
+  if ((val_memory_map_el3_data((uint64_t)mem_desc,
+                               sizeof(mem_desc),
+                               NONSECURE_PAS) != ACS_STATUS_PASS) ||
+      (val_memory_map_el3_data((uint64_t)pgt_desc,
+                               sizeof(*pgt_desc),
+                               NONSECURE_PAS) != ACS_STATUS_PASS) ||
+      (val_memory_map_el3_data((uint64_t)master,
+                               sizeof(*master),
+                               NONSECURE_PAS) != ACS_STATUS_PASS))
+  {
+    (void)val_smmu_disable(smmu_index);
+    master->smmu_index = ACS_INVALID_INDEX;
+    return ACS_STATUS_ERR;
+  }
+
+  if (val_rlm_pgt_create(mem_desc, pgt_desc) != 0u)
+  {
+    (void)val_smmu_disable(smmu_index);
+    master->smmu_index = ACS_INVALID_INDEX;
+    return ACS_STATUS_ERR;
+  }
+
+  val_pe_reg_write(VTTBR, pgt_desc->pgt_base);
+  if (val_smmu_rlm_map_el3(master, pgt_desc) != 0u)
+  {
+    val_rlm_pgt_destroy(pgt_desc);
+    pgt_desc->pgt_base = 0u;
+    (void)val_smmu_disable(smmu_index);
+    master->smmu_index = ACS_INVALID_INDEX;
+    return ACS_STATUS_ERR;
+  }
+
+  return ACS_STATUS_PASS;
+}
+
+static uint32_t
+val_cda_cache_ats_translation(uint32_t endpoint_bdf,
+                              uint64_t iova,
+                              uint64_t expected_pa,
+                              uint32_t expected_te,
+                              uint32_t page_size)
+{
+  VAL_ATS_TRANSLATION_RESULT response;
+  uint32_t status;
+
+  status = val_exerciser_ats_translate_by_bdf(endpoint_bdf,
+                                               iova,
+                                               page_size,
+                                               VAL_ATS_REQUEST_T,
+                                               &response);
+  if (status != ACS_STATUS_PASS)
+    return status;
+
+  if ((response.completion_success == 0u) ||
+      (response.translated_pa != expected_pa) ||
+      (response.te != expected_te) ||
+      ((response.response_attributes & VAL_ATS_PERMISSION_MASK) == 0u))
+  {
+    val_print(ACS_PRINT_ERR, " CDA: ATS PA 0x%llx", response.translated_pa);
+    val_print(ACS_PRINT_ERR, " CDA: ATS TE %u", (uint64_t)response.te);
+    val_print(ACS_PRINT_ERR,
+              " CDA: ATS attributes 0x%x",
+              (uint64_t)response.response_attributes);
+    return ACS_STATUS_FAIL;
+  }
+
+  return ACS_STATUS_PASS;
+}
+
+/**
+  @brief  Populate a Realm DCM line through the device coherent path.
+
+  @param  endpoint_bdf  Endpoint BDF identifying the requesting TDI.
+  @param  realm_alias   Cacheable Realm mapping of dcm_hpa.
+  @param  dcm_hpa       Host physical address of the DCM Location.
+  @param  verify_va     Non-secure verification buffer virtual address.
+  @param  verify_pa     Physical address corresponding to verify_va.
+  @param  seed_value    Value used to initialize and verify the DCM Location.
+  @param  page_size     Translation granule used for ATS requests.
+
+  @return ACS_STATUS_PASS when the line was fetched and verified.
+**/
+uint32_t
+val_cda_populate_realm_device_cache_line(uint32_t endpoint_bdf,
+                                         volatile uint64_t *realm_alias,
+                                         uint64_t dcm_hpa,
+                                         uint8_t *verify_va,
+                                         uint64_t verify_pa,
+                                         uint64_t seed_value,
+                                         uint32_t page_size)
+{
+  uint64_t observed;
+  uint32_t dma_length;
+
+  if ((realm_alias == NULL) || (dcm_hpa == 0u) || (verify_va == NULL) ||
+      (verify_pa == 0u) || (page_size == 0u))
+    return ACS_STATUS_ERR;
+
+  dma_length = (uint32_t)sizeof(uint64_t);
+  if (val_cda_seed_realm_cache_line(dcm_hpa,
+                                    realm_alias,
+                                    seed_value) != ACS_STATUS_PASS)
+    return ACS_STATUS_FAIL;
+
+  if ((val_memory_set_el3(verify_va, dma_length, 0u) != 0u) ||
+      (val_memory_cache_clean_invalidate_range_el3((uint64_t)verify_va,
+                                                    dma_length)
+       != ACS_STATUS_PASS))
+    return ACS_STATUS_ERR;
+
+  /* Fetch the DCM Location with an ATS-derived Realm translation. */
+  if ((val_cda_cache_ats_translation(endpoint_bdf,
+                                     dcm_hpa,
+                                     dcm_hpa,
+                                     1u,
+                                     page_size) != ACS_STATUS_PASS) ||
+      (val_exerciser_dma_with_atc_by_bdf(endpoint_bdf,
+                                         dcm_hpa,
+                                         dma_length,
+                                         EDMA_TO_DEVICE) != ACS_STATUS_PASS))
+    return ACS_STATUS_FAIL;
+
+  /* Copy the captured value to host memory without inspecting device state. */
+  if ((val_cda_cache_ats_translation(endpoint_bdf,
+                                     verify_pa,
+                                     verify_pa,
+                                     0u,
+                                     page_size) != ACS_STATUS_PASS) ||
+      (val_exerciser_dma_with_atc_by_bdf(endpoint_bdf,
+                                         verify_pa,
+                                         dma_length,
+                                         EDMA_FROM_DEVICE) != ACS_STATUS_PASS) ||
+      (val_memory_cache_invalidate_range_el3((uint64_t)verify_va,
+                                             dma_length)
+       != ACS_STATUS_PASS))
+    return ACS_STATUS_FAIL;
+
+  observed = *(volatile uint64_t *)verify_va;
+  if (observed != seed_value)
+  {
+    val_print(ACS_PRINT_ERR,
+              " CDA: device cache-fill readback 0x%llx",
+              observed);
+    val_print(ACS_PRINT_ERR,
+              " CDA: expected device cache-fill value 0x%llx",
+              seed_value);
+    return ACS_STATUS_FAIL;
+  }
+
+  return ACS_STATUS_PASS;
+}
+
 static void
 val_cda_init_dcm_window_context(uint32_t decoder_index,
                                 VAL_CDA_DCM_WINDOW_CONTEXT *context)
@@ -267,6 +506,26 @@ val_cda_prepare_dcm_window_with_dev_props(
                            uint32_t required_dev_properties,
                            VAL_CDA_DCM_WINDOW_CONTEXT *context)
 {
+  return val_cda_prepare_dcm_window_from_root_index(decoder_index,
+                                                     required_dev_properties,
+                                                     0u,
+                                                     context);
+}
+
+/**
+  @brief  Prepare a DCM window by scanning from a component-table root index.
+
+  This permits a caller to continue discovery after an otherwise suitable
+  endpoint cannot provide an optional test stimulus.
+**/
+static uint32_t
+val_cda_prepare_dcm_window_internal(
+                           uint32_t decoder_index,
+                           uint32_t required_dev_properties,
+                           uint32_t start_root_index,
+                           uint32_t require_exerciser,
+                           VAL_CDA_DCM_WINDOW_CONTEXT *context)
+{
   CXL_COMPONENT_TABLE *table;
 
   if (context == NULL)
@@ -274,10 +533,12 @@ val_cda_prepare_dcm_window_with_dev_props(
 
   val_cda_init_dcm_window_context(decoder_index, context);
   table = val_cxl_component_table_ptr();
-  if ((table == NULL) || (table->num_entries == 0u))
+  if ((table == NULL) || (start_root_index >= table->num_entries))
     return ACS_STATUS_SKIP;
 
-  for (uint32_t root_idx = 0u; root_idx < table->num_entries; ++root_idx)
+  for (uint32_t root_idx = start_root_index;
+       root_idx < table->num_entries;
+       ++root_idx)
   {
     VAL_CDA_DCM_WINDOW_CONTEXT candidate;
     const CXL_COMPONENT_ENTRY *root_port;
@@ -294,9 +555,14 @@ val_cda_prepare_dcm_window_with_dev_props(
         (root_port->chi_c2c_supported == 0u))
       continue;
 
-    if (val_cda_find_downstream_chi_c2c_exerciser_endpoint(root_port->bdf,
-                                                            &endpoint_bdf)
-        != ACS_STATUS_PASS)
+    if (((require_exerciser != 0u) &&
+         (val_cda_find_downstream_chi_c2c_exerciser_endpoint(root_port->bdf,
+                                                              &endpoint_bdf)
+          != ACS_STATUS_PASS)) ||
+        ((require_exerciser == 0u) &&
+         (val_cda_find_downstream_chi_c2c_endpoint(root_port->bdf,
+                                                    &endpoint_bdf)
+          != ACS_STATUS_PASS)))
       continue;
 
     if (val_cxl_find_component_index_by_bdf(endpoint_bdf,
@@ -431,8 +697,47 @@ val_cda_prepare_dcm_window_with_dev_props(
   return ACS_STATUS_SKIP;
 }
 
+uint32_t
+val_cda_prepare_dcm_window_from_root_index(
+                           uint32_t decoder_index,
+                           uint32_t required_dev_properties,
+                           uint32_t start_root_index,
+                           VAL_CDA_DCM_WINDOW_CONTEXT *context)
+{
+  return val_cda_prepare_dcm_window_internal(decoder_index,
+                                              required_dev_properties,
+                                              start_root_index,
+                                              1u,
+                                              context);
+}
+
+/** Prepare a DCM window without requiring the endpoint to implement PAL exerciser hooks. */
+uint32_t
+val_cda_prepare_generic_dcm_window(
+                           uint32_t decoder_index,
+                           VAL_CDA_DCM_WINDOW_CONTEXT *context)
+{
+  return val_cda_prepare_generic_dcm_window_from_root_index(decoder_index,
+                                                             0u,
+                                                             context);
+}
+
+/** Continue generic CHI-C2C endpoint discovery from a component-table index. */
+uint32_t
+val_cda_prepare_generic_dcm_window_from_root_index(
+                           uint32_t decoder_index,
+                           uint32_t start_root_index,
+                           VAL_CDA_DCM_WINDOW_CONTEXT *context)
+{
+  return val_cda_prepare_dcm_window_internal(decoder_index,
+                                              0u,
+                                              start_root_index,
+                                              0u,
+                                              context);
+}
+
 /**
-  @brief  Find a CHI-C2C exerciser endpoint downstream of a root port.
+  @brief  Find a CHI-C2C endpoint downstream of a root port.
 
   @param  root_bdf          Root port BDF.
   @param  endpoint_bdf_out  Output pointer for the endpoint BDF.
@@ -441,9 +746,10 @@ val_cda_prepare_dcm_window_with_dev_props(
           ACS_STATUS_SKIP if no matching endpoint is present.
           ACS_STATUS_ERR  if discovery data cannot be read.
 **/
-uint32_t
-val_cda_find_downstream_chi_c2c_exerciser_endpoint(uint32_t root_bdf,
-                                                   uint32_t *endpoint_bdf_out)
+static uint32_t
+val_cda_find_downstream_chi_c2c_endpoint_internal(uint32_t root_bdf,
+                                                  uint32_t require_exerciser,
+                                                  uint32_t *endpoint_bdf_out)
 {
   CXL_COMPONENT_TABLE *table;
   uint32_t reg_value;
@@ -489,14 +795,33 @@ val_cda_find_downstream_chi_c2c_exerciser_endpoint(uint32_t root_bdf,
     if ((candidate_bus < secondary_bus) || (candidate_bus > subordinate_bus))
       continue;
 
-    if (val_exerciser_init_by_bdf(candidate_bdf) == 0u)
-    {
-      *endpoint_bdf_out = candidate_bdf;
-      return ACS_STATUS_PASS;
-    }
+    if ((require_exerciser != 0u) &&
+        (val_exerciser_init_by_bdf(candidate_bdf) != 0u))
+      continue;
+
+    *endpoint_bdf_out = candidate_bdf;
+    return ACS_STATUS_PASS;
   }
 
   return ACS_STATUS_SKIP;
+}
+
+uint32_t
+val_cda_find_downstream_chi_c2c_endpoint(uint32_t root_bdf,
+                                         uint32_t *endpoint_bdf_out)
+{
+  return val_cda_find_downstream_chi_c2c_endpoint_internal(root_bdf,
+                                                            0u,
+                                                            endpoint_bdf_out);
+}
+
+uint32_t
+val_cda_find_downstream_chi_c2c_exerciser_endpoint(uint32_t root_bdf,
+                                                   uint32_t *endpoint_bdf_out)
+{
+  return val_cda_find_downstream_chi_c2c_endpoint_internal(root_bdf,
+                                                            1u,
+                                                            endpoint_bdf_out);
 }
 
 /**

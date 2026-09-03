@@ -157,6 +157,10 @@ uint32_t val_exerciser_stop_transaction_monitor_by_bdf(uint32_t bdf);
 uint32_t val_exerciser_get_transaction_record_by_bdf(
                                 uint32_t bdf,
                                 VAL_EXERCISER_TRANSACTION_RECORD *record);
+uint32_t val_exerciser_find_transaction_by_bdf(uint32_t bdf,
+                                                uint64_t address,
+                                                uint32_t required_attributes,
+                                                uint32_t *observed);
 uint32_t val_exerciser_ats_translate_by_bdf(uint32_t bdf,
                                             uint64_t iova,
                                             uint32_t length,

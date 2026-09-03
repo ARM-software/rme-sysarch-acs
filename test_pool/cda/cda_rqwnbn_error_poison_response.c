@@ -24,7 +24,6 @@
 #include "val/include/val_dpt.h"
 #include "val/include/val_el32.h"
 #include "val/include/val_exerciser.h"
-#include "val/include/val_iovirt.h"
 #include "val/include/val_memory.h"
 #include "val/include/val_pcie.h"
 #include "val/include/val_pcie_spec.h"
@@ -40,9 +39,6 @@
 
 #define DECODER_SLOT 0u
 #define AER_POISONED_TLP (1u << 12)
-#define PGT_STAGE2_RME_NS_MASK (1ull << 55)
-#define DMA_TEST_LENGTH ((uint32_t)sizeof(uint64_t))
-
 #define ESR_EC_SHIFT                 26u
 #define ESR_EC_MASK                  0x3Fu
 #define ESR_EC_DATA_ABORT_SAME_EL    0x25u
@@ -204,254 +200,6 @@ select_test_pages(uint64_t window_base,
   *snoop_hpa_out = snoop_hpa;
   *writeback_hpa_out = writeback_hpa;
   return ACS_STATUS_PASS;
-}
-
-static uint32_t
-prepare_realm_dma_mapping(uint32_t endpoint_bdf,
-                          uint64_t dcm_hpa,
-                          uint64_t verify_pa,
-                          uint64_t page_size,
-                          smmu_master_attributes_t *master,
-                          pgt_descriptor_t *pgt_desc)
-{
-  memory_region_descriptor_t mem_desc[3];
-  uint32_t device_id;
-  uint32_t its_id;
-  uint32_t smmu_index;
-
-  if ((dcm_hpa == 0u) || (verify_pa == 0u) || (page_size == 0u) ||
-      (master == NULL) || (pgt_desc == NULL))
-    return ACS_STATUS_ERR;
-
-  val_memory_set(master, sizeof(*master), 0);
-  val_memory_set(pgt_desc, sizeof(*pgt_desc), 0);
-  master->smmu_index = ACS_INVALID_INDEX;
-
-  smmu_index = val_iovirt_get_rc_smmu_index(PCIE_EXTRACT_BDF_SEG(endpoint_bdf),
-                                            PCIE_CREATE_BDF_PACKED(endpoint_bdf));
-  if ((smmu_index == ACS_INVALID_INDEX) ||
-      (val_iovirt_get_smmu_info(SMMU_CTRL_ARCH_MAJOR_REV, smmu_index) != 3u))
-    return ACS_STATUS_SKIP;
-
-  device_id = 0u;
-  its_id = 0u;
-  if (val_iovirt_get_device_info(PCIE_CREATE_BDF_PACKED(endpoint_bdf),
-                                 PCIE_EXTRACT_BDF_SEG(endpoint_bdf),
-                                 &device_id,
-                                 &master->streamid,
-                                 &its_id) != 0u)
-    return ACS_STATUS_SKIP;
-
-  if (val_smmu_enable(smmu_index) != 0u)
-    return ACS_STATUS_ERR;
-
-  master->smmu_index = smmu_index;
-  master->stage2 = 1u;
-
-  val_memory_set(mem_desc, sizeof(mem_desc), 0);
-  mem_desc[0].virtual_address = dcm_hpa;
-  mem_desc[0].physical_address = dcm_hpa;
-  mem_desc[0].length = 2u * page_size;
-  /* Map the adjacent writeback and snoop pages into Realm PAS. */
-  mem_desc[0].attributes = PGT_STAGE2_AP_RW;
-  mem_desc[1].virtual_address = verify_pa;
-  mem_desc[1].physical_address = verify_pa;
-  mem_desc[1].length = page_size;
-  /* The verification page remains in Non-secure PAS. */
-  mem_desc[1].attributes = PGT_STAGE2_AP_RW | PGT_STAGE2_RME_NS_MASK;
-
-  pgt_desc->ias = (uint32_t)val_smmu_get_info(SMMU_IN_ADDR_SIZE, smmu_index);
-  pgt_desc->oas = (uint32_t)val_smmu_get_info(SMMU_OUT_ADDR_SIZE, smmu_index);
-  pgt_desc->stage = PGT_STAGE2;
-  if ((pgt_desc->ias == 0u) || (pgt_desc->oas == 0u))
-  {
-    (void)val_smmu_disable(smmu_index);
-    master->smmu_index = ACS_INVALID_INDEX;
-    return ACS_STATUS_SKIP;
-  }
-
-  if (val_pe_get_vtcr(&pgt_desc->vtcr) != 0u)
-  {
-    (void)val_smmu_disable(smmu_index);
-    master->smmu_index = ACS_INVALID_INDEX;
-    return ACS_STATUS_ERR;
-  }
-
-  if ((val_memory_map_el3_data((uint64_t)mem_desc,
-                               sizeof(mem_desc),
-                               NONSECURE_PAS) != ACS_STATUS_PASS) ||
-      (val_memory_map_el3_data((uint64_t)pgt_desc,
-                               sizeof(*pgt_desc),
-                               NONSECURE_PAS) != ACS_STATUS_PASS) ||
-      (val_memory_map_el3_data((uint64_t)master,
-                               sizeof(*master),
-                               NONSECURE_PAS) != ACS_STATUS_PASS))
-  {
-    (void)val_smmu_disable(smmu_index);
-    master->smmu_index = ACS_INVALID_INDEX;
-    return ACS_STATUS_ERR;
-  }
-
-  if (val_rlm_pgt_create(mem_desc, pgt_desc) != 0u)
-  {
-    (void)val_smmu_disable(smmu_index);
-    master->smmu_index = ACS_INVALID_INDEX;
-    return ACS_STATUS_ERR;
-  }
-
-  val_pe_reg_write(VTTBR, pgt_desc->pgt_base);
-  if (val_smmu_rlm_map_el3(master, pgt_desc) != 0u)
-  {
-    val_rlm_pgt_destroy(pgt_desc);
-    pgt_desc->pgt_base = 0u;
-    (void)val_smmu_disable(smmu_index);
-    master->smmu_index = ACS_INVALID_INDEX;
-    return ACS_STATUS_ERR;
-  }
-
-  return ACS_STATUS_PASS;
-}
-
-static uint32_t
-cache_ats_translation(uint32_t endpoint_bdf,
-                      uint64_t iova,
-                      uint64_t expected_pa,
-                      uint32_t expected_te,
-                      uint32_t page_size)
-{
-  VAL_ATS_TRANSLATION_RESULT response;
-  uint32_t status;
-
-  status = val_exerciser_ats_translate_by_bdf(endpoint_bdf,
-                                               iova,
-                                               page_size,
-                                               VAL_ATS_REQUEST_T,
-                                               &response);
-  if (status != ACS_STATUS_PASS)
-    return status;
-
-  if ((response.completion_success == 0u) ||
-      (response.translated_pa != expected_pa) ||
-      (response.te != expected_te) ||
-      ((response.response_attributes & VAL_ATS_PERMISSION_MASK) == 0u))
-  {
-    val_print(ACS_PRINT_ERR, " RQWNBN: ATS PA 0x%llx", response.translated_pa);
-    val_print(ACS_PRINT_ERR, " RQWNBN: ATS TE %u", (uint64_t)response.te);
-    val_print(ACS_PRINT_ERR,
-              " RQWNBN: ATS attributes 0x%x",
-              (uint64_t)response.response_attributes);
-    return ACS_STATUS_FAIL;
-  }
-
-  return ACS_STATUS_PASS;
-}
-
-static uint32_t
-run_atc_backed_dma(uint32_t endpoint_bdf,
-                   uint64_t iova,
-                   EXERCISER_DMA_ATTR direction)
-{
-  uint32_t status;
-
-  status = val_exerciser_dma_with_atc_by_bdf(endpoint_bdf,
-                                              iova,
-                                              DMA_TEST_LENGTH,
-                                              direction);
-  if (status != ACS_STATUS_PASS)
-  {
-    val_print(ACS_PRINT_ERR,
-              " RQWNBN: ATC DMA direction %u failed",
-              (uint64_t)direction);
-  }
-
-  return status;
-}
-
-static uint32_t
-populate_device_cache_line(uint32_t endpoint_bdf,
-                           volatile uint64_t *realm_alias,
-                           uint64_t dcm_hpa,
-                           uint8_t *verify_va,
-                           uint64_t verify_pa,
-                           uint64_t seed_value,
-                           uint32_t page_size)
-{
-  uint64_t observed;
-
-  if ((realm_alias == NULL) || (dcm_hpa == 0u) || (verify_va == NULL) ||
-      (verify_pa == 0u) || (page_size == 0u))
-    return ACS_STATUS_ERR;
-
-  /* Initialize backing DCM, then establish a clean cacheable Realm line. */
-  if (val_cda_seed_realm_cache_line(dcm_hpa,
-                                    realm_alias,
-                                    seed_value) != ACS_STATUS_PASS)
-    return ACS_STATUS_FAIL;
-
-  if ((val_memory_set_el3(verify_va, DMA_TEST_LENGTH, 0u) != 0u) ||
-      (val_memory_cache_clean_invalidate_range_el3((uint64_t)verify_va,
-                                                    DMA_TEST_LENGTH)
-       != ACS_STATUS_PASS))
-    return ACS_STATUS_ERR;
-
-  /*
-   * Fetch the Realm DCM Location through the TDI's ATS-backed coherent path.
-   * This verifies that the populated line is reachable with the TDI's Realm
-   * translation before the existing line is explicitly marked dirty.
-   */
-  if ((cache_ats_translation(endpoint_bdf,
-                             dcm_hpa,
-                             dcm_hpa,
-                             1u,
-                             page_size) != ACS_STATUS_PASS) ||
-      (run_atc_backed_dma(endpoint_bdf,
-                          dcm_hpa,
-                          EDMA_TO_DEVICE) != ACS_STATUS_PASS))
-    return ACS_STATUS_FAIL;
-
-  /*
-   * Return the data captured by the device to an ordinary host page. This
-   * avoids relying on the exerciser's implementation-defined internal buffer.
-   */
-  if ((cache_ats_translation(endpoint_bdf,
-                             verify_pa,
-                             verify_pa,
-                             0u,
-                             page_size) != ACS_STATUS_PASS) ||
-      (run_atc_backed_dma(endpoint_bdf,
-                          verify_pa,
-                          EDMA_FROM_DEVICE) != ACS_STATUS_PASS) ||
-      (val_memory_cache_invalidate_range_el3((uint64_t)verify_va,
-                                             DMA_TEST_LENGTH)
-       != ACS_STATUS_PASS))
-    return ACS_STATUS_FAIL;
-
-  observed = *(volatile uint64_t *)verify_va;
-  if (observed != seed_value)
-  {
-    val_print(ACS_PRINT_ERR,
-              " RQWNBN: device cache-fill readback 0x%llx",
-              observed);
-    return ACS_STATUS_FAIL;
-  }
-
-  return ACS_STATUS_PASS;
-}
-
-static uint32_t
-force_tdi_error(val_spdm_context_t *spdm_ctx,
-                uint32_t session_id)
-{
-  if ((spdm_ctx == NULL) || (session_id == 0u))
-    return ACS_STATUS_ERR;
-
-  /*
-   * Closing the SPDM session while the interface is CONFIG_LOCKED or RUN is
-   * one of the TDI ERROR transition paths implemented by the model. After this
-   * point the secure session is gone, so the caller must not issue STOP_INTERFACE
-   * during cleanup.
-   */
-  return val_spdm_session_close(spdm_ctx, session_id);
 }
 
 static uint32_t
@@ -893,12 +641,13 @@ exercise_rule(TEST_CONTEXT *context)
   }
   dcm_gpt_set = 1u;
 
-  status = prepare_realm_dma_mapping(context->endpoint_bdf,
-                                     writeback_hpa,
-                                     verify_pa,
-                                     page_size,
-                                     &master,
-                                     &pgt_desc);
+  status = val_cda_prepare_realm_dma_mapping(context->endpoint_bdf,
+                                              writeback_hpa,
+                                              2u * page_size,
+                                              verify_pa,
+                                              page_size,
+                                              &master,
+                                              &pgt_desc);
   if (status != ACS_STATUS_PASS)
   {
     result = status;
@@ -1046,7 +795,7 @@ exercise_rule(TEST_CONTEXT *context)
    * captured data through a separate host page. Only then ask the exerciser to
    * change the existing line's state to dirty.
    */
-  status = populate_device_cache_line(context->endpoint_bdf,
+  status = val_cda_populate_realm_device_cache_line(context->endpoint_bdf,
                                       snoop_realm_alias,
                                       snoop_hpa,
                                       verify_va,
@@ -1074,7 +823,7 @@ exercise_rule(TEST_CONTEXT *context)
     goto cleanup;
   }
 
-  status = populate_device_cache_line(context->endpoint_bdf,
+  status = val_cda_populate_realm_device_cache_line(context->endpoint_bdf,
                                       writeback_realm_alias,
                                       writeback_hpa,
                                       verify_va,
@@ -1104,7 +853,7 @@ exercise_rule(TEST_CONTEXT *context)
     goto cleanup;
   }
 
-  status = force_tdi_error(&spdm_ctx, session_id);
+  status = val_tdisp_close_session_to_error(&spdm_ctx, session_id);
   if (status != ACS_STATUS_PASS)
   {
     result = ACS_STATUS_SKIP;

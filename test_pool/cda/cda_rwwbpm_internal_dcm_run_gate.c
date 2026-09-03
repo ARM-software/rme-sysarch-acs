@@ -1198,17 +1198,17 @@ exercise_rule(TEST_CONTEXT *context)
     goto cleanup;
   }
 
+  /*
+   * STOP_INTERFACE transitions the TDI to CONFIG_UNLOCKED. The coherent
+   * device is permitted, and may be required, to scrub TDI-associated DCM as
+   * part of that transition. Therefore the old baseline is not a valid oracle
+   * here. The access is prohibited if its requested value reached the media;
+   * any other value can result from the independent scrub operation.
+   */
   if (observed != STOP_BASELINE_VALUE)
-  {
-    val_print(ACS_PRINT_ERR,
-              " RWWBPM: unexpected Realm DCM value after non-RUN access",
-              0);
-    val_print(ACS_PRINT_ERR,
-              " RWWBPM: Realm non-RUN observed 0x%llx",
+    val_print(ACS_PRINT_INFO,
+              " RWWBPM: CONFIG_UNLOCKED changed DCM to 0x%llx",
               observed);
-    result = ACS_STATUS_FAIL;
-    goto cleanup;
-  }
 
   if (status != ACS_STATUS_PASS)
   {

@@ -22,6 +22,8 @@
 #include "include/val_pcie.h"
 #include "include/val_smmu.h"
 
+#define VAL_EXERCISER_MAX_CAPTURE_RECORDS 32u
+
 EXERCISER_INFO_TABLE g_exerciser_info_table;
 CXL_EXERCISER_INFO_TABLE g_cxl_exerciser_info_table;
 
@@ -399,6 +401,42 @@ val_exerciser_get_transaction_record_by_bdf(
 
     record->attributes = (uint32_t)attributes;
     record->address = address;
+    return ACS_STATUS_PASS;
+}
+
+/** Drain a transaction capture and report a matching address and attributes. */
+uint32_t
+val_exerciser_find_transaction_by_bdf(uint32_t bdf,
+                                      uint64_t address,
+                                      uint32_t required_attributes,
+                                      uint32_t *observed)
+{
+    VAL_EXERCISER_TRANSACTION_RECORD record;
+
+    if (observed == NULL)
+        return ACS_STATUS_ERR;
+
+    *observed = 0u;
+    for (uint32_t index = 0u;
+         index < VAL_EXERCISER_MAX_CAPTURE_RECORDS;
+         ++index)
+    {
+        if (val_exerciser_get_transaction_record_by_bdf(bdf, &record)
+            != ACS_STATUS_PASS)
+            break;
+
+        val_print(ACS_PRINT_DEBUG,
+                  " Exerciser trace attributes 0x%x",
+                  (uint64_t)record.attributes);
+        val_print(ACS_PRINT_DEBUG,
+                  " Exerciser trace address 0x%llx",
+                  record.address);
+
+        if ((record.address == address) &&
+            ((record.attributes & required_attributes) == required_attributes))
+            *observed = 1u;
+    }
+
     return ACS_STATUS_PASS;
 }
 

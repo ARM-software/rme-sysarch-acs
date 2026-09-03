@@ -61,9 +61,13 @@ uint32_t cda_ryjvjr_ats_te_pas_entry(uint32_t num_pe);
 uint32_t cda_rshsxk_d2h_gpc_dpt_entry(uint32_t num_pe);
 uint32_t cda_rjsyps_d2h_snp_range_entry(uint32_t num_pe);
 uint32_t cda_rstqhs_unknown_snoop_filter_entry(uint32_t num_pe);
+uint32_t cda_rvpkvf_tdi_state_independent_entry(uint32_t num_pe);
+uint32_t cda_rhdxtm_dcm_scrub_entry(uint32_t num_pe);
 
 uint32_t val_cda_find_downstream_chi_c2c_exerciser_endpoint(uint32_t root_bdf,
                                                             uint32_t *endpoint_bdf_out);
+uint32_t val_cda_find_downstream_chi_c2c_endpoint(uint32_t root_bdf,
+                                                  uint32_t *endpoint_bdf_out);
 uint32_t val_cda_is_downstream_chi_c2c_endpoint(const CXL_COMPONENT_ENTRY *entry,
                                                 uint32_t root_bdf,
                                                 uint32_t secondary_bus,
@@ -89,11 +93,39 @@ uint32_t val_cda_tdi_snoop_attempt(uint32_t endpoint_bdf,
 uint32_t val_cda_seed_realm_cache_line(uint64_t target_hpa,
                                        volatile uint64_t *realm_alias,
                                        uint64_t value);
+uint32_t val_cda_prepare_realm_dma_mapping(
+                                       uint32_t endpoint_bdf,
+                                       uint64_t realm_base,
+                                       uint64_t realm_length,
+                                       uint64_t ns_pa,
+                                       uint64_t page_size,
+                                       smmu_master_attributes_t *master,
+                                       pgt_descriptor_t *pgt_desc);
+uint32_t val_cda_populate_realm_device_cache_line(
+                                       uint32_t endpoint_bdf,
+                                       volatile uint64_t *realm_alias,
+                                       uint64_t dcm_hpa,
+                                       uint8_t *verify_va,
+                                       uint64_t verify_pa,
+                                       uint64_t seed_value,
+                                       uint32_t page_size);
 uint32_t val_cda_prepare_dcm_window(uint32_t decoder_index,
                                     VAL_CDA_DCM_WINDOW_CONTEXT *context);
 uint32_t val_cda_prepare_dcm_window_with_dev_props(
                                     uint32_t decoder_index,
                                     uint32_t required_dev_properties,
+                                    VAL_CDA_DCM_WINDOW_CONTEXT *context);
+uint32_t val_cda_prepare_dcm_window_from_root_index(
+                                    uint32_t decoder_index,
+                                    uint32_t required_dev_properties,
+                                    uint32_t start_root_index,
+                                    VAL_CDA_DCM_WINDOW_CONTEXT *context);
+uint32_t val_cda_prepare_generic_dcm_window(
+                                    uint32_t decoder_index,
+                                    VAL_CDA_DCM_WINDOW_CONTEXT *context);
+uint32_t val_cda_prepare_generic_dcm_window_from_root_index(
+                                    uint32_t decoder_index,
+                                    uint32_t start_root_index,
                                     VAL_CDA_DCM_WINDOW_CONTEXT *context);
 uint32_t val_cda_restore_dcm_window(const VAL_CDA_DCM_WINDOW_CONTEXT *context);
 

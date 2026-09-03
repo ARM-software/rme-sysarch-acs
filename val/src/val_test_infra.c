@@ -140,6 +140,14 @@ MODULE_TEST_DISPATCHER_s g_module_test_table[MODULE_SENTINEL] = {
         .entry_fn = cda_rstqhs_unknown_snoop_filter_entry,
         .test_text = "cda_rstqhs_unknown_snoop_filter",
       },
+      [CDA_ENTRY_CDA_RVPKVF_TDI_STATE_INDEPENDENT_ENTRY] = {
+        .entry_fn = cda_rvpkvf_tdi_state_independent_entry,
+        .test_text = "cda_rvpkvf_tdi_state_independent",
+      },
+      [CDA_ENTRY_CDA_RHDXTM_DCM_SCRUB_ENTRY] = {
+        .entry_fn = cda_rhdxtm_dcm_scrub_entry,
+        .test_text = "cda_rhdxtm_dcm_scrub",
+      },
       [CDA_ENTRY_CDA_RFZBMW_EXTERNAL_DCM_IDE_GATE_ENTRY] = {
         .entry_fn = cda_rfzbmw_external_dcm_ide_gate_entry,
         .test_text = "cda_rfzbmw_external_dcm_ide_gate",
