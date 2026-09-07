@@ -1,5 +1,5 @@
 #/** @file
-# Copyright (c) 2016-2018, Arm Limited or its affiliates. All rights reserved.
+# Copyright (c) 2016-2018, 2026, Arm Limited or its affiliates. All rights reserved.
 # SPDX-License-Identifier : Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -25,7 +25,9 @@ GCC_ASM_IMPORT(PalGetMaxMpidr)
 GCC_ASM_EXPORT(ModuleEntryPoint)
 
 StartupAddr:         .8byte ASM_PFX(val_test_entry)
-ASM_PFX(StackSize):  .8byte 0x100
+
+/* Must match SIZE_STACK_SECONDARY_PE in pal_pe.c. */
+ASM_PFX(StackSize):  .8byte 0x1000
 
 ASM_PFX(ModuleEntryPoint):
   // Get ID of this CPU in Multicore system
