@@ -76,6 +76,7 @@
 #define ENABLE_MEC   0x1
 #define CONFIG_MECID 0x2
 #define DISABLE_MEC  0x3
+#define GET_MEC_STATE 0x4
 
 /* Defines related to PGT attrinutes of an address */
 #define MAIR_REG_VAL_EL3 0x00000000004400ff

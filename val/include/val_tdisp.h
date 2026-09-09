@@ -173,6 +173,9 @@ val_tdisp_vdm_set_interface(val_spdm_context_t *context,
                             uint32_t *response_size);
 
 uint32_t
+val_tdisp_configure_pmecid(uint32_t endpoint_bdf, uint16_t pmecid);
+
+uint32_t
 val_tdisp_vdm_send_raw_request(val_spdm_context_t *context,
                                uint32_t session_id,
                                const uint8_t *request,

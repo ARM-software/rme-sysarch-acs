@@ -579,6 +579,29 @@ val_cxl_exerciser_execute_cmd(uint32_t bdf, uint32_t opcode,
     return ACS_STATUS_PASS;
 }
 
+/**
+  @brief  Enable or disable an exerciser override for snoop-response MECID.
+
+  This is an implementation-defined coherent exerciser stimulus. It permits a
+  host test to generate both permitted and unpermitted response MECIDs without
+  exposing any private host-port decision state.
+**/
+uint32_t
+val_cxl_exerciser_set_snoop_response_mecid(uint32_t bdf,
+                                            uint16_t mecid,
+                                            uint32_t enable)
+{
+    uint64_t control;
+
+    control = (enable != 0u) ?
+              (CXL_SNOOP_RESPONSE_MECID_VALID | (uint64_t)mecid) : 0u;
+    return val_cxl_exerciser_execute_cmd(bdf,
+                                         CXL_CMD_OP_SNOOP_RESPONSE_MECID,
+                                         0u,
+                                         control,
+                                         NULL);
+}
+
 uint32_t
 val_cxl_exerciser_backdoor_read64(uint32_t bdf, uint64_t dpa, uint64_t *readback)
 {

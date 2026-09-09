@@ -702,6 +702,40 @@ val_memory_cache_invalidate_range_el3(uint64_t address, uint32_t length)
 }
 
 /**
+  @brief  Check that an EL3-accessible buffer contains one repeated byte.
+
+  @param  buffer_va     Buffer virtual address.
+  @param  length        Number of bytes to check. Must be 32-bit aligned.
+  @param  byte_pattern  Byte value expected throughout the buffer.
+
+  @return ACS_STATUS_PASS when the pattern matches, ACS_STATUS_FAIL on a
+          mismatch, or ACS_STATUS_ERR on invalid input or an EL3 read failure.
+**/
+uint32_t
+val_memory_has_byte_pattern_el3(uint64_t buffer_va,
+                                uint32_t length,
+                                uint32_t byte_pattern)
+{
+  uint32_t expected;
+  uint32_t value;
+
+  if ((buffer_va == 0u) || (length == 0u) ||
+      ((length % sizeof(uint32_t)) != 0u))
+    return ACS_STATUS_ERR;
+
+  expected = (byte_pattern & 0xFFu) * 0x01010101u;
+  for (uint32_t offset = 0u; offset < length; offset += sizeof(uint32_t))
+  {
+    if (val_memory_read_el3(buffer_va + offset, &value) != ACS_STATUS_PASS)
+      return ACS_STATUS_ERR;
+    if (value != expected)
+      return ACS_STATUS_FAIL;
+  }
+
+  return ACS_STATUS_PASS;
+}
+
+/**
   @brief  Compare two buffers through EL3 MUT reads.
 
   @param  src_va  Source buffer VA.

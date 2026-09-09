@@ -485,12 +485,14 @@
  * CXL components that support CHI-C2C.
  * Provide BDF values in PCIE_CREATE_BDF encoding (0xSSBBDDFF).
  */
-#define CXL_CHI_C2C_SUPPORTED_CNT 0x4
+#define CXL_CHI_C2C_SUPPORTED_CNT 0x6
 #define CXL_CHI_C2C_SUPPORTED_BDF_ENTRIES(_) \
   _(0x00000500)                              \
   _(0x00050000)                              \
   _(0x00000600)                              \
-  _(0x00060000)
+  _(0x00060000)                              \
+  _(0x00000700)                              \
+  _(0x00070000)
 
 #define GPC_PROTECTED_REGION_CNT 0x4
 

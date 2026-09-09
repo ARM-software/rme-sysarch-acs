@@ -28,13 +28,23 @@
 #include "include/val_iovirt.h"
 #include "include/val_mem_interface.h"
 #include "include/val_el32.h"
-#include "include/val_mem_interface.h"
 #include "include/pal_interface.h"
 
 #define TEST_DATA_1 0xabababab
 #define TEST_DATA_2 0xcdcdcdcd
 
+#define RMSD_PAS_COUNT        4u
+#define RMSD_ALIAS_PAGE_COUNT 64u
+
+typedef struct {
+  uint64_t pa_page;
+  uint64_t va[RMSD_PAS_COUNT];
+} RMSD_ALIAS_PAGE;
+
 REGISTER_INFO_TABLE  *g_register_info_table;
+
+static RMSD_ALIAS_PAGE g_rmsd_alias_pages[RMSD_ALIAS_PAGE_COUNT];
+static uint32_t g_rmsd_alias_page_count;
 
 #if ENABLE_SPDM
 
@@ -90,6 +100,70 @@ static void spdm_free_slot(spdm_session_slot_t *slot)
 #endif
 
 /**
+  @brief  Return a persistent EL3 alias for one RMSD register page and PAS.
+
+          RMSD checks repeatedly access several registers from the same MMIO
+          page. Keeping one alias for each (page, PAS) pair avoids consuming a
+          new UEFI VA and translation for every register access. Separate
+          aliases also avoid changing the PAS attributes of a live EL3 PTE.
+
+  @param  pa_page    Granule-aligned physical address of the register page.
+  @param  pas_index  Index in the RMSD PAS test sequence.
+  @param  pas        PAS attribute for the EL3 mapping.
+  @param  attr       Common EL3 mapping attributes.
+  @param  tg         Translation granule size.
+
+  @return EL3 virtual address on success, 0 on failure.
+**/
+static uint64_t
+get_rmsd_access_va(uint64_t pa_page,
+                   uint32_t pas_index,
+                   uint64_t pas,
+                   uint64_t attr,
+                   uint64_t tg)
+{
+  RMSD_ALIAS_PAGE *alias_page = NULL;
+  uint64_t va;
+
+  if (pas_index >= RMSD_PAS_COUNT)
+    return 0u;
+
+  for (uint32_t index = 0u; index < g_rmsd_alias_page_count; ++index)
+  {
+    if (g_rmsd_alias_pages[index].pa_page == pa_page)
+    {
+      alias_page = &g_rmsd_alias_pages[index];
+      break;
+    }
+  }
+
+  if (alias_page == NULL)
+  {
+    if (g_rmsd_alias_page_count >= RMSD_ALIAS_PAGE_COUNT)
+      return 0u;
+
+    alias_page = &g_rmsd_alias_pages[g_rmsd_alias_page_count++];
+    alias_page->pa_page = pa_page;
+    val_memory_set(alias_page->va, sizeof(alias_page->va), 0);
+  }
+
+  if (alias_page->va[pas_index] != 0u)
+    return alias_page->va[pas_index];
+
+  va = val_get_free_va(tg);
+  if (va <= 1u)
+    return 0u;
+
+  if (val_add_mmu_entry_el3(va,
+                            pa_page,
+                            attr | LOWER_ATTRS(PAS_ATTR(pas))))
+    return 0u;
+
+  alias_page->va[pas_index] = va;
+  return va;
+}
+
+/**
   @brief  Exercise Realm Management Secure Domain write-protect behaviour for a register.
 
           The helper maps the target register into EL3 with each permitted PAS, attempts a
@@ -122,24 +196,23 @@ val_rmsd_write_protect_check(uint64_t pa,
   attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(OUTER_SHAREABLE) |
                      GET_ATTR_INDEX(DEV_MEM_nGnRnE) | PGT_ENTRY_AP_RW);
 
+  if (val_add_gpt_entry_el3(pa_page, GPT_ANY))
+  {
+    val_print(ACS_PRINT_ERR,
+              " Failed to add GPT entry for 0x%llx ",
+              pa_page);
+    return 1u;
+  }
+
   for (uint32_t index = 0; index < (sizeof(pas_list) / sizeof(pas_list[0])); ++index)
   {
     uint64_t pas = pas_list[index];
-    uint64_t va = val_get_free_va(tg);
+    uint64_t va = get_rmsd_access_va(pa_page, index, pas, attr, tg);
 
-    if (val_add_gpt_entry_el3(pa_page, GPT_ANY))
+    if (va == 0u)
     {
       val_print(ACS_PRINT_ERR,
-                " Failed to add GPT entry for 0x%llx ",
-                pa_page);
-      failures++;
-      continue;
-    }
-
-    if (val_add_mmu_entry_el3(va, pa_page, attr | LOWER_ATTRS(PAS_ATTR(pas))))
-    {
-      val_print(ACS_PRINT_ERR,
-                " Failed to add MMU entry for 0x%llx ",
+                " Failed to create RMSD access alias for 0x%llx ",
                 pa_page);
       val_print(ACS_PRINT_ERR,
                 " with PAS 0x%llx",

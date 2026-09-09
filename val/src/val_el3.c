@@ -728,6 +728,26 @@ uint32_t val_rlm_disable_mec(void)
 }
 
 /**
+ *  @brief  Read whether MEC is currently enabled at EL3.
+ *  @param  enabled_out  Receives 1 when enabled and 0 when disabled.
+ *  @return 0 on success, 1 on error.
+ */
+uint32_t val_rlm_get_mec_state(uint32_t *enabled_out)
+{
+  if (enabled_out == NULL)
+      return 1;
+
+  UserCallSMC(ARM_ACS_SMC_FID, MEC_SERVICE, GET_MEC_STATE, 0, 0);
+  if (shared_data->status_code != 0) {
+    val_print(ACS_PRINT_ERR, shared_data->error_msg, shared_data->error_code);
+    return 1;
+  }
+
+  *enabled_out = shared_data->shared_data_access[0].data ? 1u : 0u;
+  return 0;
+}
+
+/**
  *  @brief  This API is used to check if SMMU implements MEC.
  *          Returns 1 on error, 0 on success.
  *  @return 1 on error, 0 on success

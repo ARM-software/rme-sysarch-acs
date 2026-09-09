@@ -2773,24 +2773,18 @@ val_cxl_enable_mem(uint32_t bdf)
   return ACS_STATUS_PASS;
 }
 
-/**
-  @brief   Enable CXL.cache in the CXL Device DVSEC control register.
-
-  @param  bdf  PCIe identifier of the device to program.
-
-  @return ACS_STATUS_PASS when enabled or already set.
-          ACS_STATUS_SKIP when the device does not advertise CXL.cache.
-          ACS_STATUS_FAIL when enable is not set after programming.
-          ACS_STATUS_ERR on config space access failures.
-**/
-uint32_t
-val_cxl_enable_cache(uint32_t bdf)
+static uint32_t
+val_cxl_get_cache_control(uint32_t bdf,
+                          uint32_t *dvsec_offset_out,
+                          uint32_t *control_out)
 {
   uint32_t dvsec_offset;
   uint32_t hdr2;
-  uint32_t ctrl;
   uint32_t status;
   uint16_t cxl_cap;
+
+  if ((dvsec_offset_out == NULL) || (control_out == NULL))
+    return ACS_STATUS_ERR;
 
   status = val_pcie_find_vendor_dvsec(bdf,
                                       CXL_DVSEC_VENDOR_ID,
@@ -2809,19 +2803,78 @@ val_cxl_enable_cache(uint32_t bdf)
   if ((cxl_cap & CXL_DVSEC_CXL_CAP_CACHE_CAPABLE) == 0u)
     return ACS_STATUS_SKIP;
 
-  if (val_pcie_read_cfg(bdf, dvsec_offset + CXL_DVSEC_CTRL_OFFSET, &ctrl))
+  if (val_pcie_read_cfg(bdf,
+                        dvsec_offset + CXL_DVSEC_CTRL_OFFSET,
+                        control_out))
     return ACS_STATUS_ERR;
 
-  if ((ctrl & CXL_DVSEC_CACHE_ENABLE) == 0u) {
-    ctrl |= CXL_DVSEC_CACHE_ENABLE;
-    val_pcie_write_cfg(bdf, dvsec_offset + CXL_DVSEC_CTRL_OFFSET, ctrl);
-  }
+  *dvsec_offset_out = dvsec_offset;
+  return ACS_STATUS_PASS;
+}
 
-  if (val_pcie_read_cfg(bdf, dvsec_offset + CXL_DVSEC_CTRL_OFFSET, &ctrl))
+/**
+  @brief  Read the CXL.cache enable state from the CXL Device DVSEC.
+**/
+uint32_t
+val_cxl_get_cache_enable(uint32_t bdf, uint32_t *enable_out)
+{
+  uint32_t control;
+  uint32_t dvsec_offset;
+  uint32_t status;
+
+  if (enable_out == NULL)
     return ACS_STATUS_ERR;
 
-  return ((ctrl & CXL_DVSEC_CACHE_ENABLE) != 0u) ?
+  status = val_cxl_get_cache_control(bdf, &dvsec_offset, &control);
+  if (status != ACS_STATUS_PASS)
+    return status;
+
+  *enable_out = ((control & CXL_DVSEC_CACHE_ENABLE) != 0u) ? 1u : 0u;
+  return ACS_STATUS_PASS;
+}
+
+/**
+  @brief  Set or clear CXL.cache enable and verify the resulting state.
+**/
+uint32_t
+val_cxl_set_cache_enable(uint32_t bdf, uint32_t enable)
+{
+  uint32_t control;
+  uint32_t dvsec_offset;
+  uint32_t expected;
+  uint32_t status;
+
+  status = val_cxl_get_cache_control(bdf, &dvsec_offset, &control);
+  if (status != ACS_STATUS_PASS)
+    return status;
+
+  expected = (enable != 0u) ? CXL_DVSEC_CACHE_ENABLE : 0u;
+  control = (control & ~CXL_DVSEC_CACHE_ENABLE) | expected;
+  val_pcie_write_cfg(bdf, dvsec_offset + CXL_DVSEC_CTRL_OFFSET, control);
+
+  if (val_pcie_read_cfg(bdf,
+                        dvsec_offset + CXL_DVSEC_CTRL_OFFSET,
+                        &control))
+    return ACS_STATUS_ERR;
+
+  return ((control & CXL_DVSEC_CACHE_ENABLE) == expected) ?
          ACS_STATUS_PASS : ACS_STATUS_FAIL;
+}
+
+/**
+  @brief   Enable CXL.cache in the CXL Device DVSEC control register.
+
+  @param  bdf  PCIe identifier of the device to program.
+
+  @return ACS_STATUS_PASS when enabled or already set.
+          ACS_STATUS_SKIP when the device does not advertise CXL.cache.
+          ACS_STATUS_FAIL when enable is not set after programming.
+          ACS_STATUS_ERR on config space access failures.
+**/
+uint32_t
+val_cxl_enable_cache(uint32_t bdf)
+{
+  return val_cxl_set_cache_enable(bdf, 1u);
 }
 
 /**

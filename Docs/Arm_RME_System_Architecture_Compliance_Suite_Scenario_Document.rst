@@ -1341,6 +1341,29 @@ Testcase checklist
 
   * -
 
+      `cda_rdrvtk_d2h_mecid <../test_pool/cda/cda_rdrvtk_d2h_mecid.c>`_
+
+    -
+
+      RDRVTK: The host must guarantee that every device-to-host request and device-to-host response is associated with a MECID that the device is permitted to use.
+
+    -
+
+      1. Select a CHI-C2C-capable root port with an RME-CDA DVSEC and a downstream CHI-C2C exerciser endpoint that advertises MEC support and a non-zero MECID width. Require host MEC support.
+      2. Configure the TDI primary MECID to 1 with SET_INTERFACE while the TDI is CONFIG_UNLOCKED. Program the root-port RID range for the endpoint, enable TDISP enforcement, set LINK_STR_LOCK, then transition the TDI to RUN and establish the coherent-link IDE stream.
+      3. Allocate separate source, destination, and verification pages. Create a Realm SMMU stage-2 context for the endpoint StreamID covering the ACS-owned HCM pages, two DCM pages, and the Non-secure verification page. Configure the Realm STE to select MECID 1 and mark the Realm output pages in GPT.
+      4. Initialize the source and destination under MECID 1 with different patterns. Issue an untranslated device read from the source IOVA followed by a device write to the destination IOVA, using the endpoint's natural RID and Realm SEC_SID. The Realm SMMU translates both requests and associates them with MECID 1 from the endpoint STE. Require the buffers to match under MECID 1.
+      5. Clean the HCM data to the Point of Encryption, select MECID 0 on the PE, and require the destination not to expose the original plaintext pattern. Restore MECID 1 and require the source and destination to match again. This data-path observation verifies that the SMMU-selected permitted MECID was associated with the D2H read and write requests.
+      6. If the exerciser can select a MECID on a snoop response, associate two DCM pages with the TDI, configure the required DPT permissions, enable ATS, populate and verify a coherent Realm line on each page, and mark each existing line Dirty. Translate each HPA through the endpoint HDM decoder and use a direct-DPA exerciser operation to replace the backing DCM value without changing the dirty cached value.
+      7. Configure the first snoop response to carry permitted MECID 1 and issue a protected Realm host read. Require the read to complete and return the dirty cached value rather than the distinct backing value; this calibrates the snoop-response path.
+      8. Configure the second snoop response to carry unpermitted MECID 0 and issue the same protected Realm host read. Fail if the read completes with the dirty cached value. A synchronous fault or the distinct backing value demonstrates that the host did not consume the unpermitted response. Treat any other normal-completion value as inconclusive and report partial coverage.
+      9. If response-MECID selection or the coherent cache-fill stimulus is unavailable, report PASSED PARTIAL after the mandatory D2H request checks pass. Otherwise require both request and response checks to pass.
+      10. Disable the response override, clear the DCM assignments, disable IDE, stop the TDISP session, and restore CXL.cache, ATS, SMMU, DPT, GPT, RID-range, PMECID, MEC, decoder, and RME-CDA state.
+
+      Note: The response-MECID operation is an implementation-defined exerciser stimulus. It does not expose a private host-port decision; ACS derives the response verdict from the architectural host read outcome and data. The HCM request check remains portable on systems that implement host memory encryption and SMMU MECID selection.
+
+  * -
+
       `cda_rstqhs_unknown_snoop_filter <../test_pool/cda/cda_rstqhs_unknown_snoop_filter.c>`_
 
     -
@@ -1783,10 +1806,10 @@ Testcase checklist
       1. Select a CHI-C2C-capable CXL root port and downstream exerciser endpoint, program a host-visible DCM window, and select three DCM pages. If an implementation-defined stimulus required by the test is unavailable, restore that endpoint and continue with the next eligible CHI-C2C endpoint. Skip the test only if no endpoint can provide all required stimuli.
       2. Configure Realm SMMU and DPT mappings for the DCM pages, enable ATS for the endpoint, program the endpoint RID in the RME-CDA RID range, and associate the pages with the endpoint TDI.
       3. Transition the TDI to RUN and establish the coherent-link IDE stream. Seed two DCM Locations, fetch each Location through an ATS-derived Realm translation, and copy the fetched data to a separate Non-secure verification page to confirm that the device-originated coherent read completed.
-      4. Mark the two populated device cache lines dirty. Reserve the third DCM page for repeatable device-to-host snoop and host CMO stimuli.
-      5. While the TDI is in RUN, issue a host demand read that requires a host-to-device snoop, dirty a PE cache line and clean it to generate a host-to-device request on the CHI REQ channel, then issue a TDI-attributed device-to-host Realm snoop. Use the exerciser's incoming coherent-transaction monitor to verify that the demand read and generated request reach the device interface, and verify that the device-to-host request is emitted. Match the generated request by its HPA because an upstream cache can consume the CMO and emit an ordinary cacheable writeback downstream. The test does not require a host-port monitoring interface.
+      4. Mark the two populated device cache lines dirty. Reserve the third DCM page for repeatable device-to-host snoop and host request stimuli.
+      5. While the TDI is in RUN, issue a host demand read that requires a host-to-device snoop, dirty a PE cache line and clean it to generate a host-to-device request on the CHI REQ channel, then issue a TDI-attributed device-to-host Realm snoop. Use the exerciser's incoming coherent-transaction monitor to verify that the demand read and generated request reach the device interface, and verify that the device-to-host request is emitted. Match the generated request by its HPA because the coherent writeback can be represented downstream as an ordinary cacheable write. The test does not require a host-port monitoring interface.
       6. Repopulate the PE cache line while Realm access remains permitted, then close the protected SPDM session to transition the TDI from RUN to ERROR without changing the DCM associations.
-      7. Repeat the host-to-device snoop with the second dirty device line, the host CMO with the staged PE line, and the device-to-host snoop. Verify through the exerciser interface that all three operation classes remain available in ERROR. A fault while consuming the ERROR-state snoop response is permitted because response poisoning is checked separately by RQWNBN.
+      7. Repeat the host-to-device snoop with the second dirty device line, the staged host writeback, and the device-to-host snoop. Verify through the exerciser interface that all three operation classes remain available in ERROR. A fault while consuming the ERROR-state snoop response is permitted because response poisoning is checked separately by RQWNBN.
       8. Clear the DCM associations, reset the endpoint out of ERROR, and restore ATS, SMMU, DPT, GPT, RID-range, decoder, and RME-CDA state.
 
   * -

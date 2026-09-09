@@ -701,7 +701,7 @@ exercise_rule(VAL_CDA_DCM_WINDOW_CONTEXT *context)
     goto cleanup;
   }
 
-  /* Stage the ERROR-state CMO while Realm access is still permitted in RUN. */
+  /* Stage the ERROR-state request while Realm access is still permitted in RUN. */
   if (prepare_host_request_line(alias[REQUEST_PAGE], REQUEST_VALUE)
       != ACS_STATUS_PASS)
   {

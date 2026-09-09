@@ -42,7 +42,6 @@
 #define RMECDA_CTL1_TDISP_EN_MASK 0x1u
 #define RMECDA_CTL1_LINK_STR_LOCK_MASK (1u << 1)
 #define DECODER_SLOT CXL_HDM_DECODER_SLOT_DEFAULT
-#define PGT_STAGE2_RME_NS_MASK (1ull << 55)
 #define DMA_TEST_LENGTH ((uint32_t)sizeof(uint64_t))
 #define SEC_SID_REALM_VALID ((1u << 31) | (1u << 1))
 

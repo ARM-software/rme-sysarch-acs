@@ -181,6 +181,9 @@ uint32_t val_get_exerciser_err_info(EXERCISER_ERROR_CODE type);
 uint32_t val_cxl_exerciser_execute_cmd(uint32_t bdf, uint32_t opcode,
                                        uint64_t address, uint64_t data,
                                        uint64_t *readback);
+uint32_t val_cxl_exerciser_set_snoop_response_mecid(uint32_t bdf,
+                                                     uint16_t mecid,
+                                                     uint32_t enable);
 /* Direct media backdoor operations take a device physical address (DPA). */
 uint32_t val_cxl_exerciser_backdoor_read64(uint32_t bdf, uint64_t dpa,
                                   uint64_t *readback);

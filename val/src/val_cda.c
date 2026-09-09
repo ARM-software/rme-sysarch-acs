@@ -39,8 +39,6 @@
 #define RMECDA_CTL4_RID_BASE_SHIFT        8u
 #define RMECDA_CTL4_RID_BASE_MASK         (0xFFFFu << RMECDA_CTL4_RID_BASE_SHIFT)
 #define RMECDA_CTL4_RID_RANGE_VALID_MASK  0x1u
-#define PGT_STAGE2_RME_NS_MASK            (1ull << 55)
-
 /**
   @brief  Attempt an attributed, permission-checked TDI snoop request.
 

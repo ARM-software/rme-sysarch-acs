@@ -728,6 +728,9 @@ typedef enum {
 #define CXL_CMD_OP_DCM_CACHE_DIRTY           0x4u
 #define CXL_CMD_OP_DCM_SET_REALM_ASSIGNMENT  0x6u
 #define CXL_CMD_OP_DCM_CACHE_WRITEBACK       0x8u
+/* data[15:0] selects the response MECID; data[16] enables the override. */
+#define CXL_CMD_OP_SNOOP_RESPONSE_MECID      0x9u
+#define CXL_SNOOP_RESPONSE_MECID_VALID       (1u << 16)
 #define CXL_SNOOP_RESULT_VALID                (1u << 0)
 #define CXL_SNOOP_RESULT_EMITTED              (1u << 1)
 #define CXL_SNOOP_RESULT_BLOCKED              (1u << 2)

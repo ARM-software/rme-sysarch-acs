@@ -407,28 +407,6 @@ start_dma(uint32_t endpoint_bdf,
 }
 
 static uint32_t
-buffer_has_pattern(uint64_t buffer_va, uint32_t length, uint32_t byte_pattern)
-{
-  uint32_t expected;
-  uint32_t value;
-
-  if ((buffer_va == 0u) || ((length % sizeof(uint32_t)) != 0u))
-    return ACS_STATUS_ERR;
-
-  /* Read through EL3 because the tested page is not always NS-accessible. */
-  expected = (byte_pattern & 0xFFu) * 0x01010101u;
-  for (uint32_t offset = 0u; offset < length; offset += sizeof(uint32_t))
-  {
-    if (val_memory_read_el3(buffer_va + offset, &value) != ACS_STATUS_PASS)
-      return ACS_STATUS_ERR;
-    if (value != expected)
-      return ACS_STATUS_FAIL;
-  }
-
-  return ACS_STATUS_PASS;
-}
-
-static uint32_t
 exercise_rule(const RSHSXK_DEVICE_CONTEXT *device)
 {
   RSHSXK_LINK_CONTEXT link;
@@ -726,9 +704,9 @@ exercise_rule(const RSHSXK_DEVICE_CONTEXT *device)
     goto cleanup;
   }
 
-  status = buffer_has_pattern((uint64_t)destination,
-                              page_size,
-                              RSHSXK_DST_PATTERN);
+  status = val_memory_has_byte_pattern_el3((uint64_t)destination,
+                                           page_size,
+                                           RSHSXK_DST_PATTERN);
   if (status != ACS_STATUS_PASS)
   {
     val_print(ACS_PRINT_ERR, " RSHSXK: GPC-denied D2H DMA modified HCM", 0);
@@ -848,9 +826,9 @@ exercise_rule(const RSHSXK_DEVICE_CONTEXT *device)
     goto cleanup;
   }
 
-  status = buffer_has_pattern((uint64_t)destination,
-                              page_size,
-                              RSHSXK_DST_PATTERN);
+  status = val_memory_has_byte_pattern_el3((uint64_t)destination,
+                                           page_size,
+                                           RSHSXK_DST_PATTERN);
   if (status != ACS_STATUS_PASS)
   {
     val_print(ACS_PRINT_ERR, " RSHSXK: DPT-denied D2H DMA modified HCM", 0);

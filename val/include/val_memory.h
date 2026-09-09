@@ -75,6 +75,9 @@ uint32_t val_memory_cache_clean_invalidate_range_el3(uint64_t address,
                                                       uint32_t length);
 uint32_t val_memory_cache_invalidate_range_el3(uint64_t address,
                                                 uint32_t length);
+uint32_t val_memory_has_byte_pattern_el3(uint64_t buffer_va,
+                                         uint32_t length,
+                                         uint32_t byte_pattern);
 uint32_t val_memory_compare_el3(uint64_t src_va, uint64_t dst_va, uint32_t size);
 uint32_t val_memory_compare_src_el3(uint32_t *src, uint32_t *dest, uint32_t size);
 uint32_t val_strnlen(const char8_t *str);

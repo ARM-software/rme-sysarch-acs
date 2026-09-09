@@ -40,8 +40,6 @@
 #define SMMU_R_IDR3_XT_MASK        (1u << 17)
 #define RMECDA_CTL1_TDISP_EN_MASK   0x1u
 #define RMECDA_CTL1_LINK_LOCK_MASK  (1u << 1)
-#define PGT_STAGE2_RME_NS_MASK      (1ull << 55)
-
 #if ENABLE_SPDM
 
 typedef struct {

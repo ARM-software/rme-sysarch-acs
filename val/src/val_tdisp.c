@@ -384,6 +384,93 @@ val_tdisp_vdm_set_interface(val_spdm_context_t *context,
 }
 
 /**
+  @brief  Configure the primary MECID of a CONFIG_UNLOCKED TDI.
+
+  The helper owns the temporary SPDM session and validates the success-path
+  SET_INTERFACE response before returning.
+
+  @param  endpoint_bdf  Endpoint BDF identifying the TDI.
+  @param  pmecid        Primary MECID to configure.
+
+  @return ACS_STATUS_PASS/SKIP/ERR, or ACS_STATUS_FAIL for a malformed
+          response or an interface in the wrong state.
+**/
+uint32_t
+val_tdisp_configure_pmecid(uint32_t endpoint_bdf, uint16_t pmecid)
+{
+#if ENABLE_SPDM
+  pci_tdisp_interface_id_t interface_id;
+  val_spdm_context_t spdm_ctx;
+  uint8_t response[VAL_TDISP_ARM_VDM_MAX_RSP_SIZE];
+  uint8_t tdi_state;
+  uint32_t response_size;
+  uint32_t session_id;
+  uint32_t status;
+
+  val_memory_set(&spdm_ctx, sizeof(spdm_ctx), 0);
+  val_memory_set(response, sizeof(response), 0);
+  interface_id.function_id = (uint32_t)PCIE_CREATE_BDF_PACKED(endpoint_bdf);
+  interface_id.reserved = 0ull;
+  session_id = 0u;
+
+  status = val_spdm_session_open(endpoint_bdf, &spdm_ctx, &session_id);
+  if (status != ACS_STATUS_PASS)
+    return status;
+
+  status = val_tdisp_get_interface_state(&spdm_ctx,
+                                          session_id,
+                                          &interface_id,
+                                          &tdi_state);
+  if (status != ACS_STATUS_PASS)
+    goto close_session;
+
+  if (tdi_state != PCI_TDISP_INTERFACE_STATE_CONFIG_UNLOCKED)
+  {
+    val_print(ACS_PRINT_INFO,
+              " TDISP: PMECID configuration requires CONFIG_UNLOCKED, state 0x%x",
+              (uint64_t)tdi_state);
+    status = ACS_STATUS_FAIL;
+    goto close_session;
+  }
+
+  response_size = (uint32_t)sizeof(response);
+  status = val_tdisp_vdm_set_interface(&spdm_ctx,
+                                        session_id,
+                                        &interface_id,
+                                        pmecid,
+                                        response,
+                                        &response_size);
+  if (status != ACS_STATUS_PASS)
+    goto close_session;
+
+  if ((response_size < VAL_TDISP_SET_IF_RESP_SIZE) ||
+      (response[VAL_TDISP_HDR_MSG_TYPE_OFF] != PCI_TDISP_VDM_RSP) ||
+      (response[VAL_TDISP_REQ_RESP_HDR_OFF +
+                VAL_TDISP_REQ_RESP_TYPE_OFF] !=
+       VAL_TDISP_ARM_MSG_SET_INTERFACE_RESP))
+  {
+    val_print(ACS_PRINT_ERR, " TDISP: invalid SET_INTERFACE response", 0);
+    status = ACS_STATUS_FAIL;
+  }
+
+close_session:
+  if (val_spdm_session_close(&spdm_ctx, session_id) != ACS_STATUS_PASS)
+  {
+    val_print(ACS_PRINT_ERR, " TDISP: SPDM session close failed", 0);
+    if (status == ACS_STATUS_PASS)
+      status = ACS_STATUS_FAIL;
+  }
+
+  return status;
+#else
+  (void)endpoint_bdf;
+  (void)pmecid;
+
+  return ACS_STATUS_SKIP;
+#endif
+}
+
+/**
   @brief  Send a raw Arm TDISP VDM request buffer.
 
   @param  context       SPDM context.
