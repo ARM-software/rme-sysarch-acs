@@ -403,7 +403,7 @@ pal_mem_allocate_shared(uint32_t num_pe, uint32_t sizeofentry)
    /* Place shared data in the shared region so all PEs can access it. */
    size = (uint64_t)num_pe * (uint64_t)sizeofentry;
    base = (uint64_t)PLATFORM_SHARED_REGION_BASE;
-   aligned = (base + 63u) & ~63u;
+   aligned = (base + 63ULL) & ~63ULL;
    if ((aligned + size) > ((uint64_t)PLATFORM_SHARED_REGION_BASE +
                            (uint64_t)PLATFORM_SHARED_REGION_SIZE)) {
      return;
