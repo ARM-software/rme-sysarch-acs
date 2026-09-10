@@ -87,8 +87,11 @@ start_realm_link(const VAL_CDA_DCM_WINDOW_CONTEXT *context,
                                    &link->interface_id);
   if (status != ACS_STATUS_PASS)
     return status;
+
   link->session_active = 1u;
 
+  /* Even a failed IDE setup can have installed keys that need to be stopped. */
+  link->ide_active = 1u;
   status = val_cxl_ide_establish_link(context->root_index,
                                       context->endpoint_index,
                                       &link->spdm_ctx,
@@ -96,7 +99,6 @@ start_realm_link(const VAL_CDA_DCM_WINDOW_CONTEXT *context,
   if (status != ACS_STATUS_PASS)
     return status;
 
-  link->ide_active = 1u;
   return ACS_STATUS_PASS;
 }
 
@@ -123,6 +125,8 @@ stop_realm_link(const VAL_CDA_DCM_WINDOW_CONTEXT *context,
                 RVPKVF_LINK_CONTEXT *link)
 {
   uint32_t result;
+  uint32_t status;
+  uint32_t recovered_from_error = 0u;
 
   if ((context == NULL) || (link == NULL))
     return ACS_STATUS_ERR;
@@ -130,34 +134,74 @@ stop_realm_link(const VAL_CDA_DCM_WINDOW_CONTEXT *context,
   result = ACS_STATUS_PASS;
   if (link->tdi_in_error != 0u)
   {
-    /* Reset is required because the SPDM session was intentionally closed. */
+    /* Recover the TDI and its BARs; a function reset need not stop link IDE. */
     if (val_cxl_unlock_tsp_best_effort(context->root_bdf,
                                        context->endpoint_bdf,
                                        &link->endpoint_cfg) != ACS_STATUS_PASS)
-      result = ACS_STATUS_FAIL;
+    {
+      val_print(ACS_PRINT_ERR, " RVPKVF: endpoint recovery failed for BDF 0x%x",
+                context->endpoint_bdf);
+      return ACS_STATUS_FAIL;
+    }
+
     link->tdi_in_error = 0u;
-    link->ide_active = 0u;
-    return result;
+
+    /* The session used by RUN was closed to induce ERROR and cannot be reused. */
+    status = val_spdm_session_open(context->endpoint_bdf,
+                                    &link->spdm_ctx,
+                                    &link->session_id);
+    if (status != ACS_STATUS_PASS)
+    {
+      val_print(ACS_PRINT_ERR, " RVPKVF: recovery session failed for BDF 0x%x",
+                context->endpoint_bdf);
+      return ACS_STATUS_FAIL;
+    }
+
+    link->session_active = 1u;
+    recovered_from_error = 1u;
   }
 
   if (link->ide_active != 0u)
   {
+    /* Stop both directions and verify endpoint/root-port IDE are INSECURE. */
     if (val_cxl_ide_disable_link(context->root_index,
                                  context->endpoint_index,
                                  &link->spdm_ctx,
                                  link->session_id) != ACS_STATUS_PASS)
+    {
+      val_print(ACS_PRINT_ERR, " RVPKVF: IDE cleanup failed for BDF 0x%x",
+                context->endpoint_bdf);
       result = ACS_STATUS_FAIL;
-    link->ide_active = 0u;
+    }
+    else
+    {
+      link->ide_active = 0u;
+      val_print(ACS_PRINT_DEBUG, " RVPKVF: IDE cleanup complete for BDF 0x%x",
+                context->endpoint_bdf);
+    }
+
   }
 
   if (link->session_active != 0u)
   {
-    if (val_tdisp_stop_if_needed(&link->spdm_ctx,
-                                 link->session_id,
-                                 &link->interface_id,
-                                 0u) != ACS_STATUS_PASS)
+    /* Reset already recovered the TDI; the new session owns only IDE cleanup. */
+    if (recovered_from_error != 0u)
+      status = val_spdm_session_close(&link->spdm_ctx, link->session_id);
+    else
+      status = val_tdisp_stop_if_needed(&link->spdm_ctx,
+                                         link->session_id,
+                                         &link->interface_id,
+                                         0u);
+
+    if (status != ACS_STATUS_PASS)
+    {
+      val_print(ACS_PRINT_ERR, " RVPKVF: session cleanup failed for BDF 0x%x",
+                context->endpoint_bdf);
       result = ACS_STATUS_FAIL;
+    }
+
     link->session_active = 0u;
+    link->session_id = 0u;
   }
 
   return result;
@@ -346,7 +390,7 @@ check_host_to_device_request(uint32_t endpoint_bdf,
   if (observed == 0u)
   {
     val_print((baseline != 0u) ? ACS_PRINT_INFO : ACS_PRINT_ERR,
-              " RVPKVF: host request did not reach HPA 0x%llx",
+              " RVPKVF: no host request observed for HPA 0x%llx",
               target_hpa);
     return (baseline != 0u) ? ACS_STATUS_SKIP : ACS_STATUS_FAIL;
   }
@@ -359,9 +403,10 @@ check_host_to_device_request(uint32_t endpoint_bdf,
 }
 
 /*
- * Leave a dirty Realm copy in the PE cache. The following cache clean and
- * invalidate must then issue a coherent request instead of completing as a
- * local cache miss.
+ * Dirty a Realm copy in the PE cache while the TDI is in RUN. Cache residency
+ * is not guaranteed across the state transition, so minimize work before the
+ * monitored clean and invalidate. Only traffic observed in that capture can
+ * satisfy the host-request check.
  */
 static uint32_t
 prepare_host_request_line(volatile uint64_t *target_alias, uint64_t value)
@@ -389,18 +434,19 @@ run_state_checks(uint32_t endpoint_bdf,
 {
   uint32_t status;
 
+  /* Check the staged host line before a snoop, fault handler, or trace dump. */
+  status = check_host_to_device_request(endpoint_bdf,
+                                        request_hpa,
+                                        request_alias,
+                                        baseline);
+  if (status != ACS_STATUS_PASS)
+    return status;
+
   status = check_host_to_device_snoop(endpoint_bdf,
                                       snoop_hpa,
                                       snoop_alias,
                                       snoop_value,
                                       baseline);
-  if (status != ACS_STATUS_PASS)
-    return status;
-
-  status = check_host_to_device_request(endpoint_bdf,
-                                        request_hpa,
-                                        request_alias,
-                                        baseline);
   if (status != ACS_STATUS_PASS)
     return status;
 
@@ -426,6 +472,8 @@ exercise_rule(VAL_CDA_DCM_WINDOW_CONTEXT *context)
   uint32_t ats_cap_base;
   uint32_t ats_ctrl_orig;
   uint32_t ats_enabled;
+  uint32_t cache_enable_orig;
+  uint32_t cache_enable_saved;
   uint32_t dcm_dpt_mask;
   uint32_t dpt_coverage_configured;
   uint32_t gpt_mask;
@@ -462,6 +510,8 @@ exercise_rule(VAL_CDA_DCM_WINDOW_CONTEXT *context)
   ats_cap_base = 0u;
   ats_ctrl_orig = 0u;
   ats_enabled = 0u;
+  cache_enable_orig = 0u;
+  cache_enable_saved = 0u;
   dcm_dpt_mask = 0u;
   dpt_coverage_configured = 0u;
   gpt_mask = 0u;
@@ -620,6 +670,33 @@ exercise_rule(VAL_CDA_DCM_WINDOW_CONTEXT *context)
     assigned_mask |= (1u << index);
   }
 
+  /*
+   * Configure the advertised cache capability used by the exerciser stimulus.
+   * Do not depend on an earlier test leaving it enabled. Save the original
+   * value before writing so cleanup also covers a failed enable/readback.
+   */
+  status = val_cxl_get_cache_enable(context->endpoint_bdf, &cache_enable_orig);
+  if (status != ACS_STATUS_PASS)
+  {
+    val_print((status == ACS_STATUS_SKIP) ? ACS_PRINT_INFO : ACS_PRINT_ERR,
+              " RVPKVF: cache capability/state unavailable, status 0x%x", status);
+    result = status;
+    goto cleanup;
+  }
+
+  cache_enable_saved = 1u;
+  val_print(ACS_PRINT_INFO, " RVPKVF: initial CXL.cache enable %u", cache_enable_orig);
+  status = val_cxl_enable_cache(context->endpoint_bdf);
+  if (status != ACS_STATUS_PASS)
+  {
+    val_print(ACS_PRINT_ERR, " RVPKVF: CXL.cache enable failed, status 0x%x", status);
+    result = ACS_STATUS_FAIL;
+    goto cleanup;
+  }
+
+  /* The VAL helper verifies the enable bit by reading it back. */
+  val_print(ACS_PRINT_INFO, " RVPKVF: CXL.cache enabled and verified", 0);
+
   status = start_realm_link(context, &link);
   if (status != ACS_STATUS_PASS)
   {
@@ -677,6 +754,7 @@ exercise_rule(VAL_CDA_DCM_WINDOW_CONTEXT *context)
     goto cleanup;
   }
 
+  val_print(ACS_PRINT_INFO, " RVPKVF: preparing operations in TDI RUN", 0);
   if (prepare_host_request_line(alias[REQUEST_PAGE], REQUEST_VALUE)
       != ACS_STATUS_PASS)
   {
@@ -687,7 +765,6 @@ exercise_rule(VAL_CDA_DCM_WINDOW_CONTEXT *context)
     goto cleanup;
   }
 
-  val_print(ACS_PRINT_INFO, " RVPKVF: checking operations in TDI RUN", 0);
   status = run_state_checks(context->endpoint_bdf,
                             page[RUN_SNOOP_PAGE],
                             alias[RUN_SNOOP_PAGE],
@@ -702,6 +779,8 @@ exercise_rule(VAL_CDA_DCM_WINDOW_CONTEXT *context)
   }
 
   /* Stage the ERROR-state request while Realm access is still permitted in RUN. */
+  val_print(ACS_PRINT_INFO,
+            " RVPKVF: staging host line in RUN before transition to ERROR", 0);
   if (prepare_host_request_line(alias[REQUEST_PAGE], REQUEST_VALUE)
       != ACS_STATUS_PASS)
   {
@@ -719,7 +798,7 @@ exercise_rule(VAL_CDA_DCM_WINDOW_CONTEXT *context)
     goto cleanup;
   }
 
-  val_print(ACS_PRINT_INFO, " RVPKVF: checking operations in TDI ERROR", 0);
+  /* Check the staged host request immediately after the TDI state transition. */
   status = run_state_checks(context->endpoint_bdf,
                             page[ERROR_SNOOP_PAGE],
                             alias[ERROR_SNOOP_PAGE],
@@ -816,6 +895,23 @@ cleanup:
     val_pcie_write_cfg(context->endpoint_bdf,
                        ats_cap_base + ATS_CTRL,
                        ats_ctrl_orig);
+
+  /* Restore after recovery, which may reset the endpoint configuration. */
+  if (cache_enable_saved != 0u)
+  {
+    if (val_cxl_set_cache_enable(context->endpoint_bdf, cache_enable_orig)
+        != ACS_STATUS_PASS)
+    {
+      val_print(ACS_PRINT_ERR, " RVPKVF: CXL.cache enable restore failed", 0);
+      result = ACS_STATUS_FAIL;
+    }
+    else
+    {
+      val_print(ACS_PRINT_DEBUG, " RVPKVF: restored CXL.cache enable %u",
+                cache_enable_orig);
+    }
+
+  }
 
   if (verify_va != NULL)
     val_memory_free_pages(verify_va, 1u);

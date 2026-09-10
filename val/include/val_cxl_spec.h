@@ -45,13 +45,17 @@
 
 /* Per-entry fields (offsets from start of an entry)
    DW0 layout (little endian):
-     [7:0]   BAR Indicator (BAR number in [2:0]; upper bits reserved)
+     [2:0]   BAR Indicator
+     [7:3]   Reserved
      [15:8]  Block Identifier (8-bit)
-     [31:16] Reserved
-   DW1: 32-bit Register Offset (relative to BAR base)
+     [31:16] Register Block Offset A[31:16]
+   DW1: Register Block Offset A[63:32]
+   The offset is relative to the BAR base and 64-KB aligned (A[15:0] = 0).
 */
 #define CXL_RL_ENTRY_DW0_OFF            0x00
-#define CXL_RL_ENTRY_REG_OFF            0x04    /* 32b offset */
+#define CXL_RL_ENTRY_REG_OFF            0x04    /* Register Offset High */
+#define CXL_RL_BLOCK_OFFSET(dw0, dw1) \
+    (((uint64_t)(dw1) << 32) | ((uint64_t)(dw0) & 0xFFFF0000u))
 
 /* Block IDs commonly seen (8-bit identifiers per RL DW0[15:8]) */
 #define CXL_REG_BLOCK_COMPONENT         0x01    /* CXL Component Registers */
@@ -61,7 +65,7 @@
 #define CXL_RL_BAR_NUM(b)               ((b) & 0x7)
 #define CXL_RL_BAR_IS_64B(b)            (((b) >> 7) & 0x1)
 
-/* CXL.cachemem Primary range offset (per CXL 3.1 Table 8-21): BAR + 4KB */
+/* CXL.cachemem Primary range: 4KB from the Component Register Block base. */
 #ifndef CXL_CACHEMEM_PRIMARY_OFFSET
 #define CXL_CACHEMEM_PRIMARY_OFFSET     0x1000
 #endif
@@ -152,7 +156,7 @@
 
 /* ---- CXL Register Locator entry fields (DW0) ---- */
 #define CXL_RL_ENTRY_BIR_SHIFT         0
-#define CXL_RL_ENTRY_BIR_MASK          0xFF
+#define CXL_RL_ENTRY_BIR_MASK          0x7
 #define CXL_RL_ENTRY_BLOCKID_SHIFT     8
 #define CXL_RL_ENTRY_BLOCKID_MASK      0xFF
 

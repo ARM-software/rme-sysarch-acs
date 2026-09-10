@@ -65,6 +65,7 @@ uint32_t cda_rstqhs_unknown_snoop_filter_entry(uint32_t num_pe);
 uint32_t cda_rvpkvf_tdi_state_independent_entry(uint32_t num_pe);
 uint32_t cda_rhdxtm_dcm_scrub_entry(uint32_t num_pe);
 uint32_t cda_rdrvtk_d2h_mecid_entry(uint32_t num_pe);
+uint32_t cda_rnvwmc_device_interface_support_entry(uint32_t num_pe);
 
 uint32_t val_cda_find_downstream_chi_c2c_exerciser_endpoint(uint32_t root_bdf,
                                                             uint32_t *endpoint_bdf_out);

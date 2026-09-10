@@ -1103,6 +1103,96 @@ cleanup:
 }
 
 /**
+  @brief  Retrieve all measurements through an established SPDM secure session.
+
+  libspdm checks the response framing and measurement records. The session
+  protects the exchange, so a separate measurement signature is not requested.
+  Success does not attest the device: certificate trust and comparison against
+  an approved measurement policy remain the caller's responsibility.
+
+  @param  block_count  Receives the number of measurement blocks.
+  @param  record_size  Buffer capacity on input, record length on success.
+  @param  record       Caller-owned buffer for the measurement record.
+
+  @return PASS on retrieval, FAIL on a protocol/record error, SKIP if the local
+          measurement support or buffer capacity is insufficient, ERR on bad input.
+**/
+uint32_t
+val_spdm_get_measurements(val_spdm_context_t *context,
+                           uint32_t session_id,
+                           uint8_t *block_count,
+                           uint32_t *record_size,
+                           uint8_t *record)
+{
+#if ENABLE_SPDM && LIBSPDM_ENABLE_CAPABILITY_MEAS_CAP
+  libspdm_data_parameter_t parameter;
+  libspdm_return_t status;
+  uint32_t caps;
+  size_t size = sizeof(caps);
+  uint8_t total = 0u;
+
+  if ((context == NULL) || (context->spdm_context == NULL) ||
+      (session_id == 0u) || (block_count == NULL) ||
+      (record_size == NULL) || (*record_size == 0u) || (record == NULL))
+    return ACS_STATUS_ERR;
+
+  *block_count = 0u;
+  val_memory_set(&parameter, sizeof(parameter), 0);
+  parameter.location = LIBSPDM_DATA_LOCATION_CONNECTION;
+  status = libspdm_get_data(context->spdm_context, LIBSPDM_DATA_CAPABILITY_FLAGS,
+                            &parameter, &caps, &size);
+  if (LIBSPDM_STATUS_IS_ERROR(status))
+    return ACS_STATUS_ERR;
+
+  caps &= SPDM_GET_CAPABILITIES_RESPONSE_FLAGS_MEAS_CAP;
+  if ((caps != SPDM_GET_CAPABILITIES_RESPONSE_FLAGS_MEAS_CAP_NO_SIG) &&
+      (caps != SPDM_GET_CAPABILITIES_RESPONSE_FLAGS_MEAS_CAP_SIG))
+  {
+    val_print(ACS_PRINT_ERR, " SPDM: measurement capability unavailable/invalid 0x%x", caps);
+    return ACS_STATUS_FAIL;
+  }
+
+  status = libspdm_get_measurement(context->spdm_context, &session_id, 0u,
+              SPDM_GET_MEASUREMENTS_REQUEST_MEASUREMENT_OPERATION_TOTAL_NUMBER_OF_MEASUREMENTS,
+              0u, NULL, &total, NULL, NULL);
+  if (LIBSPDM_STATUS_IS_ERROR(status))
+  {
+    val_print(ACS_PRINT_ERR, " SPDM: measurement count query failed 0x%x", status);
+    return ACS_STATUS_FAIL;
+  }
+
+  status = libspdm_get_measurement(context->spdm_context, &session_id, 0u,
+              SPDM_GET_MEASUREMENTS_REQUEST_MEASUREMENT_OPERATION_ALL_MEASUREMENTS,
+              0u, NULL, block_count, record_size, record);
+  if (status == LIBSPDM_STATUS_BUFFER_TOO_SMALL)
+  {
+    val_print(ACS_PRINT_INFO, " SPDM: measurement record exceeds the supplied buffer", 0);
+    return ACS_STATUS_SKIP;
+  }
+  if (LIBSPDM_STATUS_IS_ERROR(status))
+  {
+    val_print(ACS_PRINT_ERR, " SPDM: measurement retrieval failed 0x%x", status);
+    return ACS_STATUS_FAIL;
+  }
+
+  if ((total == 0u) || (*block_count != total) || (*record_size == 0u))
+  {
+    val_print(ACS_PRINT_ERR, " SPDM: inconsistent measurement block count %u", *block_count);
+    return ACS_STATUS_FAIL;
+  }
+  return ACS_STATUS_PASS;
+#else
+  (void)context;
+  (void)session_id;
+  (void)block_count;
+  (void)record_size;
+  (void)record;
+  val_print(ACS_PRINT_INFO, " SPDM: measurement requester support is disabled", 0);
+  return ACS_STATUS_SKIP;
+#endif
+}
+
+/**
   @brief  Terminate an SPDM secure session.
 
   @param  context     Initialised VAL SPDM context.

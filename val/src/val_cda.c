@@ -101,6 +101,7 @@ val_cda_tdi_snoop_attempt(uint32_t endpoint_bdf,
   @param  value        Value used to initialize the target Location.
 
   @return ACS_STATUS_PASS when initialization and cache population complete.
+          ACS_STATUS_ERR on an access fault or a data mismatch.
 **/
 uint32_t
 val_cda_seed_realm_cache_line(uint64_t target_hpa,
@@ -109,8 +110,8 @@ val_cda_seed_realm_cache_line(uint64_t target_hpa,
 {
   volatile uint64_t *seed_alias;
   uint64_t observed;
-  uint32_t observed_high;
-  uint32_t observed_low;
+  uint64_t esr;
+  uint32_t fault_seen;
 
   if ((target_hpa == 0u) || (realm_alias == NULL))
     return ACS_STATUS_ERR;
@@ -124,14 +125,24 @@ val_cda_seed_realm_cache_line(uint64_t target_hpa,
   if ((val_memory_write_el3((uint64_t)seed_alias,
                             (uint32_t)value) != ACS_STATUS_PASS) ||
       (val_memory_write_el3((uint64_t)seed_alias + sizeof(uint32_t),
-                            (uint32_t)(value >> 32)) != ACS_STATUS_PASS) ||
-      (val_memory_read_el3((uint64_t)seed_alias,
-                           &observed_low) != ACS_STATUS_PASS) ||
-      (val_memory_read_el3((uint64_t)seed_alias + sizeof(uint32_t),
-                           &observed_high) != ACS_STATUS_PASS))
+                            (uint32_t)(value >> 32)) != ACS_STATUS_PASS))
     return ACS_STATUS_ERR;
 
-  observed = ((uint64_t)observed_high << 32) | observed_low;
+  /* Recover unexpected read aborts so setup fails without terminating the suite. */
+  fault_seen = 0u;
+  esr = 0u;
+  if ((val_memory_read64_el3_protected_with_esr(seed_alias,
+                                                &observed,
+                                                &fault_seen,
+                                                &esr) != ACS_STATUS_PASS) ||
+      (fault_seen != 0u))
+  {
+    val_print(ACS_PRINT_ERR, " CDA: Realm backing read failed at HPA 0x%llx", target_hpa);
+    val_print(ACS_PRINT_ERR, " CDA: backing read VA 0x%llx", (uint64_t)seed_alias);
+    val_print(ACS_PRINT_ERR, " CDA: backing read ESR_EL3 0x%llx", esr);
+    return ACS_STATUS_ERR;
+  }
+
   if (observed != value)
   {
     val_print(ACS_PRINT_ERR,
@@ -144,13 +155,20 @@ val_cda_seed_realm_cache_line(uint64_t target_hpa,
   }
 
   /* Read through the cacheable alias to establish a clean coherent line. */
-  if ((val_memory_read_el3((uint64_t)realm_alias,
-                           &observed_low) != ACS_STATUS_PASS) ||
-      (val_memory_read_el3((uint64_t)realm_alias + sizeof(uint32_t),
-                           &observed_high) != ACS_STATUS_PASS))
+  fault_seen = 0u;
+  esr = 0u;
+  if ((val_memory_read64_el3_protected_with_esr(realm_alias,
+                                                &observed,
+                                                &fault_seen,
+                                                &esr) != ACS_STATUS_PASS) ||
+      (fault_seen != 0u))
+  {
+    val_print(ACS_PRINT_ERR, " CDA: Realm cache-line fill failed at HPA 0x%llx", target_hpa);
+    val_print(ACS_PRINT_ERR, " CDA: cache-line fill VA 0x%llx", (uint64_t)realm_alias);
+    val_print(ACS_PRINT_ERR, " CDA: cache-line fill ESR_EL3 0x%llx", esr);
     return ACS_STATUS_ERR;
+  }
 
-  observed = ((uint64_t)observed_high << 32) | observed_low;
   if (observed != value)
   {
     val_print(ACS_PRINT_ERR,
