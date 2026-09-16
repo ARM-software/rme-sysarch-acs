@@ -1,18 +1,28 @@
-From e420d18739f0791fd8a6b1d694df1ae015d96e8a Mon Sep 17 00:00:00 2001
 From: Shyamanth RH <shyamanth.rh@arm.com>
-Date: Mon, 9 Jun 2025 07:49:16 +0000
-Subject: [PATCH] build script patch
+Date: Mon, 17 Aug 2026 00:00:00 +0000
+Subject: [PATCH] rdv3: enable the external RME ACS EL3 handler
+
+Build TF-A with the upstream vendor ACS service enabled and disable branch
+protection for the standalone ACS EL3 relink.
 
 Signed-off-by: Shyamanth RH <shyamanth.rh@arm.com>
 ---
- configs/rdv3/rdv3 | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+ configs/rdv3/rdv3 | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
 
 diff --git a/configs/rdv3/rdv3 b/configs/rdv3/rdv3
-index 21bb644..0bd29a3 100755
 --- a/configs/rdv3/rdv3
 +++ b/configs/rdv3/rdv3
-@@ -100,7 +100,7 @@ fi
+@@ -79,7 +79,7 @@ TF_A_ENABLE_SPM=0
+ TF_A_RAS_FW_FIRST=0
+ TF_A_BL31_IN_DRAM=0
+ TF_A_ENABLE_MPAM_FOR_LOWER_ELS=1
+-TF_A_BUILD_FLAGS="RME_GPT_BITLOCK_BLOCK=0"
++TF_A_BUILD_FLAGS="RME_GPT_BITLOCK_BLOCK=0 ENABLE_ACS_SMC=1"
+ TF_A_PLATFORM_VARIANT=0
+ TF_A_BUILD_VARIANT="rdv3"
+ TF_A_BUILD_FLAGS="$TF_A_BUILD_FLAGS NRD_PLATFORM_VARIANT=$TF_A_PLATFORM_VARIANT"
+@@ -101,7 +101,7 @@ fi
  
  
  if [ "$TF_A_ENABLE_SEL2_SPMC" == "1" ]; then
@@ -23,4 +33,3 @@ index 21bb644..0bd29a3 100755
  	fi
 -- 
 2.43.0
-

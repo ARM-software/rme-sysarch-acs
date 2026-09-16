@@ -40,7 +40,13 @@ payload(void)
                                           table_entries,
                                           VAL_DVSEC_SELECT_RMEDA);
 
-  if (ret)
+  if (ret == ACS_STATUS_SKIP)
+  {
+      val_print(ACS_PRINT_TEST,
+                " No PCIe RME-DA DVSEC instances discovered, skipping", 0);
+      val_set_status(pe_index, "SKIP", 01);
+  }
+  else if (ret != 0u)
       val_set_status(pe_index, "FAIL", 01);
   else
       val_set_status(pe_index, "PASS", 01);

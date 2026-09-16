@@ -31,23 +31,40 @@ build:
   tfa:
     repo:
       remote: https://git.trustedfirmware.org/TF-A/trusted-firmware-a.git
-      revision: v2.13.0
+      revision: v2.15.0
 
     params:
       BRANCH_PROTECTION: 0
-      ACS_HOME: ${btvar:ACS_PATH}
+      ENABLE_ACS_SMC: 1
       FVP_TRUSTED_SRAM_SIZE: 512
 
     prebuild:
       - git fetch --tags --force
-      - git checkout -f v2.13.0
+      - git checkout -f v2.15.0
       - git clean -fdx
       - git apply --3way ${btvar:TFA_PATCHES}/*.patch
+
+    postbuild:
+      - >-
+        make -C ${btvar:ACS_PATH}/val_el3
+        TFA_PATH=${param:sourcedir}
+        TFA_BUILD_DIR=${param:builddir}/fvp/debug
+        PLAT=fvp PAL_EL3_PLAT=FVP clean all
+      - >-
+        cp ${param:builddir}/fvp/debug/bl31/bl31_new.bin
+        ${param:builddir}/fvp/debug/bl31.bin
+      - >-
+        cp ${param:builddir}/fvp/debug/bl31/bl31_new.elf
+        ${param:builddir}/fvp/debug/bl31/bl31.elf
+      - >-
+        tools/fiptool/fiptool update
+        --soc-fw ${param:builddir}/fvp/debug/bl31.bin
+        ${param:builddir}/fvp/debug/fip.bin
 
   rmm:
     repo:
       remote: https://git.trustedfirmware.org/TF-RMM/tf-rmm.git
-      revision: tf-rmm-v0.7.0
+      revision: tf-rmm-v0.9.0
 
     params:
       -DRMM_MAX_GRANULES: 0x100900
@@ -59,9 +76,19 @@ build:
       - rm -rf .rmm_venv
 
   dt:
+    sync: false
     repo:
-      remote:  --depth 1 --branch v6.17-dts https://git.kernel.org/pub/scm/linux/kernel/git/devicetree/devicetree-rebasing.git
+      remote: https://git.kernel.org/pub/scm/linux/kernel/git/devicetree/devicetree-rebasing.git
       revision: v6.17-dts
+    prebuild:
+      - if [ ! -d .git ]; then git init; fi
+      - git remote remove origin >/dev/null 2>&1 || true
+      - git remote add origin https://git.kernel.org/pub/scm/linux/kernel/git/devicetree/devicetree-rebasing.git
+      - >-
+        git fetch --depth=1 --no-tags --force origin
+        refs/tags/v6.17-dts
+      - git checkout --detach --force FETCH_HEAD
+      - git clean -fdx
 
 buildex:
   btvars:

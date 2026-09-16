@@ -34,6 +34,8 @@ Most of the tests are executed from UEFI Shell by executing the RME UEFI shell a
   - To get the latest version of the code with bug fixes and new features, use the master branch.
 
 ## Additional reading
+  - For PCIe and CXL exerciser requirements, see the [RME System ACS Exerciser requirements](Docs/Exerciser.md).
+  - For details on porting the exerciser PAL APIs, see the [RME System ACS Exerciser API porting guide](Docs/Exerciser_API_porting_guide.md).
   - For information about the implementable RME rules test algorithm and for unimplemented RME rules, see [arm RME System ACS Scenario document](Docs/Arm_RME_System_Architecture_Compliance_Suite_Scenario_Document.rst)
   - For details on the RME System ACS UEFI Shell Application, see [arm RME System ACS Porting guide document](Docs/Arm_RME_System_ACS_Platform_porting_guide.rst).
   - For details on the Design of the RME System ACS, see. the [arm RME System ACS Validation Methodology document](Docs/Arm_RME_System_Architecture_Compliance_Suite_Validation_Methodology.pdf)
@@ -46,7 +48,7 @@ Most of the tests are executed from UEFI Shell by executing the RME UEFI shell a
 
 ### Prerequisites
     ACK test requires to execute the code at EL3 for GPT/MMU modification, so ensure that the following requirements are met.
-- When Non-secure EL2 executes 'smc' with SMC FID, 0xC2000060, EL3 Firmware is expected to branch to plat_arm_acs_smc_handler function which is predefined in ACK.
+- When Non-secure EL2 executes 'smc' with SMC FID, 0xC7000030, EL3 Firmware is expected to branch to plat_arm_acs_smc_handler function which is predefined in ACK.
 - To generate binary file for EL3 code, follow the build steps in README of val_el3.
 - 2MB memory must be flat mapped in EL3-MMU with Root access PAS and GPI as ROOT/ALL_ACCESS, which is used for MMU tables in EL3.
 - 2MB Free memory which is used as PA in tests.

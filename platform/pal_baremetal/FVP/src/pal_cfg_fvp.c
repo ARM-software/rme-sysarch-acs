@@ -18,6 +18,19 @@
 #include "../include/pal_common_support.h"
 #include "include/pal_override_struct.h"
 
+/**
+  @brief  Exit ACS execution on the bare-metal platform.
+
+  @return Zero if execution resumes after the platform halt loop.
+**/
+uint32_t
+pal_exit_acs(void)
+{
+  while (1);
+
+  return 0;
+}
+
 /* Populate the skip array with the module or test names to be excluded from the run */
 char8_t *g_skip_array[] = {"da_autonomous_rootport_request_ns_pas"};
 char8_t *g_test_array[]    = {};

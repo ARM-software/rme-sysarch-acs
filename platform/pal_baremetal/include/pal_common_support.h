@@ -94,7 +94,7 @@ void *mem_alloc(size_t alignment, size_t size);
       pal_print(string, ##__VA_ARGS__);                                 \
       /* Print file name and line number for ERR and WARN */            \
       if (level == ACS_PRINT_ERR || level == ACS_PRINT_WARN) {          \
-          pal_print("\n  [FILE: %s]", (uint64_t)FILENAME);              \
+          pal_print("  [FILE: %s]", (uint64_t)FILENAME);              \
           pal_print("  [LINE: %d]", __LINE__);                          \
       }                                                                 \
     }                                                                   \
