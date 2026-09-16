@@ -389,7 +389,7 @@ uint32_t val_pgt_create(memory_region_descriptor_t *mem_desc, pgt_descriptor_t *
         if (mem_desc_iter->virtual_address >= (0x1ull << pgt_desc->ias))
         {
             val_print(ACS_PRINT_WARN, " val_pgt_create: input address size error \
-                            and truncating to %d-bits   ", pgt_desc->ias);
+                            and truncating to %d-bits", pgt_desc->ias);
             mem_desc_iter->virtual_address &= ((0x1ull << pgt_desc->ias) - 1);
         }
 
@@ -484,7 +484,7 @@ uint32_t val_realm_pgt_create(memory_region_descriptor_t *mem_desc, pgt_descript
         if (mem_desc_iter->virtual_address >= (0x1ull << pgt_desc->ias))
             {
             val_print(ACS_PRINT_WARN, " val_pgt_create: input address size error \
-                            and truncating to %d-bits   ", pgt_desc->ias);
+                            and truncating to %d-bits", pgt_desc->ias);
             mem_desc_iter->virtual_address &= ((0x1ull << pgt_desc->ias) - 1);
             }
 

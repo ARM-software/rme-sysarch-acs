@@ -48,6 +48,11 @@ void payload(void)
 
   mem_region_cfg = val_mem_gpc_info_table();
   num_regn = mem_region_cfg->header.num_of_regn_gpc;
+  if (num_regn == 0) {
+    val_print(ACS_PRINT_WARN, " No GPC protected regions provided by the platform", 0);
+    val_set_status(index, "SKIP", 01);
+    return;
+  }
   VA = val_get_free_va(num_regn * NUM_PAS * size);
   attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(NON_SHAREABLE) | PGT_ENTRY_AP_RW);
 

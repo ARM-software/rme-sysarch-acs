@@ -2252,6 +2252,27 @@ The following rules are out of compliance scope due to the following reasons:
 
         RQNTYC: The PCIe segment and RIDs that are allocated to an RCiEP are either defined statically or configured using an RMSD write-protect register.
 
+    * - MEC
+      - RRQZBK: Memory-mapped data structures that store encryption contexts must reside in SMEM in the Root PAS, such as MSD SMEM.
+
+    * - CDA
+      - RZTQYT: An RME-CDA coherent device is not permitted to send CHI requests with DVMOp or SnpDVMOp opcodes.
+
+    * - CTC / Multi-chip
+      - RGZMNH: An RME system reset in a multi-chip system affects all nodes.
+
+        RHXJRC: If an RME system supports 4 MPAM PARTID spaces, the CTC interface transports the MPAM_SP[1:0] indication.
+
+        RCMMZS: A CTC interface that is vulnerable to physical attacks, for example by external probing or manipulation of traffic, supports Link protection in the form of cryptographic encryption and integrity protection.
+
+        RVZCPW: The security level and cryptographic strength of Link protection is equivalent to IDE [4] or better. This means that: The encryption algorithm and cryptographic parameter sizes (MAC, IV, Key) are as supported by IDE or better. There is encryption of at least the payload data of transmitted packets. There is integrity protection against corruption, drop, replay, and reorder of packets.
+
+        RMSRGY: Link protection is mandatory for both: Transactions associated with a PA in the Root, Realm and Secure physical address spaces. Transactions not associated with a physical address space, for example DVM messages.
+
+        RKYCPH: The following CTC interface registers are implemented as MSD-Protected registers or as measurable registers: CTC programming registers that allow reading or modifying transaction parameters such as packet address or data, or that could cause corruption, drop, replay, or reorder of packets, either: Before Link protection is applied (for outgoing traffic). After the Link protection check (for incoming traffic). CTC programming registers that control Link protection context and properties, for example key programming registers and enable bits.
+
+        RLXPMB: Establishing a global system state complies with all the following: If a Debug Authentication Interface signal is enabled for one node, it is enabled for the system. The lifecycle state of the system is set to Secure only if it is Secure for all nodes. For memory-mapped Resources, the value of the PA through which a Resource can be reached is the same across all nodes. All nodes observe the same GPT information at any level of the GPT.
+
     * - Miscellaneous
       - RDFYXL: In an RME system, any access by a requester and any instruction executed by a PE is associated with a single Security state.
 

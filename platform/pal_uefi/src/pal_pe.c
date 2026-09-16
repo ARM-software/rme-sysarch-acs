@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022,2025, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022, 2025-2026, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -31,7 +31,8 @@ UINT64  gMpidrMax;
 static UINT32 g_num_pe;
 extern INT32 gPsciConduit;
 
-#define SIZE_STACK_SECONDARY_PE  0x100		//256 bytes per core
+/* Set 4KB stack size for secondary PEs */
+#define SIZE_STACK_SECONDARY_PE  0x1000
 #define UPDATE_AFF_MAX(src,dest,mask)  ((dest & mask) > (src & mask) ? (dest & mask) : (src & mask))
 
 UINT64

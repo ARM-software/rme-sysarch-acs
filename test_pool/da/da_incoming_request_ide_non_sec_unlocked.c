@@ -56,6 +56,12 @@ payload(void)
   dma_len = test_data_blk_size / 2;
 
   num_exercisers = val_exerciser_get_info(EXERCISER_NUM_CARDS);
+  if (num_exercisers == 0)
+  {
+    val_print(ACS_PRINT_WARN, " No exerciser cards discovered", 0);
+    val_set_status(pe_index, "SKIP", 01);
+    return;
+  }
 
   for (instance = 0; instance < num_exercisers; ++instance)
   {

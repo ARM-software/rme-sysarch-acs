@@ -49,21 +49,17 @@
  * 8. Expect unsuccessful access.
  */
 static
-void
-payload(void)
+uint32_t
+run_smmu_gpt_tlb_sequence(uint32_t instance, uint32_t e_bdf, uint32_t smmu_index,
+                          uint32_t cap_base, uint32_t num_smmus)
 {
-  uint32_t pe_index;
   uint32_t dma_len = 0, attr = 0;
-  uint32_t instance = 0;
-  uint32_t e_bdf = 0;
-  uint32_t cap_base = 0;
   void *dram_buf_in_virt = NULL;
   void *dram_buf_out_virt = NULL;
   uint64_t dram_buf_in_phys = 0;
   uint64_t dram_buf_out_phys = 0;
   uint64_t dram_buf_in_iova = 0;
   uint64_t dram_buf_out_iova = 0;
-  uint32_t num_smmus;
   uint32_t device_id, its_id;
   uint32_t page_size = val_memory_page_size();
   memory_region_descriptor_t mem_desc_array[2], *mem_desc;
@@ -71,65 +67,46 @@ payload(void)
   pgt_descriptor_t smmu_pgt_desc;
   smmu_master_attributes_t master;
   uint64_t ttbr = 0;
-  uint32_t test_data_blk_size = page_size * TEST_DATA_NUM_PAGES;
+  uint32_t test_data_blk_size;
   uint32_t reg_value = 0;
   uint64_t size;
-  uint32_t exerciser_ready = 0;
+  uint32_t smmu_instance;
+  uint32_t ats_enabled = 0;
   uint32_t smmu_mapped = 0;
+  uint32_t status = ACS_STATUS_FAIL;
 
-  /* Enable all SMMUs */
-  num_smmus = val_iovirt_get_smmu_info(SMMU_NUM_CTRL, 0);
+  if (page_size == 0)
+      return ACS_STATUS_FAIL;
+
+  test_data_blk_size = page_size * TEST_DATA_NUM_PAGES;
 
   /* Initialize DMA master and memory descriptors */
   val_memory_set(&master, sizeof(master), 0);
-  master.smmu_index = ACS_INVALID_INDEX;
+  master.smmu_index = smmu_index;
   val_memory_set(mem_desc_array, sizeof(mem_desc_array), 0);
   val_memory_set(&cpu_pgt_desc, sizeof(cpu_pgt_desc), 0);
   val_memory_set(&smmu_pgt_desc, sizeof(smmu_pgt_desc), 0);
   mem_desc = &mem_desc_array[0];
 
-  pe_index = val_pe_get_index_mpid(val_pe_get_mpid());
-
   /* Get translation attributes via TCR and translation table base via TTBR */
-  if (val_pe_reg_read_tcr(0 /*for TTBR0*/,
-                          &cpu_pgt_desc.tcr)) {
+  if (val_pe_reg_read_tcr(0 /*for TTBR0*/, &cpu_pgt_desc.tcr)) {
     val_print(ACS_PRINT_ERR, " TCR read failure", 0);
-    goto test_fail;
+    goto test_clean;
   }
 
-  if (val_pe_reg_read_ttbr(0 /*for TTBR0*/,
-                           &ttbr)) {
+  if (val_pe_reg_read_ttbr(0 /*for TTBR0*/, &ttbr)) {
     val_print(ACS_PRINT_ERR, " TTBR0 read failure", 0);
-    goto test_fail;
+    goto test_clean;
   }
 
   /* Disable All SMMU's */
-    for (instance = 0; instance < num_smmus; ++instance)
-        val_smmu_disable(instance);
+  for (smmu_instance = 0; smmu_instance < num_smmus; ++smmu_instance)
+      val_smmu_disable(smmu_instance);
 
-  instance = 0;
-  /* if init fail moves to next exerciser */
-  if (val_exerciser_init(instance))
-        goto test_fail;
-  exerciser_ready = 1;
-
-  /* Get exerciser bdf */
-  e_bdf = val_exerciser_get_bdf(instance);
-  val_print(ACS_PRINT_TEST, " Exerciser BDF - 0x%x", e_bdf);
-
-  /* Get SMMU node index for this exerciser instance */
-  master.smmu_index = val_iovirt_get_rc_smmu_index(PCIE_EXTRACT_BDF_SEG(e_bdf),
-                                                   PCIE_CREATE_BDF_PACKED(e_bdf));
-
-  /* Enable SMMU globally so that the transaction passes
-   * through the SMMU.
-   */
-  if (master.smmu_index != ACS_INVALID_INDEX) {
-      if (val_smmu_enable(master.smmu_index)) {
-            val_print(ACS_PRINT_ERR, " Exerciser %x smmu disable error", instance);
-            val_set_status(pe_index, "FAIL", 02);
-            goto test_fail;
-        }
+  /* Enable SMMU globally so that the transaction passes through the SMMU. */
+  if (val_smmu_enable(master.smmu_index)) {
+      val_print(ACS_PRINT_ERR, " Exerciser %x smmu enable error", instance);
+      goto test_clean;
   }
 
   size = val_get_min_tg();
@@ -142,12 +119,10 @@ payload(void)
   dram_buf_out_phys = dram_buf_in_phys + (test_data_blk_size / 2);
   dma_len = test_data_blk_size / 2;
 
-  /* If ATS Capability Not Present, Skip. */
-  if (val_pcie_find_capability(e_bdf, PCIE_ECAP, ECID_ATS, &cap_base) != PCIE_SUCCESS)
-       goto test_fail;
   val_pcie_read_cfg(e_bdf, cap_base + ATS_CTRL, &reg_value);
   reg_value |= ATS_CACHING_EN;
   val_pcie_write_cfg(e_bdf, cap_base + ATS_CTRL, reg_value);
+  ats_enabled = 1;
 
   cpu_pgt_desc.pgt_base = (ttbr & AARCH64_TTBR_ADDR_MASK);
   cpu_pgt_desc.mair = val_pe_reg_read(MAIR_ELx);
@@ -162,91 +137,85 @@ payload(void)
   if (val_pgt_create(mem_desc, &cpu_pgt_desc)) {
         val_print(ACS_PRINT_ERR,
                       " Unable to create page table with given attributes", 0);
-            goto test_fail;
-      }
-
+        goto test_clean;
+  }
 
   /* Get memory attributes of the test buffer, we'll use the same attibutes to create
    * our own page table later.
    */
   if (val_pgt_get_attributes(cpu_pgt_desc, (uint64_t)dram_buf_in_virt, &mem_desc->attributes)) {
         val_print(ACS_PRINT_ERR, " Unable to get memory attributes of the test buffer", 0);
-        goto test_fail;
+        goto test_clean;
   }
 
   dram_buf_in_iova = dram_buf_in_phys;
   dram_buf_out_iova = dram_buf_out_phys;
-  if (master.smmu_index != ACS_INVALID_INDEX &&
-      val_iovirt_get_smmu_info(SMMU_CTRL_ARCH_MAJOR_REV, master.smmu_index) == 3) {
-      if (val_iovirt_get_device_info(PCIE_CREATE_BDF_PACKED(e_bdf),
-                                     PCIE_EXTRACT_BDF_SEG(e_bdf),
-                                     &device_id, &master.streamid,
-                                     &its_id))
-            goto test_fail;
 
-      /* We create the requisite page tables and configure the SMMU for exerciser*/
-      mem_desc->virtual_address = (uint64_t)dram_buf_in_virt;
-      mem_desc->physical_address = dram_buf_in_phys;
-      mem_desc->length = test_data_blk_size;
-      mem_desc->attributes |= (PGT_STAGE1_AP_RW);
+  if (val_iovirt_get_device_info(PCIE_CREATE_BDF_PACKED(e_bdf),
+                                 PCIE_EXTRACT_BDF_SEG(e_bdf),
+                                 &device_id, &master.streamid,
+                                 &its_id))
+        goto test_clean;
 
-      //Map the memory as Non-secure for the instance
-      if (val_add_gpt_entry_el3(mem_desc->physical_address, GPT_NONSECURE))
-      {
-          val_print(ACS_PRINT_ERR, " GPT mapping failed for the address: 0x%llx",
-            mem_desc->physical_address);
-          goto test_fail;
+  /* We create the requisite page tables and configure the SMMU for exerciser */
+  mem_desc->virtual_address = (uint64_t)dram_buf_in_virt;
+  mem_desc->physical_address = dram_buf_in_phys;
+  mem_desc->length = test_data_blk_size;
+  mem_desc->attributes |= (PGT_STAGE1_AP_RW);
 
-      }
-      attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(OUTER_SHAREABLE) | PGT_ENTRY_AP_RW);
-      if (val_add_mmu_entry_el3(mem_desc->virtual_address, mem_desc->physical_address,
-                      (attr | LOWER_ATTRS(PAS_ATTR(NONSECURE_PAS)))))
-      {
-          val_print(ACS_PRINT_ERR, " Failed to add MMU entry for dram_buf_in_virt: 0x%llx",
-                    (uint64_t)dram_buf_in_virt);
-          goto test_fail;
-      }
-
-      //Clear the memory
-      val_memory_set((uint64_t *)dram_buf_in_virt, dma_len, 0);
-      val_data_cache_ops_by_va((uint64_t)dram_buf_in_virt, CLEAN_AND_INVALIDATE);
-
-      /* Need to know input and output address sizes before creating page table */
-      smmu_pgt_desc = cpu_pgt_desc;
-      smmu_pgt_desc.ias = val_smmu_get_info(SMMU_IN_ADDR_SIZE, master.smmu_index);
-      if ((smmu_pgt_desc.ias) == 0) {
-            val_print(ACS_PRINT_ERR,
-                          " Input address size of SMMU %d is 0", master.smmu_index);
-            goto test_fail;
-      }
-
-      smmu_pgt_desc.oas = val_smmu_get_info(SMMU_OUT_ADDR_SIZE, master.smmu_index);
-      if ((smmu_pgt_desc.oas) == 0) {
-            val_print(ACS_PRINT_ERR,
-                          " Output address size of SMMU %d is 0", master.smmu_index);
-            goto test_fail;
-      }
-
-      /* set pgt_base to NULL to create a new translation table for the SMMU */
-      smmu_pgt_desc.pgt_base = (uint64_t) NULL;
-      if (val_pgt_create(mem_desc, &smmu_pgt_desc)) {
-            val_print(ACS_PRINT_ERR,
-                      " Unable to create page table with given attributes", 0);
-            goto test_fail;
-      }
-
-      /* Configure the SMMU tables for this exerciser to use this page table
-         for VA to PA translations*/
-      if (val_smmu_map(master, smmu_pgt_desc))
-      {
-            val_print(ACS_PRINT_ERR, " SMMU mapping failed (%x)     ", e_bdf);
-            goto test_fail;
-      }
-      smmu_mapped = 1;
-
-      dram_buf_in_iova = mem_desc->virtual_address;
-      dram_buf_out_iova = dram_buf_in_iova + (test_data_blk_size / 2);
+  /* Map the memory as Non-secure for the instance */
+  if (val_add_gpt_entry_el3(mem_desc->physical_address, GPT_NONSECURE))
+  {
+      val_print(ACS_PRINT_ERR, " GPT mapping failed for the address: 0x%llx",
+        mem_desc->physical_address);
+      goto test_clean;
   }
+
+  attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(OUTER_SHAREABLE) | PGT_ENTRY_AP_RW);
+  if (val_add_mmu_entry_el3(mem_desc->virtual_address, mem_desc->physical_address,
+                  (attr | LOWER_ATTRS(PAS_ATTR(NONSECURE_PAS)))))
+  {
+      val_print(ACS_PRINT_ERR, " Failed to add MMU entry for dram_buf_in_virt: 0x%llx",
+                (uint64_t)dram_buf_in_virt);
+      goto test_clean;
+  }
+
+  /* Clear the memory */
+  val_memory_set((uint64_t *)dram_buf_in_virt, dma_len, 0);
+  val_data_cache_ops_by_va((uint64_t)dram_buf_in_virt, CLEAN_AND_INVALIDATE);
+
+  /* Need to know input and output address sizes before creating page table */
+  smmu_pgt_desc = cpu_pgt_desc;
+  smmu_pgt_desc.ias = val_smmu_get_info(SMMU_IN_ADDR_SIZE, master.smmu_index);
+  if ((smmu_pgt_desc.ias) == 0) {
+        val_print(ACS_PRINT_ERR, " Input address size of SMMU %d is 0", master.smmu_index);
+        goto test_clean;
+  }
+
+  smmu_pgt_desc.oas = val_smmu_get_info(SMMU_OUT_ADDR_SIZE, master.smmu_index);
+  if ((smmu_pgt_desc.oas) == 0) {
+        val_print(ACS_PRINT_ERR, " Output address size of SMMU %d is 0", master.smmu_index);
+        goto test_clean;
+  }
+
+  /* set pgt_base to NULL to create a new translation table for the SMMU */
+  smmu_pgt_desc.pgt_base = (uint64_t) NULL;
+  if (val_pgt_create(mem_desc, &smmu_pgt_desc)) {
+        val_print(ACS_PRINT_ERR, " Unable to create page table with given attributes", 0);
+        goto test_clean;
+  }
+
+  /* Configure the SMMU tables for this exerciser to use this page table
+     for VA to PA translations */
+  if (val_smmu_map(master, smmu_pgt_desc))
+  {
+        val_print(ACS_PRINT_ERR, " SMMU mapping failed (%x)     ", e_bdf);
+        goto test_clean;
+  }
+  smmu_mapped = 1;
+
+  dram_buf_in_iova = mem_desc->virtual_address;
+  dram_buf_out_iova = dram_buf_in_iova + (test_data_blk_size / 2);
 
   /* Initialize the sender buffer with test specific data */
   val_memory_set((uint64_t *)dram_buf_in_virt, dma_len, TEST_DATA);
@@ -257,71 +226,67 @@ payload(void)
 
   if (val_exerciser_set_param(DMA_ATTRIBUTES, dram_buf_in_phys, dma_len, instance)) {
         val_print(ACS_PRINT_ERR, " DMA attributes setting failure %4x", instance);
-        goto test_fail;
+        goto test_clean;
   }
 
   /* Trigger DMA from input buffer to exerciser memory */
   if (val_exerciser_ops(START_DMA, EDMA_TO_DEVICE, instance)) {
         val_print(ACS_PRINT_ERR, " DMA write failure to exerciser %4x", instance);
-        goto test_fail;
+        goto test_clean;
   }
 
   if (val_exerciser_set_param(DMA_ATTRIBUTES, dram_buf_out_iova, dma_len, instance)) {
         val_print(ACS_PRINT_ERR, " DMA attributes setting failure %4x", instance);
-        goto test_fail;
+        goto test_clean;
   }
 
-  /* Trigger DMA from exerciser memory to output buffer*/
+  /* Trigger DMA from exerciser memory to output buffer */
   if (val_exerciser_ops(START_DMA, EDMA_FROM_DEVICE, instance)) {
         val_print(ACS_PRINT_ERR, " DMA read failure from exerciser %4x", instance);
-        goto test_fail;
+        goto test_clean;
   }
 
   if (val_memory_compare(dram_buf_in_virt, dram_buf_out_virt, dma_len)) {
         val_print(ACS_PRINT_ERR, " Data Comparasion failure for Exerciser %4x", instance);
-        goto test_fail;
+        goto test_clean;
   }
   val_print(ACS_PRINT_TEST, " The Nonsecure DMA transaction is successful", 0);
 
-  //clear the memory before the next transaction
+  /* Clear the memory before the next transaction */
   val_memory_set((uint64_t *)dram_buf_in_virt, dma_len, 0);
   val_data_cache_ops_by_va((uint64_t)dram_buf_in_virt, CLEAN_AND_INVALIDATE);
 
-  //Disable smmu now
+  /* Disable smmu now */
   val_print(ACS_PRINT_TEST, " Disabling SMMU of index: %d", master.smmu_index);
   val_smmu_disable(master.smmu_index);
 
   val_exerciser_set_param(DMA_ATTRIBUTES, dram_buf_in_phys, dma_len, instance);
 
-  //Change the GPI for the PA
+  /* Change the GPI for the PA */
   if (val_add_gpt_entry_el3(dram_buf_in_phys, GPT_ROOT))
   {
       val_print(ACS_PRINT_ERR, " GPT mapping failed for 0x%llx", dram_buf_in_phys);
-      goto test_fail;
+      goto test_clean;
   }
 
-  //Enable smmu now
+  /* Enable smmu now */
   val_print(ACS_PRINT_TEST, " Enabling SMMU of index: %d", master.smmu_index);
   val_smmu_enable(master.smmu_index);
 
-  // Trigger DMA from input buffer to exerciser memory
+  /* Trigger DMA from input buffer to exerciser memory */
   if (!(val_exerciser_ops(START_DMA, EDMA_TO_DEVICE, instance))) {
         val_print(ACS_PRINT_ERR, " ERROR:      DMA write success to exerciser %4x", instance);
-        goto test_fail;
+        goto test_clean;
   }
 
-  val_set_status(pe_index, "PASS", 01);
-  goto test_clean;
-
-test_fail:
-  val_set_status(pe_index, "FAIL", 01);
+  status = ACS_STATUS_PASS;
 
 test_clean:
   if ((dram_buf_in_phys != 0u) && val_add_gpt_entry_el3(dram_buf_in_phys, GPT_ANY))
   {
       val_print(ACS_PRINT_ERR,
                   " test_clean: Failed to clear GPT entry for PA 0x%llx", dram_buf_in_phys);
-      val_set_status(pe_index, "FAIL", 02);
+      status = ACS_STATUS_FAIL;
   }
 
   if ((dram_buf_in_virt != NULL) && (dram_buf_in_phys != 0u) &&
@@ -330,22 +295,23 @@ test_clean:
   {
       val_print(ACS_PRINT_ERR,
                   " test_clean: Failed to add MMU entry for PA 0x%llx", dram_buf_in_phys);
-      val_set_status(pe_index, "FAIL", 03);
+      status = ACS_STATUS_FAIL;
   }
 
-  //Clear the memory
+  /* Clear the memory */
   if ((dram_buf_in_virt != NULL) && (dma_len != 0u) &&
       val_memory_set_el3((uint64_t *)dram_buf_in_virt, dma_len/2, 0))
   {
       val_print(ACS_PRINT_ERR, " test_clean: Failed to set memory to 0 ", 0);
-      val_set_status(pe_index, "FAIL", 04);
+      status = ACS_STATUS_FAIL;
   }
-  //Clean and invalidate the memory
+
+  /* Clean and invalidate the memory */
   if ((dram_buf_in_virt != NULL) &&
       val_data_cache_ops_by_va_el3((uint64_t)dram_buf_in_virt, CLEAN_AND_INVALIDATE))
   {
       val_print(ACS_PRINT_ERR, " test_clean: Failed to clean and invalidate dram_buf_in", 0);
-      val_set_status(pe_index, "FAIL", 05);
+      status = ACS_STATUS_FAIL;
   }
 
   if (smmu_mapped)
@@ -354,8 +320,7 @@ test_clean:
   if (smmu_pgt_desc.pgt_base != (uint64_t) NULL)
       val_pgt_destroy(smmu_pgt_desc);
 
-  if (exerciser_ready &&
-      (val_pcie_find_capability(e_bdf, PCIE_ECAP, ECID_ATS, &cap_base) == PCIE_SUCCESS))
+  if (ats_enabled)
   {
         val_pcie_read_cfg(e_bdf, cap_base + ATS_CTRL, &reg_value);
         reg_value &= ATS_CACHING_DIS;
@@ -363,9 +328,91 @@ test_clean:
   }
 
   /* Disable all SMMUs */
-  for (instance = 0; instance < num_smmus; ++instance)
-     val_smmu_disable(instance);
+  for (smmu_instance = 0; smmu_instance < num_smmus; ++smmu_instance)
+     val_smmu_disable(smmu_instance);
 
+  return status;
+}
+
+static
+void
+payload(void)
+{
+  uint32_t pe_index;
+  uint32_t instance;
+  uint32_t e_bdf;
+  uint32_t cap_base;
+  uint32_t smmu_index;
+  uint32_t num_smmus;
+  uint32_t num_exercisers;
+  uint32_t test_run = 0;
+  uint32_t status;
+
+  num_smmus = val_iovirt_get_smmu_info(SMMU_NUM_CTRL, 0);
+
+  pe_index = val_pe_get_index_mpid(val_pe_get_mpid());
+  if (num_smmus == 0) {
+    val_print(ACS_PRINT_WARN, " No SMMU controllers discovered", 0);
+    val_set_status(pe_index, "SKIP", 01);
+    return;
+  }
+
+  if (val_pcie_get_info(PCIE_INFO_NUM_ECAM, 0) == 0) {
+    val_print(ACS_PRINT_WARN, " No PCIe ECAM regions discovered", 0);
+    val_set_status(pe_index, "SKIP", 02);
+    return;
+  }
+
+  num_exercisers = val_exerciser_get_info(EXERCISER_NUM_CARDS);
+  if (num_exercisers == 0) {
+    val_print(ACS_PRINT_WARN, " No exerciser cards discovered", 0);
+    val_set_status(pe_index, "SKIP", 03);
+    return;
+  }
+
+  for (instance = 0; instance < num_exercisers; ++instance) {
+    if (val_exerciser_init(instance)) {
+      val_print(ACS_PRINT_WARN, " Exerciser init failed for instance %d", instance);
+      continue;
+    }
+
+    e_bdf = val_exerciser_get_bdf(instance);
+    val_print(ACS_PRINT_TEST, " Exerciser BDF - 0x%x", e_bdf);
+
+    smmu_index = val_iovirt_get_rc_smmu_index(PCIE_EXTRACT_BDF_SEG(e_bdf),
+                                              PCIE_CREATE_BDF_PACKED(e_bdf));
+    if (smmu_index == ACS_INVALID_INDEX || smmu_index >= num_smmus) {
+      val_print(ACS_PRINT_WARN, " No SMMU mapping found for exerciser %x", instance);
+      continue;
+    }
+
+    if (val_iovirt_get_smmu_info(SMMU_CTRL_ARCH_MAJOR_REV, smmu_index) != 3) {
+      val_print(ACS_PRINT_WARN, " Test requires SMMUv3 for exerciser %x", instance);
+      continue;
+    }
+
+    if (val_pcie_find_capability(e_bdf, PCIE_ECAP, ECID_ATS, &cap_base) != PCIE_SUCCESS)
+    {
+      val_print(ACS_PRINT_WARN, " ATS capability not found for BDF 0x%x", e_bdf);
+      continue;
+    }
+
+    status = run_smmu_gpt_tlb_sequence(instance, e_bdf, smmu_index, cap_base, num_smmus);
+    if (status == ACS_STATUS_FAIL) {
+      val_set_status(pe_index, "FAIL", 03);
+      return;
+    }
+
+    test_run++;
+  }
+
+  if (test_run == 0) {
+    val_print(ACS_PRINT_WARN, " No usable exerciser backed by SMMUv3 discovered", 0);
+    val_set_status(pe_index, "SKIP", 04);
+    return;
+  }
+
+  val_set_status(pe_index, "PASS", 01);
 }
 
 uint32_t

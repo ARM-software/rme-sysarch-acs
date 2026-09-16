@@ -168,6 +168,7 @@ payload (void)
     uint32_t pe_index;
     uint32_t instance = 0;
     uint32_t e_bdf = 0, num_smmu;
+    uint32_t smmu_instance;
     void *dram_buf1_virt;
     void *dram_buf1_phys;
     uint32_t cap_base = 0;
@@ -177,6 +178,8 @@ payload (void)
     uint32_t size;
     uint32_t smmu_mapped = 0;
     uint32_t exerciser_ready = 0;
+    uint32_t exerciser_found = 0;
+    uint32_t num_exercisers;
     smmu_master_attributes_t master;
     memory_region_descriptor_t mem_desc_array[2], *mem_desc;
     pgt_descriptor_t cpu_pgt_desc;
@@ -195,7 +198,52 @@ payload (void)
 
     attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(NON_SHAREABLE) | PGT_ENTRY_AP_RW);
 
+    if (val_pcie_get_info(PCIE_INFO_NUM_ECAM, 0) == 0) {
+        val_print(ACS_PRINT_WARN, " No PCIe ECAM regions discovered", 0);
+        val_set_status(pe_index, "SKIP", 01);
+        return;
+    }
+
+    num_exercisers = val_exerciser_get_info(EXERCISER_NUM_CARDS);
+    if (num_exercisers == 0) {
+        val_print(ACS_PRINT_WARN, " No exerciser cards discovered", 0);
+        val_set_status(pe_index, "SKIP", 02);
+        return;
+    }
+
     num_smmu = val_iovirt_get_smmu_info(SMMU_NUM_CTRL, 0);
+    if (num_smmu == 0) {
+        val_print(ACS_PRINT_WARN, " No SMMU controllers discovered", 0);
+        val_set_status(pe_index, "SKIP", 03);
+        return;
+    }
+
+    for (instance = 0; instance < num_exercisers; ++instance) {
+        if (val_exerciser_init(instance)) {
+            val_print(ACS_PRINT_WARN, " Exerciser init failed for instance %d", instance);
+            continue;
+        }
+
+        e_bdf = val_exerciser_get_bdf(instance);
+        if (val_pcie_find_capability(e_bdf, PCIE_ECAP, ECID_ATS, &cap_base) != PCIE_SUCCESS) {
+            val_print(ACS_PRINT_WARN, " ATS capability not found for BDF 0x%x", e_bdf);
+            continue;
+        }
+
+        exerciser_found = 1;
+        exerciser_ready = 1;
+        break;
+    }
+
+    if (!exerciser_found) {
+        val_print(ACS_PRINT_WARN, " No usable exerciser with ATS capability found", 0);
+        val_set_status(pe_index, "SKIP", 04);
+        return;
+    }
+
+    /* Disable All SMMU's */
+    for (smmu_instance = 0; smmu_instance < num_smmu; ++smmu_instance)
+        val_smmu_disable(smmu_instance);
 
     /* Get translation attributes via TCR and translation table base via TTBR */
     if (val_pe_reg_read_tcr(0 /*for TTBR0*/,
@@ -213,19 +261,6 @@ payload (void)
     /* Initialize DMA master and memory descriptors */
     val_memory_set(mem_desc_array, sizeof(mem_desc_array), 0);
     mem_desc = &mem_desc_array[0];
-
-    /* Disable All SMMU's */
-    for (instance = 0; instance < num_smmu; ++instance)
-        val_smmu_disable(instance);
-
-    instance = 0;
-    /* Initialise the exerciser */
-    if (val_exerciser_init(instance))
-        goto test_fail;
-    exerciser_ready = 1;
-
-    /* Get the exerciser BDF */
-    e_bdf = val_exerciser_get_bdf(instance);
 
     /* Find SMMU node index for this exerciser instance */
     master.smmu_index = val_iovirt_get_rc_smmu_index(PCIE_EXTRACT_BDF_SEG(e_bdf),
@@ -249,10 +284,7 @@ payload (void)
     attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(NON_SHAREABLE) | PGT_ENTRY_AP_RW);
 
 
-    /* If ATS Capability Not Present, Skip. */
-    if (val_pcie_find_capability(e_bdf, PCIE_ECAP, ECID_ATS, &cap_base) != PCIE_SUCCESS)
-       goto test_fail;
-
+    /* ATS capability was verified while selecting the exerciser. */
     val_pcie_read_cfg(e_bdf, cap_base + ATS_CTRL, &reg_value);
     reg_value |= ATS_CACHING_EN;
     val_pcie_write_cfg(e_bdf, cap_base + ATS_CTRL, reg_value);
@@ -291,7 +323,7 @@ payload (void)
             goto test_fail;
 
       /* We create the requisite page tables and configure the SMMU for exerciser*/
-      mem_desc->virtual_address = (uint64_t)dram_buf1_virt + instance * test_data_blk_size;
+      mem_desc->virtual_address = (uint64_t)dram_buf1_virt;
       mem_desc->physical_address = (uint64_t)dram_buf1_phys;
       mem_desc->length = test_data_blk_size;
       mem_desc->attributes |= (PGT_STAGE1_AP_RW);
@@ -389,8 +421,8 @@ test_clean:
   }
 
   /* Disable all SMMUs */
-  for (instance = 0; instance < num_smmu; ++instance)
-     val_smmu_disable(instance);
+  for (smmu_instance = 0; smmu_instance < num_smmu; ++smmu_instance)
+     val_smmu_disable(smmu_instance);
 
 }
 

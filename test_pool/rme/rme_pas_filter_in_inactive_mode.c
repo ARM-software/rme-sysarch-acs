@@ -47,7 +47,12 @@ void payload(void)
   MEM_REGN_INFO_TABLE *mem_region_pas_filter_cfg;
 
   mem_region_pas_filter_cfg = val_mem_pas_info_table();
-  num_regn = mem_region_pas_filter_cfg->header.num_of_regn_gpc;
+  num_regn = mem_region_pas_filter_cfg->header.num_of_regn_pas_filter;
+  if (num_regn == 0) {
+    val_print(ACS_PRINT_WARN, " No PAS filter regions provided by the platform", 0);
+    val_set_status(index, "SKIP", 01);
+    return;
+  }
 
   if (!val_is_pas_filter_mode_programmable()) {
     val_print(ACS_PRINT_ERR, " The pas filter mode is not programmable in this system", 0);

@@ -65,6 +65,12 @@ payload(void)
   dma_len = test_data_blk_size / 2;
 
   num_exercisers = val_exerciser_get_info(EXERCISER_NUM_CARDS);
+  if (num_exercisers == 0)
+  {
+    val_print(ACS_PRINT_WARN, " No exerciser cards discovered", 0);
+    val_set_status(pe_index, "SKIP", 01);
+    return;
+  }
 
   for (instance = 0; instance < num_exercisers; ++instance)
   {
@@ -85,18 +91,21 @@ payload(void)
       val_memory_set(dram_buf_in_virt, dma_len, TEST_DATA);
 
       if (val_pcie_get_rootport(e_bdf, &rp_bdf))
+      {
+          val_memory_free_pages(dram_buf_in_virt, TEST_DATA_NUM_PAGES);
           continue;
-
-      test_skip = 0;
+      }
 
       /* Check for DA Capability */
       if (val_pcie_find_da_capability(rp_bdf, &da_cap_base) != PCIE_SUCCESS)
       {
-          val_print(ACS_PRINT_ERR,
+          val_print(ACS_PRINT_WARN,
                         " PCIe DA DVSEC capability not present,bdf 0x%x", e_bdf);
-          test_fail++;
+          val_memory_free_pages(dram_buf_in_virt, TEST_DATA_NUM_PAGES);
           continue;
       }
+
+      test_skip = 0;
 
       /* Disable RMEDA_CTL1.TDISP_EN*/
       if (val_pcie_disable_tdisp(rp_bdf))
@@ -144,19 +153,25 @@ cleanup_unlock:
 
   tbl_index = 0;
   bdf_tbl_ptr = val_pcie_bdf_table_ptr();
+  if ((bdf_tbl_ptr == NULL) || (bdf_tbl_ptr->num_entries == 0))
+  {
+      val_print(ACS_PRINT_WARN, " No PCIe BDF entries discovered", 0);
+      val_set_status(pe_index, "SKIP", 01);
+      return;
+  }
+
   while (tbl_index < bdf_tbl_ptr->num_entries)
   {
       rp_bdf = bdf_tbl_ptr->device[tbl_index++].bdf;
       dp_type = val_pcie_device_port_type(rp_bdf);
 
-      test_skip = 0;
       if (dp_type == RP)
       {
           /* Check for DA Capability */
           if (val_pcie_find_da_capability(rp_bdf, &da_cap_base) != PCIE_SUCCESS)
           {
-              val_print(ACS_PRINT_ERR,
-                        " PCIe DA DVSEC capability not present,bdf 0x%x", e_bdf);
+              val_print(ACS_PRINT_WARN,
+                        " PCIe DA DVSEC capability not present,bdf 0x%x", rp_bdf);
               continue;
           }
 
@@ -178,6 +193,8 @@ cleanup_unlock:
 
           if (!Bar_Base)
               goto cleanup_unlock_rp;
+
+          test_skip = 0;
 
           va = val_get_free_va(val_get_min_tg());
           pgt_attr_el3 = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(OUTER_SHAREABLE)

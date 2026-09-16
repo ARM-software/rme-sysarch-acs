@@ -49,6 +49,12 @@ payload(void)
   tbl_index = 0;
   pe_index = val_pe_get_index_mpid(val_pe_get_mpid());
   bdf_tbl_ptr = val_pcie_bdf_table_ptr();
+  if ((bdf_tbl_ptr == NULL) || (bdf_tbl_ptr->num_entries == 0))
+  {
+      val_print(ACS_PRINT_WARN, " No PCIe BDF entries discovered", 0);
+      val_set_status(pe_index, "SKIP", 01);
+      return;
+  }
 
   while (tbl_index < bdf_tbl_ptr->num_entries)
   {

@@ -757,6 +757,9 @@ uint64_t
 val_cxl_get_component_info(CXL_COMPONENT_INFO_e type, uint32_t index)
 {
   if (g_cxl_component_table == NULL) {
+    if (type == CXL_COMPONENT_INFO_COUNT)
+      return 0;
+
     val_print(ACS_PRINT_ERR, " GET_CXL_COMPONENT_INFO: component table not created", 0);
     return 0;
   }
@@ -3133,11 +3136,11 @@ val_cxl_create_info_table(uint64_t *cxl_info_table)
   uint32_t num_entries = g_cxl_info_table->num_entries;
 
   val_print(ACS_PRINT_ALWAYS,
-            " CXL_INFO: Number of CXL host bridges : %4u\n",
+            "\n CXL_INFO: Number of CXL host bridges : %4u",
             num_entries);
 
   if (num_entries == 0) {
-    val_print(ACS_PRINT_WARN, " CXL_INFO: No CXL host bridges found\n", 0);
+    val_print(ACS_PRINT_WARN, " CXL_INFO: No CXL host bridges found ", 0);
     return;
   }
 
@@ -3918,6 +3921,12 @@ val_rme_cxl_execute_tests(uint32_t num_pe)
   uint32_t smmu_cnt;
 
   g_curr_module = 1 << CXL_MODULE_ID;
+
+  if (num_smmus == 0)
+  {
+    val_print(ACS_PRINT_WARN, " No SMMU Controller Found, Skipping RME-CXL tests...", 0);
+    return ACS_STATUS_SKIP;
+  }
 
   if (!g_rl_smmu_init)
   {

@@ -44,6 +44,11 @@ void payload(void)
   mem_region_cfg = val_mem_gpc_info_table();
   num_regn = mem_region_cfg->header.num_of_regn_gpc;
   status_fail_cnt = 0;
+  if (num_regn == 0) {
+    val_print(ACS_PRINT_WARN, " No GPC protected regions provided by the platform", 0);
+    val_set_status(index, "SKIP", 01);
+    return;
+  }
 
   for (uint32_t regn_cnt = 0; regn_cnt < num_regn; ++regn_cnt) {
 

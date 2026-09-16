@@ -231,7 +231,7 @@ ShellAppMainrme(
   if (val_enable_mmu())
       return ACS_STATUS_FAIL;
 #else
-  val_print(g_print_level, "Skipping MMU setup/enable (ACS_ENABLE_MMU=0)\n", 0);
+  val_print(ACS_PRINT_ALWAYS, "Skipping MMU setup/enable (ACS_ENABLE_MMU=0)\n", 0);
 #endif
 
   g_print_mmio = FALSE;
@@ -294,7 +294,8 @@ ShellAppMainrme(
 #ifndef SKIP_SMMU_GIC_ITS_INIT
   configureGicIts();
 #else
-  val_print(g_print_level, "Skipping GIC ITS configuration (SKIP_SMMU_GIC_ITS_INIT)\n", 0);
+  val_print(ACS_PRINT_ALWAYS,
+            "\n Skipping GIC ITS configuration (SKIP_SMMU_GIC_ITS_INIT)", 0);
 #endif
 
   /* Create the platform config tables for the RME Issue A tests */
@@ -349,7 +350,5 @@ print_test_status:
   val_print(ACS_PRINT_ALWAYS, "\n********* RME tests complete. Reset the system *********\n\n", 0);
 
   val_pe_context_restore(AA64WriteSp(g_stack_pointer));
-  while (1);
-
-  return 0;
+  return val_exit_acs();
 }

@@ -58,6 +58,10 @@ void payload(void)
   val_save_global_test_data();
   write_gpr_and_reset();
 
+  val_print(ACS_PRINT_ERR, " System reset returned unexpectedly", 0);
+  val_set_status(index, "FAIL", 02);
+  return;
+
 reset_done:
   //Check the status of the GPR comparision which is already completed right after the reset
   val_restore_global_test_data();
