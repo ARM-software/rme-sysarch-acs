@@ -251,8 +251,6 @@ payload(void)
   for (uint32_t idx = 0; idx < table->num_entries; ++idx)
   {
     const CXL_COMPONENT_ENTRY *component = &table->component[idx];
-    uint32_t rp_bdf;
-    uint32_t cda_offset;
     uint32_t tsp_capable;
     uint32_t status;
     uint32_t cma_supported;
@@ -279,30 +277,13 @@ payload(void)
 
     evaluated++;
 
-    /* Step 2: Ensure the upstream root port exposes the RME-CDA DVSEC. */
-    status = val_cxl_find_upstream_root_port(component->bdf, &rp_bdf);
-    if (status != ACS_STATUS_PASS)
-    {
-      val_print(ACS_PRINT_ERR,
-                " RCNSLJ: No root port for BDF 0x%x",
-                (uint64_t)component->bdf);
-      failures++;
-      continue;
-    }
+    /*
+     * RCNSLJ prerequisites apply independently of upstream RME-CDA support.
+     * Host-side MPE encryption is required by both RCNSLJ and RLQMCY; the
+     * checks below cover the device prerequisites and HDM write protection.
+     */
 
-    if (val_pcie_find_cda_capability(rp_bdf,
-                                     &cda_offset) != PCIE_SUCCESS)
-    {
-      val_print(ACS_PRINT_ERR,
-                " RCNSLJ: RME-CDA DVSEC missing for RP BDF 0x%x",
-                (uint64_t)rp_bdf);
-      failures++;
-      continue;
-    }
-
-    /* Host-side MPE encryption coverage is handled by RLQMCY. */
-
-    /* Step 3: Verify CMA-SPDM support via DOE discovery. */
+    /* Step 2: Verify CMA-SPDM support via DOE discovery. */
     status = check_cma_support(component->bdf, &cma_supported);
     if (status != ACS_STATUS_PASS)
     {
@@ -321,7 +302,7 @@ payload(void)
       continue;
     }
 
-    /* Step 4: Check Direct P2P mem enable is disabled. */
+    /* Step 3: Check Direct P2P mem enable is disabled. */
     status = check_direct_p2p_disabled(component->bdf);
     if (status != ACS_STATUS_PASS)
     {
@@ -329,7 +310,7 @@ payload(void)
       continue;
     }
 
-    /* Step 5: Ensure back-invalidate snoops are disabled. */
+    /* Step 4: Ensure back-invalidate snoops are disabled. */
     status = check_bi_disabled(component);
     if (status != ACS_STATUS_PASS)
     {
@@ -337,7 +318,7 @@ payload(void)
       continue;
     }
 
-    /* Step 6: Verify HDM decoder registers are RMSD write-protected. */
+    /* Step 5: Verify HDM decoder registers are RMSD write-protected. */
     status = check_hdm_decoder_rmsd(component);
     if (status != ACS_STATUS_PASS)
     {
@@ -345,7 +326,7 @@ payload(void)
       continue;
     }
 
-    /* Step 7: Attempt an SPDM session for additional coverage. */
+    /* Step 6: Attempt an SPDM session for additional coverage. */
     attempt_spdm_session(component->bdf);
   }
 

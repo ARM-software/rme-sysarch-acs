@@ -86,6 +86,23 @@ val_cxl_rp_is_not_subject_to_host_gpc(uint32_t rp_bdf)
   return pal_cxl_rp_is_not_subject_to_host_gpc(rp_bdf);
 }
 
+/**
+  @brief   Query user-provided confirmation of the RBYTYV Realm access exception.
+
+  @param   rp_bdf  Root Port BDF in PCIE_CREATE_BDF encoding.
+
+  @return  1 if platform configuration confirms that MSD firmware or a trusted
+           subsystem already permits Realm accesses to all CXL.mem windows used
+           by ACS through this port; 0 if authorization is not confirmed.
+
+  This query does not enable authorization or probe the hardware access policy.
+**/
+uint32_t
+val_cxl_rp_is_realm_access_authorized(uint32_t rp_bdf)
+{
+  return pal_cxl_rp_is_realm_access_authorized(rp_bdf);
+}
+
 static int  val_cxl_dev_cap_hdr_read(uint64_t arr_base,
                                      uint32_t index,
                                      uint16_t *id_out,

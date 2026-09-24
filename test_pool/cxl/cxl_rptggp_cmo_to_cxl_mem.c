@@ -283,6 +283,7 @@ payload(void)
   uint32_t attr;
   uint64_t cfg_addr;
   uint32_t rmecda_cap_base;
+  uint32_t rmecda_present = 0u;
   uint32_t rmecda_ctl1;
   uint64_t tg;
 
@@ -369,6 +370,19 @@ payload(void)
     }
 
     root_port = &table->component[root_index];
+
+    /* Skip unauthorized ports before changing target lists or decoders. */
+    rmecda_present = (val_pcie_find_cda_capability(root_port->bdf,
+                                                   &rmecda_cap_base) == PCIE_SUCCESS);
+    if ((rmecda_present == 0u) &&
+        (val_cxl_rp_is_realm_access_authorized(root_port->bdf) == 0u))
+    {
+      val_print(ACS_PRINT_DEBUG,
+                " RPTGGP: Skipping RP 0x%x: no RME-CDA or configured Realm authorization",
+                (uint64_t)root_port->bdf);
+      continue;
+    }
+
     context.root_index = root_index;
     context.endpoint_index = endpoint_index;
     context.exerciser_bdf = 0u;
@@ -482,75 +496,78 @@ payload(void)
     return;
   }
 
-  /* Enable TDISP and lock the link after decoder programming. */
-  status = val_pcie_find_cda_capability(table->component[context.root_index].bdf,
-                                        &rmecda_cap_base);
-  if (status != ACS_STATUS_PASS)
+  /*
+   * RPTGGP does not require RME-CDA. Where implemented, enable TDISP and
+   * lock the link to permit the Realm accesses used by this test.
+   */
+  if (rmecda_present != 0u)
   {
-    val_print(ACS_PRINT_INFO, " RPTGGP: RME-CDA DVSEC missing", 0);
-    result = ACS_STATUS_SKIP;
-    goto cleanup;
-  }
+    cfg_addr = val_pcie_get_bdf_config_addr(table->component[context.root_index].bdf);
+    tg = val_get_min_tg();
+    if ((cfg_addr == 0u) || (tg == 0u))
+    {
+      result = ACS_STATUS_FAIL;
+      goto cleanup;
+    }
 
-  cfg_addr = val_pcie_get_bdf_config_addr(table->component[context.root_index].bdf);
-  tg = val_get_min_tg();
-  if ((cfg_addr == 0u) || (tg == 0u))
+    context.rmecda_cfg_va = val_get_free_va(tg);
+    if (context.rmecda_cfg_va == 0u)
+    {
+      result = ACS_STATUS_FAIL;
+      goto cleanup;
+    }
+
+    attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(OUTER_SHAREABLE) |
+                       GET_ATTR_INDEX(DEV_MEM_nGnRnE) | PGT_ENTRY_AP_RW |
+                       PAS_ATTR(ROOT_PAS));
+    if (val_add_mmu_entry_el3(context.rmecda_cfg_va, cfg_addr, attr))
+    {
+      result = ACS_STATUS_FAIL;
+      goto cleanup;
+    }
+
+    context.rmecda_cap_base = rmecda_cap_base;
+    if (read_from_root(context.rmecda_cfg_va + rmecda_cap_base + RMECDA_CTL1_OFFSET,
+                       &context.rmecda_ctl1_orig) != ACS_STATUS_PASS)
+    {
+      result = ACS_STATUS_FAIL;
+      goto cleanup;
+    }
+
+    /* Restore the original control even if programming or readback fails. */
+    context.rmecda_ctl1_valid = 1u;
+    rmecda_ctl1 = context.rmecda_ctl1_orig |
+                  RMECDA_CTL1_TDISP_EN_MASK |
+                  RMECDA_CTL1_LINK_STR_LOCK_MASK;
+    if (write_from_root(context.rmecda_cfg_va + rmecda_cap_base + RMECDA_CTL1_OFFSET,
+                        rmecda_ctl1) != ACS_STATUS_PASS)
+    {
+      result = ACS_STATUS_FAIL;
+      goto cleanup;
+    }
+
+    if (read_from_root(context.rmecda_cfg_va + rmecda_cap_base + RMECDA_CTL1_OFFSET,
+                       &rmecda_ctl1) != ACS_STATUS_PASS)
+    {
+      result = ACS_STATUS_FAIL;
+      goto cleanup;
+    }
+
+    if ((rmecda_ctl1 & (RMECDA_CTL1_TDISP_EN_MASK |
+                        RMECDA_CTL1_LINK_STR_LOCK_MASK)) !=
+        (RMECDA_CTL1_TDISP_EN_MASK |
+         RMECDA_CTL1_LINK_STR_LOCK_MASK))
+    {
+      result = ACS_STATUS_FAIL;
+      goto cleanup;
+    }
+  }
+  else
   {
-    result = ACS_STATUS_FAIL;
-    goto cleanup;
+    val_print(ACS_PRINT_DEBUG,
+              " RPTGGP: RME-CDA absent; platform configuration confirms Realm authorization",
+              0);
   }
-
-  context.rmecda_cfg_va = val_get_free_va(tg);
-  if (context.rmecda_cfg_va == 0u)
-  {
-    result = ACS_STATUS_FAIL;
-    goto cleanup;
-  }
-
-  attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(OUTER_SHAREABLE) |
-                     GET_ATTR_INDEX(DEV_MEM_nGnRnE) | PGT_ENTRY_AP_RW |
-                     PAS_ATTR(ROOT_PAS));
-  if (val_add_mmu_entry_el3(context.rmecda_cfg_va, cfg_addr, attr))
-  {
-    result = ACS_STATUS_FAIL;
-    goto cleanup;
-  }
-
-  context.rmecda_cap_base = rmecda_cap_base;
-  if (read_from_root(context.rmecda_cfg_va + rmecda_cap_base + RMECDA_CTL1_OFFSET,
-                     &context.rmecda_ctl1_orig) != ACS_STATUS_PASS)
-  {
-    result = ACS_STATUS_FAIL;
-    goto cleanup;
-  }
-
-  rmecda_ctl1 = context.rmecda_ctl1_orig |
-                RMECDA_CTL1_TDISP_EN_MASK |
-                RMECDA_CTL1_LINK_STR_LOCK_MASK;
-  if (write_from_root(context.rmecda_cfg_va + rmecda_cap_base + RMECDA_CTL1_OFFSET,
-                      rmecda_ctl1) != ACS_STATUS_PASS)
-  {
-    result = ACS_STATUS_FAIL;
-    goto cleanup;
-  }
-
-  if (read_from_root(context.rmecda_cfg_va + rmecda_cap_base + RMECDA_CTL1_OFFSET,
-                     &rmecda_ctl1) != ACS_STATUS_PASS)
-  {
-    result = ACS_STATUS_FAIL;
-    goto cleanup;
-  }
-
-  if ((rmecda_ctl1 & (RMECDA_CTL1_TDISP_EN_MASK |
-                      RMECDA_CTL1_LINK_STR_LOCK_MASK)) !=
-      (RMECDA_CTL1_TDISP_EN_MASK |
-       RMECDA_CTL1_LINK_STR_LOCK_MASK))
-  {
-    result = ACS_STATUS_FAIL;
-    goto cleanup;
-  }
-
-  context.rmecda_ctl1_valid = 1u;
 
   /*
    * Populate host cache with a known pattern in CXL.mem memory so that a

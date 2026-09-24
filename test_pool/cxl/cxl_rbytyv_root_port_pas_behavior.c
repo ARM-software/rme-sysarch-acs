@@ -887,18 +887,27 @@ verify_root_port(const CXL_COMPONENT_TABLE *table,
     goto cleanup;
   }
 
-  /* Step 2: Verify Realm host-to-device requests are rejected. */
-  status = access_cxl_mem(root_port->bdf,
-                          endpoint->bdf,
-                          aer_offset,
-                          context.window_base,
-                          REALM_PAS,
-                          1u);
-  if (status != ACS_STATUS_PASS)
+  /* Step 2: Require Realm rejection only when the RBYTYV exception is unused. */
+  if (val_cxl_rp_is_realm_access_authorized(root_port->bdf) == 0u)
   {
-    val_print(ACS_PRINT_ERR, " RBYTYV: Realm host-to-device reject failed", 0);
-    result = ACS_STATUS_FAIL;
-    goto cleanup;
+    status = access_cxl_mem(root_port->bdf,
+                            endpoint->bdf,
+                            aer_offset,
+                            context.window_base,
+                            REALM_PAS,
+                            1u);
+    if (status != ACS_STATUS_PASS)
+    {
+      val_print(ACS_PRINT_ERR, " RBYTYV: Realm host-to-device reject failed", 0);
+      result = ACS_STATUS_FAIL;
+      goto cleanup;
+    }
+  }
+  else
+  {
+    val_print(ACS_PRINT_DEBUG,
+              " RBYTYV: Realm rejection check omitted: platform authorization configured",
+              0);
   }
 
   /* Step 3: Verify device-to-host traffic is forced to Non-secure. */

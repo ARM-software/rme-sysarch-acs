@@ -42,6 +42,21 @@ static const uint32_t g_cxl_rp_not_subject_to_host_gpc_bdfs[CXL_RP_NOT_SUBJECT_T
   {CXL_RP_NOT_SUBJECT_TO_HOST_GPC_BDF_ENTRIES(EXPAND_CXL_RP_BDF_ENTRY)};
 #undef EXPAND_CXL_RP_BDF_ENTRY
 
+#ifndef CXL_RP_REALM_ACCESS_AUTHORIZED_CNT
+#define CXL_RP_REALM_ACCESS_AUTHORIZED_CNT 0u
+#endif
+#ifndef CXL_RP_REALM_ACCESS_AUTHORIZED_BDF_ENTRIES
+#define CXL_RP_REALM_ACCESS_AUTHORIZED_BDF_ENTRIES(_)
+#endif
+
+#if CXL_RP_REALM_ACCESS_AUTHORIZED_CNT != 0u
+/* User-confirmed Root Ports with the RBYTYV Realm access exception enabled. */
+#define EXPAND_CXL_RP_BDF_ENTRY(bdf) bdf,
+static const uint32_t g_cxl_rp_realm_access_authorized_bdfs[] =
+  {CXL_RP_REALM_ACCESS_AUTHORIZED_BDF_ENTRIES(EXPAND_CXL_RP_BDF_ENTRY)};
+#undef EXPAND_CXL_RP_BDF_ENTRY
+#endif
+
 #ifndef CXL_CHI_C2C_SUPPORTED_CNT
 #define CXL_CHI_C2C_SUPPORTED_CNT 0u
 #endif
@@ -69,6 +84,30 @@ pal_cxl_rp_is_not_subject_to_host_gpc(uint32_t rp_bdf)
   }
 
   return 0u;
+}
+
+uint32_t
+pal_cxl_rp_is_realm_access_authorized(uint32_t rp_bdf)
+{
+#if CXL_RP_REALM_ACCESS_AUTHORIZED_CNT == 0u
+  (void)rp_bdf;
+  return 0u;
+#else
+  uint32_t count = (uint32_t)(sizeof(g_cxl_rp_realm_access_authorized_bdfs) /
+                             sizeof(g_cxl_rp_realm_access_authorized_bdfs[0]));
+
+  /* A mismatched count/list must not authorize an unintended port. */
+  if (count != CXL_RP_REALM_ACCESS_AUTHORIZED_CNT)
+    return 0u;
+
+  for (uint32_t idx = 0u; idx < count; ++idx)
+  {
+    if (g_cxl_rp_realm_access_authorized_bdfs[idx] == rp_bdf)
+      return 1u;
+  }
+
+  return 0u;
+#endif
 }
 
 uint32_t
