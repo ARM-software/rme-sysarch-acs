@@ -1,7 +1,7 @@
 Bare-metal Macros for Platform Configuration
 ============================================
 
-This section documents the bare-metal macros for PE, GIC, Timer, PCIe, and SMMU components as used in the RME ACS platform override definitions.
+This section documents the bare-metal macros for PE, GIC, Timer, PCIe, CXL, and SMMU components as used in the RME ACS platform override definitions.
 
 Steps to Customize Bare-metal Code
 ==================================
@@ -223,6 +223,34 @@ Where macros with _<n> suffix are repeated for each ECAM region (0 to NUM_ECAM-1
         PERIPHERAL_IRQ_MAP irq_map;
     } PCIE_READ_BLOCK;
 
+CXL Realm Access Authorization Macros
+-------------------------------------
+
+For a Root Port without RME-CDA, the user must confirm that MSD firmware or a
+trusted subsystem has already authorized Realm access under RBYTYV. List only
+Root Ports authorized for all CXL.mem windows used by ACS through them. These
+macros report existing authorization; they do not program the access policy.
+
+The default configuration authorizes no ports:
+
+.. code-block:: c
+
+    #define CXL_RP_REALM_ACCESS_AUTHORIZED_CNT 0u
+    #define CXL_RP_REALM_ACCESS_AUTHORIZED_BDF_ENTRIES(_)
+
+After enabling authorization on the platform, an example for one Root Port is:
+
+.. code-block:: c
+
+    #define CXL_RP_REALM_ACCESS_AUTHORIZED_CNT 1u
+    #define CXL_RP_REALM_ACCESS_AUTHORIZED_BDF_ENTRIES(_) _(0x00000400)
+
+Use Root Port BDFs in ``PCIE_CREATE_BDF`` encoding (``0xSSBBDDFF``). The count
+must match the number of entries. RHCQWS, RLQMCY and RPTGGP skip ports without
+RME-CDA unless ``val_cxl_rp_is_realm_access_authorized()`` confirms a matching entry.
+For UEFI INI configuration, see the CXL Realm access authorization section in the
+`platform porting guide <Arm_RME_System_ACS_Platform_porting_guide.rst>`_.
+
 SMMU and IOVIRT Macros
 ----------------------
 
@@ -294,4 +322,3 @@ Example:
         uint32_t output_base;
         uint32_t output_ref;
     } ID_MAP;
-

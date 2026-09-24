@@ -475,6 +475,15 @@
 #define CXL_RP_NOT_SUBJECT_TO_HOST_GPC_BDF_ENTRIES(_) _(0x400)
 
 /*
+ * Root Ports with Realm access already authorized by MSD firmware or a trusted
+ * subsystem (RBYTYV). Listing a port confirms authorization for all CXL.mem
+ * windows used by ACS through it; these macros do not enable authorization.
+ * Provide BDF values in PCIE_CREATE_BDF encoding (0xSSBBDDFF).
+ */
+#define CXL_RP_REALM_ACCESS_AUTHORIZED_CNT 0u
+#define CXL_RP_REALM_ACCESS_AUTHORIZED_BDF_ENTRIES(_)
+
+/*
  * CXL components that support CHI-C2C.
  * Provide BDF values in PCIE_CREATE_BDF encoding (0xSSBBDDFF).
  */

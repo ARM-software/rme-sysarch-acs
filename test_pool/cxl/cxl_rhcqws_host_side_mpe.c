@@ -428,6 +428,7 @@ exercise_root_port(const CXL_COMPONENT_TABLE *table,
   uint32_t session_active = 0u;
   libcxltsp_device_capabilities_t capabilities;
   uint32_t rmecda_cap_base = 0u;
+  uint32_t rmecda_present;
   uint64_t cfg_addr = 0u;
   uint64_t cfg_va = 0u;
   uint64_t tg = 0u;
@@ -458,8 +459,20 @@ exercise_root_port(const CXL_COMPONENT_TABLE *table,
   if (endpoint->device_type != CXL_DEVICE_TYPE_TYPE3)
     return ACS_STATUS_SKIP;
 
-  /* Filter to configurations with host/endpoint HDM decoders. */
+  /* Record the Type-3 device before checking execution prerequisites. */
   *type3_found = 1u;
+
+  /* Confirm Realm access before modifying CXL.mem or decoder configuration. */
+  rmecda_present = (val_pcie_find_cda_capability(root_port->bdf,
+                                                 &rmecda_cap_base) == PCIE_SUCCESS);
+  if ((rmecda_present == 0u) &&
+      (val_cxl_rp_is_realm_access_authorized(root_port->bdf) == 0u))
+  {
+    val_print(ACS_PRINT_DEBUG,
+              " RHCQWS: Skipping RP 0x%x: no RME-CDA or configured Realm authorization",
+              (uint64_t)root_port->bdf);
+    return ACS_STATUS_SKIP;
+  }
 
   host_index = root_port->host_bridge_index;
   if (host_index == CXL_COMPONENT_INVALID_INDEX)
@@ -614,94 +627,97 @@ exercise_root_port(const CXL_COMPONENT_TABLE *table,
     goto cleanup;
   }
 
-  /* Enable TDISP and lock the link after decoder programming. */
-  status = val_pcie_find_cda_capability(root_port->bdf, &rmecda_cap_base);
-  if (status != ACS_STATUS_PASS)
+  /*
+   * RHCQWS does not require RME-CDA. Where implemented, enable TDISP and
+   * lock the link to permit the Realm accesses used by this test.
+   */
+  if (rmecda_present != 0u)
+  {
+    cfg_addr = val_pcie_get_bdf_config_addr(root_port->bdf);
+    tg = val_get_min_tg();
+    if ((cfg_addr == 0u) || (tg == 0u))
+    {
+      val_print(ACS_PRINT_ERR,
+                " RHCQWS: Invalid config mapping for BDF 0x%x",
+                (uint64_t)root_port->bdf);
+      status = ACS_STATUS_FAIL;
+      goto cleanup;
+    }
+
+    cfg_va = val_get_free_va(tg);
+    if (cfg_va == 0u)
+    {
+      val_print(ACS_PRINT_ERR,
+                " RHCQWS: Config VA allocation failed for BDF 0x%x",
+                (uint64_t)root_port->bdf);
+      status = ACS_STATUS_FAIL;
+      goto cleanup;
+    }
+
+    attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(OUTER_SHAREABLE) |
+                       GET_ATTR_INDEX(DEV_MEM_nGnRnE) | PGT_ENTRY_AP_RW |
+                       PAS_ATTR(ROOT_PAS));
+    if (val_add_mmu_entry_el3(cfg_va, cfg_addr, attr))
+    {
+      val_print(ACS_PRINT_ERR,
+                " RHCQWS: Config map failed for BDF 0x%x",
+                (uint64_t)root_port->bdf);
+      status = ACS_STATUS_FAIL;
+      goto cleanup;
+    }
+
+    if (read_from_root(cfg_va + rmecda_cap_base + RMECDA_CTL1_OFFSET,
+                       &ctl1_original) != ACS_STATUS_PASS)
+    {
+      val_print(ACS_PRINT_ERR,
+                " RHCQWS: RMECDA_CTL1 read failed for BDF 0x%x",
+                (uint64_t)root_port->bdf);
+      status = ACS_STATUS_FAIL;
+      goto cleanup;
+    }
+
+    /* Restore the original control even if programming or readback fails. */
+    ctl1_valid = 1u;
+    ctl1_programmed = ctl1_original |
+                      RMECDA_CTL1_TDISP_EN_MASK |
+                      RMECDA_CTL1_LINK_STR_LOCK_MASK;
+    if (write_from_root(cfg_va + rmecda_cap_base + RMECDA_CTL1_OFFSET,
+                        ctl1_programmed) != ACS_STATUS_PASS)
+    {
+      val_print(ACS_PRINT_ERR,
+                " RHCQWS: RMECDA_CTL1 write failed for BDF 0x%x",
+                (uint64_t)root_port->bdf);
+      status = ACS_STATUS_FAIL;
+      goto cleanup;
+    }
+
+    if (read_from_root(cfg_va + rmecda_cap_base + RMECDA_CTL1_OFFSET,
+                       &ctl1_readback) != ACS_STATUS_PASS)
+    {
+      val_print(ACS_PRINT_ERR,
+                " RHCQWS: RMECDA_CTL1 readback failed for BDF 0x%x",
+                (uint64_t)root_port->bdf);
+      status = ACS_STATUS_FAIL;
+      goto cleanup;
+    }
+
+    if ((ctl1_readback &
+         (RMECDA_CTL1_TDISP_EN_MASK | RMECDA_CTL1_LINK_STR_LOCK_MASK)) !=
+        (RMECDA_CTL1_TDISP_EN_MASK | RMECDA_CTL1_LINK_STR_LOCK_MASK))
+    {
+      val_print(ACS_PRINT_ERR,
+                " RHCQWS: RMECDA_CTL1 not set for BDF 0x%x",
+                (uint64_t)root_port->bdf);
+      status = ACS_STATUS_FAIL;
+      goto cleanup;
+    }
+  }
+  else
   {
     val_print(ACS_PRINT_DEBUG,
-              " RHCQWS: RME-CDA DVSEC missing for BDF 0x%x",
-              (uint64_t)root_port->bdf);
-    status = ACS_STATUS_SKIP;
-    goto cleanup;
+              " RHCQWS: RME-CDA absent; platform configuration confirms Realm authorization",
+              0);
   }
-
-  cfg_addr = val_pcie_get_bdf_config_addr(root_port->bdf);
-  tg = val_get_min_tg();
-  if ((cfg_addr == 0u) || (tg == 0u))
-  {
-    val_print(ACS_PRINT_ERR,
-              " RHCQWS: Invalid config mapping for BDF 0x%x",
-              (uint64_t)root_port->bdf);
-    status = ACS_STATUS_FAIL;
-    goto cleanup;
-  }
-
-  cfg_va = val_get_free_va(tg);
-  if (cfg_va == 0u)
-  {
-    val_print(ACS_PRINT_ERR,
-              " RHCQWS: Config VA allocation failed for BDF 0x%x",
-              (uint64_t)root_port->bdf);
-    status = ACS_STATUS_FAIL;
-    goto cleanup;
-  }
-
-  attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(OUTER_SHAREABLE) |
-                     GET_ATTR_INDEX(DEV_MEM_nGnRnE) | PGT_ENTRY_AP_RW |
-                     PAS_ATTR(ROOT_PAS));
-  if (val_add_mmu_entry_el3(cfg_va, cfg_addr, attr))
-  {
-    val_print(ACS_PRINT_ERR,
-              " RHCQWS: Config map failed for BDF 0x%x",
-              (uint64_t)root_port->bdf);
-    status = ACS_STATUS_FAIL;
-    goto cleanup;
-  }
-
-  if (read_from_root(cfg_va + rmecda_cap_base + RMECDA_CTL1_OFFSET,
-                     &ctl1_original) != ACS_STATUS_PASS)
-  {
-    val_print(ACS_PRINT_ERR,
-              " RHCQWS: RMECDA_CTL1 read failed for BDF 0x%x",
-              (uint64_t)root_port->bdf);
-    status = ACS_STATUS_FAIL;
-    goto cleanup;
-  }
-
-  ctl1_programmed = ctl1_original |
-                    RMECDA_CTL1_TDISP_EN_MASK |
-                    RMECDA_CTL1_LINK_STR_LOCK_MASK;
-  if (write_from_root(cfg_va + rmecda_cap_base + RMECDA_CTL1_OFFSET,
-                      ctl1_programmed) != ACS_STATUS_PASS)
-  {
-    val_print(ACS_PRINT_ERR,
-              " RHCQWS: RMECDA_CTL1 write failed for BDF 0x%x",
-              (uint64_t)root_port->bdf);
-    status = ACS_STATUS_FAIL;
-    goto cleanup;
-  }
-
-  if (read_from_root(cfg_va + rmecda_cap_base + RMECDA_CTL1_OFFSET,
-                     &ctl1_readback) != ACS_STATUS_PASS)
-  {
-    val_print(ACS_PRINT_ERR,
-              " RHCQWS: RMECDA_CTL1 readback failed for BDF 0x%x",
-              (uint64_t)root_port->bdf);
-    status = ACS_STATUS_FAIL;
-    goto cleanup;
-  }
-
-  if ((ctl1_readback &
-       (RMECDA_CTL1_TDISP_EN_MASK | RMECDA_CTL1_LINK_STR_LOCK_MASK)) !=
-      (RMECDA_CTL1_TDISP_EN_MASK | RMECDA_CTL1_LINK_STR_LOCK_MASK))
-  {
-    val_print(ACS_PRINT_ERR,
-              " RHCQWS: RMECDA_CTL1 not set for BDF 0x%x",
-              (uint64_t)root_port->bdf);
-    status = ACS_STATUS_FAIL;
-    goto cleanup;
-  }
-  ctl1_valid = 1u;
 
   status = run_partial_write_test(&context);
 
@@ -773,7 +789,7 @@ payload(void)
   if (candidates == 0u)
   {
     val_print(ACS_PRINT_DEBUG,
-              " RHCQWS: No initiator-based encryption devices",
+              " RHCQWS: No eligible initiator-based encryption devices",
               0);
     val_set_status(pe_index, "SKIP", 03);
     return;

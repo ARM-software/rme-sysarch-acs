@@ -1055,7 +1055,7 @@ Testcase checklist
 
       1. Enumerate CXL Root Ports in the system.
       2. For each root port that does not expose the RME-CDA DVSEC, select a downstream Type-2/Type-3 endpoint and enable CXL.mem; program host/endpoint HDM decoders for a CXL.mem window.
-      3. Validate host-to-device accesses: Non-secure PAS reads/writes succeed and Realm PAS reads/writes are rejected with error.
+      3. Validate host-to-device accesses: Non-secure PAS reads/writes succeed. Require Realm PAS reads/writes to be rejected with error only when val_cxl_rp_is_realm_access_authorized() does not confirm user-configured authorization for the root port; otherwise omit the Realm rejection check under the RBYTYV exception.
       4. Validate device-to-host DMA is effectively forced to Non-secure by attempting DMA to Non-secure memory (passes) and Realm-assigned memory (rejected / payload not observed).
 
   * -
@@ -1077,9 +1077,14 @@ Testcase checklist
 
     -
 
-      1. Identify CXL Type-3 devices that do not advertise CXL-TSP capability.
-      2. Verify the upstream root port exposes the RME-CDA DVSEC.
-      3. Confirm CMA-SPDM support via DOE discovery, Direct P2P memory enable is disabled, BI decoder is disabled, and HDM decoder global control is RMSD write-protect.
+      1. Identify CXL Type-3 devices that do not advertise CXL-TSP capability and evaluate the following prerequisites independently of upstream RME-CDA support.
+      2. Confirm CMA-SPDM support via DOE discovery.
+      3. Verify Direct P2P memory enable is disabled.
+      4. If the BI decoder capability is present, verify back-invalidate snoops are disabled.
+      5. Verify the HDM decoder capability is present with at least one decoder and its global control register is RMSD write-protect.
+      6. Attempt an SPDM session for additional coverage and close the session; a session failure is logged without failing the test.
+
+      Note: This scenario requires SPDM/DOE support and provides partial RCNSLJ coverage. Host-side MPE encryption remains required by RCNSLJ; this test does not directly validate encryption, cryptographic integrity/replay protection, or protection of all device and switch configuration registers.
 
   * -
 
@@ -1183,10 +1188,13 @@ Testcase checklist
 
     -
 
-      1. Select a Type-3 CXL.mem endpoint that does not advertise target-side encryption but supports MemRdFill (TSP Capable).
-      2. Enable MEC, program HDM decoders, and enable CXL.mem access.
-      3. Enable TDISP and set RMECDA_CTL1.LINK_STR_LOCK.
-      4. Write a 32-bit value, update a single byte, and read back the 32-bit value to confirm untouched bytes are preserved.
+      1. Select a Type-3 CXL.mem endpoint. If its upstream root port lacks RME-CDA, require val_cxl_rp_is_realm_access_authorized() to confirm user-configured Realm authorization; otherwise skip this candidate before modifying device state. Require host and endpoint HDM decoders.
+      2. Enable CXL.mem, select a CFMWS window, and save and program the host target list and host/endpoint HDM decoders.
+      3. Use an SPDM session to query CXL-TSP capabilities. Skip endpoints that advertise target-side encryption and verify TSP Capable is set for MemRdFill support.
+      4. If the upstream root port exposes the RME-CDA DVSEC, save RMECDA_CTL1, set TDISP_EN and LINK_STR_LOCK, and verify both bits read back as set. For a port without RME-CDA, use the Realm authorization confirmed in step 1.
+      5. Enable MEC, configure a MECID, and map a non-cacheable Realm PAS alias for the CXL.mem window.
+      6. Write a 32-bit value, update a single byte, and read back the 32-bit value to confirm untouched bytes are preserved.
+      7. During cleanup, disable MEC if enabled, attempt to restore saved decoder/target-list programming and RMECDA_CTL1 if saved, and close the SPDM session. Control restoration is attempted even if RME-CDA programming or readback fails.
 
       Note: This scenario requires SPDM/DOE support to query CXL-TSP capabilities.
 
@@ -1293,10 +1301,12 @@ Testcase checklist
 
     -
 
-      1. Identify a Type-3 endpoint that does not advertise target-side encryption capability.
-      2. Enable MEC, enable CXL.mem, and program HDM decoders for a CXL.mem window.
-      3. Enable TDISP and set RMECDA_CTL1.LINK_STR_LOCK.
-      4. Write using MECID1, issue a CMO to PoE, then read using MECID2 and confirm the read data differs from the write data (host-side MPE observed).
+      1. Identify a Type-3 endpoint. If its upstream root port lacks RME-CDA, require val_cxl_rp_is_realm_access_authorized() to confirm user-configured Realm authorization; otherwise skip this candidate before enabling MEC or modifying device state. Use an SPDM session to confirm the endpoint does not advertise target-side encryption capability.
+      2. Enable MEC, enable CXL.mem, and save and program HDM decoders for a selected CFMWS window.
+      3. If the upstream root port exposes the RME-CDA DVSEC, save RMECDA_CTL1, set TDISP_EN and LINK_STR_LOCK, and verify both bits read back as set. For a port without RME-CDA, use the Realm authorization confirmed in step 1.
+      4. Select a page-aligned address in the window and map a Realm PAS alias. Write using MECID1, issue a CMO to PoE, then read using MECID2 and confirm the read data differs from the write data (host-side MPE observed).
+      5. Restore the global MECID after the access sequence.
+      6. On every exit after successful decoder setup, attempt to restore saved decoder programming. If RMECDA_CTL1 was saved, attempt to restore it even after programming or readback failures. Close the SPDM session and disable MEC when the test completes.
 
       Note: This scenario requires SPDM/DOE support to query CXL-TSP capabilities.
 
@@ -1401,9 +1411,11 @@ Testcase checklist
 
     -
 
-      1. Select a CXL exerciser endpoint and its upstream root port and program HDM decoders for a CXL.mem window.
-      2. Enable TDISP and set RMECDA_CTL1.LINK_STR_LOCK.
-      3. Dirty host cachelines by writing to the window, issue CMOs to PoPA and PoE, and verify a device-side read observes the written pattern.
+      1. Select a CXL exerciser endpoint and its upstream root port. If the port lacks RME-CDA, require val_cxl_rp_is_realm_access_authorized() to confirm user-configured Realm authorization; otherwise continue to the next candidate before modifying device state. Enable CXL.mem and save and program the host target list and host/endpoint HDM decoders for a selected CFMWS window.
+      2. If the upstream root port exposes the RME-CDA DVSEC, save RMECDA_CTL1, set TDISP_EN and LINK_STR_LOCK, and verify both bits read back as set. For a port without RME-CDA, use the Realm authorization confirmed in step 1.
+      3. Map a cacheable Realm PAS alias and dirty the host cache by writing a known pattern to the CXL.mem window.
+      4. Issue a CMO to PoPA and verify a device-side read observes the written pattern, then issue a CMO to PoE and repeat the device-side readback check.
+      5. During cleanup, attempt to restore saved decoder/target-list programming and RMECDA_CTL1 if saved. Control restoration is attempted even if RME-CDA programming or readback fails.
 
   * -
 

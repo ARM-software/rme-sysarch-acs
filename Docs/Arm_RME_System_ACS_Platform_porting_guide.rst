@@ -232,6 +232,48 @@ Running Parser.efi will:
 - Install a runtime configuration table (CT) that RME will consume
 - Print the exact ``Rme.efi -cfg <ini>`` command to run next (Parser no longer auto‑launches RME)
 
+**CXL Realm access authorization**
+
+RBYTYV requires a CXL Root Port without RME-CDA to reject host-to-device Realm
+requests unless an implementation-defined mechanism controlled by MSD firmware
+or a trusted subsystem permits them. The user must configure that mechanism
+before running ACS and list the authorized Root Ports in the platform configuration.
+Each entry confirms authorization for all CXL.mem windows used by ACS through
+that port. Listing a port does not enable hardware authorization.
+
+The VAL hook ``val_cxl_rp_is_realm_access_authorized()`` obtains this confirmation
+from ``pal_cxl_rp_is_realm_access_authorized()``. It returns 1 only for a listed
+Root Port; a missing setting or a count of zero returns 0. Use Root Port BDFs in
+``PCIE_CREATE_BDF`` encoding (``0xSSBBDDFF``), not endpoint BDFs.
+
+For UEFI, set the following keys in the ``[PLATFORM_CONFIG]`` section of the
+INI supplied with ``-cfg``. For example, after authorizing Root Port ``0x00000400``:
+
+.. code-block:: ini
+
+   CXL_RP_REALM_ACCESS_AUTHORIZED_CNT=1
+   CXL_RP_REALM_ACCESS_AUTHORIZED_0_BDF=0x00000400
+
+Number entries from zero to count minus one. The UEFI PAL supports up to 256
+entries. Both supplied platform INI templates default to a count of zero.
+
+For bare-metal, set the equivalent macros in
+``platform/pal_baremetal/FVP/include/pal_override_fvp.h`` or the platform's
+override header and rebuild:
+
+.. code-block:: c
+
+   #define CXL_RP_REALM_ACCESS_AUTHORIZED_CNT 1u
+   #define CXL_RP_REALM_ACCESS_AUTHORIZED_BDF_ENTRIES(_) _(0x00000400)
+
+The macro count must match the number of BDF entries. The default is an empty list.
+
+RHCQWS, RLQMCY and RPTGGP skip a candidate before programming its CXL.mem
+configuration if it has neither RME-CDA nor this user-provided confirmation.
+Confirmed authorization allows the test to run; subsequent access or behavior
+failures remain failures. RBYTYV omits its host-to-device Realm rejection check
+for a listed port, while retaining its Non-secure access and device-to-host checks.
+
 EL3–UEFI coordination (authoritative values)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

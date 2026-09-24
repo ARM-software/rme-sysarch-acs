@@ -75,6 +75,31 @@ pal_cxl_rp_is_not_subject_to_host_gpc(UINT32 rp_bdf)
 }
 
 UINT32
+pal_cxl_rp_is_realm_access_authorized(UINT32 rp_bdf)
+{
+  UINT64 count = RmeCfgGetU64(L"CXL_RP_REALM_ACCESS_AUTHORIZED_CNT", 0u);
+
+  /* Missing or invalid configuration does not confirm authorization. */
+  if (count > 256u)
+    return 0u;
+
+  for (UINT32 idx = 0u; idx < count; ++idx)
+  {
+    CHAR16 key[64];
+    UnicodeSPrint(key,
+                  sizeof(key),
+                  L"CXL_RP_REALM_ACCESS_AUTHORIZED_%u_BDF",
+                  idx);
+
+    UINT64 cfg_bdf = RmeCfgGetU64(key, ~0ULL);
+    if (cfg_bdf == (UINT64)rp_bdf)
+      return 1u;
+  }
+
+  return 0u;
+}
+
+UINT32
 pal_cxl_is_chi_c2c_supported(UINT32 bdf)
 {
   UINT32 count

@@ -185,6 +185,7 @@ uint32_t val_cxl_find_capability(uint64_t component_base,
                                  uint16_t capability_id,
                                  uint64_t *cap_base_out);
 uint32_t val_cxl_rp_is_not_subject_to_host_gpc(uint32_t rp_bdf);
+uint32_t val_cxl_rp_is_realm_access_authorized(uint32_t rp_bdf);
 uint32_t val_cxl_device_is_cxl(uint32_t bdf);
 uint32_t val_cxl_component_add(uint32_t bdf);
 void     val_cxl_print_component_summary(void);

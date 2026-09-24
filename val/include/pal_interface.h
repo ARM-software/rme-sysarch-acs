@@ -389,6 +389,7 @@ uint32_t pal_cxl_root_port_ide_program_and_enable(uint32_t rp_bdf,
                                                   const CXL_IDE_KEY_BUFFER *rx_key,
                                                   const CXL_IDE_KEY_BUFFER *tx_key);
 uint32_t pal_cxl_rp_is_not_subject_to_host_gpc(uint32_t rp_bdf);
+uint32_t pal_cxl_rp_is_realm_access_authorized(uint32_t rp_bdf);
 uint32_t pal_cxl_is_chi_c2c_supported(uint32_t bdf);
 uint32_t pal_cxl_root_port_ide_disable(uint32_t rp_bdf,
                                        uint8_t stream_id,
