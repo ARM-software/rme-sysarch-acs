@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022-2023, 2025, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2023, 2025-2026, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -138,7 +138,7 @@ val_gic_install_isr(uint32_t int_id, void (*isr)(void))
       return val_gic_rme_install_isr(int_id, isr);
   else {
       ret_val = pal_gic_install_isr(int_id, isr);
-      if (int_id > 31 && int_id < 1024) {
+      if (isr != NULL && int_id > 31 && int_id < 1024) {
           /**** UEFI GIC code is not enabling interrupt in the Distributor ***/
           /**** So, do this here as a fail-safe. Remove if PAL guarantees this ***/
           val_mmio_write(val_gic_get_gicd_base() + GICD_ISENABLER + (4 * reg_offset),
