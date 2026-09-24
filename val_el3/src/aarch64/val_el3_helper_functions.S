@@ -503,24 +503,29 @@ val_el3_asm_eret:
        msr    sp_el0, x8
        ERET
 
+.macro ack_vector_entry vector_offset
+       prepare_ack_handler_entry
+       save_firmware_handler_entry_addr offset=\vector_offset
+       set_ack_el3_stack
+       B  val_el3_ack_handler
+       .balign 0x80, 0
+.endm
+
 .align 11, 0
 val_el3_exception_handler_user:
-       prepare_ack_handler_entry
-       save_firmware_handler_entry_addr offset=0x0
-       set_ack_el3_stack
-       B  val_el3_ack_handler
-.align 9, 0
-       prepare_ack_handler_entry
-       save_firmware_handler_entry_addr offset=0x200
-       set_ack_el3_stack
-       B  val_el3_ack_handler
-.align 9, 0
-       prepare_ack_handler_entry
-       save_firmware_handler_entry_addr offset=0x400
-       set_ack_el3_stack
-       B  val_el3_ack_handler
-.align 9, 0
-       prepare_ack_handler_entry
-       save_firmware_handler_entry_addr offset=0x600
-       set_ack_el3_stack
-       B  val_el3_ack_handler
+       ack_vector_entry 0x000
+       ack_vector_entry 0x080
+       ack_vector_entry 0x100
+       ack_vector_entry 0x180
+       ack_vector_entry 0x200
+       ack_vector_entry 0x280
+       ack_vector_entry 0x300
+       ack_vector_entry 0x380
+       ack_vector_entry 0x400
+       ack_vector_entry 0x480
+       ack_vector_entry 0x500
+       ack_vector_entry 0x580
+       ack_vector_entry 0x600
+       ack_vector_entry 0x680
+       ack_vector_entry 0x700
+       ack_vector_entry 0x780
