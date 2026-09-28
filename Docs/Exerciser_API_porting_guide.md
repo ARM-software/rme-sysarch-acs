@@ -272,21 +272,15 @@ interface:
 
 | PAL item | Meaning |
 | --- | --- |
-| `EXERCISER_CXL_CMD_OP` | Select `BACKDOOR_READ64`, `BACKDOOR_WRITE64`, or `BISNP` |
-| `EXERCISER_CXL_CMD_ADDR` | Set the 64-bit CXL physical address |
+| `EXERCISER_CXL_CMD_OP` | Select the supported CXL/CDA command |
+| `EXERCISER_CXL_CMD_ADDR` | Set the 64-bit address in the domain required by the command |
 | `EXERCISER_CXL_CMD_DATA0` | Set or get the 64-bit payload/result |
 | `CXL_CMD_START` | Trigger the selected command and wait for completion |
 
-The opcode values are:
-
-| Opcode | Value |
-| --- | ---: |
-| `CXL_CMD_OP_BACKDOOR_READ64` | `0x1` |
-| `CXL_CMD_OP_BACKDOOR_WRITE64` | `0x2` |
-| `CXL_CMD_OP_BISNP` | `0x3` |
-
-The PAL API uses these values. A PAL translating to a different native
-interface must retain them.
+The command values and address domains are listed in
+[CDA stimulus contracts](#cda-stimulus-contracts). These are the logical PAL
+values; a PAL translating to another native interface must preserve their
+meaning.
 
 The CXL command interface uses one combined register at BAR0 offset `0x80`:
 
@@ -311,7 +305,7 @@ uint64_t unused;
 
 pal_exerciser_set_param(EXERCISER_CXL_CMD_OP,
                          CXL_CMD_OP_BACKDOOR_READ64, 0, bdf);
-pal_exerciser_set_param(EXERCISER_CXL_CMD_ADDR, address, 0, bdf);
+pal_exerciser_set_param(EXERCISER_CXL_CMD_ADDR, dpa, 0, bdf);
 pal_exerciser_ops(CXL_CMD_START, 0, bdf);
 pal_exerciser_get_param(EXERCISER_CXL_CMD_DATA0,
                          &data, &unused, bdf);
@@ -322,7 +316,7 @@ pal_exerciser_get_param(EXERCISER_CXL_CMD_DATA0,
 ```c
 pal_exerciser_set_param(EXERCISER_CXL_CMD_OP,
                          CXL_CMD_OP_BACKDOOR_WRITE64, 0, bdf);
-pal_exerciser_set_param(EXERCISER_CXL_CMD_ADDR, address, 0, bdf);
+pal_exerciser_set_param(EXERCISER_CXL_CMD_ADDR, dpa, 0, bdf);
 pal_exerciser_set_param(EXERCISER_CXL_CMD_DATA0, data, 0, bdf);
 pal_exerciser_ops(CXL_CMD_START, 0, bdf);
 ```
@@ -332,7 +326,7 @@ pal_exerciser_ops(CXL_CMD_START, 0, bdf);
 ```c
 pal_exerciser_set_param(EXERCISER_CXL_CMD_OP,
                          CXL_CMD_OP_BISNP, 0, bdf);
-pal_exerciser_set_param(EXERCISER_CXL_CMD_ADDR, address, 0, bdf);
+pal_exerciser_set_param(EXERCISER_CXL_CMD_ADDR, hpa, 0, bdf);
 pal_exerciser_ops(CXL_CMD_START, 0, bdf);
 ```
 
@@ -344,6 +338,48 @@ by the device ABI.
 Backdoor read and write must use the debug CXL memory path. `BISNP` must
 generate the upstream CXL Back-Invalidate stimulus; replacing it with a
 backdoor memory operation is not equivalent.
+
+### CDA stimulus contracts
+
+The CXL command interface also carries the coherent-device stimuli used by
+CDA tests. Command support and native register layouts are platform-specific.
+The logical commands are defined in
+[`val/include/pal_interface.h`](../val/include/pal_interface.h):
+
+| Command | Value | Address | Required role |
+| --- | ---: | --- | --- |
+| `CXL_CMD_OP_BACKDOOR_READ64` | `0x1` | DPA | Read device media independently of the normal coherent access under test. |
+| `CXL_CMD_OP_BACKDOOR_WRITE64` | `0x2` | DPA | Seed device media independently of the normal coherent access under test. |
+| `CXL_CMD_OP_BISNP` | `0x3` | HPA | Request the upstream snoop operation exposed by the exerciser. |
+| `CXL_CMD_OP_DCM_CACHE_DIRTY` | `0x4` | HPA | Prepare dirty device-cache state for an existing populated Realm line. |
+| `CXL_CMD_OP_DCM_SET_REALM_ASSIGNMENT` | `0x6` | HPA | Establish or clear a device-side Realm association for the DCM Location. This does not configure host GPT ownership. |
+| `CXL_CMD_OP_DCM_CACHE_WRITEBACK` | `0x8` | HPA | Write back the specified device cache line through the coherent path for host-visible observation. |
+| `CXL_CMD_OP_SNOOP_RESPONSE_MECID` | `0x9` | Unused; pass zero | Enable or clear a response-MECID override for permitted and unpermitted snoop-response tests. |
+
+Backdoor operations take a device physical address (DPA); DCM assignment,
+cache-state, writeback, and snoop operations take a host physical address
+(HPA). `val_cxl_hpa_to_dpa()` derives the DPA from a supported endpoint HDM
+decoder configuration. Do not assume HPA and DPA are identical or substitute
+a backdoor operation for the normal transaction being checked.
+
+The snoop stimulus must have the protocol meaning and completion evidence
+required by the scenario. The command name alone is not proof of CHI SNP
+channel coverage. `pal_cda_tdi_snoop_attempt()` supplies the selected HPA and
+PAS and returns normalized emission, local-blocking, and host-completion
+evidence to VAL. Result flags such as `CXL_SNOOP_RESULT_HOST_ACCEPTED` and
+`CXL_SNOOP_RESULT_HOST_REJECTED` are PAL observations, not architectural
+host-port register bits. Derive them from actual exerciser or coherent-response
+evidence; a status-only interface may not expose every distinction.
+
+For the response-MECID override, `DATA0[15:0]` selects the MECID and
+`DATA0[16]` enables the override. Clear the enable bit during cleanup.
+`val_cxl_exerciser_set_snoop_response_mecid()` packages this control for tests.
+
+These interfaces describe endpoint capabilities. They do not require private
+host-port acceptance bits or a host-port monitoring backdoor. Unsupported
+commands and missing observations must not return fabricated success.
+Command completion alone is not the compliance verdict: the test evaluates
+the resulting data, response, exception, or fresh error status as appropriate.
 
 ## CHI-C2C SEC_SID
 

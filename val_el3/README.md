@@ -20,7 +20,7 @@ Prerequisites:
 plat_arm_acs_smc_handler function which is predefined in ACK.
 - 2MB memory must be flat mapped in EL3-MMU with Root access PAS and GPI as ROOT/ALL_ACCESS.
 
-For more information, see Docs/Arm_RME_System_Architecture_Compliance_Suite_Validation_Methodology.pdf.
+For more information, see the [Validation Methodology](../Docs/Arm_RME_System_Architecture_Compliance_Suite_Validation_Methodology.rst).
 
 Building EL3 code
 =================
@@ -60,4 +60,4 @@ Note:
     The configs.mk file is used to configure all Makefile variables such as build flags, paths,
 source files, include options, etc. They can be changed as required.
 
-For more information on the implementation, see Docs/Arm_RME_System_Architecture_Compliance_Suite_Validation_Methodology.pdf.
+For more information on the implementation, see the [Validation Methodology](../Docs/Arm_RME_System_Architecture_Compliance_Suite_Validation_Methodology.rst).

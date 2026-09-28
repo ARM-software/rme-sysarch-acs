@@ -526,6 +526,11 @@ target address must be valid for the platform CXL memory path configuration.
 Backdoor reads and writes use the debug CXL memory path; BISNP generates the
 upstream Back-Invalidate stimulus used to observe host cache and PAS behavior.
 
+For the additional CDA cache, Realm-assignment, writeback, and response-MECID
+commands, see [CDA stimulus contracts](Exerciser_API_porting_guide.md#cda-stimulus-contracts)
+in the exerciser API porting guide. That section defines the logical PAL
+commands, their HPA/DPA address domains, and the required completion evidence.
+
 **Transaction Monitoring**
 
 Transaction monitoring capabilities in the exerciser provides the ability to record the incoming transactions, for both config

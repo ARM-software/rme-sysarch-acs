@@ -38,7 +38,7 @@ Most of the tests are executed from UEFI Shell by executing the RME UEFI shell a
   - For details on porting the exerciser PAL APIs, see the [RME System ACS Exerciser API porting guide](Docs/Exerciser_API_porting_guide.md).
   - For information about the implementable RME rules test algorithm and for unimplemented RME rules, see [arm RME System ACS Scenario document](Docs/Arm_RME_System_Architecture_Compliance_Suite_Scenario_Document.rst)
   - For details on the RME System ACS UEFI Shell Application, see [arm RME System ACS Porting guide document](Docs/Arm_RME_System_ACS_Platform_porting_guide.rst).
-  - For details on the Design of the RME System ACS, see. the [arm RME System ACS Validation Methodology document](Docs/Arm_RME_System_Architecture_Compliance_Suite_Validation_Methodology.pdf)
+  - For details on the design of the RME System ACS, see the [Arm RME System ACS Validation Methodology document](Docs/Arm_RME_System_Architecture_Compliance_Suite_Validation_Methodology.rst).
   - For details on the RME ACS Bare-metal support, see the
           - [arm RME System ACS Porting guide document](Docs/Arm_RME_System_ACS_Platform_porting_guide.rst)
           - [Baremetal code](platform/pal_baremetal/)
@@ -57,7 +57,7 @@ Most of the tests are executed from UEFI Shell by executing the RME UEFI shell a
 - 512MB Unused VA space (within 48bits) that is used in the tests as VA.
 - 4KB of Non-Volatile memory that is used only in reset tests.
 
-For more information, see [arm RME System ACS Validation Methodology document](Docs/Arm_RME_System_Architecture_Compliance_Suite_Validation_Methodology.pdf).
+For more information, see [Arm RME System ACS Validation Methodology document](Docs/Arm_RME_System_Architecture_Compliance_Suite_Validation_Methodology.rst).
 
 ## ACS build steps - UEFI Shell application
 
