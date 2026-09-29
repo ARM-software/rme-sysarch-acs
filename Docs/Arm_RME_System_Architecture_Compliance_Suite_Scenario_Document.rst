@@ -63,7 +63,7 @@ Testcase checklist
 
       RBJVZS: An access to a Resource is associated with an Access PAS in accordance with the PAS Access Table.
 
-      RGDVSZ: A PA of an access to a memory-mapped peripheral is associated with a PAS until reaching the PAS filter assigned to protect the peripheral
+      RGDVSZ: A PA of an access to a memory-mapped peripheral is associated with a PAS until reaching the PAS filter assigned to protect the peripheral.
 
       RDVPGT: A private PAS filter allows access to a register only if the Access PAS matches a Resource PAS that the register is associated with.
 
@@ -646,15 +646,16 @@ Testcase checklist
 
       RGRCKL: An RME-DA Root Port supports the following IDE features:
 
-      - At least one Selective IDE Stream.NUM_SEL_STR denotes the number of Selective IDE Streams supported by the Root Port.
-      - At least three Address Association registers for each Selective IDE Stream.
-      - The TEE-Limited Stream IDE capability.
+      - At least one Selective IDE Stream. NUM_SEL_STR denotes the number of Selective IDE Streams supported by the Root Port.
+      - At least two Address Association register blocks for each Selective IDE Stream. Each block contains three registers.
+
+      IHDPRK recommends support for the TEE-Limited Stream IDE capability.
 
     -
 
-      1. For all RootPorts in the system, check at least one Selective IDE Stream is supported and TEE-Limited Stream is supported in the IDE Capability register.
-      2. Check at least three Address Association registers in the Address association block.
-      3. The RootPort should have all the expected values required for the IDE feature.
+      1. For all RootPorts in the system, check at least one Selective IDE Stream is supported in the IDE Capability register.
+      2. Check that each Selective IDE Stream supports at least two Address Association register blocks.
+      3. Report a warning if the recommended TEE-Limited Stream IDE capability is not supported.
 
   * -
 
