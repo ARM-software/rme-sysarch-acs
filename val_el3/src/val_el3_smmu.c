@@ -1761,7 +1761,7 @@ void val_el3_smmu_init(uint32_t num_smmu, uint64_t *smmu_base_arr)
     }
 
     for (i = 0; i < g_num_smmus; ++i) {
-        if (EXTRACT(ARCH_REV, val_el3_mmio_read(smmu_base_arr[i] + SMMU_AIDR_OFFSET)) != 3)
+        if (EXTRACT(ARCH_REV, val_el3_mmio_read(smmu_base_arr[i] + SMMU_AIDR_OFFSET)) < 3)
         {
             ERROR("\n val_smmu_init: SMMUv3.x supported, \
                                 skipping smmu %d", i);
