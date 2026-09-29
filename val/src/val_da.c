@@ -641,7 +641,8 @@ uint32_t val_ide_set_sel_stream(uint32_t bdf, uint32_t str_cnt, uint32_t enable)
   }
 
   /* Check if Selective IDE Stream is supported */
-  val_pcie_read_cfg(bdf, ide_cap_base + IDE_CAP_REG, &reg_value);
+  if (val_pcie_read_cfg(bdf, ide_cap_base + IDE_CAP_REG, &reg_value) != PCIE_SUCCESS)
+      return 1;
   sel_ide_str_supported = (reg_value & SEL_IDE_STR_MASK) >> SEL_IDE_STR_SHIFT;
   if (!sel_ide_str_supported)
   {
@@ -651,6 +652,8 @@ uint32_t val_ide_set_sel_stream(uint32_t bdf, uint32_t str_cnt, uint32_t enable)
 
   /* Get the number of Selective IDE stream */
   num_sel_ide_stream_supp = (reg_value & NUM_SEL_STR_MASK) >> NUM_SEL_STR_SHIFT;
+  if (str_cnt == 0 || str_cnt > num_sel_ide_stream_supp + 1)
+      return 1;
 
   /* Skip Link IDE register blocks only when Link IDE is supported. */
   num_tc_supp = (reg_value & NUM_TC_SUPP_MASK) >> NUM_TC_SUPP_SHIFT;
@@ -661,13 +664,22 @@ uint32_t val_ide_set_sel_stream(uint32_t bdf, uint32_t str_cnt, uint32_t enable)
   count = 0;
   while (count++ <= num_sel_ide_stream_supp)
   {
-      val_pcie_read_cfg(bdf, current_base_offset, &reg_value);
+      if (current_base_offset + SEL_IDE_CAP_REG_SIZE + RID_ADDR_REG1_SIZE +
+          RID_ADDR_REG2_SIZE > PCIE_CFG_SIZE ||
+          val_pcie_read_cfg(bdf, current_base_offset, &reg_value) != PCIE_SUCCESS)
+          return 1;
       num_addr_asso_block = (reg_value & NUM_ADDR_ASSO_REG_MASK) >> NUM_ADDR_ASSO_REG_SHIFT;
+      if (current_base_offset + SEL_IDE_CAP_REG_SIZE + RID_ADDR_REG1_SIZE +
+          RID_ADDR_REG2_SIZE + num_addr_asso_block * IDE_ADDR_REG_BLK_SIZE >
+          PCIE_CFG_SIZE)
+          return 1;
 
       /* Set/Unset the Selective IDE Stream enable bit */
       if (count == str_cnt)
       {
-          val_pcie_read_cfg(bdf, current_base_offset + SEL_IDE_CAP_CNTRL_REG, &reg_value);
+          if (val_pcie_read_cfg(bdf, current_base_offset + SEL_IDE_CAP_CNTRL_REG,
+                               &reg_value) != PCIE_SUCCESS)
+              return 1;
           if (enable)
               val_pcie_write_cfg(bdf, current_base_offset + SEL_IDE_CAP_CNTRL_REG, reg_value | 1);
           else
@@ -714,7 +726,8 @@ uint32_t val_ide_program_stream_id(uint32_t bdf, uint32_t str_cnt, uint32_t stre
   }
 
   /* Check if Selective IDE Stream is supported */
-  val_pcie_read_cfg(bdf, ide_cap_base + IDE_CAP_REG, &reg_value);
+  if (val_pcie_read_cfg(bdf, ide_cap_base + IDE_CAP_REG, &reg_value) != PCIE_SUCCESS)
+      return 1;
   sel_ide_str_supported = (reg_value & SEL_IDE_STR_MASK) >> SEL_IDE_STR_SHIFT;
   if (!sel_ide_str_supported)
   {
@@ -724,6 +737,8 @@ uint32_t val_ide_program_stream_id(uint32_t bdf, uint32_t str_cnt, uint32_t stre
 
   /* Get the number of Selective IDE stream */
   num_sel_ide_stream_supp = (reg_value & NUM_SEL_STR_MASK) >> NUM_SEL_STR_SHIFT;
+  if (str_cnt == 0 || str_cnt > num_sel_ide_stream_supp + 1)
+      return 1;
 
   /* Skip Link IDE register blocks only when Link IDE is supported. */
   num_tc_supp = (reg_value & NUM_TC_SUPP_MASK) >> NUM_TC_SUPP_SHIFT;
@@ -734,14 +749,27 @@ uint32_t val_ide_program_stream_id(uint32_t bdf, uint32_t str_cnt, uint32_t stre
   count = 0;
   while (count++ <= num_sel_ide_stream_supp)
   {
-      val_pcie_read_cfg(bdf, current_base_offset, &reg_value);
+      if (current_base_offset + SEL_IDE_CAP_REG_SIZE + RID_ADDR_REG1_SIZE +
+          RID_ADDR_REG2_SIZE > PCIE_CFG_SIZE ||
+          val_pcie_read_cfg(bdf, current_base_offset, &reg_value) != PCIE_SUCCESS)
+          return 1;
       num_addr_asso_block = (reg_value & NUM_ADDR_ASSO_REG_MASK) >> NUM_ADDR_ASSO_REG_SHIFT;
+      if (current_base_offset + SEL_IDE_CAP_REG_SIZE + RID_ADDR_REG1_SIZE +
+          RID_ADDR_REG2_SIZE + num_addr_asso_block * IDE_ADDR_REG_BLK_SIZE >
+          PCIE_CFG_SIZE)
+          return 1;
 
       /* Write the given Stream ID in the Selective IDE Stream control Register Bit[31:24] */
       if (count == str_cnt)
       {
-          val_pcie_write_cfg(bdf, current_base_offset + SEL_IDE_CAP_CNTRL_REG,
-                            (stream_id << 24) & 0xFF000000);
+          if (val_pcie_read_cfg(bdf, current_base_offset + SEL_IDE_CAP_CNTRL_REG,
+                               &reg_value) != PCIE_SUCCESS)
+              return 1;
+
+          /* Preserve Stream Enable and every control field other than Stream ID. */
+          reg_value = (reg_value & ~SEL_IDE_STR_ID_MASK) |
+                      ((stream_id << SEL_IDE_STR_ID_SHIFT) & SEL_IDE_STR_ID_MASK);
+          val_pcie_write_cfg(bdf, current_base_offset + SEL_IDE_CAP_CNTRL_REG, reg_value);
           return 0;
       }
 
@@ -785,7 +813,8 @@ uint32_t val_ide_program_rid_base_limit_valid(uint32_t bdf, uint32_t str_cnt,
   }
 
   /* Check if Selective IDE Stream is supported */
-  val_pcie_read_cfg(bdf, ide_cap_base + IDE_CAP_REG, &reg_value);
+  if (val_pcie_read_cfg(bdf, ide_cap_base + IDE_CAP_REG, &reg_value) != PCIE_SUCCESS)
+      return 1;
   sel_ide_str_supported = (reg_value & SEL_IDE_STR_MASK) >> SEL_IDE_STR_SHIFT;
   if (!sel_ide_str_supported)
   {
@@ -795,6 +824,8 @@ uint32_t val_ide_program_rid_base_limit_valid(uint32_t bdf, uint32_t str_cnt,
 
   /* Get the number of Selective IDE stream */
   num_sel_ide_stream_supp = (reg_value & NUM_SEL_STR_MASK) >> NUM_SEL_STR_SHIFT;
+  if (str_cnt == 0 || str_cnt > num_sel_ide_stream_supp + 1)
+      return 1;
 
   /* Skip Link IDE register blocks only when Link IDE is supported. */
   num_tc_supp = (reg_value & NUM_TC_SUPP_MASK) >> NUM_TC_SUPP_SHIFT;
@@ -805,8 +836,15 @@ uint32_t val_ide_program_rid_base_limit_valid(uint32_t bdf, uint32_t str_cnt,
   count = 0;
   while (count++ <= num_sel_ide_stream_supp)
   {
-      val_pcie_read_cfg(bdf, current_base_offset, &reg_value);
+      if (current_base_offset + SEL_IDE_CAP_REG_SIZE + RID_ADDR_REG1_SIZE +
+          RID_ADDR_REG2_SIZE > PCIE_CFG_SIZE ||
+          val_pcie_read_cfg(bdf, current_base_offset, &reg_value) != PCIE_SUCCESS)
+          return 1;
       num_addr_asso_block = (reg_value & NUM_ADDR_ASSO_REG_MASK) >> NUM_ADDR_ASSO_REG_SHIFT;
+      if (current_base_offset + SEL_IDE_CAP_REG_SIZE + RID_ADDR_REG1_SIZE +
+          RID_ADDR_REG2_SIZE + num_addr_asso_block * IDE_ADDR_REG_BLK_SIZE >
+          PCIE_CFG_SIZE)
+          return 1;
 
       /* Base offset of IDE RID Association Register 1 */
       current_base_offset = current_base_offset + SEL_IDE_CAP_REG_SIZE;
@@ -844,6 +882,9 @@ uint32_t val_ide_get_num_sel_str(uint32_t bdf, uint32_t *num_sel_str)
   uint32_t ide_cap_base;
   uint32_t sel_ide_str_supported;
 
+  if (num_sel_str == NULL)
+      return 1;
+
   /* Check IDE Extended Capability register is present */
   if (val_pcie_find_capability(bdf, PCIE_ECAP, ECID_IDE, &ide_cap_base) != PCIE_SUCCESS)
   {
@@ -853,7 +894,8 @@ uint32_t val_ide_get_num_sel_str(uint32_t bdf, uint32_t *num_sel_str)
   }
 
   /* Check if Selective IDE Stream is supported */
-  val_pcie_read_cfg(bdf, ide_cap_base + IDE_CAP_REG, &reg_value);
+  if (val_pcie_read_cfg(bdf, ide_cap_base + IDE_CAP_REG, &reg_value) != PCIE_SUCCESS)
+      return 1;
   sel_ide_str_supported = (reg_value & SEL_IDE_STR_MASK) >> SEL_IDE_STR_SHIFT;
   if (!sel_ide_str_supported)
   {
@@ -977,6 +1019,9 @@ uint32_t val_get_sel_str_status(uint32_t bdf, uint32_t str_cnt, uint32_t *str_st
   uint32_t num_addr_asso_block;
   uint32_t count;
 
+  if (str_status == NULL)
+      return 1;
+
   /* Check IDE Extended Capability register is present */
   if (val_pcie_find_capability(bdf, PCIE_ECAP, ECID_IDE, &ide_cap_base) != PCIE_SUCCESS)
   {
@@ -986,7 +1031,8 @@ uint32_t val_get_sel_str_status(uint32_t bdf, uint32_t str_cnt, uint32_t *str_st
   }
 
   /* Check if Selective IDE Stream is supported */
-  val_pcie_read_cfg(bdf, ide_cap_base + IDE_CAP_REG, &reg_value);
+  if (val_pcie_read_cfg(bdf, ide_cap_base + IDE_CAP_REG, &reg_value) != PCIE_SUCCESS)
+      return 1;
   sel_ide_str_supported = (reg_value & SEL_IDE_STR_MASK) >> SEL_IDE_STR_SHIFT;
   if (!sel_ide_str_supported)
   {
@@ -996,6 +1042,8 @@ uint32_t val_get_sel_str_status(uint32_t bdf, uint32_t str_cnt, uint32_t *str_st
 
   /* Get the number of Selective IDE stream */
   num_sel_ide_stream_supp = (reg_value & NUM_SEL_STR_MASK) >> NUM_SEL_STR_SHIFT;
+  if (str_cnt == 0 || str_cnt > num_sel_ide_stream_supp + 1)
+      return 1;
 
   /* Skip Link IDE register blocks only when Link IDE is supported. */
   num_tc_supp = (reg_value & NUM_TC_SUPP_MASK) >> NUM_TC_SUPP_SHIFT;
@@ -1006,13 +1054,22 @@ uint32_t val_get_sel_str_status(uint32_t bdf, uint32_t str_cnt, uint32_t *str_st
   count = 0;
   while (count++ <= num_sel_ide_stream_supp)
   {
-      val_pcie_read_cfg(bdf, current_base_offset, &reg_value);
+      if (current_base_offset + SEL_IDE_CAP_REG_SIZE + RID_ADDR_REG1_SIZE +
+          RID_ADDR_REG2_SIZE > PCIE_CFG_SIZE ||
+          val_pcie_read_cfg(bdf, current_base_offset, &reg_value) != PCIE_SUCCESS)
+          return 1;
       num_addr_asso_block = (reg_value & NUM_ADDR_ASSO_REG_MASK) >> NUM_ADDR_ASSO_REG_SHIFT;
+      if (current_base_offset + SEL_IDE_CAP_REG_SIZE + RID_ADDR_REG1_SIZE +
+          RID_ADDR_REG2_SIZE + num_addr_asso_block * IDE_ADDR_REG_BLK_SIZE >
+          PCIE_CFG_SIZE)
+          return 1;
 
       /* Get the Status of Selective IDE Stream state */
       if (count == str_cnt)
       {
-          val_pcie_read_cfg(bdf, current_base_offset + SEL_IDE_CAP_STATUS_REG, &reg_value);
+          if (val_pcie_read_cfg(bdf, current_base_offset + SEL_IDE_CAP_STATUS_REG,
+                               &reg_value) != PCIE_SUCCESS)
+              return 1;
           *str_status = reg_value & SEL_IDE_STATE_MASK;
           return 0;
       }
@@ -1038,6 +1095,14 @@ uint32_t
 val_ide_establish_stream(uint32_t bdf, uint32_t count, uint32_t stream_id, uint32_t base_limit)
 {
   uint32_t status, reg_value;
+
+  /* Stream ID programming preserves Enable; disable explicitly before reconfiguration. */
+  status = val_ide_set_sel_stream(bdf, count, 0);
+  if (status)
+  {
+      val_print(ACS_PRINT_ERR, " Failed to disable Sel Stream for BDF: 0x%x", bdf);
+      return 1;
+  }
 
   status = val_ide_program_rid_base_limit_valid(bdf, count,
              PCIE_CREATE_BDF_PACKED(base_limit), PCIE_CREATE_BDF_PACKED(base_limit), 1);
