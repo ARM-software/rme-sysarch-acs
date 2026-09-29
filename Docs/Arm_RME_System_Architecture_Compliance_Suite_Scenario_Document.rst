@@ -800,22 +800,25 @@ Testcase checklist
 
       RYHQQL: When a Selective IDE register block is Unlocked (SEL_STR_LOCK is 0):
 
-      - The block registers do not have any register security property
-      - The associated Selective IDE Stream is in Unlocked state
+      - The block registers do not have any register security property.
+      - The associated Selective IDE Stream is in Unlocked state.
 
       When a Selective IDE register block is Locked (SEL_STR_LOCK is 1):
 
-      - The block registers are RMSD write-detect
-      - The associated Selective IDE Stream is in Locked state
+      - The block registers are RMSD write-detect.
+      - The associated Selective IDE Stream is in Locked state.
 
     -
 
-      IDE stream must be transitioned to Insecure state when Selective IDE register block is locked and re-configured.
+      A Non-secure write to a locked Selective IDE register block must trigger RMSD write detection as defined by IFLPRX.
 
-      1. Configure IDE stream between RP and EP and set it to Secure state.
-      2. Lock the Selective IDE register block by setting SEL_STR_LOCK to 1.
-      3. Re-Configure the IDE stream.
-      4. Check that the IDE stream is transitioned to Insecure state which validates the RMSD write-detect property.
+      1. Test each Selective IDE stream with a corresponding SEL_STR_LOCK bit (indices 0 through 31).
+      2. Establish an enabled, Secure target stream with the register blocks unlocked.
+      3. Lock all implemented Selective IDE register blocks from Root PAS and verify the lock bits read back as set.
+      4. Verify that the target stream remains enabled and Secure after locking.
+      5. Change only the target Stream ID from Non-secure PAS, preserving Stream Enable and all other control fields.
+      6. Before cleanup, check with bounded polling that all hosted IDE streams are Insecure and all implemented Selective Stream Lock bits are cleared. Link IDE support is not required; check Link streams only if advertised.
+      7. Unlock the register blocks, disable the tested stream, and disable TDISP when the Root Port checks finish, including failure paths.
 
   * -
 

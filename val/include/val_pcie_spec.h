@@ -395,6 +395,11 @@
 #define RID_ADDR_REG2_SIZE 0x4
 #define IDE_ADDR_REG_BLK_SIZE 0xC
 
+/* Selective IDE Stream Control Register fields */
+#define SEL_IDE_STR_EN_MASK 0x1u
+#define SEL_IDE_STR_ID_MASK 0xFF000000u
+#define SEL_IDE_STR_ID_SHIFT 24
+
 /* Link IDE Stream Status Register Mask */
 #define LINK_IDE_STATE_MASK 0xF
 
