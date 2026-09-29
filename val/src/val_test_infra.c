@@ -655,7 +655,11 @@ void val_log_context(uint32_t level, char8_t *string, uint64_t data, const char 
     /* Print file name and line number for ERR and WARN */
     if (level == ACS_PRINT_ERR || level == ACS_PRINT_WARN)
     {
+#if defined(TARGET_EMULATION) || defined(TARGET_BM_BOOT)
       pal_print("  [FILE: %s]", (uint64_t)file);
+#else
+      pal_print("  [FILE: %a]", (uint64_t)file);
+#endif
       pal_print("  [LINE: %d]", line);
     }
   }
