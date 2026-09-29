@@ -81,9 +81,14 @@ payload(void)
           }
 
           /* Check if Selective IDE stream is supported. If it is supported, then it
-           * means at lease one Selective IDE stream will be supported such that 0=1 Stream
+           * means at least one Selective IDE stream will be supported such that 0=1 Stream
            */
-          val_pcie_read_cfg(bdf, cap_base + IDE_CAP_REG, &reg_value);
+          if (val_pcie_read_cfg(bdf, cap_base + IDE_CAP_REG, &reg_value) != PCIE_SUCCESS)
+          {
+              val_print(ACS_PRINT_ERR, " Failed to read IDE Capability for BDF: %x", bdf);
+              test_fails++;
+              continue;
+          }
           sel_ide_str_supported = (reg_value & SEL_IDE_STR_MASK) >> SEL_IDE_STR_SHIFT;
           if (sel_ide_str_supported != 0x1)
           {
@@ -92,12 +97,12 @@ payload(void)
               continue;
           }
 
-          /* Check if TEE-Limited Stream control mechanism is supported */
+          /* IHDPRK recommends TEE-Limited Stream support; it is not required by RGRCKL. */
           tee_limited_stream_supp = (reg_value & TEE_LIM_STR_SUPP_MASK) >> TEE_LIM_STR_SUPP_SHIFT;
           if (tee_limited_stream_supp != 1)
           {
-              val_print(ACS_PRINT_ERR, " TEE limited str not supported for BDF: %x", bdf);
-              test_fails++;
+              val_print(ACS_PRINT_WARN,
+                        " Recommended TEE limited str not supported for BDF: %x", bdf);
           }
 
           /* Get the number of Selective IDE Streams */
@@ -112,13 +117,20 @@ payload(void)
           /* Base offset of Link IDE Register Block */
           current_base_offset = current_base_offset + IDE_CAP_REG_SIZE;
 
+          /* Link IDE blocks precede all Selective IDE Streams and are present only if supported. */
+          if (reg_value & LINK_IDE_STR_MASK)
+              current_base_offset += (num_tc_supp + 1) * LINK_IDE_BLK_SIZE;
+
           while (count <= num_sel_ide_stream_supp)
           {
-              /* Base offset of Selective IDE Stream Block */
-              current_base_offset = current_base_offset + ((num_tc_supp + 1) * LINK_IDE_BLK_SIZE);
-
-              /* Get the number of Address Associaltion Register Blocks */
-              val_pcie_read_cfg(bdf, current_base_offset, &reg_value);
+              /* Get the number of Address Association Register Blocks (not zero-based). */
+              if (val_pcie_read_cfg(bdf, current_base_offset, &reg_value) != PCIE_SUCCESS)
+              {
+                  val_print(ACS_PRINT_ERR,
+                            " Failed to read Selective IDE Stream Capability for BDF: %x", bdf);
+                  test_fails++;
+                  break;
+              }
               num_addr_asso_block = (reg_value & NUM_ADDR_ASSO_REG_MASK) >> NUM_ADDR_ASSO_REG_SHIFT;
               count++;
 
@@ -131,12 +143,13 @@ payload(void)
               /* Base offset of IDE Address Association Register Block */
               current_base_offset = current_base_offset + RID_ADDR_REG2_SIZE;
 
-              /*Check if at least 3 Address Association registers for each Selective IDE Stream */
-              if (num_addr_asso_block < 3)
+              /* RGRCKL requires at least two Address Association register blocks per stream.
+               * Each block contains three registers (IDE_ADDR_REG_BLK_SIZE bytes).
+               */
+              if (num_addr_asso_block < 2)
               {
-                  val_print(ACS_PRINT_ERR, " Addr asso reg blk is < 3 for BDF: %x", bdf);
+                  val_print(ACS_PRINT_ERR, " Addr asso reg blk is < 2 for BDF: %x", bdf);
                   test_fails++;
-                  continue;
               }
 
               /* Base offset of next Selective IDE Stream Register Block */

@@ -406,6 +406,7 @@
 #define STREAM_STATE_SECURE   0x2
 
 /* IDE Capability Register offset */
+#define LINK_IDE_STR_MASK 0x1
 #define SEL_IDE_STR_SUPPORT 0x1
 #define SEL_IDE_STR_MASK 0x2
 #define SEL_IDE_STR_SHIFT 0x1
