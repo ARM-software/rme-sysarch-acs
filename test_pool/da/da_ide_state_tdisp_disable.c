@@ -88,44 +88,49 @@ payload(void)
           continue;
       }
 
-      /* Find the DA DVSEC_CTL register and enable TDISP */
-      if (val_pcie_enable_tdisp(bdf))
-      {
-          val_print(ACS_PRINT_ERR, " Unable to set tdisp_en for BDF: 0x%x", bdf);
-          test_fail++;
-          continue;
-      }
-
       count = 0;
       while (count++ < num_sel_str)
       {
+          /* Each stream must observe a verified TDISP_EN transition from 1 to 0. */
+          if (val_pcie_enable_tdisp(bdf))
+          {
+              val_print(ACS_PRINT_ERR, " Unable to set tdisp_en for BDF: 0x%x", bdf);
+              test_fail++;
+              break;
+          }
+
           status = val_ide_establish_stream(bdf, count, val_generate_stream_id(),
                                      bdf);
           if (status)
           {
               val_print(ACS_PRINT_ERR, " Failed to establish stream for bdf: 0x%x", bdf);
               test_fail++;
-              continue;
+              goto stream_cleanup;
           }
 
           /* Disable the TDISP */
-          val_pcie_disable_tdisp(bdf);
+          if (val_pcie_disable_tdisp(bdf))
+          {
+              val_print(ACS_PRINT_ERR, " Failed to disable TDISP for BDF: 0x%x", bdf);
+              test_fail++;
+              goto stream_cleanup;
+          }
 
           status = val_get_sel_str_status(bdf, count, &reg_value);
           if (status)
           {
               val_print(ACS_PRINT_ERR, " Fail to get Sel Stream state for BDF: 0x%x", bdf);
               test_fail++;
-              continue;
+              goto stream_cleanup;
           }
 
           if (reg_value != STREAM_STATE_INSECURE)
           {
               val_print(ACS_PRINT_ERR, " Sel Stream is not in Insecure for BDF: 0x%x", bdf);
               test_fail++;
-              continue;
            }
 
+stream_cleanup:
           status = val_ide_set_sel_stream(bdf, count, 0);
           if (status)
           {
@@ -138,7 +143,11 @@ payload(void)
       }
 
       /* Disable the TDISP before moving to next RP */
-      val_pcie_disable_tdisp(bdf);
+      if (val_pcie_disable_tdisp(bdf))
+      {
+          val_print(ACS_PRINT_ERR, " Failed to disable TDISP for BDF: 0x%x", bdf);
+          test_fail++;
+      }
 
   }
 

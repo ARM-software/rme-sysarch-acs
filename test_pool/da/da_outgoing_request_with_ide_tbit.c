@@ -60,6 +60,9 @@ payload(void)
   {
       bdf = bdf_tbl_ptr->device[tbl_index++].bdf;
 
+      if (val_pcie_device_port_type(bdf) != RP)
+          continue;
+
       /* If it is a RP, get the Endpoint BAR Base below it if it is available.
        * Otherwise use the RP's BAR address */
       if ((val_pcie_function_header_type(bdf) == TYPE1_HEADER) &&
@@ -73,11 +76,15 @@ payload(void)
       if (!bar_base)
          continue;
 
-      /* Enable the TDISP_EN bit in the RME-DA DVSEC register */
-      if (val_pcie_enable_tdisp(bdf))
-         continue;
-
       test_skip = 0;
+
+      /* Enable and verify TDISP_EN before checking the outgoing request. */
+      if (val_pcie_enable_tdisp(bdf))
+      {
+          val_print(ACS_PRINT_ERR, " Unable to set tdisp_en for BDF: 0x%x", bdf);
+          test_fails++;
+          goto port_cleanup;
+      }
 
       val_print(ACS_PRINT_TEST, " Checking BDF: 0x%x", bdf);
 
@@ -95,15 +102,21 @@ payload(void)
       {
             val_print(ACS_PRINT_ERR, " MUT Access failed for VA: 0x%llx", va);
             test_fails++;
+            goto port_cleanup;
       }
       data = shared_data->shared_data_access[0].data;
 
-      /* Disable the TDISP */
-      val_pcie_disable_tdisp(bdf);
       /* The Request should be rejected by the RP */
       if (data != PCIE_UNKNOWN_RESPONSE)
       {
           val_print(ACS_PRINT_ERR, " Request not rejected by RP BDF: %x", bdf);
+          test_fails++;
+      }
+
+port_cleanup:
+      if (val_pcie_disable_tdisp(bdf))
+      {
+          val_print(ACS_PRINT_ERR, " Failed to disable TDISP for BDF: 0x%x", bdf);
           test_fails++;
       }
   }
