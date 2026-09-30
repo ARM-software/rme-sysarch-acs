@@ -100,7 +100,7 @@ payload(void)
       while (count++ < num_sel_str)
       {
           status = val_ide_establish_stream(bdf, count, val_generate_stream_id(),
-                                     PCIE_CREATE_BDF_PACKED(bdf));
+                                     bdf);
           if (status)
           {
               val_print(ACS_PRINT_ERR, " Failed to establish stream for bdf: 0x%x", bdf);
