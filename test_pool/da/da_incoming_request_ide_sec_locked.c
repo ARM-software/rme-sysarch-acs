@@ -148,7 +148,7 @@ payload(void)
       {
           val_print(ACS_PRINT_ERR, " Unable to set tdisp_en for BDF: 0x%x", rp_bdf);
           test_fail++;
-          continue;
+          goto cleanup_tdisp;
       }
 
       count = 1;
@@ -406,7 +406,12 @@ cleanup_instance:
 
       /* Per-instance cleanup: unlock device and disable TDISP */
       val_device_unlock(bdf);
-      val_pcie_disable_tdisp(rp_bdf);
+cleanup_tdisp:
+      if (val_pcie_disable_tdisp(rp_bdf))
+      {
+          val_print(ACS_PRINT_ERR, " Failed to disable TDISP for BDF: 0x%x", rp_bdf);
+          test_fail++;
+      }
   }
 
   if (test_skip)
