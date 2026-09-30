@@ -244,10 +244,9 @@ payload(void)
 
       tgt_bar_size = ~(tgt_bar_size) + 1;
 
-      val_memory_set((void *)tgt_bar_base, tgt_bar_size, 0);
-
       /* The transaction length should be min of bar size and test data length */
       dma_len = (tgt_bar_size < dma_len)?tgt_bar_size:dma_len;
+      val_memory_set((void *)tgt_bar_base, dma_len, 0);
 
       test_skip = 0;
 
