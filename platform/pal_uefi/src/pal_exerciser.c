@@ -103,7 +103,7 @@ pal_exerciser_find_error_injection_capability (
   UINT32 PtrOffset;
   UINT64 NxtPtr = 0;
 
-  Ecam = pal_pcie_get_mcfg_ecam();
+  Ecam = pal_pcie_get_mcfg_ecam_for_bdf(Bdf);
   NxtPtr = PCIE_CAP_OFFSET;
 
   /* Serach in PCIe extended configuration space */
@@ -150,7 +150,7 @@ pal_exerciser_find_pcie_capability (
   UINT32 PtrMask;
   UINT32 PtrOffset;
 
-  Ecam = pal_pcie_get_mcfg_ecam();
+  Ecam = pal_pcie_get_mcfg_ecam_for_bdf(Bdf);
   NxtPtr = PCIE_CAP_OFFSET;
 
   if (Value == 1) {
@@ -199,7 +199,7 @@ UINT32 pal_exerciser_set_param (
   UINT64 Ecam;
 
   Base = pal_exerciser_get_ecsr_base(Bdf,0);
-  Ecam = pal_pcie_get_mcfg_ecam(); // Getting the ECAM address
+  Ecam = pal_pcie_get_mcfg_ecam_for_bdf(Bdf); // Getting the ECAM address
 
   switch (Type) {
 
@@ -456,7 +456,7 @@ pal_exerciser_ops (
   UINT32 CapabilityOffset = 0;
   UINT32 data;
   Base = pal_exerciser_get_ecsr_base(Bdf,0);
-  Ecam = pal_pcie_get_mcfg_ecam(); // Getting the ECAM address
+  Ecam = pal_pcie_get_mcfg_ecam_for_bdf(Bdf); // Getting the ECAM address
   switch(Ops){
 
     case START_DMA:
@@ -666,7 +666,7 @@ pal_is_bdf_exerciser(UINT32 bdf)
 {
   UINT64 Ecam;
   UINT32 vendor_dev_id;
-  Ecam = pal_pcie_get_mcfg_ecam();
+  Ecam = pal_pcie_get_mcfg_ecam_for_bdf(bdf);
 
   vendor_dev_id = pal_mmio_read(Ecam + pal_exerciser_get_pcie_config_offset(bdf));
   if (vendor_dev_id == EXERCISER_ID)
