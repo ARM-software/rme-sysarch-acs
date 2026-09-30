@@ -439,6 +439,7 @@ void val_el3_smmu_access_enable(uint64_t smmu_base);
 void val_el3_smmu_root_config_service(uint64_t arg0, uint64_t arg1, uint64_t arg2);
 void val_el3_smmu_init(uint32_t num_smmu, uint64_t smmu_base_arr[]);
 uint32_t val_el3_smmu_rlm_map(smmu_master_attributes_t master_attr, pgt_descriptor_t pgt_desc);
+uint32_t val_el3_smmu_unmap(smmu_master_attributes_t master_attr);
 uint32_t val_el3_smmu_gpt_invalidate(smmu_master_attributes_t master_attr);
 uint32_t val_el3_dpt_add_entry(uint64_t translated_addr, uint64_t smmu_info);
 void val_el3_dpt_invalidate_all(uint64_t smmu_index);

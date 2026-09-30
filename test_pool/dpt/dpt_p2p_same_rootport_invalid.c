@@ -129,8 +129,9 @@ payload(void)
   uint32_t device_id, its_id;
   uint32_t page_size = val_memory_page_size();
   smmu_master_attributes_t master;
-  memory_region_descriptor_t mem_desc_array[2], *mem_desc;
+  memory_region_descriptor_t mem_desc_array[3], *mem_desc;
   pgt_descriptor_t pgt_desc;
+  uint32_t rlm_mapped;
   uint64_t translated_addr, m_vir_addr, bar_buf_in_phys, dram_buf_in_phys;
   uint32_t tgt_e_bdf, tgt_rp_bdf, tgt_instance, tgt_bar_size;
   uint64_t tgt_bar_base;
@@ -181,6 +182,8 @@ payload(void)
 
   for (instance = 0; instance < num_exercisers; ++instance)
   {
+      pgt_desc.pgt_base = 0;
+      rlm_mapped = 0;
       /* if init fail moves to next exerciser */
       if (val_exerciser_init(instance))
           continue;
@@ -380,6 +383,11 @@ payload(void)
       mem_desc->length = test_data_blk_size;
       mem_desc->attributes = PGT_STAGE2_AP_RW;
 
+      mem_desc[1].virtual_address = (uint64_t)tgt_bar_base;
+      mem_desc[1].physical_address = (uint64_t)bar_buf_in_phys;
+      mem_desc[1].length = tgt_bar_size;
+      mem_desc[1].attributes = PGT_STAGE2_AP_RW;
+
       /* Find SMMU node index for this exerciser instance */
       master.smmu_index = val_iovirt_get_rc_smmu_index(PCIE_EXTRACT_BDF_SEG(bdf),
                           PCIE_CREATE_BDF_PACKED(bdf));
@@ -440,19 +448,6 @@ payload(void)
       /* Write pgt_base to the VTTBR register so that EL3 can update while programming STE */
       val_pe_reg_write(VTTBR, pgt_desc.pgt_base);
 
-      mem_desc->virtual_address = (uint64_t)tgt_bar_base;
-      mem_desc->physical_address = (uint64_t)bar_buf_in_phys;
-      mem_desc->length = tgt_bar_size;
-      mem_desc->attributes = PGT_STAGE2_AP_RW;
-
-      if (val_rlm_pgt_create(mem_desc, &pgt_desc))
-      {
-          val_print(ACS_PRINT_ERR,
-            " Failed to create page table for instance %4x", instance);
-          test_fail++;
-          goto free_mem;
-      }
-
       /* Enable the stage2 mapping for Realm SMMU Transaction */
       master.stage2 = 1;
       val_print(ACS_PRINT_DEBUG, " Stream ID: 0x%lx", master.streamid);
@@ -465,6 +460,7 @@ payload(void)
           test_fail++;
           goto free_mem;
       }
+      rlm_mapped = 1;
 
       /* Send an ATS Translation Request for the VA */
       val_exerciser_set_param(DMA_ATTRIBUTES, (uint64_t)tgt_bar_base, dma_len, instance);
@@ -541,6 +537,22 @@ payload(void)
 free_mem:
       val_exerciser_ops(ATS_INV_CACHE, 0, instance);
 
+      if (val_pcie_find_capability(bdf, PCIE_ECAP, ECID_ATS, &cap_base) == PCIE_SUCCESS)
+      {
+          val_pcie_read_cfg(bdf, cap_base + ATS_CTRL, &reg_value);
+          reg_value &= ATS_CACHING_DIS;
+          val_pcie_write_cfg(bdf, cap_base + ATS_CTRL, reg_value);
+      }
+
+      if (pgt_desc.pgt_base &&
+          ((rlm_mapped && val_smmu_rlm_unmap_el3(&master)) ||
+           val_rlm_pgt_destroy(&pgt_desc)))
+      {
+          val_print(ACS_PRINT_ERR, " Failed to release Realm page table for instance %4x",
+                    instance);
+          test_fail++;
+      }
+
       /* Add DPT entry for the PA with Read Write Access */
       if (val_dpt_add_entry((uint64_t)tgt_bar_base,
                        ((((uint64_t)(master.smmu_index)) << 32) | DPT_RDWR_ACCESS_ENTRY)))
@@ -557,13 +569,6 @@ free_mem:
           continue;
       }
 
-
-      if (val_pcie_find_capability(bdf, PCIE_ECAP, ECID_ATS, &cap_base) == PCIE_SUCCESS)
-      {
-          val_pcie_read_cfg(bdf, cap_base + ATS_CTRL, &reg_value);
-          reg_value &= ATS_CACHING_DIS;
-          val_pcie_write_cfg(bdf, cap_base + ATS_CTRL, reg_value);
-      }
 
       val_pcie_disable_tdisp(rp_bdf);
       val_device_unlock(bdf);
