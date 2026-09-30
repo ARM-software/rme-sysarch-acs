@@ -1363,38 +1363,51 @@ uint32_t val_el3_smmu_rlm_map(smmu_master_attributes_t master_attr, pgt_descript
  *
  * @param master_attr  Master attributes (SMMU index, SID/SSID, stage settings).
  */
-void val_el3_smmu_unmap(smmu_master_attributes_t master_attr)
+uint32_t val_el3_smmu_unmap(smmu_master_attributes_t master_attr)
 {
     smmu_master_t *master;
     smmu_dev_t *smmu;
     uint64_t *strtab;
+    uint32_t root_cr0;
+    uint32_t status;
 
+    if (g_smmu == NULL || master_attr.smmu_index >= g_num_smmus)
+        return 1;
     smmu = &g_smmu[master_attr.smmu_index];
     if (smmu->base == 0)
     {
         ERROR("\n      val_smmu_map: smmu unsupported     ");
-        return;
+        return 1;
     }
 
     master = smmu_master_at(master_attr.streamid);
     if (master == NULL)
-        return;
+        return 1;
 
-    if (master->smmu == NULL)
-        return;
+    if (master->smmu != smmu)
+        return 1;
 
     if (master_attr.streamid >= (0x1ul << master->smmu->sid_bits))
-        return;
+        return 1;
 
     if (master_attr.streamid >= (0x1ul << master->smmu->strtab_sid_bits))
-        return;
+        return 1;
 
     strtab = smmu_strtab_get_ste_for_sid(master->smmu, master_attr.streamid);
     smmu_strtab_write_ste(NULL, strtab, smmu);
 
-    smmu_cdtab_free(master);
-    smmu_tlbi_cfgi(master->smmu);
-    val_el3_memory_set(master, sizeof(smmu_master_t), 0);
+    root_cr0 = val_el3_mmio_read(smmu->base + SMMU_ROOT_CR0);
+    status = smmu_reg_write_sync(smmu, root_cr0 & ~0x2ul,
+                                 SMMU_ROOT_CR0, SMMU_ROOT_CR0_ACK);
+    if (status == 0)
+        status = smmu_tlbi_cfgi(smmu);
+    if (smmu_reg_write_sync(smmu, root_cr0, SMMU_ROOT_CR0, SMMU_ROOT_CR0_ACK))
+        status = 1;
+    if (status == 0) {
+        smmu_cdtab_free(master);
+        val_el3_memory_set(master, sizeof(smmu_master_t), 0);
+    }
+    return status;
 }
 
 uint32_t val_el3_smmu_init_one(smmu_dev_t *smmu)
@@ -1979,6 +1992,19 @@ void val_el3_smmu_root_config_service(uint64_t arg0, uint64_t arg1, uint64_t arg
               shared_data->status_code = 1;
               shared_data->error_code = smmu_attr.smmu_index;
               const char *msg = "EL3: SMMU Realm map failed";
+              int i = 0; while (msg[i] && i < sizeof(shared_data->error_msg) - 1) {
+                  shared_data->error_msg[i] = msg[i]; i++;
+              }
+              shared_data->error_msg[i] = '\0';
+         }
+         break;
+       case SMMU_RLM_SMMU_UNMAP:
+         memcpy((void *)&smmu_attr, (void *)arg1, sizeof(smmu_master_attributes_t));
+         if (val_el3_smmu_unmap(smmu_attr))
+         {
+              shared_data->status_code = 1;
+              shared_data->error_code = smmu_attr.smmu_index;
+              const char *msg = "EL3: SMMU Realm unmap failed";
               int i = 0; while (msg[i] && i < sizeof(shared_data->error_msg) - 1) {
                   shared_data->error_msg[i] = msg[i]; i++;
               }

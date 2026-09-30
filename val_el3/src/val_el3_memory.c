@@ -141,8 +141,19 @@ void val_el3_memory_free(void *ptr)
     }
 
 
-    BlockHeader *block = (BlockHeader *)((uint8_t *)ptr - sizeof(BlockHeader));
-    block->is_free = 1;
+    struct BlockHeader *block = mem_pool.free_list;
+
+    while (block) {
+        uintptr_t block_start = (uintptr_t)block + sizeof(BlockHeader);
+        uintptr_t block_end = block_start + block->size;
+
+        if ((uintptr_t)ptr >= block_start && (uintptr_t)ptr < block_end)
+            break;
+        block = block->next;
+    }
+
+    if (block != NULL)
+        block->is_free = 1;
 
     // Coalesce adjacent free blocks
     BlockHeader *current = mem_pool.free_list;
@@ -150,6 +161,7 @@ void val_el3_memory_free(void *ptr)
         if (current->is_free && current->next && current->next->is_free) {
             current->size += current->next->size + sizeof(BlockHeader);
             current->next = current->next->next;
+            continue;
         }
         current = current->next;
     }
