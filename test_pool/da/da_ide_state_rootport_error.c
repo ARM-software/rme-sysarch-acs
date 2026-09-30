@@ -131,12 +131,12 @@ payload()
         continue;
     }
 
-    /* Bring the RP to TDISP Locked state */
+    /* Enable TDISP for the RP. */
     if (val_pcie_enable_tdisp(erp_bdf))
     {
           val_print(ACS_PRINT_ERR, " Unable to set tdisp_en for BDF: 0x%x", erp_bdf);
           test_fails++;
-          continue;
+          goto port_cleanup;
     }
 
     count = 0;
@@ -186,8 +186,13 @@ payload()
 
     }
 
+port_cleanup:
     /* Disable the TDISP for RP */
-    val_pcie_disable_tdisp(erp_bdf);
+    if (val_pcie_disable_tdisp(erp_bdf))
+    {
+        val_print(ACS_PRINT_ERR, " Failed to disable TDISP for BDF: 0x%x", erp_bdf);
+        test_fails++;
+    }
 
     /* Disable error reporting of Exerciser and upstream Root Port */
     val_pcie_disable_eru(e_bdf);

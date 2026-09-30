@@ -2592,7 +2592,7 @@ val_pcie_read_rmecda_ctl1(uint32_t bdf, uint32_t *value)
 }
 
 /**
-  @brief  Set the TDISP_en bit in DA DVSEC of the input PCIe function
+  @brief  Set and verify the TDISP_en bit in DA DVSEC of the input PCIe function
   @param  bdf   - Segment/Bus/Dev/Func in PCIE_CREATE_BDF format
   @return 0 - success, 1 - failure
 **/
@@ -2632,7 +2632,8 @@ uint32_t val_pcie_enable_tdisp(uint32_t bdf)
   if (cfg_addr == 0u)
     return 1;
 
-  if (val_pcie_read_cfg(bdf, cap_base + reg_offset, &reg_value) != PCIE_SUCCESS)
+  if (val_pcie_read_cfg(bdf, cap_base + reg_offset, &reg_value) != PCIE_SUCCESS ||
+      reg_value == PCIE_UNKNOWN_RESPONSE)
     return 1;
 
   write_value = reg_value | 0x1u;
@@ -2653,11 +2654,21 @@ uint32_t val_pcie_enable_tdisp(uint32_t bdf)
     val_print(ACS_PRINT_ERR, " MUT Access failed", 0);
     return 1;
   }
-  val_pcie_read_cfg(bdf, cap_base + reg_offset, &reg_value);
+  if (val_pcie_read_cfg(bdf, cap_base + reg_offset, &reg_value) != PCIE_SUCCESS ||
+      reg_value == PCIE_UNKNOWN_RESPONSE || !(reg_value & 0x1u))
+  {
+    val_print(ACS_PRINT_ERR, " TDISP enable readback failed for BDF: 0x%x", bdf);
+    return 1;
+  }
 
   return 0;
 }
 
+/**
+  @brief  Clear and verify the TDISP_en bit in DA DVSEC of the input PCIe function
+  @param  bdf   - Segment/Bus/Dev/Func in PCIE_CREATE_BDF format
+  @return 0 - success, 1 - failure
+**/
 uint32_t val_pcie_disable_tdisp(uint32_t bdf)
 {
   uint64_t va;
@@ -2694,7 +2705,8 @@ uint32_t val_pcie_disable_tdisp(uint32_t bdf)
   if (cfg_addr == 0u)
     return 1;
 
-  if (val_pcie_read_cfg(bdf, cap_base + reg_offset, &reg_value) != PCIE_SUCCESS)
+  if (val_pcie_read_cfg(bdf, cap_base + reg_offset, &reg_value) != PCIE_SUCCESS ||
+      reg_value == PCIE_UNKNOWN_RESPONSE)
     return 1;
 
   write_value = reg_value & ~0x1u;
@@ -2713,6 +2725,13 @@ uint32_t val_pcie_disable_tdisp(uint32_t bdf)
   if (val_pe_access_mut_el3())
   {
     val_print(ACS_PRINT_ERR, " MUT Access failed for 0x%llx", (va + cap_base + reg_offset));
+    return 1;
+  }
+
+  if (val_pcie_read_cfg(bdf, cap_base + reg_offset, &reg_value) != PCIE_SUCCESS ||
+      reg_value == PCIE_UNKNOWN_RESPONSE || (reg_value & 0x1u))
+  {
+    val_print(ACS_PRINT_ERR, " TDISP disable readback failed for BDF: 0x%x", bdf);
     return 1;
   }
 
