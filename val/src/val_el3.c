@@ -581,6 +581,19 @@ uint32_t val_smmu_rlm_map_el3(smmu_master_attributes_t *smmu_attr, pgt_descripto
   }
 }
 
+uint32_t val_smmu_rlm_unmap_el3(smmu_master_attributes_t *smmu_attr)
+{
+  UserCallSMC(ARM_ACS_SMC_FID, SMMU_CONFIG_SERVICE, SMMU_RLM_SMMU_UNMAP,
+              (uint64_t)smmu_attr, 0);
+  if (val_pe_get_index_mpid(val_pe_get_mpid()) != 0)
+      return shared_data->status_code ? 1 : 0;
+  if (shared_data->status_code != 0) {
+    val_print(ACS_PRINT_ERR, shared_data->error_msg, shared_data->error_code);
+    return 1;
+  }
+  return 0;
+}
+
 /**
  *  @brief  This API requests SMMU config/TLB invalidation after GPT updates.
  *          Returns 1 on error, 0 on success.

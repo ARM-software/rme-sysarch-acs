@@ -62,6 +62,7 @@
 #define SMMU_ROOT_RME_IMPL_CHK 0x1
 #define SMMU_RLM_PGT_INIT      0x2
 #define SMMU_RLM_SMMU_MAP      0x3
+#define SMMU_RLM_SMMU_UNMAP    0x4
 #define SMMU_RLM_ADD_DPT_ENTRY 0x5
 #define SMMU_RLM_DPTI          0x6
 #define SMMU_CHECK_MEC_IMPL    0x7
