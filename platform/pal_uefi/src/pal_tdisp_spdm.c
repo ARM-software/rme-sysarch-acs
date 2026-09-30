@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2024-2025, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2024-2026, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -188,7 +188,7 @@ UINT32 pal_write_doe_msgo_doe_mailbox(UINT32 bdf, UINT32 *request, UINT64 req_le
     UINT32 value, doe_cap_base, status;
     UINT64 i, doe_length, Ecam, config_addr;;
 
-    Ecam = pal_pcie_get_mcfg_ecam(); // Getting the ECAM address
+    Ecam = pal_pcie_get_mcfg_ecam_for_bdf(bdf); // Getting the ECAM address
     config_addr = pal_exerciser_get_pcie_config_offset(bdf);
     doe_cap_base = 0;
     status = pal_exerciser_find_pcie_capability(DOE_CAP_ID, bdf, PCIE, &doe_cap_base);
@@ -236,7 +236,7 @@ UINT32 pal_host_pcie_doe_recv_resp(UINT32 bdf, UINT32 *resp_addr, UINT64 *resp_l
     UINT32 value, length, doe_cap_base, status;
     UINT64 i, Ecam, config_addr;
 
-    Ecam = pal_pcie_get_mcfg_ecam(); // Getting the ECAM address
+    Ecam = pal_pcie_get_mcfg_ecam_for_bdf(bdf); // Getting the ECAM address
     config_addr = pal_exerciser_get_pcie_config_offset(bdf);
     doe_cap_base = 0;
     status = pal_exerciser_find_pcie_capability(DOE_CAP_ID, bdf, PCIE, &doe_cap_base);

@@ -125,10 +125,18 @@ val_spdm_get_cfg_offset(uint32_t bdf)
 static uint32_t
 val_spdm_doe_get_offsets(uint32_t bdf, uint64_t *ecam, uint64_t *cfg, uint32_t *cap)
 {
+  uint32_t ecam_index;
+
   if ((ecam == NULL) || (cfg == NULL) || (cap == NULL))
     return PCIE_CAP_NOT_FOUND;
 
-  *ecam = pal_pcie_get_mcfg_ecam();
+  if (val_pcie_get_ecam_index(bdf, &ecam_index))
+    return PCIE_CAP_NOT_FOUND;
+
+  *ecam = val_pcie_get_info(PCIE_INFO_ECAM, ecam_index);
+  if (*ecam == 0u)
+    return PCIE_CAP_NOT_FOUND;
+
   *cfg = val_spdm_get_cfg_offset(bdf);
 
   return val_pcie_find_capability(bdf, PCIE_ECAP, DOE_CAP_ID, cap);

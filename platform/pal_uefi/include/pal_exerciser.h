@@ -289,6 +289,7 @@ UINT32 pal_mmio_read(UINT64 addr);
 VOID pal_mmio_write(UINT64 addr, UINT32 data);
 VOID pal_mmio_write64(UINT64 addr, UINT64 data);
 UINT64 pal_pcie_get_mcfg_ecam();
+UINT64 pal_pcie_get_mcfg_ecam_for_bdf(UINT32 Bdf);
 UINT64 pal_exerciser_get_pcie_config_offset(UINT32 Bdf);
 UINT32 pal_exerciser_find_pcie_capability(UINT32 ID, UINT32 Bdf, UINT32 Value, UINT32 *Offset);
 UINT32 pal_exerciser_set_param(EXERCISER_PARAM_TYPE Type, UINT64 Value1, UINT64 Value2, UINT32 Bdf);
