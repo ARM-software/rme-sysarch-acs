@@ -155,7 +155,7 @@ payload(void)
           bf_entry = (pcie_cfgreg_bitfield_entry *)&(bf_info_table18[index]);
 
           status = val_ide_establish_stream(ep_bdf, count, stream_id,
-                                     PCIE_CREATE_BDF_PACKED(ep_bdf));
+                                     ep_bdf);
           if (status)
           {
               val_print(ACS_PRINT_ERR, " Failed to establish stream for bdf: 0x%x", bdf);
@@ -164,7 +164,7 @@ payload(void)
           }
 
           status = val_ide_establish_stream(rp_bdf, count, stream_id,
-                                     PCIE_CREATE_BDF_PACKED(ep_bdf));
+                                     ep_bdf);
           if (status)
           {
               val_print(ACS_PRINT_ERR, " Failed to establish stream for RP bdf: 0x%x", bdf);

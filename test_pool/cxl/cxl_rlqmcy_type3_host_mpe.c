@@ -654,22 +654,13 @@ payload(void)
     return;
   }
 
-  /* Enable MEC for the duration of the test. */
-  if (val_rlm_enable_mec())
-  {
-    val_print(ACS_PRINT_ERR, " RLQMCY: Failed to enable MEC", 0);
-    val_set_status(pe_index, "FAIL", 01);
-    return;
-  }
-  mec_enabled = 1u;
-  val_print(ACS_PRINT_DEBUG, " RLQMCY: MEC enabled\n", 0);
-
   for (uint32_t root_index = 0; root_index < table->num_entries; ++root_index)
   {
     const CXL_COMPONENT_ENTRY *root = &table->component[root_index];
     const CXL_COMPONENT_ENTRY *endpoint;
     uint32_t endpoint_index;
     uint32_t rmecda_cap_base = 0u;
+    uint32_t rmecda_present;
     uint32_t ctl1_original = 0u;
     uint32_t ctl1_programmed = 0u;
     uint32_t ctl1_readback = 0u;
@@ -684,6 +675,7 @@ payload(void)
     libcxltsp_device_capabilities_t capabilities;
     uint32_t features;
     CONTEXT context;
+    uint32_t decoders_programmed = 0u;
     uint64_t test_base;
 
     /* Use root ports as the source for downstream CXL.mem devices. */
@@ -703,6 +695,18 @@ payload(void)
     endpoint = &table->component[endpoint_index];
     if (endpoint->device_type != CXL_DEVICE_TYPE_TYPE3)
       continue;
+
+    /* Confirm Realm access before enabling MEC or modifying device state. */
+    rmecda_present = (val_pcie_find_cda_capability(root->bdf,
+                                                   &rmecda_cap_base) == PCIE_SUCCESS);
+    if ((rmecda_present == 0u) &&
+        (val_cxl_rp_is_realm_access_authorized(root->bdf) == 0u))
+    {
+      val_print(ACS_PRINT_DEBUG,
+                " RLQMCY: Skipping RP 0x%x: no RME-CDA or configured Realm authorization",
+                (uint64_t)root->bdf);
+      continue;
+    }
 
     val_print(ACS_PRINT_DEBUG,
               " RLQMCY: Type-3 endpoint %u\n",
@@ -751,6 +755,19 @@ payload(void)
     targetless++;
     val_print(ACS_PRINT_DEBUG, " RLQMCY: Targetless endpoint\n", 0);
 
+    /* Enable MEC once an eligible endpoint is found. */
+    if (mec_enabled == 0u)
+    {
+      if (val_rlm_enable_mec())
+      {
+        val_print(ACS_PRINT_ERR, " RLQMCY: Failed to enable MEC", 0);
+        failures++;
+        goto device_cleanup;
+      }
+      mec_enabled = 1u;
+      val_print(ACS_PRINT_DEBUG, " RLQMCY: MEC enabled\n", 0);
+    }
+
     /* Enable CXL.mem in the endpoint device control DVSEC. */
     status = val_cxl_enable_mem(endpoint->bdf);
     if (status != ACS_STATUS_PASS)
@@ -774,93 +791,99 @@ payload(void)
       goto device_cleanup;
     }
 
-    /* Enable TDISP and lock the link after decoder programming. */
-    status = val_pcie_find_cda_capability(root->bdf, &rmecda_cap_base);
-    if (status != ACS_STATUS_PASS)
+    decoders_programmed = 1u;
+
+    /*
+     * RLQMCY does not require RME-CDA. Where implemented, enable TDISP and
+     * lock the link to permit the Realm accesses used by this test.
+     */
+    if (rmecda_present != 0u)
+    {
+      cfg_addr = val_pcie_get_bdf_config_addr(root->bdf);
+      tg = val_get_min_tg();
+      if ((cfg_addr == 0u) || (tg == 0u))
+      {
+        val_print(ACS_PRINT_ERR,
+                  " RLQMCY: Invalid config mapping for BDF 0x%x",
+                  (uint64_t)root->bdf);
+        failures++;
+        goto device_cleanup;
+      }
+
+      cfg_va = val_get_free_va(tg);
+      if (cfg_va == 0u)
+      {
+        val_print(ACS_PRINT_ERR,
+                  " RLQMCY: Config VA allocation failed for BDF 0x%x",
+                  (uint64_t)root->bdf);
+        failures++;
+        goto device_cleanup;
+      }
+
+      attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(OUTER_SHAREABLE) |
+                         GET_ATTR_INDEX(DEV_MEM_nGnRnE) | PGT_ENTRY_AP_RW |
+                         PAS_ATTR(ROOT_PAS));
+      if (val_add_mmu_entry_el3(cfg_va, cfg_addr, attr))
+      {
+        val_print(ACS_PRINT_ERR,
+                  " RLQMCY: Config map failed for BDF 0x%x",
+                  (uint64_t)root->bdf);
+        failures++;
+        goto device_cleanup;
+      }
+
+      if (read_from_root(cfg_va + rmecda_cap_base + RMECDA_CTL1_OFFSET,
+                         &ctl1_original) != ACS_STATUS_PASS)
+      {
+        val_print(ACS_PRINT_ERR,
+                  " RLQMCY: RMECDA_CTL1 read failed for BDF 0x%x",
+                  (uint64_t)root->bdf);
+        failures++;
+        goto device_cleanup;
+      }
+
+      /* Restore the original control even if programming or readback fails. */
+      ctl1_valid = 1u;
+      ctl1_programmed = ctl1_original |
+                        RMECDA_CTL1_TDISP_EN_MASK |
+                        RMECDA_CTL1_LINK_STR_LOCK_MASK;
+      if (write_from_root(cfg_va + rmecda_cap_base + RMECDA_CTL1_OFFSET,
+                          ctl1_programmed) != ACS_STATUS_PASS)
+      {
+        val_print(ACS_PRINT_ERR,
+                  " RLQMCY: RMECDA_CTL1 write failed for BDF 0x%x",
+                  (uint64_t)root->bdf);
+        failures++;
+        goto device_cleanup;
+      }
+
+      if (read_from_root(cfg_va + rmecda_cap_base + RMECDA_CTL1_OFFSET,
+                         &ctl1_readback) != ACS_STATUS_PASS)
+      {
+        val_print(ACS_PRINT_ERR,
+                  " RLQMCY: RMECDA_CTL1 readback failed for BDF 0x%x",
+                  (uint64_t)root->bdf);
+        failures++;
+        goto device_cleanup;
+      }
+
+      if ((ctl1_readback &
+           (RMECDA_CTL1_TDISP_EN_MASK | RMECDA_CTL1_LINK_STR_LOCK_MASK)) !=
+          (RMECDA_CTL1_TDISP_EN_MASK | RMECDA_CTL1_LINK_STR_LOCK_MASK))
+      {
+        val_print(ACS_PRINT_ERR,
+                  " RLQMCY: RMECDA_CTL1 not set for BDF 0x%x",
+                  (uint64_t)root->bdf);
+        failures++;
+        goto device_cleanup;
+      }
+    }
+    else
     {
       val_print(ACS_PRINT_DEBUG,
-                " RLQMCY: RME-CDA DVSEC missing for BDF 0x%x",
-                (uint64_t)root->bdf);
-      goto device_cleanup;
+                " RLQMCY: RME-CDA absent; platform configuration confirms Realm authorization",
+                0);
     }
-
-    cfg_addr = val_pcie_get_bdf_config_addr(root->bdf);
-    tg = val_get_min_tg();
-    if ((cfg_addr == 0u) || (tg == 0u))
-    {
-      val_print(ACS_PRINT_ERR,
-                " RLQMCY: Invalid config mapping for BDF 0x%x",
-                (uint64_t)root->bdf);
-      failures++;
-      goto device_cleanup;
-    }
-
-    cfg_va = val_get_free_va(tg);
-    if (cfg_va == 0u)
-    {
-      val_print(ACS_PRINT_ERR,
-                " RLQMCY: Config VA allocation failed for BDF 0x%x",
-                (uint64_t)root->bdf);
-      failures++;
-      goto device_cleanup;
-    }
-
-    attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(OUTER_SHAREABLE) |
-                       GET_ATTR_INDEX(DEV_MEM_nGnRnE) | PGT_ENTRY_AP_RW |
-                       PAS_ATTR(ROOT_PAS));
-    if (val_add_mmu_entry_el3(cfg_va, cfg_addr, attr))
-    {
-      val_print(ACS_PRINT_ERR,
-                " RLQMCY: Config map failed for BDF 0x%x",
-                (uint64_t)root->bdf);
-      failures++;
-      goto device_cleanup;
-    }
-
-    if (read_from_root(cfg_va + rmecda_cap_base + RMECDA_CTL1_OFFSET,
-                       &ctl1_original) != ACS_STATUS_PASS)
-    {
-      val_print(ACS_PRINT_ERR,
-                " RLQMCY: RMECDA_CTL1 read failed for BDF 0x%x",
-                (uint64_t)root->bdf);
-      failures++;
-      goto device_cleanup;
-    }
-
-    ctl1_programmed = ctl1_original |
-                      RMECDA_CTL1_TDISP_EN_MASK |
-                      RMECDA_CTL1_LINK_STR_LOCK_MASK;
-    if (write_from_root(cfg_va + rmecda_cap_base + RMECDA_CTL1_OFFSET,
-                        ctl1_programmed) != ACS_STATUS_PASS)
-    {
-      val_print(ACS_PRINT_ERR,
-                " RLQMCY: RMECDA_CTL1 write failed for BDF 0x%x",
-                (uint64_t)root->bdf);
-      failures++;
-      goto device_cleanup;
-    }
-
-    if (read_from_root(cfg_va + rmecda_cap_base + RMECDA_CTL1_OFFSET,
-                       &ctl1_readback) != ACS_STATUS_PASS)
-    {
-      val_print(ACS_PRINT_ERR,
-                " RLQMCY: RMECDA_CTL1 readback failed for BDF 0x%x",
-                (uint64_t)root->bdf);
-      failures++;
-      goto device_cleanup;
-    }
-
-    if ((ctl1_readback &
-         (RMECDA_CTL1_TDISP_EN_MASK | RMECDA_CTL1_LINK_STR_LOCK_MASK)) !=
-        (RMECDA_CTL1_TDISP_EN_MASK | RMECDA_CTL1_LINK_STR_LOCK_MASK))
-    {
-      val_print(ACS_PRINT_ERR,
-                " RLQMCY: RMECDA_CTL1 not set for BDF 0x%x",
-                (uint64_t)root->bdf);
-      failures++;
-      goto device_cleanup;
-    }
-    ctl1_valid = 1u;
 
     status = select_test_base(context.window_base,
                               context.window_size,
@@ -869,19 +892,16 @@ payload(void)
     if (status == ACS_STATUS_SKIP)
     {
       val_print(ACS_PRINT_DEBUG, " RLQMCY: Test base skipped\n", 0);
-      restore_decoders(&context);
       goto device_cleanup;
     }
     if (status != ACS_STATUS_PASS)
     {
       val_print(ACS_PRINT_ERR, " RLQMCY: Test base selection failed\n", 0);
-      restore_decoders(&context);
       failures++;
       goto device_cleanup;
     }
 
     status = validate_host_mpe(test_base);
-    restore_decoders(&context);
 
     /* Restore the global MECID after the access sequence. */
     if (val_rlm_configure_mecid(VAL_GMECID))
@@ -898,6 +918,9 @@ payload(void)
     val_print(ACS_PRINT_DEBUG, " RLQMCY: Endpoint evaluated\n", 0);
 
 device_cleanup:
+    if (decoders_programmed != 0u)
+      restore_decoders(&context);
+
     if (ctl1_valid != 0u)
     {
       (void)write_from_root(cfg_va + rmecda_cap_base + RMECDA_CTL1_OFFSET,
@@ -928,11 +951,11 @@ device_cleanup:
       val_print(ACS_PRINT_DEBUG, " RLQMCY: MEC disabled\n", 0);
   }
 
-  /* Skip when no Type-3 devices lacked target encryption. */
+  /* Skip when no eligible Type-3 devices lacked target encryption. */
   if (targetless == 0u)
   {
     val_print(ACS_PRINT_DEBUG,
-              " RLQMCY: No Type-3 devices without target encryption",
+              " RLQMCY: No eligible Type-3 devices without target encryption",
               0);
     val_set_status(pe_index, "SKIP", 03);
     return;

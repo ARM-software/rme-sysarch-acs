@@ -245,7 +245,7 @@ payload(void)
       {
           /* Program the selective IDE stream before TDISP enforces write protection. */
           status = val_ide_establish_stream(bdf, sel_index, val_generate_stream_id(),
-                                            PCIE_CREATE_BDF_PACKED(bdf));
+                                            bdf);
           if (status)
           {
               val_print(ACS_PRINT_ERR,

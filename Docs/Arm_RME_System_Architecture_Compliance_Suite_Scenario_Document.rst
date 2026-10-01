@@ -63,7 +63,7 @@ Testcase checklist
 
       RBJVZS: An access to a Resource is associated with an Access PAS in accordance with the PAS Access Table.
 
-      RGDVSZ: A PA of an access to a memory-mapped peripheral is associated with a PAS until reaching the PAS filter assigned to protect the peripheral
+      RGDVSZ: A PA of an access to a memory-mapped peripheral is associated with a PAS until reaching the PAS filter assigned to protect the peripheral.
 
       RDVPGT: A private PAS filter allows access to a register only if the Access PAS matches a Resource PAS that the register is associated with.
 
@@ -646,15 +646,16 @@ Testcase checklist
 
       RGRCKL: An RME-DA Root Port supports the following IDE features:
 
-      - At least one Selective IDE Stream.NUM_SEL_STR denotes the number of Selective IDE Streams supported by the Root Port.
-      - At least three Address Association registers for each Selective IDE Stream.
-      - The TEE-Limited Stream IDE capability.
+      - At least one Selective IDE Stream. NUM_SEL_STR denotes the number of Selective IDE Streams supported by the Root Port.
+      - At least two Address Association register blocks for each Selective IDE Stream. Each block contains three registers.
+
+      IHDPRK recommends support for the TEE-Limited Stream IDE capability.
 
     -
 
-      1. For all RootPorts in the system, check at least one Selective IDE Stream is supported and TEE-Limited Stream is supported in the IDE Capability register.
-      2. Check at least three Address Association registers in the Address association block.
-      3. The RootPort should have all the expected values required for the IDE feature.
+      1. For all RootPorts in the system, check at least one Selective IDE Stream is supported in the IDE Capability register.
+      2. Check that each Selective IDE Stream supports at least two Address Association register blocks.
+      3. Report a warning if the recommended TEE-Limited Stream IDE capability is not supported.
 
   * -
 
@@ -799,22 +800,25 @@ Testcase checklist
 
       RYHQQL: When a Selective IDE register block is Unlocked (SEL_STR_LOCK is 0):
 
-      - The block registers do not have any register security property
-      - The associated Selective IDE Stream is in Unlocked state
+      - The block registers do not have any register security property.
+      - The associated Selective IDE Stream is in Unlocked state.
 
       When a Selective IDE register block is Locked (SEL_STR_LOCK is 1):
 
-      - The block registers are RMSD write-detect
-      - The associated Selective IDE Stream is in Locked state
+      - The block registers are RMSD write-detect.
+      - The associated Selective IDE Stream is in Locked state.
 
     -
 
-      IDE stream must be transitioned to Insecure state when Selective IDE register block is locked and re-configured.
+      A Non-secure write to a locked Selective IDE register block must trigger RMSD write detection as defined by IFLPRX.
 
-      1. Configure IDE stream between RP and EP and set it to Secure state.
-      2. Lock the Selective IDE register block by setting SEL_STR_LOCK to 1.
-      3. Re-Configure the IDE stream.
-      4. Check that the IDE stream is transitioned to Insecure state which validates the RMSD write-detect property.
+      1. Test each Selective IDE stream with a corresponding SEL_STR_LOCK bit (indices 0 through 31).
+      2. Establish an enabled, Secure target stream with the register blocks unlocked.
+      3. Lock all implemented Selective IDE register blocks from Root PAS and verify the lock bits read back as set.
+      4. Verify that the target stream remains enabled and Secure after locking.
+      5. Change only the target Stream ID from Non-secure PAS, preserving Stream Enable and all other control fields.
+      6. Before cleanup, check with bounded polling that all hosted IDE streams are Insecure and all implemented Selective Stream Lock bits are cleared. Link IDE support is not required; check Link streams only if advertised.
+      7. Unlock the register blocks, disable the tested stream, and disable TDISP when the Root Port checks finish, including failure paths.
 
   * -
 
@@ -1055,7 +1059,7 @@ Testcase checklist
 
       1. Enumerate CXL Root Ports in the system.
       2. For each root port that does not expose the RME-CDA DVSEC, select a downstream Type-2/Type-3 endpoint and enable CXL.mem; program host/endpoint HDM decoders for a CXL.mem window and derive the DPA used by out-of-band media readback.
-      3. Validate host-to-device accesses: Non-secure PAS reads/writes succeed and Realm PAS reads/writes are rejected with error. Use the HPA for the host transaction and the corresponding endpoint-decoded DPA only for media readback.
+      3. Validate host-to-device accesses: Non-secure PAS reads/writes succeed. Require Realm PAS reads/writes to be rejected with error only when val_cxl_rp_is_realm_access_authorized() does not confirm user-configured authorization for the root port; otherwise omit the Realm rejection check under the RBYTYV exception. Use the HPA for the host transaction and the corresponding endpoint-decoded DPA only for media readback.
       4. Validate device-to-host DMA is effectively forced to Non-secure by attempting DMA to Non-secure memory (passes) and Realm-assigned memory (rejected / payload not observed).
 
   * -
@@ -1077,9 +1081,14 @@ Testcase checklist
 
     -
 
-      1. Identify CXL Type-3 devices that do not advertise CXL-TSP capability.
-      2. Verify the upstream root port exposes the RME-CDA DVSEC.
-      3. Confirm CMA-SPDM support via DOE discovery, Direct P2P memory enable is disabled, BI decoder is disabled, and HDM decoder global control is RMSD write-protect.
+      1. Identify CXL Type-3 devices that do not advertise CXL-TSP capability and evaluate the following prerequisites independently of upstream RME-CDA support.
+      2. Confirm CMA-SPDM support via DOE discovery.
+      3. Verify Direct P2P memory enable is disabled.
+      4. If the BI decoder capability is present, verify back-invalidate snoops are disabled.
+      5. Verify the HDM decoder capability is present with at least one decoder and its global control register is RMSD write-protect.
+      6. Attempt an SPDM session for additional coverage and close the session; a session failure is logged without failing the test.
+
+      Note: This scenario requires SPDM/DOE support and provides partial RCNSLJ coverage. Host-side MPE encryption remains required by RCNSLJ; this test does not directly validate encryption, cryptographic integrity/replay protection, or protection of all device and switch configuration registers.
 
   * -
 
@@ -1505,10 +1514,13 @@ Testcase checklist
 
     -
 
-      1. Select a Type-3 CXL.mem endpoint that does not advertise target-side encryption but supports MemRdFill (TSP Capable).
-      2. Enable MEC, program HDM decoders, and enable CXL.mem access.
-      3. Enable TDISP and set RMECDA_CTL1.LINK_STR_LOCK.
-      4. Write a 32-bit value, update a single byte, and read back the 32-bit value to confirm untouched bytes are preserved.
+      1. Select a Type-3 CXL.mem endpoint. If its upstream root port lacks RME-CDA, require val_cxl_rp_is_realm_access_authorized() to confirm user-configured Realm authorization; otherwise skip this candidate before modifying device state. Require host and endpoint HDM decoders.
+      2. Enable CXL.mem, select a CFMWS window, and save and program the host target list and host/endpoint HDM decoders.
+      3. Use an SPDM session to query CXL-TSP capabilities. Skip endpoints that advertise target-side encryption and verify TSP Capable is set for MemRdFill support.
+      4. If the upstream root port exposes the RME-CDA DVSEC, save RMECDA_CTL1, set TDISP_EN and LINK_STR_LOCK, and verify both bits read back as set. For a port without RME-CDA, use the Realm authorization confirmed in step 1.
+      5. Enable MEC, configure a MECID, and map a non-cacheable Realm PAS alias for the CXL.mem window.
+      6. Write a 32-bit value, update a single byte, and read back the 32-bit value to confirm untouched bytes are preserved.
+      7. During cleanup, disable MEC if enabled, attempt to restore saved decoder/target-list programming and RMECDA_CTL1 if saved, and close the SPDM session. Control restoration is attempted even if RME-CDA programming or readback fails.
 
       Note: This scenario requires SPDM/DOE support to query CXL-TSP capabilities.
 
@@ -1615,10 +1627,12 @@ Testcase checklist
 
     -
 
-      1. Identify a Type-3 endpoint that does not advertise target-side encryption capability.
-      2. Enable MEC, enable CXL.mem, and program HDM decoders for a CXL.mem window.
-      3. Enable TDISP and set RMECDA_CTL1.LINK_STR_LOCK.
-      4. Write using MECID1, issue a CMO to PoE, then read using MECID2 and confirm the read data differs from the write data (host-side MPE observed).
+      1. Identify a Type-3 endpoint. If its upstream root port lacks RME-CDA, require val_cxl_rp_is_realm_access_authorized() to confirm user-configured Realm authorization; otherwise skip this candidate before enabling MEC or modifying device state. Use an SPDM session to confirm the endpoint does not advertise target-side encryption capability.
+      2. Enable MEC, enable CXL.mem, and save and program HDM decoders for a selected CFMWS window.
+      3. If the upstream root port exposes the RME-CDA DVSEC, save RMECDA_CTL1, set TDISP_EN and LINK_STR_LOCK, and verify both bits read back as set. For a port without RME-CDA, use the Realm authorization confirmed in step 1.
+      4. Select a page-aligned address in the window and map a Realm PAS alias. Write using MECID1, issue a CMO to PoE, then read using MECID2 and confirm the read data differs from the write data (host-side MPE observed).
+      5. Restore the global MECID after the access sequence.
+      6. On every exit after successful decoder setup, attempt to restore saved decoder programming. If RMECDA_CTL1 was saved, attempt to restore it even after programming or readback failures. Close the SPDM session and disable MEC when the test completes.
 
       Note: This scenario requires SPDM/DOE support to query CXL-TSP capabilities.
 
@@ -1723,9 +1737,11 @@ Testcase checklist
 
     -
 
-      1. Select a CXL exerciser endpoint and its upstream root port and program HDM decoders for a CXL.mem window.
-      2. Enable TDISP and set RMECDA_CTL1.LINK_STR_LOCK.
-      3. Dirty host cachelines by writing to the HPA window, issue CMOs to PoPA and PoE, translate the target HPA through the endpoint decoder, and verify a direct-DPA device-media read observes the written pattern.
+      1. Select a CXL exerciser endpoint and its upstream root port. If the port lacks RME-CDA, require val_cxl_rp_is_realm_access_authorized() to confirm user-configured Realm authorization; otherwise continue to the next candidate before modifying device state. Enable CXL.mem and save and program the host target list and host/endpoint HDM decoders for a selected CFMWS window.
+      2. If the upstream root port exposes the RME-CDA DVSEC, save RMECDA_CTL1, set TDISP_EN and LINK_STR_LOCK, and verify both bits read back as set. For a port without RME-CDA, use the Realm authorization confirmed in step 1.
+      3. Map a cacheable Realm PAS alias and dirty the host cache by writing a known pattern to the CXL.mem HPA window.
+      4. Translate the target HPA through the endpoint decoder to obtain the DPA for device-media readback. Issue a CMO to PoPA and verify a direct-DPA device-media read observes the written pattern, then issue a CMO to PoE and repeat the device-side readback check.
+      5. During cleanup, attempt to restore saved decoder/target-list programming and RMECDA_CTL1 if saved. Control restoration is attempted even if RME-CDA programming or readback fails.
 
   * -
 
