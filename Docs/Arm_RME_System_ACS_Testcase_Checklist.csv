@@ -74,7 +74,7 @@ Sl No,Rule ID,Rule Description,Coverage,Notes,Exerciser PAL APIs Used
 73,RCMMDG,"For any cache before the PoPA, cache prefetching across granule-boundary is allowed only after querying the GPC for the PAS association of the next granule.",Not covered,Cache prefetch behavior is not directly software-observable.,
 74,RPSGCM,A cache maintenance operation performed on a Clean cache entry never results with a write of entry content past the PoPA.,Not covered,Clean-cache writeback behavior is not directly software-observable.,
 75,RJRJSQ,An RME coherent interconnect complies with a Distributed Virtual Memory (DVM) version that supports Realm Translation Regimes and TLB Invalidate by PA operations.,rme_interconnect_supports_tlbi_pa,,
-76,RDNFTD,A PA of an access to a PCIe Root Port is associated with a PAS until reaching the Root Port.,da_rootport_tdisp_disabled,PCIe exerciser VIP required,"pal_exerciser_set_param (DMA_ATTRIBUTES); pal_exerciser_ops (START_DMA)"
+76,RDNFTD,A PA of an access to a PCIe Root Port is associated with a PAS until reaching the Root Port.,da_rootport_tdisp_disabled,"PCIe exerciser VIP required; indirect coverage through the Root-PAS access path. Source TEST_RULE lists only RRNQNM and RGKHSZ.","pal_exerciser_set_param (DMA_ATTRIBUTES); pal_exerciser_ops (START_DMA)"
 77,RTTPLM,Interconnect registers that control mapping of PAs to PCIe Root Ports are implemented as MSD-Protected registers (MPRs).,da_interconnect_regs_rmsd_protected,,
 78,RXZTPC,"RME-DA host bridge BDF, ECAM, and memory-range assignments are static or trusted-controlled.",Planned,,
 79,RKSPKN,Encryption keys or any other confidential memory encryption context that is used by an MPE are stored in registers that are reset to a known default value on an RME system reset.,Not covered,MPE key storage is implementation-defined and not directly observable.,
@@ -97,7 +97,7 @@ Sl No,Rule ID,Rule Description,Coverage,Notes,Exerciser PAL APIs Used
 96,RNXJKQ,"When TDISP is enabled, IDE keys, confidential state, and protected payload registers are RMSD full-protect.",da_rootport_write_protect_full_protect_property,,
 97,RPCRFM,"When TDISP is enabled, protected RP configuration registers are RMSD write-detect.",da_rmsd_write_detect_property,,
 98,RHCMWC,"When RMEDA_CTL1.TDISP_EN transitions from 1 to 0, all hosted IDE Streams transition to IDE Insecure state.",da_ide_state_tdisp_disable,,
-99,RRNQNM,"When TDISP is disabled, Root Ports clear/reject protected T-bit or XT-bit traffic.",da_rootport_tdisp_disabled,PCIe exerciser VIP required,"pal_exerciser_set_param (DMA_ATTRIBUTES); pal_exerciser_ops (START_DMA)"
+99,RRNQNM,"When TDISP is disabled, Root Ports clear both T-bit and XT-bit or reject incoming protected requests, and reject with error outgoing requests requiring either bit to be set.",da_rootport_tdisp_disabled,PCIe exerciser VIP required,"pal_exerciser_set_param (DMA_ATTRIBUTES); pal_exerciser_ops (START_DMA)"
 100,RNPGJV,The RMEDA_CTL registers are RMSD write-protect by hardware default.,da_ctl_regs_rmsd_write_protect_property,,
 101,RNWSJB,All RPs in an RME-DA system must implement the RME-DA DVSEC.,da_dvsec_register_config,,
 102,RYHQQL,Selective IDE register-block lock state controls register protection and stream lock state.,da_selective_ide_register_property,,
