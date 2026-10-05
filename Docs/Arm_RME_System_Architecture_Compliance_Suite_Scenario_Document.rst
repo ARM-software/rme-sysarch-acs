@@ -720,7 +720,7 @@ Testcase checklist
       RGKHSZ: An RME-DA RP performs the following operations for all outgoing TLPs:
 
       - Associate the TLP with an IDE Stream.
-      - Set the IDE-Tbit of the TLP to the appropriate value.
+      - Set the IDE T-bit and XT-bit of the TLP to the appropriate values.
 
       RZJJMZ: As a requester, an RCiEP sets the SMMU SEC_SID, StreamID and SubstreamID fields of a request as follows:
 
@@ -743,7 +743,7 @@ Testcase checklist
 
     -
 
-      RNPGJV: RMEDA_CTL registers must behave as write-protect.
+      RNPGJV: The RMEDA_CTL registers are RMSD write-protect by hardware default.
 
     -
 
