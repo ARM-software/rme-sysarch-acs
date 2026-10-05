@@ -87,6 +87,7 @@ payload(void)
     uint32_t device_id = 0;
     uint32_t stream_id = 0;
     uint32_t its_id = 0;
+    uint32_t its_index;
     uint64_t its_base = 0, itt_base;
 
     if (val_pcie_get_info(PCIE_INFO_NUM_ECAM, 0) == 0) {
@@ -154,7 +155,14 @@ payload(void)
         return;
     }
 
-    itt_base = g_gic_its_info->GicIts[its_id].ITTBase;
+    its_index = val_gic_get_its_index(its_id);
+    if (its_index == ACS_INVALID_INDEX) {
+        val_print(ACS_PRINT_ERR, " Could not find ITS ID [%x]", its_id);
+        val_set_status(index, "FAIL", 13);
+        return;
+    }
+
+    itt_base = g_gic_its_info->GicIts[its_index].ITTBase;
     val_print(ACS_PRINT_INFO, " itt_base: 0x%lx", itt_base);
     if (val_add_gpt_entry_el3(itt_base, GPT_NONSECURE))
     {
@@ -240,7 +248,7 @@ payload(void)
      * Program one of the ITT bases with secure, Root or Realm PA
      * and expect a fault when GIC tries to access it
     **/
-    itt_base = g_gic_its_info->GicIts[its_id].ITTBase;
+    itt_base = g_gic_its_info->GicIts[its_index].ITTBase;
     if (val_add_gpt_entry_el3(itt_base, GPT_ROOT))
     {
         val_print(ACS_PRINT_ERR, " Failed to add GPT entry for PA 0x%llx", itt_base);

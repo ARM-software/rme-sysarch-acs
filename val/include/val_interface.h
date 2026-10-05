@@ -212,6 +212,7 @@ void val_gic_free_irq(uint32_t irq_num, uint32_t mapped_irq_num);
 void val_gic_set_intr_trigger(uint32_t int_id, INTR_TRIGGER_INFO_TYPE_e trigger_type);
 uint32_t val_gic_get_intr_trigger_type(uint32_t int_id, INTR_TRIGGER_INFO_TYPE_e *trigger_type);
 uint32_t val_gic_its_configure(void);
+uint32_t val_gic_get_its_index(uint32_t its_id);
 uint32_t val_gic_request_msi(uint32_t bdf, uint32_t device_id, uint32_t its_id, uint32_t int_id,
                              uint32_t msi_index);
 void val_gic_free_msi(uint32_t bdf, uint32_t device_id, uint32_t its_id, uint32_t int_id,
