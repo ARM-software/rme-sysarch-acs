@@ -275,14 +275,17 @@ its_fail:
 
 /**
   @brief   This function gets ITS Index in g_gic_its_info for its_id
-           1. Caller       -  VAL Layer
+           1. Caller       -  VAL Layer and Test Suite
            2. Prerequisite -  val_gic_its_configure
   @param   its_id ID of the ITS Block
-  @return  Index in ITS Info Block
+  @return  Index in ITS Info Block, or ACS_INVALID_INDEX if not found
 **/
-uint32_t get_its_index(uint32_t its_id)
+uint32_t val_gic_get_its_index(uint32_t its_id)
 {
   uint32_t  index;
+
+  if (g_gic_its_info == NULL)
+    return ACS_INVALID_INDEX;
 
   for (index = 0; index < g_gic_its_info->GicNumIts; index++)
   {
@@ -409,7 +412,7 @@ void val_gic_free_msi(uint32_t bdf, uint32_t device_id, uint32_t its_id,
 {
   uint32_t its_index;
 
-  its_index = get_its_index(its_id);
+  its_index = val_gic_get_its_index(its_id);
   if (its_index >= g_gic_its_info->GicNumIts)
   {
     val_print(ACS_PRINT_ERR, " Could not find ITS ID [%x]", its_id);
@@ -447,7 +450,7 @@ uint32_t val_gic_request_msi(uint32_t bdf, uint32_t device_id, uint32_t its_id,
    if ((g_gic_its_info == NULL) || (g_gic_its_info->GicNumIts == 0))
     return ACS_STATUS_ERR;
 
-  its_index = get_its_index(its_id);
+  its_index = val_gic_get_its_index(its_id);
 
   if (its_index >= g_gic_its_info->GicNumIts) {
     val_print(ACS_PRINT_ERR, " Could not find ITS ID [%x]", its_id);
@@ -486,7 +489,7 @@ uint32_t val_gic_its_get_base(uint32_t its_id, uint64_t *its_base)
    if ((g_gic_its_info == NULL) || (g_gic_its_info->GicNumIts == 0))
     return ACS_STATUS_ERR;
 
-  its_index = get_its_index(its_id);
+  its_index = val_gic_get_its_index(its_id);
 
   if (its_index >= g_gic_its_info->GicNumIts) {
     val_print(ACS_PRINT_ERR, " Could not find ITS ID [%x]", its_id);
