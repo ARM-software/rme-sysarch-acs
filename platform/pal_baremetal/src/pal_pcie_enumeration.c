@@ -520,10 +520,12 @@ uint32_t pal_pcie_enumerate_device(uint32_t bus, uint32_t sec_bus)
   uint32_t com_reg_value;
   uint32_t bar32_p_limit;
   uint32_t bar32_np_limit;
+  uint32_t end_bus;
 
   seg = g_pcie_info_table->block[pcie_index].segment_num;
-  if (bus == ((g_pcie_info_table->block[pcie_index].end_bus_num) + 1))
-      return sub_bus;
+  end_bus = g_pcie_info_table->block[pcie_index].end_bus_num;
+  if (bus > end_bus)
+      return end_bus;
 
   uint32_t bar32_p_base = g_bar32_p_start;
   uint32_t bar32_np_base = g_bar32_np_start;
@@ -543,6 +545,12 @@ uint32_t pal_pcie_enumerate_device(uint32_t bus, uint32_t sec_bus)
         pal_pci_cfg_read(seg, bus, dev, func, TYPE01_RIDR, &class_code);
         if ((((class_code >> CC_BASE_SHIFT) & CC_BASE_MASK) == HB_BASE_CLASS) &&
              (((class_code >> CC_SUB_SHIFT) & CC_SUB_MASK)) == HB_SUB_CLASS) {
+            if (sec_bus > end_bus)
+            {
+                sub_bus = end_bus;
+                continue;
+            }
+
             /* Enable memory access, Bus master enable and I/O access*/
             pal_pci_cfg_read(seg, bus, dev, func, COMMAND_REG_OFFSET, &com_reg_value);
             pal_pci_cfg_write(seg, bus, dev, func, COMMAND_REG_OFFSET,
@@ -560,6 +568,13 @@ uint32_t pal_pcie_enumerate_device(uint32_t bus, uint32_t sec_bus)
         if (PCIE_HEADER_TYPE(header_value) == TYPE1_HEADER)
         {
             print(ACS_PRINT_INFO, "TYPE1 HEADER found", 0);
+
+            /* No secondary bus remains in this ECAM range for the bridge. */
+            if (sec_bus > end_bus)
+            {
+                sub_bus = end_bus;
+                continue;
+            }
 
             /* Enable memory access, Bus master enable and I/O access*/
             pal_pci_cfg_read(seg, bus, dev, func, COMMAND_REG_OFFSET, &com_reg_value);
@@ -630,7 +645,8 @@ pal_clear_pri_bus()
     uint32_t vendor_id;
 
     seg = g_pcie_info_table->block[pcie_index].segment_num;
-    for (bus = 0; bus <= g_pcie_info_table->block[pcie_index].end_bus_num; bus++)
+    for (bus = g_pcie_info_table->block[pcie_index].start_bus_num;
+         bus <= g_pcie_info_table->block[pcie_index].end_bus_num; bus++)
     {
         for (dev = 0; dev < PCIE_MAX_DEV; dev++)
         {
@@ -705,9 +721,9 @@ uint32_t
 pal_pcie_get_bdf(uint32_t ClassCode, uint32_t StartBdf)
 {
 
-  uint32_t  Bus, InputBus, InputSeg;;
-  uint32_t  Dev, InputDev;
-  uint32_t  Func, InputFunc;
+  uint32_t  Bus, InputBus, InputSeg;
+  uint32_t  Dev, InputDev, StartDev;
+  uint32_t  Func, InputFunc, StartFunc;
   uint32_t class_code;
   InputSeg  = PCIE_EXTRACT_BDF_SEG(StartBdf);
   InputBus  = PCIE_EXTRACT_BDF_BUS(StartBdf);
@@ -716,9 +732,20 @@ pal_pcie_get_bdf(uint32_t ClassCode, uint32_t StartBdf)
 
   for (Bus = InputBus; Bus < PLATFORM_BM_OVERRIDE_PCIE_MAX_BUS; Bus++)
   {
-    for (Dev = InputDev; Dev < PCIE_MAX_DEV; Dev++)
+    if (pal_pcie_ecam_base(InputSeg, Bus, 0, 0) == 0)
+        continue;
+
+    StartDev = 0;
+    if (Bus == InputBus)
+        StartDev = InputDev;
+
+    for (Dev = StartDev; Dev < PCIE_MAX_DEV; Dev++)
     {
-      for (Func = InputFunc; Func < PCIE_MAX_FUNC; Func++)
+      StartFunc = 0;
+      if ((Bus == InputBus) && (Dev == InputDev))
+          StartFunc = InputFunc;
+
+      for (Func = StartFunc; Func < PCIE_MAX_FUNC; Func++)
       {
         pal_pci_cfg_read(InputSeg, Bus, Dev, Func, TYPE01_RIDR, &class_code);
         if ((class_code >> CC_BASE_SHIFT) == (ClassCode >> 16))
