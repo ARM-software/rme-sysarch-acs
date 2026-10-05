@@ -145,6 +145,7 @@
 #define TYPE1_IO_LIMIT_UPPER 0x32
 
 /* Type 1 Bridge Control Register */
+#define BRIDGE_CTRL_SERRE_SET   (1U << 17)
 #define BRIDGE_CTRL_SBR_SET     0x400000
 
 /* Memory Base Reg Shifts */
