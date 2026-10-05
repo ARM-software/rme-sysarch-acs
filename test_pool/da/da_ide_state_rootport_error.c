@@ -60,6 +60,7 @@ payload()
   uint32_t erp_bdf;
   uint32_t aer_offset;
   uint32_t rp_aer_offset;
+  uint32_t saved_uncorr_mask;
   uint32_t da_cap_base, ide_cap_base;
   uint32_t reg_value;
   uint32_t num_sel_ide_stream_supp;
@@ -139,6 +140,27 @@ payload()
           goto port_cleanup;
     }
 
+    /* Save the EP AER mask and unmask the Uncorrectable Internal Error. */
+    if (val_pcie_read_cfg(e_bdf, aer_offset + AER_UNCORR_MASK_OFFSET,
+                         &saved_uncorr_mask) != PCIE_SUCCESS)
+    {
+        val_print(ACS_PRINT_ERR, " Failed to read AER mask for BDF: 0x%x", e_bdf);
+        test_fails++;
+        goto port_cleanup;
+    }
+
+    /* AER mask bit 0 is undefined on read and must be written as 1. */
+    val_pcie_write_cfg(e_bdf, aer_offset + AER_UNCORR_MASK_OFFSET,
+                       (saved_uncorr_mask & ~(1u << UNCORR_INT_ERR_OFFSET)) | 1u);
+    if (val_pcie_read_cfg(e_bdf, aer_offset + AER_UNCORR_MASK_OFFSET,
+                         &reg_value) != PCIE_SUCCESS ||
+        (reg_value & (1u << UNCORR_INT_ERR_OFFSET)))
+    {
+        val_print(ACS_PRINT_ERR, " Failed to unmask AER internal error for BDF: 0x%x", e_bdf);
+        test_fails++;
+        goto aer_cleanup;
+    }
+
     count = 0;
     while (count++ < num_sel_ide_stream_supp)
     {
@@ -185,6 +207,10 @@ payload()
         val_ide_program_rid_base_limit_valid(erp_bdf, count, 0, 0, 0);
 
     }
+
+aer_cleanup:
+    /* Restore the EP AER mask, including on failure; always write bit 0 as 1. */
+    val_pcie_write_cfg(e_bdf, aer_offset + AER_UNCORR_MASK_OFFSET, saved_uncorr_mask | 1u);
 
 port_cleanup:
     /* Disable the TDISP for RP */
