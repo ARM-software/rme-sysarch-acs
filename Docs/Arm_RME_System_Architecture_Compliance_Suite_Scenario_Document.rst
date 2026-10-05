@@ -771,26 +771,17 @@ Testcase checklist
 
     -
 
-      RRNQNM: When RMEDA_CTL1.TDISP_EN==0:
-
-      - The RP rejects an incoming request if it has IDE-Tbit==1 .
-      - The RP rejects with error an outgoing request if it would otherwise need to be sent with IDE-Tbit==1.
-
-      RGKHSZ: An RME-DA RP performs the following operations for all outgoing TLPs:
-
-      - Associate the TLP with an IDE Stream.
-      - Set the IDE-Tbit of the TLP to the appropriate value.
-
-      RDNFTD: A PA of an access to a PCIe Root Port is associated with a PAS until reaching the Root Port.
+      RHCMWC: When RMEDA_CTL1.TDISP_EN transitions from 1 to 0, all hosted IDE Streams transition to IDE Insecure state.
 
     -
 
-      1. Disable the TDISP_EN bit in the RP.
-      2. Configure the exerciser EP under the RP to TDISP RUN state (IDE-Tbit = 1).
-      3. Perform a DMA transaction from the Exerciser EP to NS memory.
-      4. Map the BAR of the Exerciser EP to ROOT PAS.
-      5. Perform a read from PE from ROOT.
-      6. Check if both the transaction are rejected and should be unsuccessful.
+      For each RME-DA Root Port, test each implemented Selective IDE stream:
+
+      1. Set RMEDA_CTL1.TDISP_EN to 1 and verify that it reads back as 1.
+      2. Configure and enable the target Selective IDE stream, and verify that it is in IDE Secure state.
+      3. Clear RMEDA_CTL1.TDISP_EN and verify that it reads back as 0.
+      4. Before cleanup, read the target stream status and verify that it is in IDE Insecure state.
+      5. Disable the tested stream and clear its RID association. Repeat the verified TDISP_EN transition for each stream, and leave TDISP disabled when the Root Port checks finish.
 
   * -
 
@@ -826,15 +817,30 @@ Testcase checklist
 
     -
 
-      RHCMWC: The RMEDA_CTL registers are RMSD write-protect by hardware default.
+      RRNQNM: When RMEDA_CTL1.TDISP_EN == 0, all of the following apply:
+
+      - For any incoming request with IDE T-bit == 1 or XT-bit == 1, the RP either forces IDE T-bit == 0 and XT-bit == 0, or rejects the request.
+      - The RP rejects with error an outgoing request if it needs to be sent with IDE T-bit == 1 or XT-bit == 1.
+
+      RGKHSZ: An RME-DA RP performs the following for all outgoing TLPs:
+
+      - Associates the TLP with an IDE Stream.
+      - Sets the IDE T-bit and XT-bit of the TLP to the appropriate value.
+
+      RDNFTD: A PA of an access to a PCIe Root Port is associated with a PAS until reaching the Root Port.
+
+      RDNFTD is a related rule mapped to this test in the testcase checklist; the current test reports only RRNQNM and RGKHSZ in TEST_RULE.
 
     -
 
-      IDE stream must be transitioned to Insecure state when TDISP_EN is disabled.
+      The test requires an Exerciser. The current implementation performs the following checks:
 
-      1. After enabling the TDISP_EN, establish the IDE stream between the RP and EP.
-      2. Once done, set the TDISP_EN to 0.
-      3. Check if the IDE stream is transitioned to Insecure state.
+      1. For each Exerciser EP with an RME-DA Root Port, clear RMEDA_CTL1.TDISP_EN and verify that it reads back as 0.
+      2. Transition the EP to TDISP RUN state and perform DMA transfers from the source buffer to the Exerciser and from the Exerciser to the destination buffer.
+      3. Compare the buffers and report failure if they match, treating a successful DMA transfer as an unexpected result.
+      4. For the outgoing check, find a downstream function under each RME-DA Root Port, transition that function to TDISP RUN state, and clear and verify RMEDA_CTL1.TDISP_EN.
+      5. Map the Root Port's MMIO BAR to Root PAS and issue a PE read. The current check expects PCIE_UNKNOWN_RESPONSE (0xFFFFFFFF).
+      6. Unlock the devices and release the allocated test buffers during cleanup.
 
   * -
 
