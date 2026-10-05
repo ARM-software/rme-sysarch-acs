@@ -81,6 +81,7 @@ payload(void)
   uint32_t device_id = 0;
   uint32_t stream_id = 0;
   uint32_t its_id = 0;
+  uint32_t its_index;
   uint32_t msi_index = 0;
   uint32_t msi_cap_offset = 0;
   uint64_t itt_base;
@@ -140,13 +141,20 @@ payload(void)
           return;
       }
 
+      its_index = val_gic_get_its_index(its_id);
+      if (its_index == ACS_INVALID_INDEX) {
+          val_print(ACS_PRINT_ERR, " Could not find ITS ID [%x]", its_id);
+          val_set_status(pe_index, "FAIL", 12);
+          return;
+      }
+
       test_skip = 0;
       //Enable the Error Reporting bits in the RP's AER ROOT_ERR_CMD register
       val_pcie_read_cfg(erp_bdf, rp_aer_offset + AER_ROOT_ERR_CMD_OFFSET, &value);
       val_pcie_write_cfg(erp_bdf, rp_aer_offset + AER_ROOT_ERR_CMD_OFFSET, (value | 0x7));
 
       // Program the ITT base as ROOT in GPT
-      itt_base = g_gic_its_info->GicIts[its_id].ITTBase;
+      itt_base = g_gic_its_info->GicIts[its_index].ITTBase;
       if (val_add_gpt_entry_el3(itt_base, GPT_ROOT))
       {
             val_print(ACS_PRINT_ERR, " DPT Entry adding failed for the Address: 0x%llx", itt_base);
@@ -190,7 +198,7 @@ payload(void)
       val_pcie_clear_urd(erp_bdf);
       val_gic_free_msi(erp_bdf, device_id, its_id, lpi_int_id + instance, msi_index);
 
-      itt_base = g_gic_its_info->GicIts[its_id].ITTBase;
+      itt_base = g_gic_its_info->GicIts[its_index].ITTBase;
       if (val_add_gpt_entry_el3(itt_base, GPT_NONSECURE))
       {
             val_print(ACS_PRINT_ERR, " DPT Entry adding failed for the Address: 0x%llx", itt_base);
