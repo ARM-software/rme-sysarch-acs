@@ -68,6 +68,7 @@ void *val_el3_memory_calloc(size_t num, size_t size, size_t alignment);
 void val_el3_cmo_cipapa(uint64_t PA);
 void val_el3_tlbi_paallos(void);
 void val_el3_cln_and_invldt_cache(uint64_t *desc_addr);
+void val_el3_clean_invalidate_pe_cache(void);
 void val_el3_clean_cache(uint64_t *address);
 void val_el3_invalidate_cache(uint64_t *address);
 void val_el3_mmio_write(uintptr_t addr, uint32_t val);

@@ -676,6 +676,7 @@ void pal_restore_global_test_data(uint64_t nvm_mem, uint32_t *total_tests, uint3
 #define CLEAN_AND_INVALIDATE 0x1
 #define CLEAN                0x2
 #define INVALIDATE           0x3
+#define CLEAN_AND_INVALIDATE_SET_WAY 0x4
 
 /* Exerciser definitions */
 #define MAX_ARRAY_SIZE      32
@@ -729,6 +730,7 @@ typedef enum {
 #define EXERCISER_TXN_ATTR_READ              (1u << 1)
 #define EXERCISER_TXN_ATTR_CONFIG            (1u << 2)
 #define EXERCISER_TXN_ATTR_CACHE_MAINTENANCE (1u << 3)
+#define EXERCISER_TXN_ATTR_SNOOP             (1u << 4)
 
 typedef enum {
   TXN_REQ_ID       = 0x0,
@@ -849,6 +851,14 @@ uint32_t pal_exerciser_get_state(EXERCISER_STATE *state, uint32_t bdf);
 uint32_t pal_exerciser_ops(EXERCISER_OPS ops, uint64_t param, uint32_t instance);
 uint32_t pal_cda_tdi_snoop_attempt(uint32_t bdf, uint64_t target_hpa,
                                    uint32_t pas_realm, uint32_t *result);
+/* Host snoop setup/trigger: 0 success, 1 unsupported, 2 error. */
+#define PAL_CDA_SNOOP_SUCCESS     0u
+#define PAL_CDA_SNOOP_UNSUPPORTED 1u
+#define PAL_CDA_SNOOP_ERROR       2u
+uint32_t pal_cda_host_snoop_prepare(uint32_t root_bdf, uint32_t endpoint_bdf,
+                                    uint64_t permitted_hpa, uint64_t unknown_hpa);
+uint32_t pal_cda_host_snoop_trigger(uint32_t endpoint_bdf, uint64_t target_hpa);
+uint32_t pal_cda_host_snoop_restore(uint32_t endpoint_bdf);
 uint32_t pal_exerciser_get_data(EXERCISER_DATA_TYPE type, exerciser_data_t *data, uint32_t bdf,
                                 uint64_t ecam);
 

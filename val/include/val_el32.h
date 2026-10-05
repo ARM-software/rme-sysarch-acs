@@ -52,6 +52,7 @@
 #define CLEAN_AND_INVALIDATE 0x1
 #define CLEAN                0x2
 #define INVALIDATE           0x3
+#define CLEAN_AND_INVALIDATE_SET_WAY 0x4
 #define SET                  1
 #define CLEAR                0
 #define IDE_ENABLE           1

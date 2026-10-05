@@ -79,8 +79,8 @@ void val_el3_map_shared_mem(uint64_t shared_addr)
 /**
  * @brief Perform data cache maintenance by VA at EL3.
  *
- * @param VA    Virtual address for cache operation.
- * @param type  Operation type (CLEAN, INVALIDATE, CLEAN_AND_INVALIDATE).
+ * @param VA    Virtual address; ignored for set/way maintenance.
+ * @param type  Address-based operation or CLEAN_AND_INVALIDATE_SET_WAY.
  */
 void val_el3_data_cache_ops_by_va(uint64_t VA, uint32_t type)
 {
@@ -95,6 +95,9 @@ void val_el3_data_cache_ops_by_va(uint64_t VA, uint32_t type)
       break;
     case INVALIDATE:
       val_el3_invalidate_cache((uint64_t *)VA);
+      break;
+    case CLEAN_AND_INVALIDATE_SET_WAY:
+      val_el3_clean_invalidate_pe_cache();
       break;
     default:
       shared_data->status_code = 1;

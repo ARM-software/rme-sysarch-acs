@@ -5,6 +5,9 @@ Arm RME System Architecture Compliance Suite - Scenario Document
 .. contents:: Contents
   :depth: 2
 
+For CDA test scenarios, see the
+`CDA Scenario Document <Arm_RME_System_Architecture_Compliance_Suite_CDA_Scenario_Document.rst>`_.
+
 Testcase checklist
 ==================
 
@@ -410,8 +413,6 @@ Testcase checklist
       RNVS programming functions (memory mapped: RME_RNVS_MAILBOX_MEM) can only be accessed from Root PAS.
 
       Non-Root access to RNVS programming functions generate faults.
-
-      Note: Review PAL function after implementation. We can test mailbox is not accessible from non-Root PAS.
 
   * -
 
@@ -1178,7 +1179,7 @@ Testcase checklist
       6. Fail the link when more than one coherent device group is present under the same coherent root port.
       7. Skip the link when no downstream CHI-C2C coherent endpoint is present.
 
-      Note: This topology-only CDA scenario does not perform the optional SPDM/TDISP attestation smoke check and does not require CHI trace visibility.
+      Note: This scenario checks coherent-link topology using enumerated endpoint identities.
 
   * -
 
@@ -1230,6 +1231,25 @@ Testcase checklist
 
   * -
 
+      `cda_rkrcwk_host_side_gpc <../test_pool/cda/cda_rkrcwk_host_side_gpc.c>`_
+
+    -
+
+      RKRCWK: An access from a PE to any memory location, including to DCM, is subject to host-side GPC.
+
+    -
+
+      1. Discover a root port with a downstream Type-3 memory endpoint, host and endpoint HDM decoders, and a CFMWS window large enough for one translation granule. Skip if no usable configuration is found. An exerciser is not required.
+      2. Enable CXL.mem, save the decoder and host target-list state, and program a host-visible DCM window targeting the selected endpoint.
+      3. Select the first DCM page in that window. Set its GPT association to GPT_ANY and map a non-cacheable Non-secure alias for a protected PE access through EL3.
+      4. Attempt a store through the Non-secure alias and require the baseline access to complete without a protection fault. Skip if the baseline cannot be established, so an inaccessible DCM window cannot be mistaken for working GPC enforcement.
+      5. Change only the selected page's GPT association to Realm and repeat the store through the same Non-secure alias. Require the EL3 access helper to report the expected protection fault. Fail if the mismatched-PAS store completes.
+      6. Clear EL3 access state, restore the page to GPT_ANY, and restore saved decoder and host target-list configuration.
+
+      Note: This scenario checks host-side GPC using a Non-secure PE store to a Type-3 device memory page assigned to Realm PAS.
+
+  * -
+
       `cda_rqrmsc_dcm_ats_dependency <../test_pool/cda/cda_rqrmsc_dcm_ats_dependency.c>`_
 
     -
@@ -1249,7 +1269,7 @@ Testcase checklist
       9. Positive check: issue ATS_TXN_REQ for the DCM IOVA and verify that the response is successful, grants access, returns the selected DCM HPA, and reports Realm output PAS. Issue DMA with USE_ATC_ENTRY using the original DCM IOVA, then read the corresponding DPA through the media observation backdoor and verify the known value reached DCM.
       10. Host-GPC negative check: seed a different baseline at the DCM DPA, assign the DCM HPA to Non-secure PAS in GPT, invalidate the SMMU GPC cache and endpoint ATC, and issue a Realm ATS_TXN_REQ again for the same DCM IOVA. Fail if ATS returns a usable translation. Attempt an ATC-backed DMA and verify that DCM remains unchanged, then restore all modified state.
 
-      Note: This CDA scenario is applicable only to CHI-C2C-capable devices. Direct DPA operations are test observation hooks and are not the DCM accesses being checked for compliance.
+      Note: This CDA scenario is applicable only to CHI-C2C-capable devices. Direct-DPA operations initialize and observe device media independently of the HPA access under test.
 
   * -
 
@@ -1264,7 +1284,7 @@ Testcase checklist
       1. Select a CHI-C2C-capable CXL root port that exposes the RME-CDA DVSEC and locate a downstream CHI-C2C exerciser endpoint. Skip the test if no such endpoint is available.
       2. Select a CFMWS-backed DCM window and a same-sized aligned address range that is outside every host-visible CFMWS window. Save the original RMECDA_CTL1 value and the original host and endpoint HDM decoder state for cleanup.
       3. Clear RMECDA_CTL1.TDISP_EN and RMECDA_CTL1.LINK_STR_LOCK through Root access for the ACS setup phase, then program both host and endpoint HDM decoders to the same CFMWS-backed DCM window. This establishes a valid, non-aliased address-decoder configuration before protection is enabled.
-      4. Set RMECDA_CTL1.TDISP_EN and RMECDA_CTL1.LINK_STR_LOCK through Root access and verify the bits read back as set. These bits activate the modelled protected state for RME-sensitive device configuration registers.
+      4. Set RMECDA_CTL1.TDISP_EN and RMECDA_CTL1.LINK_STR_LOCK through Root access and verify the bits read back as set before testing register protection.
       5. While the TDI is still CONFIG_UNLOCKED, attempt to mutate the endpoint HDM decoder to the non-host-visible address range and reread the decoder. Fail the test if the decoder base or size changes. This verifies that an address-decoder register affecting DCM access is already protected before the DSM accepts LOCK_INTERFACE.
       6. Open an SPDM session to the endpoint TDI, issue TDISP GET_VERSION and GET_CAPABILITIES, and keep the interface in CONFIG_UNLOCKED state.
       7. Send Arm TDISP VDM GET_DEV_PROP and validate that the response framing and PROPERTIES reserved bits are correct. Save the PROPERTIES field and the opaque implementation-defined REGISTER_LIST bytes returned before LOCK_INTERFACE.
@@ -1274,7 +1294,7 @@ Testcase checklist
       11. While the TDI is CONFIG_LOCKED, repeat the endpoint HDM decoder mutation attempt to the non-host-visible address range and reread the decoder. Fail the test if the decoder base or size changes after lock.
       12. Stop the TDI interface, close the SPDM session, clear RMECDA protection for cleanup, restore original decoder state, restore RMECDA_CTL1, and report PASS only when the protected decoder state cannot be mutated before or after LOCK_INTERFACE and the DSM property/register-list observable is stable across LOCK_INTERFACE.
 
-      Note: The GET_DEV_PROP REGISTER_LIST encoding is implementation-defined by the architecture, so ACS treats it as an opaque DSM validation blob. Standard HDM decoder checks provide a concrete address-decoder stimulus for address-decoding registers; implementation-defined memory-integrity, error-injection, and debug controls are covered through the DSM-exposed REGISTER_LIST or the no-update-after-lock interface report.
+      Note: The GET_DEV_PROP REGISTER_LIST encoding is implementation-defined. ACS compares the returned bytes across LOCK_INTERFACE and checks protection of the standard HDM decoder registers. If the register list is empty, the test checks NO_UPDATE_AFTER_LOCK in the interface report.
 
   * -
 
@@ -1294,10 +1314,10 @@ Testcase checklist
       3. Require and enable CXL.cache, enable CXL.mem, select a CFMWS-backed DCM page, and program the host and endpoint HDM decoders for that window so coherent accesses can use host-visible HPAs.
       4. Enable RMECDA_CTL1.TDISP_EN and set RMECDA_CTL1.LINK_STR_LOCK after decoder programming is complete.
       5. Select two DCM pages from the CFMWS-backed window. Map one page as a cacheable Realm alias for the snoop-response check. Assign both pages to the endpoint TDI, establish SPDM/TDISP, and transition the TDI to RUN.
-      6. Initialize each backing DCM Location through a non-cacheable Realm mapping, then read it through a cacheable Realm mapping to establish a clean coherent line. For each Location, obtain its HPA through ATS, perform an ATC-backed device read, return the captured value to a separate host buffer, and compare it with the initialized value. Mark each existing Realm cache line dirty only after this population and verification flow succeeds.
+      6. Initialize each backing DCM Location through a non-cacheable Realm mapping, then read it through a cacheable Realm mapping to establish a clean coherent line. Evict local PE copies using set/way maintenance, without broadcasting an invalidation to the device. For each Location, obtain its HPA through ATS, perform an ATC-backed device read, return the captured value to a separate host buffer, and compare it with the initialized value. Mark each existing Realm cache line dirty only after this population and verification flow succeeds; successful DMA alone does not prove cache residency.
       7. Force the TDI into ERROR by closing the SPDM session while the TDI is in RUN state.
       8. Clear the root-port AER Uncorrectable Status register, then issue a protected host demand read to the cacheable Realm alias so the host attempts to consume or snoop the TDI-associated cached Location. Require the read to report a synchronous external abort, as specified by the RAS architecture for consumption of poisoned data. Fail if the read completes normally or reports a different exception syndrome. Treat returned data and root-port AER state as diagnostic information only for this subcase.
-      9. Clear AER again, then use the exerciser/model writeback hook to force or simulate a cache writeback for the second dirty Realm DCM Location. Require a fresh Poisoned TLP Received indication at the root port. The command may report failure when the receiving port terminates the poisoned writeback; this is accepted only when the freshly cleared AER status records the poison event. If the writeback hook is unavailable and no Poisoned TLP is logged, retain the snoop-response result and report the writeback stimulus limitation.
+      9. Clear AER again, then issue an exerciser cache-writeback command for the second dirty Realm DCM Location. Require a fresh Poisoned TLP Received indication at the root port. The command may report failure when the receiving port terminates the poisoned writeback; this is accepted only when the freshly cleared AER status records the poison event. Report SKIP if the required writeback poison indication is not observed.
       10. Clear AER status, clear both DCM assignments when safe, reset/unlock the endpoint after the intentional TDI ERROR, close any still-open SPDM/TDISP session, and restore RMECDA/decoder state.
 
       Note: This CDA scenario is applicable only to CHI-C2C-capable devices. ACS observes snoop-response poison through the synchronous external abort produced by a CPU demand read. The writeback subcase uses the root-port Poisoned TLP indication because host software cannot directly inspect the device cache writeback payload.
@@ -1317,10 +1337,10 @@ Testcase checklist
       3. Enable RMECDA_CTL1.TDISP_EN and set RMECDA_CTL1.LINK_STR_LOCK after decoder programming is complete.
       4. Map the selected DCM page as a cacheable Realm alias, assign the DCM page to the endpoint TDI, establish SPDM/TDISP, transition the TDI to RUN, and establish the CXL IDE link.
       5. Optionally prepare an ATS stale-translation probe by enabling ATS, mapping an ACS-owned IOVA to one Non-secure PA through the Realm SMMU stage-2 context, installing DPT entries, and issuing an ATS request while the TDI is in RUN. If the exerciser cannot issue the ATS request, continue with the mandatory dirty-cache invalidation check.
-      6. Initialize backing DCM through a non-cacheable Realm mapping and populate a clean line through a cacheable Realm read while the TDI is in RUN and IDE is active. Mark that existing line dirty before transitioning the TDI.
+      6. Initialize backing DCM through a non-cacheable Realm mapping and populate a clean line through a cacheable Realm read while the TDI is in RUN and IDE is active. Evict local PE copies using set/way maintenance and mark the existing device line dirty before transitioning the TDI. Do not broadcast an invalidation during setup or before the post-transition read, as this could remove the device state being checked.
       7. Issue STOP_INTERFACE_REQUEST and verify that the TDI reaches CONFIG_UNLOCKED state.
       8. If the ATS stale-translation probe was available, remap the same IOVA to a different PA while the TDI is in CONFIG_UNLOCKED.
-      9. Close the first SPDM session, re-establish the TDI in RUN, and re-establish the CXL IDE link. Invalidate any host PE cacheline for the selected Realm DCM Location without cleaning stale PE data back to memory, clear the root-port AER Uncorrectable Status register, then issue a protected host read to the cacheable Realm alias. Fail if the read faults or reports an uncorrectable error, because that indicates stale dirty TDI-owned state was not invalidated across CONFIG_UNLOCKED. Do not require the backing DCM to retain the dirty value because the CONFIG_UNLOCKED transition also scrubs TDI-associated DCM in compliance with RHDXTM.
+      9. Close the first SPDM session, re-establish the TDI in RUN, and re-establish the CXL IDE link. Evict local PE copies using set/way clean-and-invalidate with other PEs quiescent; the PE has not written the cacheable alias, so there is no dirty PE copy of the selected Location to write back. Do not send an address-based invalidation to the device. Clear the root-port AER Uncorrectable Status register, then issue a protected host read to the cacheable Realm alias. Fail if the read faults or reports an uncorrectable error, because that indicates stale dirty TDI-owned state was not invalidated across CONFIG_UNLOCKED. Do not require the backing DCM to retain the dirty value because the CONFIG_UNLOCKED transition also scrubs TDI-associated DCM in compliance with RHDXTM.
       10. If the ATS stale-translation probe was available, issue the ATS request again after re-entering RUN and fail if the returned translation is the old PA rather than the remapped PA.
       11. Clear AER status, stop and close any active TDISP session, clear the DCM assignment, restore ATS, RMECDA, HDM decoder, GPT, SMMU, and DPT state, and free any allocated ACS pages.
 
@@ -1339,7 +1359,7 @@ Testcase checklist
       1. Require coherent DA discovery and SPDM requester support. Enumerate every CHI-C2C endpoint beneath a CHI-C2C root port with an RME-CDA DVSEC, without requiring an exerciser or selecting only the first endpoint.
       2. Use only quiesced TDIs and associated memory reserved for ACS, with valid host mappings and device decoder configuration already established. Require an unprotected host port, an unused CONFIG_UNLOCKED TDI, and idle IDE state before making changes. Leave existing assignments and active links untouched.
       3. Open an SPDM secure session. Negotiate TDISP version and capabilities, require advertisement of the seven base TDISP requests from GET_VERSION through STOP_INTERFACE_REQUEST, and query the interface state. A missing local transport or requester capability is a prerequisite skip; malformed responses or failed supported exchanges fail the test.
-      4. Query the measurement count and retrieve all measurement records over the same secure session using the generic VAL SPDM helper. Require a valid non-empty record and a block count matching the count query. The SPDM library validates the protocol exchange; no expected measurement digest or certificate specific to a device implementation is embedded in the test
+      4. Query the measurement count and retrieve all measurement records over the same secure session using the generic VAL SPDM helper. Require a valid non-empty record and a block count matching the count query. The SPDM library validates the protocol exchange; no expected measurement digest or certificate specific to a device implementation is embedded in the test.
       5. Require idle link IDE status accessible through the existing VAL interfaces; otherwise skip because the protected assignment setup is unavailable. Save RMECDA_CTL1, enable TDISP, establish link IDE, and set LINK_STR_LOCK. Verify host control readback. The test does not program new DMA mappings, start device traffic, require DCM, or alter HDM decoders. Missing CXL IDE registers must not be interpreted as evidence that a CHI link needs no IDE protection.
       6. Send LOCK_INTERFACE_REQUEST and require CONFIG_LOCKED. Retrieve the DEVICE_INTERFACE_REPORT and validate its variable-length range list and device-specific information boundaries. Do not require a DCM range for a cache-only device. The requester library validates the response identity and assembles report portions.
       7. Send START_INTERFACE_REQUEST with the nonce returned by LOCK_INTERFACE and require RUN. Send STOP_INTERFACE_REQUEST and require CONFIG_UNLOCKED. An unexpected state after either operation is a failure, not a prerequisite skip.
@@ -1348,7 +1368,7 @@ Testcase checklist
 
       Applicability: DEN0129 C.a, section B2.3.5, limits this version of RME-CDA assignment to CHI-based devices. A CHI-C2C endpoint remains eligible whether its CXL-style device classification is Type-1, Type-2, Type-3, or unknown; neither CXL.mem support nor an exerciser identity is required. Native CXL Type-1/Type-2 devices are outside that version's assignment scope, and native CXL Type-3 memory-expansion requirements are separate. Non-DOE and integrated-device management transports are not implemented by this scenario.
 
-      Coverage: PASS indicates that the implemented measurement and TDI assignment interface checks completed successfully on every applicable endpoint. This is not an aggregation of other CDA results or full device attestation. Retrieval through a protected SPDM session does not establish certificate trust or compare measurements against approved reference evidence. Memory-encryption correctness, full MEC and coherency compliance, all TDISP security properties, and the remaining coherent-device requirements need separate evidence. The test reports only PASS, FAIL, or SKIP.
+      Note: This scenario validates measurement retrieval and TDI assignment interfaces. Certificate validation and measurement appraisal are not performed by this test. Results are PASS, FAIL, or SKIP.
 
   * -
 
@@ -1389,11 +1409,11 @@ Testcase checklist
       5. Clean the HCM data to the Point of Encryption, select MECID 0 on the PE, and require the destination not to expose the original plaintext pattern. Restore MECID 1 and require the source and destination to match again. This data-path observation verifies that the SMMU-selected permitted MECID was associated with the D2H read and write requests.
       6. If the exerciser can select a MECID on a snoop response, associate two DCM pages with the TDI, configure the required DPT permissions, enable ATS, populate and verify a coherent Realm line on each page, and mark each existing line Dirty. Translate each HPA through the endpoint HDM decoder and use a direct-DPA exerciser operation to replace the backing DCM value without changing the dirty cached value.
       7. Configure the first snoop response to carry permitted MECID 1 and issue a protected Realm host read. Require the read to complete and return the dirty cached value rather than the distinct backing value; this calibrates the snoop-response path.
-      8. Configure the second snoop response to carry unpermitted MECID 0 and issue the same protected Realm host read. Fail if the read completes with the dirty cached value. A synchronous fault or the distinct backing value demonstrates that the host did not consume the unpermitted response. Treat any other normal-completion value as inconclusive and report partial coverage.
+      8. Configure the second snoop response to carry unpermitted MECID 0 and issue the same protected Realm host read. Fail if the read completes with the dirty cached value. A synchronous fault or the distinct backing value demonstrates that the host did not consume the unpermitted response. For any other normal-completion value, report PASSED PARTIAL.
       9. If response-MECID selection or the coherent cache-fill stimulus is unavailable, report PASSED PARTIAL after the mandatory D2H request checks pass. Otherwise require both request and response checks to pass.
       10. Disable the response override, clear the DCM assignments, disable IDE, stop the TDISP session, and restore CXL.cache, ATS, SMMU, DPT, GPT, RID-range, PMECID, MEC, decoder, and RME-CDA state.
 
-      Note: The response-MECID operation is an implementation-defined exerciser stimulus. It does not expose a private host-port decision; ACS derives the response verdict from the architectural host read outcome and data. The HCM request check remains portable on systems that implement host memory encryption and SMMU MECID selection.
+      Note: The response-MECID operation is an implementation-defined exerciser stimulus. ACS evaluates the response using the host read outcome and returned data. The HCM request check requires host memory encryption and SMMU MECID selection.
 
   * -
 
@@ -1406,14 +1426,14 @@ Testcase checklist
     -
 
       1. Select a CHI-C2C-capable root port with an RME-CDA DVSEC and a downstream CHI-C2C exerciser endpoint, then program a host-visible DCM window.
-      2. Select two adjacent DCM pages and change their GPT association to Realm PAS. Associate only the first page with the endpoint TDI; do not cache, associate, or provision a MECID for the second page.
+      2. Select two adjacent DCM pages and change their GPT association to Realm PAS.
       3. Establish TDISP RUN and the coherent-link IDE stream so transport security does not independently prevent host-to-device snoops.
-      4. Map both pages for Realm host access. Associate one Realm DCM page with the TDI, start the exerciser transaction monitor, and read the permitted page through the coherent host path. Require the monitor to observe the resulting host-to-device snoop. This is a monitor-path calibration and is not the rule verdict.
-      5. Start a new transaction-monitor capture and read the unassociated DCM page through the same Realm host path.
-      6. Fail if the endpoint observes a coherent request for the unknown DCM page. Otherwise pass regardless of whether the initiating host read completes or faults; the verdict is based on whether the snoop was forwarded.
-      7. Clear the DCM association, stop TDISP and IDE, and restore GPT and decoder state.
+      4. Use the platform PAL to establish and verify host snoop eligibility: the first Realm Location is an eligible positive target; the second has no known cached copy, permitted PA association, or permitted MECID. Require support for a host snoop stimulus and snoop-specific endpoint transaction records. Skip if these prerequisites cannot be established.
+      5. Start the exerciser transaction monitor and ask the PAL to trigger a host snoop candidate for the permitted Location. Wait for completion and require a matching incoming snoop record as positive calibration. Ordinary memory reads and cache-maintenance records do not qualify as snoop evidence.
+      6. Start a fresh capture and trigger the unknown Realm candidate without granting it permission or populating it in the device cache. Wait for the forwarding decision and observation to complete. Fail if a matching snoop is observed; otherwise pass. Unsupported stimulus does not count as successful filtering.
+      7. Restore the host state saved by the PAL, including after a partially completed setup. Stop TDISP and IDE, then restore GPT and decoder state.
 
-      Note: The related informational statement IKMFFT makes the host compliance mechanism implementation defined. The exerciser monitor only observes traffic received by the endpoint and does not report a private host-port decision. Platforms that cannot establish the required unknown-target conditions or observe incoming coherent traffic skip the test.
+      Note: IKMFFT specifies an implementation-defined host mechanism. The platform PAL must establish host snoop eligibility and provide the stimulus and snoop observation required by the algorithm. Skip if these operations are unavailable.
 
   * -
 
@@ -1430,7 +1450,7 @@ Testcase checklist
       3. Require and enable CXL.cache, enable CXL.mem, select a CFMWS-backed DCM page, and program the host and endpoint HDM decoders for that window.
       4. Enable RMECDA_CTL1.TDISP_EN and set RMECDA_CTL1.LINK_STR_LOCK after decoder programming is complete.
       5. Map the selected DCM page as a cacheable Realm alias, assign the DCM page to the endpoint TDI, establish SPDM/TDISP, transition the TDI to RUN, and establish the CXL IDE link.
-      6. Initialize backing DCM through a non-cacheable Realm mapping and populate a clean line through a cacheable Realm read while the TDI is in RUN and IDE is active. Mark that existing line dirty before disabling the IDE link.
+      6. Initialize backing DCM through a non-cacheable Realm mapping and populate a clean line through a cacheable Realm read while the TDI is in RUN and IDE is active. Evict local PE copies using set/way maintenance without broadcasting an invalidation to the device, then mark the retained device line dirty before disabling the IDE link.
       7. Disable the CXL IDE link while the TDI remains in RUN state. This creates the RHTTNB condition where a host-to-device snoop cannot be forwarded to the coherent device.
       8. Clear root-port AER status when available, then issue a protected host read to the cacheable Realm alias so the host port must resolve a potentially device-owned dirty Location without forwarding the snoop.
       9. Pass when consuming the poison raises a synchronous external abort. If the read completes, require poison/fixed data rather than the original dirty value cached by the TDI. AER status is recorded only as diagnostic information because a coherent poison response does not require a PCIe Poisoned TLP indication.
@@ -1774,7 +1794,7 @@ Testcase checklist
       6. Re-establish TDI RUN and IDE, then issue the same external Realm-PAS HPA read. Verify that the access faults or does not return the protected media value.
       7. Stop the TDISP session, disable IDE, restore the GPT, decoder, and RME-CDA state, and clear any remaining DCM assignment.
 
-      Note: This scenario covers only the externally originated access requirement of RVHZCR. Internal access is device-local behavior and is not included in this System ACS verdict.
+      Note: This scenario exercises external access to DCM on devices that advertise PAS_CHECK==TRUE. Internal access is not tested by this scenario.
 
   * -
 
@@ -1823,11 +1843,11 @@ Testcase checklist
       1. Select a CHI-C2C-capable CXL root port and downstream exerciser endpoint, program the endpoint decoder for a CFMWS window, and select two DCM pages.
       2. Program the RME-CDA RID range to admit the selected endpoint, enable the TDISP and link-stream-lock controls, transition the endpoint TDI to RUN, and establish the coherent-link IDE stream.
       3. Assign page A to Realm while page B remains unassigned, then request Realm-PAS BISnp transactions attributed to that TDI.
-      4. Verify the platform hook reports that the snoop to page A was emitted and that the snoop to page B was blocked without emitting a transaction.
+      4. Verify from the PAL snoop observation that the snoop to page A was emitted and that the snoop to page B was blocked without emitting a transaction.
       5. Move the Realm assignment from page A to page B and repeat both checks to verify that the current Realm assignment controls access.
       6. Clear Realm assignments, disable IDE, stop the TDISP session, and restore the decoder and RME-CDA controls.
 
-      Note: The device-to-host snoop carries the selected PAS and TDI attribution and is subject to the originating TDI's physical-address permission check.
+      Note: The device-to-host snoop carries the selected PAS and TDI attribution and is subject to the originating TDI's physical-address permission check. Calibrate the permitted snoop only after RUN, IDE, and the page association are established. Skip if local blocking cannot be observed; a generic command error does not prove that the TDI prevented emission.
 
   * -
 
@@ -1846,7 +1866,7 @@ Testcase checklist
       1. Select a CHI-C2C-capable CXL root port and downstream exerciser endpoint, program a host-visible DCM window, and select three DCM pages. If an implementation-defined stimulus required by the test is unavailable, restore that endpoint and continue with the next eligible CHI-C2C endpoint. Skip the test only if no endpoint can provide all required stimuli.
       2. Configure Realm SMMU and DPT mappings for the DCM pages, enable ATS for the endpoint, program the endpoint RID in the RME-CDA RID range, and associate the pages with the endpoint TDI.
       3. Save the endpoint's original cache-enable state, then enable and verify the advertised cache capability used by the exerciser stimulus. Transition the TDI to RUN and establish the coherent-link IDE stream. Seed two DCM Locations, fetch each Location through an ATS-derived Realm translation, and copy the fetched data to a separate Non-secure verification page to confirm that the device-originated coherent read completed.
-      4. Mark the two populated device cache lines dirty. Reserve the third DCM page for repeatable device-to-host snoop and host request stimuli.
+      4. Evict local PE copies during cache-line setup using set/way maintenance rather than broadcasting an invalidation to the device. Mark the two retained device cache lines dirty. Reserve the third DCM page for repeatable device-to-host snoop and host request stimuli.
       5. While the TDI is in RUN, dirty a PE cache line and immediately perform the monitored clean and invalidate to generate a host-to-device request on the CHI REQ channel. Next issue a host demand read that requires a host-to-device snoop, then issue a TDI-attributed device-to-host Realm snoop. Use the exerciser's incoming coherent-transaction monitor to verify that the generated request and demand read reach the device interface, and verify that the device-to-host request is emitted. Match the generated request by its HPA because the coherent writeback can be represented downstream as an ordinary cacheable write. The test does not require a host-port monitoring interface.
       6. Repopulate the PE cache line while Realm access remains permitted, then close the protected SPDM session to transition the TDI from RUN to ERROR without changing the DCM associations.
       7. Immediately check the staged host writeback after the transition, before the host-to-device snoop with the second dirty device line and the device-to-host snoop. This minimizes intervening work that could evict the staged PE cache line before capture starts. Verify through the exerciser interface that all three operation classes remain available in ERROR. A fault while consuming the ERROR-state snoop response is permitted because response poisoning is checked separately by RQWNBN.
@@ -1868,6 +1888,8 @@ Testcase checklist
       4. Issue a Realm device-to-host SNP to the in-range DCM PA and verify from the coherent response that the request succeeds without applying GPC or DPT checks.
       5. Issue a Non-secure device-to-host SNP to the out-of-range host PA. Verify from the coherent error response that the host rejects it despite the address having matching Non-secure GPC state.
       6. Clear the DCM assignment and restore the TDISP, IDE, GPT, and decoder state.
+
+      Note: Successful upstream transaction completion can establish emission and host acceptance. A generic command error cannot distinguish local blocking from host rejection. Skip if the required emission or host-response evidence is unavailable; do not treat an ambiguous error as successful range enforcement.
 
   * -
 
@@ -2277,7 +2299,10 @@ The following rules are out of compliance scope due to the following reasons:
 - Other resources, like System PMU events, IDE_KM, RNVS registers are impdef.
 - Lack of non-a-profile processor for testing.
 - Dependency on Non-Arm IP/ implementation defined features.
-- System ACS infra doesn't support coherent devices yet.
+- Some coherent-device internal behavior lacks portable stimulus or observation.
+
+Architectural requirements remain applicable independently of ACS test
+availability.
 
 .. list-table::
     :header-rows: 1
@@ -2382,7 +2407,21 @@ The following rules are out of compliance scope due to the following reasons:
       - RRQZBK: Memory-mapped data structures that store encryption contexts must reside in SMEM in the Root PAS, such as MSD SMEM.
 
     * - CDA
-      - RZTQYT: An RME-CDA coherent device is not permitted to send CHI requests with DVMOp or SnpDVMOp opcodes.
+      - RKNZGC: If a device-side PAS protection check applies to read-sensitive locations, the device must not permit speculative execution of accesses to any location that might be read-sensitive until the check completes.
+
+        Verification requires device-specific observation of speculative accesses and read-sensitive side effects relative to completion of the PAS check.
+
+        RSKJNK: Any PA on a device-to-host memory request over a coherent or non-coherent channel must have been obtained by the device from the host SMMU through ATS or an ATS-equivalent protocol.
+
+        Verification requires device-side evidence that the request address was obtained from an ATS or ATS-equivalent response; the host-visible memory transaction does not expose this provenance.
+
+        RHVCNR: If a device-to-host snoop cannot be forwarded because IDE is Insecure, and the device tracks the Location as potentially owned Dirty by an external caching agent, the device must behave consistently with receiving a poisoned host-to-device snoop response.
+
+        Verification requires control and observation of device-side ownership tracking and poison handling for a blocked device-to-host snoop.
+
+        RZTQYT: An RME-CDA coherent device is not permitted to send CHI requests with DVMOp or SnpDVMOp opcodes.
+
+        Verification requires device protocol validation with CHI opcode visibility and suitable device stimulus.
 
     * - CTC / Multi-chip
       - RGZMNH: An RME system reset in a multi-chip system affects all nodes.
@@ -2490,12 +2529,12 @@ RME System ACS is distributed under Apache v2.0 License.
 *Copyright (c) 2023-2026, Arm Limited and Contributors. All rights reserved.*
 
 
-.. _RME_System_Architecture_Spec: https://developer.arm.com/documentation/den0024/latest
+.. _RME_System_Architecture_Spec: https://developer.arm.com/documentation/den0129/latest
 .. _RME_PE_Spec: https://developer.arm.com/documentation/ddi0615/latest
 .. _SMMU_RME_Spec: https://developer.arm.com/documentation/ihi0094/latest
 .. _PSCI_Spec: https://developer.arm.com/documentation/den0022/latest
 .. _GIC_Spec: https://developer.arm.com/documentation/ihi0069/latest
 .. _BSA_Spec: https://developer.arm.com/documentation/den0094/latest
 .. _SBSA_Spec: https://developer.arm.com/documentation/den0029/latest
-.. _PCIE_Spec: PCI-SIG
-.. _TDISP_Spec: PCI-SIG
+.. _PCIE_Spec: https://pcisig.com/specifications
+.. _TDISP_Spec: https://pcisig.com/specifications

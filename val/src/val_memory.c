@@ -653,6 +653,29 @@ val_memory_prepare_dma_buffers_el3(void *buffer_src,
 }
 
 /**
+  @brief  Clean and invalidate the executing PE's data caches by set/way.
+
+  Use only during single-PE setup with other PEs quiescent. This removes local
+  copies without broadcasting an address-based invalidation to device caches.
+  It does not maintain other PEs or system caches.
+
+  @return ACS_STATUS_PASS on completion, ACS_STATUS_ERR on an EL3 error.
+**/
+uint32_t
+val_memory_cache_clean_invalidate_pe_el3(void)
+{
+  UserCallSMC(ARM_ACS_SMC_FID, RME_DATA_CACHE_OPS, 0u,
+              CLEAN_AND_INVALIDATE_SET_WAY, 0u);
+  if (shared_data->status_code != 0u)
+  {
+    val_print(ACS_PRINT_ERR, " Local PE cache maintenance failed at EL3", 0);
+    return ACS_STATUS_ERR;
+  }
+
+  return ACS_STATUS_PASS;
+}
+
+/**
   @brief  Clean and invalidate every EL3 data-cache line in an address range.
 
   @param  address  Start virtual address.

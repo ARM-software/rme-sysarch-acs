@@ -1,4 +1,4 @@
-#Realm Management Extension System Architecture - Architecture Compliance Suite
+# Realm Management Extension System Architecture - Architecture Compliance Suite
 
 ## Realm Management Extension System Architecture
 **Realm Management Extension System Architecture** (RME) is an extension to the Armv9 A-profile architecture. RME adds the following features:
@@ -22,16 +22,16 @@ Most of the tests are executed from UEFI Shell by executing the RME UEFI shell a
     - Issue A: EAC
     - Issue B: EAC
     - Issue C:
-      - CDA: ALPHA
+      - CDA: BETA
       - CXL: EAC
       - TDISP: BETA
   - The tests are written for version A.d, B.a and C.a of the Arm Realm Management Extension (RME) System Architecture.
   - The compliance suite is not a substitute for design verification.
 
 ## GitHub branch
-  - Latest tag: vC.a_CXL.EAC_TDISP.BETA_26.07
+  - Latest tag: v26.10_RME_C.a.1
   - To pick up the release version of the code, checkout the latest tag.
-  - To get the latest version of the code with bug fixes and new features, use the master branch.
+  - To get the latest version of the code with bug fixes and new features, use the main branch.
 
 ## Additional reading
   - For PCIe and CXL exerciser requirements, see the [RME System ACS Exerciser requirements](Docs/Exerciser.md).
@@ -63,9 +63,9 @@ For more information, see [Arm RME System ACS Validation Methodology document](D
 
 Before starting the ACS build, ensure that the following requirements are met.
 
-- Partner needs to provide their inputs to these following files...
-   - platform/pal_baremetal/FVP/include/platform_override_fvp.h -> For Bare-metal platform,
-   - platform/pal_uefi/include/platform_overrride_fvp.h -> For UEFI platform.
+- Partners need to provide their platform inputs in the following files:
+   - [pal_override_fvp.h](platform/pal_baremetal/FVP/include/pal_override_fvp.h) for the FVP bare-metal platform.
+   - [pal_override.h](platform/pal_uefi/include/pal_override.h) for the UEFI platform.
 - Any mainstream Linux based OS distribution running on a x86 or aarch64 machine.
 - git clone --branch edk2-stable202505 --depth 1 https://github.com/tianocore/edk2
 - git clone https://github.com/tianocore/edk2-libc [ Checkout SHA: 61687168fe02ac4d933a36c9145fdd242ac424d1]
@@ -102,7 +102,7 @@ The EFI executable file is generated at <edk2_path>/Build/RmeAcs/DEBUG_GCC49/AAR
 
 The execution of the compliance suite varies depending on the test environment. These steps assume that the test suite is invoked through the ACS UEFI shell application.
 
-##For details about the RME System ACS UEFI Shell application, see [Arm RME System ACS Porting Guide](Docs/Arm_RME_System_ACS_Platform_porting_guide.rst)
+For details about the RME System ACS UEFI Shell application, see [Arm RME System ACS Porting Guide](Docs/Arm_RME_System_ACS_Platform_porting_guide.rst).
 
 ### UEFI Shell (Parser.efi flow)
 

@@ -2170,7 +2170,8 @@ val_cxl_program_decoder_common(uint64_t cap_base,
 
     ctrl = val_mmio_read(ctrl_addr);
     if ((ctrl & CXL_HDM_COMMITTED_BIT) != 0u) {
-      val_print(ACS_PRINT_ERR,
+      /* Protected decoders may reject this write; the caller determines the test result. */
+      val_print(ACS_PRINT_DEBUG,
                 " CXL_HDM: commit bit stuck for decoder %u",
                 decoder_index);
       return ACS_STATUS_ERR;

@@ -371,6 +371,14 @@ evidence to VAL. Result flags such as `CXL_SNOOP_RESULT_HOST_ACCEPTED` and
 host-port register bits. Derive them from actual exerciser or coherent-response
 evidence; a status-only interface may not expose every distinction.
 
+The reference PAL treats a successful BISnp command with zero `DATA0` as
+`VALID | EMITTED | HOST_ACCEPTED`: this command completes successfully only
+after its upstream transaction succeeds. Explicit nonzero result flags remain
+subject to VAL validation. `DATA0` is cleared before each attempt to discard
+stale results. An error or timeout is not proof of local blocking or host
+rejection; tests skip an observation they cannot establish rather than count
+it as a successful negative check.
+
 For the response-MECID override, `DATA0[15:0]` selects the MECID and
 `DATA0[16]` enables the override. Clear the enable bit during cleanup.
 `val_cxl_exerciser_set_snoop_response_mecid()` packages this control for tests.
@@ -380,6 +388,45 @@ host-port acceptance bits or a host-port monitoring backdoor. Unsupported
 commands and missing observations must not return fabricated success.
 Command completion alone is not the compliance verdict: the test evaluates
 the resulting data, response, exception, or fresh error status as appropriate.
+
+### Realm cache-line setup
+
+`val_cda_seed_realm_cache_line()` initializes backing DCM through a
+non-cacheable Realm alias, verifies a cacheable read, then evicts the executing
+PE's copies with local set/way maintenance. The helper is for single-PE test
+setup with other PEs quiescent. It does not invalidate system or device caches.
+Address-based invalidation to PoC is unsuitable here because it can remove the
+device line that the test needs to retain. `DCM_CACHE_DIRTY` must still reject
+a missing line; data returned by DMA alone does not prove cache residency.
+
+The EL3 implementation reuses TF-A's cache-geometry-aware `dcsw_op_all()`
+routine. Rebuild and package the ACS EL3 payload together with the ACS
+application when adding this cache-maintenance operation.
+
+### Host snoop eligibility and observation
+
+`pal_cda_host_snoop_prepare(root_bdf, endpoint_bdf, permitted_hpa, unknown_hpa)`
+must save platform state and verify eligibility for a positive Realm snoop,
+and the absence of all forwarding conditions for the unknown Realm target.
+It must also establish a supported stimulus and an endpoint monitor that can
+distinguish received snoops from memory requests and cache maintenance.
+
+`pal_cda_host_snoop_trigger(endpoint_bdf, target_hpa)` initiates a genuine
+host snoop candidate without altering that eligibility. Success means the
+forwarding decision and monitor observation have completed, including when
+the host suppresses the candidate. It is not a verdict on host compliance.
+
+Use `PAL_CDA_SNOOP_SUCCESS`, `PAL_CDA_SNOOP_UNSUPPORTED`, or
+`PAL_CDA_SNOOP_ERROR` for setup and trigger results. Restore saved state with
+`pal_cda_host_snoop_restore(endpoint_bdf)` after every setup attempt, including
+failure or unsupported results; restoration returns success only when state
+is restored or no state was changed.
+
+Only actual received host-to-device snoops may set
+`EXERCISER_TXN_ATTR_SNOOP` in normalized transaction records. This logical PAL
+flag is not a requirement for an architectural host-port register or a native
+exerciser register encoding. Do not derive it from the read or CMO bit alone.
+The default PAL leaves state unchanged and reports setup/trigger unsupported.
 
 ## CHI-C2C SEC_SID
 

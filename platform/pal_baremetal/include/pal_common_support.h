@@ -695,6 +695,7 @@ typedef enum {
 #define EXERCISER_TXN_ATTR_READ              (1u << 1)
 #define EXERCISER_TXN_ATTR_CONFIG            (1u << 2)
 #define EXERCISER_TXN_ATTR_CACHE_MAINTENANCE (1u << 3)
+#define EXERCISER_TXN_ATTR_SNOOP             (1u << 4)
 
 typedef enum {
     EXERCISER_RESET = 0x1,
@@ -742,6 +743,13 @@ typedef enum {
 
 uint32_t pal_cda_tdi_snoop_attempt(uint32_t bdf, uint64_t target_hpa,
                                    uint32_t pas_realm, uint32_t *result);
+#define PAL_CDA_SNOOP_SUCCESS     0u
+#define PAL_CDA_SNOOP_UNSUPPORTED 1u
+#define PAL_CDA_SNOOP_ERROR       2u
+uint32_t pal_cda_host_snoop_prepare(uint32_t root_bdf, uint32_t endpoint_bdf,
+                                    uint64_t permitted_hpa, uint64_t unknown_hpa);
+uint32_t pal_cda_host_snoop_trigger(uint32_t endpoint_bdf, uint64_t target_hpa);
+uint32_t pal_cda_host_snoop_restore(uint32_t endpoint_bdf);
 
 /* LibC functions declaration */
 

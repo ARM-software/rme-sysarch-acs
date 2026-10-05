@@ -936,11 +936,11 @@ exercise_rule(TEST_CONTEXT *context)
   second_ide_enabled = 1u;
 
   /*
-   * Invalidate the PE copy so the read fetches data written back by the device.
-   * Invalidate-only avoids cleaning PE data over the value that STOP_INTERFACE
-   * had to preserve.
+   * Remove local PE copies without sending an invalidation to the device.
+   * A broadcast invalidation here could hide a device that retained its old
+   * line across STOP_INTERFACE. The PE has not written the cacheable alias.
    */
-  if (val_data_cache_ops_by_va_el3((uint64_t)realm_alias, INVALIDATE) != 0u)
+  if (val_memory_cache_clean_invalidate_pe_el3() != ACS_STATUS_PASS)
   {
     result = ACS_STATUS_ERR;
     goto cleanup;

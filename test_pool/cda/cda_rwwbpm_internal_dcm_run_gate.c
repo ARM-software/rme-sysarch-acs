@@ -706,8 +706,9 @@ run_atc_backed_dma(uint32_t endpoint_bdf,
                                               direction);
   if (status != ACS_STATUS_PASS)
   {
-    val_print(ACS_PRINT_ERR, " RWWBPM: ATC DMA direction %u failed", (uint64_t)direction);
-    val_print(ACS_PRINT_ERR, " RWWBPM: ATC DMA status %u", (uint64_t)status);
+    /* This helper also serves the negative case; callers report unexpected failures. */
+    val_print(ACS_PRINT_DEBUG, " RWWBPM: ATC DMA direction %u failed", (uint64_t)direction);
+    val_print(ACS_PRINT_DEBUG, " RWWBPM: ATC DMA status %u", (uint64_t)status);
   }
 
   return status;

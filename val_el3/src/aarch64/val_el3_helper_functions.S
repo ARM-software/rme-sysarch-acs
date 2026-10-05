@@ -39,6 +39,7 @@
         .globl val_el3_branch_asm
         .globl val_el3_tlbi_paallos
         .globl val_el3_cln_and_invldt_cache
+        .globl val_el3_clean_invalidate_pe_cache
         .globl val_el3_clean_cache
         .globl val_el3_invalidate_cache
         .globl val_el3_at_s1e3w
@@ -412,6 +413,20 @@ val_el3_cln_and_invldt_cache:
        dc civac, x0; // x0 contains VA which is updated
        dsb    sy
        isb
+       ret
+
+// TF-A supplies the geometry-aware set/way walk, including FEAT_CCIDX support.
+val_el3_clean_invalidate_pe_cache:
+       stp    x29, x30, [sp, #-32]!
+       mrs    x9, csselr_el1
+       str    x9, [sp, #16]
+       dsb    sy
+       mov    x0, #1             // TF-A DCCISW operation selector
+       bl     dcsw_op_all
+       ldr    x9, [sp, #16]
+       msr    csselr_el1, x9
+       isb
+       ldp    x29, x30, [sp], #32
        ret
 
 // Clean data cache by address to Point of Coherency.

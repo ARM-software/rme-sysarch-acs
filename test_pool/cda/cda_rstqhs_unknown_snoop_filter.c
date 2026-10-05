@@ -105,63 +105,27 @@ stop_realm_link(const VAL_CDA_DCM_WINDOW_CONTEXT *context,
 }
 
 /*
- * Capture the coherent read received by the endpoint while the host accesses
- * target_hpa through a Realm mapping. The exerciser transaction monitor
- * observes its own incoming interface and does not influence host forwarding.
+ * Capture actual incoming snoops while the PAL initiates a candidate at the
+ * host. Completion of the trigger includes the observation interval, so an
+ * empty capture is meaningful. Memory reads and CMOs alone are not snoops.
  */
 static uint32_t
 capture_host_snoop(uint32_t endpoint_bdf,
                    uint64_t target_hpa,
-                   volatile uint64_t *target_alias,
-                   uint32_t require_operation_success,
                    uint32_t *observed)
 {
-  uint64_t read_esr;
-  uint64_t read_value;
-  uint32_t fault_seen;
-  uint32_t monitor_started;
   uint32_t status;
 
-  if ((target_alias == NULL) || (observed == NULL))
+  if (observed == NULL)
     return ACS_STATUS_ERR;
 
   *observed = 0u;
-  monitor_started = 0u;
   status = val_exerciser_start_transaction_monitor_by_bdf(endpoint_bdf);
   if (status != ACS_STATUS_PASS)
     return status;
-  monitor_started = 1u;
 
-  read_esr = 0u;
-  read_value = 0u;
-  fault_seen = 0u;
-  status = val_memory_read64_el3_protected_with_esr(target_alias,
-                                                     &read_value,
-                                                     &fault_seen,
-                                                     &read_esr);
-  if (status != ACS_STATUS_PASS)
-  {
-    status = ACS_STATUS_ERR;
-    goto stop_monitor;
-  }
-
-  val_print(ACS_PRINT_DEBUG, " RSTQHS: host read fault %u", fault_seen);
-  val_print(ACS_PRINT_DEBUG, " RSTQHS: host read ESR 0x%llx", read_esr);
-  if ((require_operation_success != 0u) && (fault_seen != 0u))
-  {
-    val_print(ACS_PRINT_ERR,
-              " RSTQHS: permitted host read faulted for HPA 0x%llx",
-              target_hpa);
-    status = ACS_STATUS_FAIL;
-    goto stop_monitor;
-  }
-
-  status = ACS_STATUS_PASS;
-
-stop_monitor:
-  if ((monitor_started != 0u) &&
-      (val_exerciser_stop_transaction_monitor_by_bdf(endpoint_bdf)
-       != ACS_STATUS_PASS))
+  status = val_cda_host_snoop_trigger(endpoint_bdf, target_hpa);
+  if (val_exerciser_stop_transaction_monitor_by_bdf(endpoint_bdf) != ACS_STATUS_PASS)
     return ACS_STATUS_ERR;
 
   if (status != ACS_STATUS_PASS)
@@ -170,7 +134,7 @@ stop_monitor:
   return val_exerciser_find_transaction_by_bdf(
                                   endpoint_bdf,
                                   target_hpa,
-                                  EXERCISER_TXN_ATTR_READ,
+                                  EXERCISER_TXN_ATTR_SNOOP,
                                   observed);
 }
 
@@ -178,14 +142,12 @@ static uint32_t
 exercise_rule(VAL_CDA_DCM_WINDOW_CONTEXT *context)
 {
   RSTQHS_LINK_CONTEXT link;
-  volatile uint64_t *permitted_alias;
-  volatile uint64_t *unknown_alias;
   uint64_t permitted_hpa;
   uint64_t unknown_hpa;
   uint64_t page_size;
   uint32_t permitted_gpt_set;
   uint32_t unknown_gpt_set;
-  uint32_t realm_assigned;
+  uint32_t host_setup_attempted;
   uint32_t snoop_observed;
   uint32_t result;
   uint32_t status;
@@ -206,11 +168,9 @@ exercise_rule(VAL_CDA_DCM_WINDOW_CONTEXT *context)
   unknown_hpa = permitted_hpa - page_size;
 
   val_memory_set(&link, sizeof(link), 0);
-  permitted_alias = NULL;
-  unknown_alias = NULL;
   permitted_gpt_set = 0u;
   unknown_gpt_set = 0u;
-  realm_assigned = 0u;
+  host_setup_attempted = 0u;
   result = ACS_STATUS_FAIL;
 
   /* Both observations use Realm PAS so Non-secure PAS cannot authorize them. */
@@ -228,41 +188,25 @@ exercise_rule(VAL_CDA_DCM_WINDOW_CONTEXT *context)
   }
   unknown_gpt_set = 1u;
 
-  /* Device mappings force both host probes onto the coherent DCM path. */
-  if ((val_memory_map_device_alias(permitted_hpa,
-                                   REALM_PAS,
-                                   &permitted_alias) != ACS_STATUS_PASS) ||
-      (val_memory_map_device_alias(unknown_hpa,
-                                   REALM_PAS,
-                                   &unknown_alias) != ACS_STATUS_PASS))
+  status = start_realm_link(context, &link);
+  if (status != ACS_STATUS_PASS)
   {
-    result = ACS_STATUS_ERR;
+    result = status;
     goto cleanup;
   }
 
   /*
-   * Associate one DCM page with the TDI before entering RUN. A host snoop to
-   * this page is permitted and provides a positive monitor-path calibration.
+   * Eligibility is host state, not the endpoint's Realm assignment table.
+   * Require the platform to verify the positive case and exclude every
+   * forwarding condition for the unknown target, including permitted MECIDs.
    */
-  status = val_cxl_exerciser_execute_cmd(
-                                  context->endpoint_bdf,
-                                  CXL_CMD_OP_DCM_SET_REALM_ASSIGNMENT,
-                                  permitted_hpa,
-                                  1u,
-                                  NULL);
+  host_setup_attempted = 1u;
+  status = val_cda_host_snoop_prepare(context->root_bdf, context->endpoint_bdf,
+                                       permitted_hpa, unknown_hpa);
   if (status != ACS_STATUS_PASS)
   {
-    val_print(ACS_PRINT_INFO,
-              " RSTQHS: Realm DCM association is unavailable",
-              0);
-    result = ACS_STATUS_SKIP;
-    goto cleanup;
-  }
-  realm_assigned = 1u;
-
-  status = start_realm_link(context, &link);
-  if (status != ACS_STATUS_PASS)
-  {
+    val_print((status == ACS_STATUS_SKIP) ? ACS_PRINT_INFO : ACS_PRINT_ERR,
+              " RSTQHS: verified host snoop setup unavailable, status 0x%x", status);
     result = status;
     goto cleanup;
   }
@@ -272,8 +216,6 @@ exercise_rule(VAL_CDA_DCM_WINDOW_CONTEXT *context)
             permitted_hpa);
   status = capture_host_snoop(context->endpoint_bdf,
                               permitted_hpa,
-                              permitted_alias,
-                              1u,
                               &snoop_observed);
   if (status != ACS_STATUS_PASS)
   {
@@ -291,17 +233,15 @@ exercise_rule(VAL_CDA_DCM_WINDOW_CONTEXT *context)
   }
 
   /*
-   * The adjacent DCM page was never associated with or cached by the endpoint,
-   * and the test does not provision a permitted MECID for it. Together with
-   * Realm PAS, none of the forwarding conditions applies to this request.
+   * The PAL has verified that none of the forwarding conditions applies to
+   * this Realm candidate. Only a received snoop can fail this observation;
+   * unrelated memory requests are ignored by the transaction matcher.
    */
   val_print(ACS_PRINT_INFO,
             " RSTQHS: unknown Realm HPA 0x%llx",
             unknown_hpa);
   status = capture_host_snoop(context->endpoint_bdf,
                               unknown_hpa,
-                              unknown_alias,
-                              0u,
                               &snoop_observed);
   if (status != ACS_STATUS_PASS)
   {
@@ -321,16 +261,14 @@ exercise_rule(VAL_CDA_DCM_WINDOW_CONTEXT *context)
   result = ACS_STATUS_PASS;
 
 cleanup:
-  if (stop_realm_link(context, &link) != ACS_STATUS_PASS)
+  if ((host_setup_attempted != 0u) &&
+      (val_cda_host_snoop_restore(context->endpoint_bdf) != ACS_STATUS_PASS))
+  {
+    val_print(ACS_PRINT_ERR, " RSTQHS: host snoop state restoration failed", 0);
     result = ACS_STATUS_FAIL;
+  }
 
-  if ((realm_assigned != 0u) &&
-      (val_cxl_exerciser_execute_cmd(
-                                  context->endpoint_bdf,
-                                  CXL_CMD_OP_DCM_SET_REALM_ASSIGNMENT,
-                                  permitted_hpa,
-                                  0u,
-                                  NULL) != ACS_STATUS_PASS))
+  if (stop_realm_link(context, &link) != ACS_STATUS_PASS)
     result = ACS_STATUS_FAIL;
 
   if ((permitted_gpt_set != 0u) &&

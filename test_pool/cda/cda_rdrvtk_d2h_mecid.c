@@ -1034,6 +1034,20 @@ exercise_rule(VAL_CDA_DCM_WINDOW_CONTEXT *context)
     goto cleanup;
   }
 
+  /*
+   * The request check leaves the PE using the TDI's MECID. SMMU bookkeeping
+   * and DPT memory belong to VAL_GMECID, not to the test's Realm data context.
+   * Restore that context before any DPT access, including invalidation.
+   */
+  if (val_rlm_configure_mecid(VAL_GMECID) != 0u)
+  {
+    result = ACS_STATUS_ERR;
+    goto cleanup;
+  }
+
+  pe_mecid_selected = 0u;
+  val_print(ACS_PRINT_DEBUG, " RDRVTK: DPT setup with MECID %u", VAL_GMECID);
+
   /* DPT is required only by the optional ATS-backed response stimulus. */
   max_pa = denied_hpa;
   if (verify_pa > max_pa)
@@ -1093,6 +1107,18 @@ exercise_rule(VAL_CDA_DCM_WINDOW_CONTEXT *context)
     goto cleanup;
   }
   ats_enabled = 1u;
+
+  /* Seed and read DCM using the MECID permitted for this TDI. */
+  if (val_rlm_configure_mecid(RDRVTK_ALLOWED_MECID) != 0u)
+  {
+    result = ACS_STATUS_ERR;
+    goto cleanup;
+  }
+
+  pe_mecid_selected = 1u;
+  val_print(ACS_PRINT_DEBUG,
+            " RDRVTK: snoop-response check with MECID %u",
+            RDRVTK_ALLOWED_MECID);
 
   status = check_snoop_response_mecid(context,
                                       allowed_alias,

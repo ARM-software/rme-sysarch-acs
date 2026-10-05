@@ -32,9 +32,9 @@ ACS is built in a layered architecture that consists of the following components
    * - Test Environment
      - Test Suites
    * - UEFI Shell
-     - RME, GIC, SMMU, Legacy System, DA, DPT, MEC
+     - RME, GIC, SMMU, Legacy System, DA, DPT, MEC, CXL, CDA, TDISP
    * - Bare-metal
-     - RME, GIC, SMMU, Legacy System, DA, DPT, MEC
+     - RME, GIC, SMMU, Legacy System, DA, DPT, MEC, CXL, CDA, TDISP
 
 1.3 Boot Framework
 ------------------
@@ -191,7 +191,7 @@ This section provides information on executing tests from the UEFI Shell applica
 
    Shell> fsX:Rme.efi [-v <n>] [-skip <x,y,z>] [-t <test name>] [-m <module name>] [-cfg <plat>_config.ini]
 
-**Parser.efi and System configuration configuration**
+**Parser.efi and System configuration**
 
 Partners are encouraged to run the parser application to prepare the system configuration through INI before executing the ACS:
 
@@ -219,8 +219,7 @@ Notes:
 - Legacy shell usage is still supported when ``-cfg`` is not provided.
 - At start, RME prints a concise [CFG] summary of applied settings, and a selection summary showing Modules(n)/Tests(n)/Skips(n).
 
-Runtime platform configuration (UEFI vs Baremetal)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+**Runtime platform configuration (UEFI vs Baremetal)**
 
 - UEFI: Platform values are applied at runtime by the PAL from the Parser‑installed configuration table/INI. The previous runtime macro indirection is not used. The VAL helpers ``val_get_*()`` are the supported way to consume platform values in UEFI builds; they call PAL getters which read from the INI with compile-time defaults as fallback.
 - Baremetal/Emulation: ``val_get_*()`` resolves to compile-time ``PLAT_*`` macros so behavior is identical to previous releases.
@@ -274,8 +273,7 @@ Confirmed authorization allows the test to run; subsequent access or behavior
 failures remain failures. RBYTYV omits its host-to-device Realm rejection check
 for a listed port, while retaining its Non-secure access and device-to-host checks.
 
-EL3–UEFI coordination (authoritative values)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+**EL3-UEFI coordination (authoritative values)**
 
 - During UEFI runs, EL3 is authoritative for certain values required by EL3 services:
   - The shared structure base (``PLAT_SHARED_ADDRESS``) is chosen by EL3. UEFI does not override this via INI.
@@ -540,6 +538,56 @@ A nonzero return indicates that the hook is unavailable or did not provide a
 valid observation. RFRFJG skips when the positive-control invocation shows
 that this platform capability is unavailable, but fails if a forbidden snoop
 is reported as emitted.
+
+The reference PAL supports a status-only BISnp completion as well as explicit
+result flags in ``DATA0``. When successful command completion means that the
+upstream transaction succeeded, zero ``DATA0`` is normalized to ``VALID``,
+``EMITTED``, and ``HOST_ACCEPTED``. Nonzero result flags are preserved for VAL
+validation. The PAL clears ``DATA0`` before issuing the command so an earlier
+operation cannot supply a stale result.
+
+A command error or timeout alone cannot establish whether the request was
+blocked locally, rejected by the host, or could not be issued. It must not be
+converted to ``BLOCKED`` or ``HOST_REJECTED`` without additional evidence.
+RFRFJG requires local-blocking evidence for its negative case; RJSYPS requires
+an emitted request and an observed host rejection. Missing evidence causes a
+skip, not a pass. RFRFJG calibrates its positive path after establishing TDISP
+RUN, IDE, and the permitted page association.
+
+
+RSTQHS host snoop setup and observation
+---------------------------------------
+
+The host snoop test requires the platform to implement:
+
+- ``pal_cda_host_snoop_prepare(root_bdf, endpoint_bdf, permitted_hpa, unknown_hpa)``:
+  save state and verify a permitted Realm target, plus an unknown Realm target
+  with no known cached copy, permitted PA association, or permitted MECID.
+  Verify that snoop-specific endpoint monitoring and host stimulus are supported.
+- ``pal_cda_host_snoop_trigger(endpoint_bdf, target_hpa)``: initiate a host
+  snoop candidate and wait for the forwarding decision and observation interval
+  to complete. Preserve the eligibility established during preparation.
+- ``pal_cda_host_snoop_restore(endpoint_bdf)``: restore saved state after every
+  preparation attempt, including unsuccessful and partially completed setup.
+
+Setup and trigger return zero for success, one for unsupported, or two for an
+error. Restore returns zero only when restoration succeeds or no state was
+changed. The reference PAL reports setup and trigger as unsupported.
+
+The existing exerciser transaction monitor supplies the verdict. Its PAL
+must set ``EXERCISER_TXN_ATTR_SNOOP`` only for an actual received snoop, not
+merely a memory read or cache-maintenance request. Device-side DCM assignment
+does not verify host snoop eligibility. A platform that cannot establish the
+preconditions must report unsupported, not supply a fabricated host decision.
+
+Single-PE cache setup
+----------------------
+
+The CDA cache-line seed helper uses ``val_memory_cache_clean_invalidate_pe_el3``
+to evict local PE copies after filling a device cache line. This uses TF-A's
+set/way routine, with other PEs quiescent; it does not invalidate device caches.
+The ACS EL3 payload must be rebuilt and packaged with the application to support
+``CLEAN_AND_INVALIDATE_SET_WAY`` in the existing cache-maintenance SMC service.
 
 
 4. Prerequisites

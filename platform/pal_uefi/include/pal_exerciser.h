@@ -182,6 +182,7 @@ typedef enum {
 #define EXERCISER_TXN_ATTR_READ              (1u << 1)
 #define EXERCISER_TXN_ATTR_CONFIG            (1u << 2)
 #define EXERCISER_TXN_ATTR_CACHE_MAINTENANCE (1u << 3)
+#define EXERCISER_TXN_ATTR_SNOOP             (1u << 4)
 
 typedef enum {
     TXN_REQ_ID     = 0x0,
@@ -335,6 +336,13 @@ UINT32 pal_exerciser_get_state(EXERCISER_STATE *State, UINT32 Bdf);
 UINT32 pal_exerciser_ops(EXERCISER_OPS Ops, UINT64 Param, UINT32 Bdf);
 UINT32 pal_cda_tdi_snoop_attempt(UINT32 Bdf, UINT64 TargetHpa,
                                  UINT32 PasRealm, UINT32 *Result);
+#define PAL_CDA_SNOOP_SUCCESS     0u
+#define PAL_CDA_SNOOP_UNSUPPORTED 1u
+#define PAL_CDA_SNOOP_ERROR       2u
+UINT32 pal_cda_host_snoop_prepare(UINT32 RootBdf, UINT32 EndpointBdf,
+                                   UINT64 PermittedHpa, UINT64 UnknownHpa);
+UINT32 pal_cda_host_snoop_trigger(UINT32 EndpointBdf, UINT64 TargetHpa);
+UINT32 pal_cda_host_snoop_restore(UINT32 EndpointBdf);
 UINT32 pal_exerciser_get_data(EXERCISER_DATA_TYPE Type, exerciser_data_t *Data, UINT32 Bdf, UINT64 Ecam);
 
 #endif

@@ -93,6 +93,55 @@ val_cda_tdi_snoop_attempt(uint32_t endpoint_bdf,
   return ACS_STATUS_PASS;
 }
 
+static uint32_t
+val_cda_host_snoop_status(uint32_t status)
+{
+  if (status == PAL_CDA_SNOOP_SUCCESS)
+    return ACS_STATUS_PASS;
+
+  if (status == PAL_CDA_SNOOP_UNSUPPORTED)
+    return ACS_STATUS_SKIP;
+
+  return ACS_STATUS_ERR;
+}
+
+/**
+  @brief  Establish and verify host snoop eligibility for two Realm Locations.
+
+  The PAL must verify an eligible positive target, an unknown target with no
+  permitted PA/MECID or cached copy, and snoop-specific endpoint monitoring.
+  Device-side DCM assignment alone is not evidence of the host's state.
+  Restore must be called after any preparation attempt, including an error.
+**/
+uint32_t
+val_cda_host_snoop_prepare(uint32_t root_bdf, uint32_t endpoint_bdf,
+                           uint64_t permitted_hpa, uint64_t unknown_hpa)
+{
+  if ((permitted_hpa == 0u) || (unknown_hpa == 0u) || (permitted_hpa == unknown_hpa))
+    return ACS_STATUS_ERR;
+
+  return val_cda_host_snoop_status(pal_cda_host_snoop_prepare(root_bdf, endpoint_bdf,
+                                                             permitted_hpa, unknown_hpa));
+}
+
+/** Trigger a host snoop candidate and wait until its forwarding decision completes. */
+uint32_t
+val_cda_host_snoop_trigger(uint32_t endpoint_bdf, uint64_t target_hpa)
+{
+  if (target_hpa == 0u)
+    return ACS_STATUS_ERR;
+
+  return val_cda_host_snoop_status(pal_cda_host_snoop_trigger(endpoint_bdf, target_hpa));
+}
+
+/** Restore host eligibility, cache and stimulus state saved by the PAL. */
+uint32_t
+val_cda_host_snoop_restore(uint32_t endpoint_bdf)
+{
+  return (pal_cda_host_snoop_restore(endpoint_bdf) == PAL_CDA_SNOOP_SUCCESS) ?
+         ACS_STATUS_PASS : ACS_STATUS_ERR;
+}
+
 /**
   @brief  Seed a Realm Location and establish a clean coherent cache line.
 
@@ -180,9 +229,13 @@ val_cda_seed_realm_cache_line(uint64_t target_hpa,
     return ACS_STATUS_ERR;
   }
 
-  /* Remove only the PE copy; the coherent target retains the clean line. */
-  if (val_data_cache_ops_by_va_el3((uint64_t)realm_alias,
-                                   CLEAN_AND_INVALIDATE) != 0u)
+  /*
+   * Evict the PE copy before the later demand read. Address-based maintenance
+   * to PoC can also invalidate the device line that was just populated. These
+   * tests run on one PE, so use local set/way maintenance instead. CACHE_DIRTY
+   * subsequently verifies that the target device retained the Realm line.
+   */
+  if (val_memory_cache_clean_invalidate_pe_el3() != ACS_STATUS_PASS)
     return ACS_STATUS_ERR;
 
   return ACS_STATUS_PASS;

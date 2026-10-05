@@ -93,6 +93,10 @@ uint32_t val_cda_tdi_snoop_attempt(uint32_t endpoint_bdf,
                                     uint64_t target_hpa,
                                    uint32_t access_pas,
                                    uint32_t *result);
+uint32_t val_cda_host_snoop_prepare(uint32_t root_bdf, uint32_t endpoint_bdf,
+                                    uint64_t permitted_hpa, uint64_t unknown_hpa);
+uint32_t val_cda_host_snoop_trigger(uint32_t endpoint_bdf, uint64_t target_hpa);
+uint32_t val_cda_host_snoop_restore(uint32_t endpoint_bdf);
 uint32_t val_cda_seed_realm_cache_line(uint64_t target_hpa,
                                        volatile uint64_t *realm_alias,
                                        uint64_t value);

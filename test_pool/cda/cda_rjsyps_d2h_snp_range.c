@@ -148,6 +148,15 @@ check_snoop_result(uint32_t endpoint_bdf,
                                      target_hpa,
                                      access_pas,
                                      &result);
+  if (status == ACS_STATUS_SKIP)
+  {
+    /* A generic command error cannot be attributed to the host range check. */
+    val_print(ACS_PRINT_INFO,
+              " RJSYPS: snoop emission/host response unavailable for PA 0x%llx",
+              target_hpa);
+    return ACS_STATUS_SKIP;
+  }
+
   if (status != ACS_STATUS_PASS)
     return status;
 

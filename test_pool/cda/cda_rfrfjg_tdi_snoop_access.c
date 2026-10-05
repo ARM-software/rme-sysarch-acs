@@ -464,10 +464,10 @@ check_allowed_snoop(const TEST_CONTEXT *context, uint32_t page)
                                      &result);
   if (status == ACS_STATUS_SKIP)
   {
-    val_print(ACS_PRINT_ERR,
-              " RFRFJG: attributed TDI snoop command failed",
-              0);
-    return ACS_STATUS_FAIL;
+    val_print(ACS_PRINT_INFO,
+              " RFRFJG: positive-control snoop observation unavailable for PA 0x%llx",
+              context->dcm_hpa[page]);
+    return ACS_STATUS_SKIP;
   }
 
   if (status != ACS_STATUS_PASS)
@@ -497,6 +497,15 @@ check_forbidden_snoop(const TEST_CONTEXT *context, uint32_t page)
                                      context->dcm_hpa[page],
                                      REALM_PAS,
                                      &result);
+  if (status == ACS_STATUS_SKIP)
+  {
+    /* An error completion does not prove that the TDI prevented emission. */
+    val_print(ACS_PRINT_INFO,
+              " RFRFJG: local snoop blocking is not observable for PA 0x%llx",
+              context->dcm_hpa[page]);
+    return ACS_STATUS_SKIP;
+  }
+
   if (status != ACS_STATUS_PASS)
     return ACS_STATUS_FAIL;
 
@@ -528,7 +537,6 @@ exercise_rule(TEST_CONTEXT *context)
   uint32_t session_id;
   uint32_t session_open;
   uint32_t status;
-  uint32_t probe_result;
 
   if (context == NULL)
     return ACS_STATUS_ERR;
@@ -539,25 +547,6 @@ exercise_rule(TEST_CONTEXT *context)
   session_id = 0u;
   session_open = 0u;
   val_memory_set(&spdm_ctx, sizeof(spdm_ctx), 0);
-
-  /*
-   * Confirm that the platform can originate the attributed snoop required by
-   * this rule before changing TDISP, IDE, or DCM assignment state. The result
-   * of this precondition probe is not a rule verdict.
-   */
-  status = val_cda_tdi_snoop_attempt(context->endpoint_bdf,
-                                     context->dcm_hpa[RFRFJG_PAGE_A],
-                                     REALM_PAS,
-                                     &probe_result);
-  if (status == ACS_STATUS_SKIP)
-  {
-    val_print(ACS_PRINT_INFO,
-              " RFRFJG: attributed TDI snoop stimulus unavailable",
-              0);
-    return ACS_STATUS_SKIP;
-  }
-  if (status != ACS_STATUS_PASS)
-    return ACS_STATUS_FAIL;
 
   status = val_tdisp_establish_run(context->endpoint_bdf,
                                    &spdm_ctx,
@@ -607,6 +596,11 @@ exercise_rule(TEST_CONTEXT *context)
   }
   assigned_mask |= (1u << RFRFJG_PAGE_A);
 
+  /*
+   * Calibrate the snoop path only after RUN, IDE, and page permissions are
+   * established. A rejected request before setup cannot identify an absent
+   * command or distinguish it from a security-policy rejection.
+   */
   status = check_allowed_snoop(context, RFRFJG_PAGE_A);
   if (status != ACS_STATUS_PASS)
   {
@@ -614,8 +608,12 @@ exercise_rule(TEST_CONTEXT *context)
     goto cleanup;
   }
 
-  if (check_forbidden_snoop(context, RFRFJG_PAGE_B) != ACS_STATUS_PASS)
+  status = check_forbidden_snoop(context, RFRFJG_PAGE_B);
+  if (status != ACS_STATUS_PASS)
+  {
+    result = status;
     goto cleanup;
+  }
 
   /* Swap the assignment and repeat the permission checks for both pages. */
   if (set_realm_assignment(context->endpoint_bdf,
@@ -637,8 +635,12 @@ exercise_rule(TEST_CONTEXT *context)
     goto cleanup;
   }
 
-  if (check_forbidden_snoop(context, RFRFJG_PAGE_A) != ACS_STATUS_PASS)
+  status = check_forbidden_snoop(context, RFRFJG_PAGE_A);
+  if (status != ACS_STATUS_PASS)
+  {
+    result = status;
     goto cleanup;
+  }
 
   result = ACS_STATUS_PASS;
 

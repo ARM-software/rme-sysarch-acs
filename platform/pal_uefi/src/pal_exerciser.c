@@ -591,10 +591,15 @@ pal_exerciser_ops (
             data = pal_mmio_read(Base + CXL_CMD_OP);
             status = data & CXL_CMD_STATUS_MASK;
             if (status == CXL_CMD_STATUS_ERR)
+            {
+                rme_print(ACS_PRINT_DEBUG, L" CXL_CMD_START error status 0x%x", data);
                 return 1;
+            }
+
             if (status == CXL_CMD_STATUS_DONE)
                 return 0;
         }
+        rme_print(ACS_PRINT_DEBUG, L" CXL_CMD_START timed out for BDF 0x%x", Bdf);
         return 1;
 
     case START_TXN_MONITOR:
@@ -661,6 +666,11 @@ pal_cda_tdi_snoop_attempt (
                                      TargetHpa,
                                      0u,
                                      Bdf);
+
+  /* Do not interpret data left by an earlier command as a snoop result. */
+  if (Status == 0u)
+    Status = pal_exerciser_set_param(EXERCISER_CXL_CMD_DATA0, 0u, 0u, Bdf);
+
   if (Status == 0u)
     Status = pal_exerciser_ops(CXL_CMD_START, 0u, Bdf);
   if (Status == 0u)
@@ -673,8 +683,51 @@ pal_cda_tdi_snoop_attempt (
   if (Status != 0u)
     return 1;
 
-  *Result = (UINT32)RawResult;
+  /*
+   * A status-only BISnp command completes successfully after the upstream
+   * transaction succeeds. DATA0 is zero when no detailed result is supplied.
+   * Retain explicit observations when available. A command error alone cannot
+   * distinguish local blocking from host rejection and is not normalized here.
+   */
+  if (RawResult == 0u)
+    *Result = CXL_SNOOP_RESULT_VALID | CXL_SNOOP_RESULT_EMITTED |
+              CXL_SNOOP_RESULT_HOST_ACCEPTED;
+  else
+    *Result = (UINT32)RawResult;
+
   return 0;
+}
+
+/*
+ * No portable register configures/verifies the host's PA/MECID associations
+ * and cache-residency knowledge. A platform port must supply that setup plus
+ * a genuine host snoop stimulus and snoop-specific transaction records.
+ * The default implementation leaves state unchanged and reports unsupported.
+ */
+UINT32
+pal_cda_host_snoop_prepare(UINT32 RootBdf, UINT32 EndpointBdf,
+                            UINT64 PermittedHpa, UINT64 UnknownHpa)
+{
+  (void)RootBdf;
+  (void)EndpointBdf;
+  (void)PermittedHpa;
+  (void)UnknownHpa;
+  return PAL_CDA_SNOOP_UNSUPPORTED;
+}
+
+UINT32
+pal_cda_host_snoop_trigger(UINT32 EndpointBdf, UINT64 TargetHpa)
+{
+  (void)EndpointBdf;
+  (void)TargetHpa;
+  return PAL_CDA_SNOOP_UNSUPPORTED;
+}
+
+UINT32
+pal_cda_host_snoop_restore(UINT32 EndpointBdf)
+{
+  (void)EndpointBdf;
+  return PAL_CDA_SNOOP_SUCCESS;
 }
 
 /**
