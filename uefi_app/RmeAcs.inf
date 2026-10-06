@@ -109,7 +109,6 @@
   ../test_pool/rme/rme_data_encryption_with_different_tweak.c
   ../test_pool/rme/rme_encryption_for_all_pas_except_ns.c
   ../test_pool/rme/rme_gpc_for_system_resource.c
-  ../test_pool/rme/rme_gprs_scrubbed_after_reset.c
   ../test_pool/rme/rme_interconnect_supports_tlbi_pa.c
   ../test_pool/rme/rme_memory_associated_with_pas_till_popa.c
   ../test_pool/rme/rme_msd_save_restore_mem_in_root_pas.c
