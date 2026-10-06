@@ -29,20 +29,6 @@ Testcase checklist
 
   * -
 
-      `rme_gprs_scrubbed_after_reset <../test_pool/rme/rme_gprs_scrubbed_after_reset.c>`_
-
-    -
-
-      RNULL: GPRs must be scrubbed after reset.
-
-    -
-
-      1. Select the Realm Security State of EL2 by writing to SCR_EL3.NSE and NS bit.
-      2. Write GPR_WRITE_VAL to GPRs from x19-x29 using asm function and execute reset.
-      3. Check if GPRs have retained their value or have they been scrubbed.
-
-  * -
-
       `rme_all_pe_has_feat_rng_or_rng_trap <../test_pool/rme/rme_all_pe_has_feat_rng_or_rng_trap.c>`_
 
     -

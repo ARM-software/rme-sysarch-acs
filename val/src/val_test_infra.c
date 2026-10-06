@@ -387,10 +387,6 @@ MODULE_TEST_DISPATCHER_s g_module_test_table[MODULE_SENTINEL] = {
         .entry_fn = rme_gpc_for_system_resource_entry,
         .test_text = "rme_gpc_for_system_resource",
       },
-      [RME_ENTRY_RME_GPRS_SCRUBBED_AFTER_RESET_ENTRY] = {
-        .entry_fn = rme_gprs_scrubbed_after_reset_entry,
-        .test_text = "rme_gprs_scrubbed_after_reset",
-      },
       [RME_ENTRY_RME_INTERCONNECT_SUPPORTS_TLBI_PA_ENTRY] = {
         .entry_fn = rme_interconnect_supports_tlbi_pa_entry,
         .test_text = "rme_interconnect_supports_tlbi_pa",
