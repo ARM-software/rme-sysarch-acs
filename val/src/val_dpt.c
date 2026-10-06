@@ -76,7 +76,6 @@ val_rme_dpt_execute_tests(uint32_t num_pe)
 
   if (reset_status != RESET_TST12_FLAG &&
       reset_status != RESET_TST31_FLAG &&
-      reset_status != RESET_TST2_FLAG &&
       reset_status != RESET_LS_DISBL_FLAG &&
       reset_status != RESET_LS_TEST3_FLAG)
   {

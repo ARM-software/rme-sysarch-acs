@@ -43,20 +43,11 @@ rme_run_if_selected(uint32_t num_pe, uint32_t status, uint32_t reset_status)
   else if (reset_status == RESET_TST32_FLAG)
           goto reset_done_32;
 
-  else if (reset_status == RESET_TST2_FLAG)
-          goto reset_done_2;
-
   else if (reset_status == RESET_LS_DISBL_FLAG || reset_status == RESET_LS_TEST3_FLAG)
           goto reset_done_ls;
 
   val_execute_module_tests(RME_MODULE_ID,
                            RME_ENTRY_RME_SUPPORT_IN_PE_ENTRY - 1,
-                           RME_ENTRY_RME_GPRS_SCRUBBED_AFTER_RESET_ENTRY + 1,
-                           num_pe,
-                           status);
-  reset_done_2:
-  val_execute_module_tests(RME_MODULE_ID,
-                           RME_ENTRY_RME_GPRS_SCRUBBED_AFTER_RESET_ENTRY - 1,
                            RME_ENTRY_RME_REALM_SMEM_BEHAVIOUR_AFTER_RESET_ENTRY + 1,
                            num_pe,
                            status);
