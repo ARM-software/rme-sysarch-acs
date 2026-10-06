@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022-2023,2025, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2023,2025-2026, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,7 +21,6 @@
 #define RESET_TST12_FLAG 12
 #define RESET_TST31_FLAG 31
 #define RESET_TST32_FLAG 32
-#define RESET_TST2_FLAG 34
 #define RESET_LS_TEST3_FLAG 503
 #define RESET_LS_DISBL_FLAG 500
 

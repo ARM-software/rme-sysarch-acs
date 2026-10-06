@@ -21,7 +21,6 @@
 #include "val_pe.h"
 
 uint32_t rme_support_in_pe_entry(uint32_t num_pe);
-uint32_t rme_gprs_scrubbed_after_reset_entry(uint32_t num_pe);
 uint32_t rme_all_pe_has_feat_rng_or_rng_trap_entry(uint32_t num_pe);
 uint32_t rme_gpc_for_system_resource_entry(uint32_t num_pe);
 uint32_t rme_coherent_interconnect_supports_cmo_popa_entry(uint32_t num_pe);
