@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022-2023, 2025, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2023, 2025-2026, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -198,7 +198,7 @@ uint32_t val_gic_its_gicr_lpi_support(uint64_t rd_base);
 
 
 void val_gic_its_EnableLPIsRD(uint64_t rd_base);
-void val_gic_its_create_lpi_map(uint32_t its_index, uint32_t device_id,
+uint32_t val_gic_its_create_lpi_map(uint32_t its_index, uint32_t device_id,
                             uint32_t int_id, uint32_t Priority);
 void val_gic_its_clear_lpi_map(uint32_t its_index, uint32_t device_id, uint32_t int_id);
 
