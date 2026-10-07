@@ -32,8 +32,8 @@
 #include "val/sys_arch_src/gic/its/val_gic_its.h"
 
 #define TEST_NAME "gic_its_subjected_to_gpc_check"
-#define TEST_DESC  "To check if GIC ITS mem accesses are only to NS memory "
-#define TEST_RULE  "RNULL"
+#define TEST_DESC  "Check ITS table accesses are subject to PAS protection "
+#define TEST_RULE  "RMZJXC"
 
 static uint32_t irq_pending;
 static uint32_t lpi_int_id = 0x204c;
@@ -53,7 +53,7 @@ intr_handler(void)
 }
 
 /**
- * @brief The test validates that the ITS access is always Non-secure in nature.
+ * @brief Validate PAS protection for ITS table accesses (RMZJXC).
  * 1. The Exerciser is initialised by setting command register for Memory Space Enable and
  *    Bus Master Enable.
  * 2. GIC ITS is configured by initialising ITS along with CommandQueue, Device and
