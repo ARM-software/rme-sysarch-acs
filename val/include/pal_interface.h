@@ -247,6 +247,12 @@ typedef enum {
   ENTRY_TYPE_GICH
 } GIC_INFO_TYPE_e;
 
+/* ITS is disabled/quiescent. Preserve mappings and invalidate all translation
+ * caches; return 0 only after completion, NOT_IMPLEMENTED without changing
+ * hardware if unsupported. On other errors VAL leaves ITS stopped.
+ */
+uint32_t pal_gic_its_invalidate_cache(uint64_t its_base);
+
 void pal_gic_create_info_table(GIC_INFO_TABLE *gic_info_table);
 uint32_t pal_gic_install_isr(uint32_t int_id, void (*isr)(void));
 void pal_gic_end_of_interrupt(uint32_t int_id);

@@ -149,6 +149,117 @@ static uint32_t ItsEnsureDeviceTable(uint32_t its_index, uint32_t device_id,
   return device_table_found ? ACS_STATUS_PASS : ACS_STATUS_ERR;
 }
 
+typedef struct ITS_EVENT_MAPPING {
+  uint32_t int_id;
+  uint32_t setup_complete; /* Set only after the mapping commands finish. */
+  uint32_t teardown_pending; /* Commands were published but not yet retired. */
+  struct ITS_EVENT_MAPPING *next;
+} ITS_EVENT_MAPPING;
+
+typedef struct ITS_DEVICE_ITT {
+  uint32_t device_id;
+  uint32_t event_count;
+  void *itt_base;
+  void *allocation;
+  uint64_t itt_pa;
+  uint32_t itt_size;
+  ITS_EVENT_MAPPING *events;
+  struct ITS_DEVICE_ITT *next;
+} ITS_DEVICE_ITT;
+
+static ITS_DEVICE_ITT **g_device_itts;
+
+/* Isolate the table from other allocations when tests change its GPT granule. */
+#define ITS_ITT_ALIGNMENT SIZE_64KB
+
+static ITS_DEVICE_ITT *ItsFindDeviceITT(uint32_t its_index, uint32_t device_id)
+{
+  ITS_DEVICE_ITT *device;
+
+  for (device = g_device_itts[its_index]; device != NULL; device = device->next) {
+    if (device->device_id == device_id)
+      return device;
+  }
+
+  return NULL;
+}
+
+static ITS_EVENT_MAPPING *ItsFindEvent(ITS_DEVICE_ITT *device, uint32_t int_id)
+{
+  ITS_EVENT_MAPPING *event;
+
+  for (event = device->events; event != NULL; event = event->next) {
+    if (event->int_id == int_id)
+      return event;
+  }
+
+  return NULL;
+}
+
+static ITS_DEVICE_ITT *ItsAllocateDeviceITT(uint32_t its_index, uint32_t device_id)
+{
+  ITS_DEVICE_ITT *device;
+  uint64_t entry_count, itt_size, typer, pa;
+  uint32_t entry_size, id_bits;
+  void *itt_base, *allocation;
+
+  typer = val_mmio_read64(g_gic_its_info->GicIts[its_index].Base + ARM_GITS_TYPER);
+  id_bits = g_gic_its_info->GicIts[its_index].IDBits;
+  entry_size = ARM_GITS_TYPER_ITTEntrySize(typer) + 1;
+  entry_count = 1ULL << (id_bits + 1);
+  itt_size = entry_count * entry_size;
+  itt_size = (itt_size + ITS_ITT_ALIGNMENT - 1) & ~(ITS_ITT_ALIGNMENT - 1);
+  if ((itt_size == 0) || (itt_size > 0xFFFFFFFFULL - ITS_ITT_ALIGNMENT + 1))
+    return NULL;
+
+  /* Keep the original pool pointer so both PALs can release the allocation. */
+  allocation = val_memory_alloc((uint32_t)itt_size + ITS_ITT_ALIGNMENT - 1);
+  if (allocation == NULL)
+    return NULL;
+
+  itt_base = (void *)(((uint64_t)allocation + ITS_ITT_ALIGNMENT - 1) &
+                      ~(uint64_t)(ITS_ITT_ALIGNMENT - 1));
+  pa = (uint64_t)val_memory_virt_to_phys(itt_base);
+  if ((pa == 0) || (pa & ~ITT_PAR_MASK) || (pa & (ITS_ITT_ALIGNMENT - 1))) {
+    val_memory_free(allocation);
+    return NULL;
+  }
+
+  device = val_memory_calloc(1, sizeof(*device));
+  if (device == NULL) {
+    val_memory_free(allocation);
+    return NULL;
+  }
+
+  val_memory_set(itt_base, (uint32_t)itt_size, 0);
+  val_pe_cache_clean_range((uint64_t)itt_base, itt_size);
+  TestExecuteBarrier();
+
+  device->device_id = device_id;
+  device->itt_base = itt_base;
+  device->allocation = allocation;
+  device->itt_pa = pa;
+  device->itt_size = (uint32_t)itt_size;
+  device->next = g_device_itts[its_index];
+  g_device_itts[its_index] = device;
+
+  return device;
+}
+
+static void ItsRemoveDeviceITT(uint32_t its_index, ITS_DEVICE_ITT *device)
+{
+  ITS_DEVICE_ITT **link = &g_device_itts[its_index];
+
+  while ((*link != NULL) && (*link != device))
+    link = &(*link)->next;
+  if (*link == NULL)
+    return;
+
+  *link = device->next;
+  val_memory_free(device->allocation);
+  val_memory_free(device);
+}
+
 uint32_t GET_NUM_BITS(uint64_t value)
 {
   uint64_t bit_pos = 0;
@@ -453,19 +564,6 @@ uint32_t ArmGicSetItsTables(uint32_t its_index)
   }
   }
 
-  /* Allocate Memory for Interrupt Translation Table */
-  Address = val_get_free_pa((NUM_PAGES_8 * SIZE_4KB), (NUM_PAGES_8 * SIZE_4KB));
-
-  val_print(ACS_PRINT_INFO, " ITS: Address allocated for ITT = 0x%lx.", Address);
-  if (!Address) {
-    val_print(ACS_PRINT_ERR,  " ITS : Could Not Allocate Memory For ITT. Test may not pass.", 0);
-    return 1;
-  }
-
-  val_memory_set((void *)Address, (NUM_PAGES_8*SIZE_4KB), 0);
-
-  g_gic_its_info->GicIts[its_index].ITTBase = Address;
-
   return 0;
 }
 
@@ -583,7 +681,7 @@ WriteCmdQSYNC(
     g_cwriter_ptr[its_index] = g_cwriter_ptr[its_index] + ITS_NEXT_CMD_PTR;
 }
 
-void PollTillCommandQueueDone(uint32_t its_index)
+uint32_t PollTillCommandQueueDone(uint32_t its_index)
 {
   uint32_t    count;
   uint64_t    creadr_value;
@@ -605,18 +703,20 @@ void PollTillCommandQueueDone(uint32_t its_index)
       val_mmio_write64((ItsBase + ARM_GITS_CWRITER),
                   (cwriter_value | ARM_GITS_CWRITER_RETRY)
                  );
+      TestExecuteBarrier();
     }
 
     count++;
     if (count > WAIT_ITS_COMMAND_DONE) {
       val_print(ACS_PRINT_ERR,
-                " ITS : Command Queue READR not moving, Test may not pass", 0);
-      break;
+                " ITS : Command queue completion timed out; retaining mapping memory", 0);
+      return ACS_STATUS_ERR;
     }
 
     creadr_value = val_mmio_read64(ItsBase + ARM_GITS_CREADR);
   }
 
+  return ACS_STATUS_PASS;
 }
 
 uint64_t GetRDBaseFormat(uint32_t its_index)
@@ -644,58 +744,93 @@ uint64_t GetRDBaseFormat(uint32_t its_index)
 }
 
 
-void val_gic_its_clear_lpi_map(uint32_t its_index, uint32_t device_id, uint32_t int_id)
+uint32_t val_gic_its_clear_lpi_map(uint32_t its_index, uint32_t device_id, uint32_t int_id)
 {
-  uint64_t    value;
-  uint64_t    RDBase;
-  uint64_t    ItsBase;
-  uint64_t    ItsCommandBase;
+  uint64_t value;
+  uint64_t RDBase;
+  uint64_t ItsBase;
+  uint64_t ItsCommandBase;
+  ITS_DEVICE_ITT *device;
+  ITS_EVENT_MAPPING *event;
+  ITS_EVENT_MAPPING **event_link;
+  uint32_t last_event;
 
-  if (!g_its_setup_done)
-    return;
+  if (!g_its_setup_done || (g_device_itts == NULL) ||
+      (its_index >= g_gic_its_info->GicNumIts))
+    return ACS_STATUS_ERR;
 
   /* Unmapping must not allocate an unused L2 page. */
   if (ItsEnsureDeviceTable(its_index, device_id, 0) != ACS_STATUS_PASS)
-    return;
+    return ACS_STATUS_ERR;
 
-  ItsBase        = g_gic_its_info->GicIts[its_index].Base;
+  device = ItsFindDeviceITT(its_index, device_id);
+  if (device == NULL)
+    return ACS_STATUS_PASS;
+
+  event = ItsFindEvent(device, int_id);
+  if (event == NULL) {
+    /* No event was published: release an allocation left by pre-mapping failure. */
+    if (device->event_count == 0)
+      ItsRemoveDeviceITT(its_index, device);
+    return ACS_STATUS_PASS;
+  }
+  last_event = (device->event_count == 1);
+
+  ItsBase = g_gic_its_info->GicIts[its_index].Base;
   ItsCommandBase = g_gic_its_info->GicIts[its_index].CommandQBase;
-
-  /* Clear Config table for LPI=int_id */
-  val_gic_its_ClearConfigTable(int_id);
-
-  /* Get RDBase Depending on GITS_TYPER.PTA */
   RDBase = GetRDBaseFormat(its_index);
 
-  /* Discard Mappings */
-  WriteCmdQDISCARD(its_index, (uint64_t *)(ItsCommandBase), device_id, int_id);
-  /* Un Map Device using MAPD */
-  WriteCmdQMAPD(its_index, (uint64_t *)(ItsCommandBase), device_id,
-                g_gic_its_info->GicIts[its_index].ITTBase,
-                0, 0 /*InValid*/);
-  /* ITS SYNC Command */
-  WriteCmdQSYNC(its_index, (uint64_t *)(ItsCommandBase), RDBase);
+  /* A retry of timed-out cleanup must not submit DISCARD for the same event twice. */
+  if (!event->teardown_pending) {
+    /* Finish any previous batch before appending more commands to the queue. */
+    if (PollTillCommandQueueDone(its_index) != ACS_STATUS_PASS)
+      return ACS_STATUS_ERR;
 
+    WriteCmdQDISCARD(its_index, (uint64_t *)ItsCommandBase, device_id, int_id);
+    if (last_event)
+      WriteCmdQMAPD(its_index, (uint64_t *)ItsCommandBase, device_id, 0, 0, 0);
+    WriteCmdQSYNC(its_index, (uint64_t *)ItsCommandBase, RDBase);
+
+    TestExecuteBarrier();
+    value = g_cwriter_ptr[its_index] * NUM_BYTES_IN_DW;
+    event->teardown_pending = 1;
+    val_mmio_write64(ItsBase + ARM_GITS_CWRITER, value);
+  }
+
+  /* Pending commands may still access the ITT; retain all state on timeout. */
+  if (PollTillCommandQueueDone(its_index) != ACS_STATUS_PASS)
+    return ACS_STATUS_ERR;
   TestExecuteBarrier();
-  /* Update the CWRITER Register so that all the commands from Command queue gets executed.*/
-  value = ((g_cwriter_ptr[its_index] * NUM_BYTES_IN_DW));
-  val_mmio_write64((ItsBase + ARM_GITS_CWRITER), value);
 
-  /* Check CREADR value which ensures Command Queue is processed */
-  PollTillCommandQueueDone(its_index);
-  TestExecuteBarrier();
+  val_gic_its_ClearConfigTable(int_id);
+  event_link = &device->events;
+  while ((*event_link != NULL) && (*event_link != event))
+    event_link = &(*event_link)->next;
+  if (*event_link != NULL) {
+    *event_link = event->next;
+    val_memory_free(event);
+    device->event_count--;
+  }
 
+  if (device->event_count == 0)
+    ItsRemoveDeviceITT(its_index, device);
+
+  return ACS_STATUS_PASS;
 }
 
 uint32_t val_gic_its_create_lpi_map(uint32_t its_index, uint32_t device_id,
                                 uint32_t int_id, uint32_t Priority)
 {
-  uint64_t    value;
-  uint64_t    RDBase;
-  uint64_t    ItsBase;
-  uint64_t    ItsCommandBase;
+  uint64_t value;
+  uint64_t RDBase;
+  uint64_t ItsBase;
+  uint64_t ItsCommandBase;
+  ITS_DEVICE_ITT *device;
+  ITS_EVENT_MAPPING *event;
+  uint32_t map_device = 0;
 
-  if (!g_its_setup_done)
+  if (!g_its_setup_done || (g_device_itts == NULL) ||
+      (its_index >= g_gic_its_info->GicNumIts))
     return ACS_STATUS_ERR;
 
   /* Allocate/clear only the L2 page containing this MAPD DeviceID. */
@@ -704,48 +839,257 @@ uint32_t val_gic_its_create_lpi_map(uint32_t its_index, uint32_t device_id,
     return ACS_STATUS_ERR;
   }
 
-  ItsBase        = g_gic_its_info->GicIts[its_index].Base;
+  if ((int_id < ARM_LPI_MINID) ||
+      ((uint64_t)int_id >=
+       (1ULL << (g_gic_its_info->GicIts[its_index].IDBits + 1))))
+    return ACS_STATUS_ERR;
+
+  device = ItsFindDeviceITT(its_index, device_id);
+  if (device == NULL) {
+    device = ItsAllocateDeviceITT(its_index, device_id);
+    if (device == NULL) {
+      val_print(ACS_PRINT_ERR, " ITS : ITT allocation failed for DeviceID 0x%x", device_id);
+      return ACS_STATUS_ERR;
+    }
+  }
+
+  map_device = (device->event_count == 0);
+  event = ItsFindEvent(device, int_id);
+  if (event != NULL) {
+    /* Do not issue MAPTI again for an existing or partially completed mapping. */
+    return (event->setup_complete && !event->teardown_pending) ?
+           ACS_STATUS_PASS : ACS_STATUS_ERR;
+  }
+
+  if (event == NULL) {
+    event = val_memory_calloc(1, sizeof(*event));
+    if (event == NULL) {
+      if (map_device)
+        ItsRemoveDeviceITT(its_index, device);
+      return ACS_STATUS_ERR;
+    }
+    event->int_id = int_id;
+    event->next = device->events;
+    device->events = event;
+    device->event_count++;
+  }
+
+  ItsBase = g_gic_its_info->GicIts[its_index].Base;
   ItsCommandBase = g_gic_its_info->GicIts[its_index].CommandQBase;
 
-  /* Set Config table with enable the LPI = int_id, Priority. */
+  /* Finish any previous batch before appending more commands to the queue. */
+  if (PollTillCommandQueueDone(its_index) != ACS_STATUS_PASS)
+    return ACS_STATUS_ERR;
+
   val_gic_its_SetConfigTable(int_id, Priority);
-
-  /* Enable Redistributor */
   val_gic_its_EnableLPIsRD(g_gic_its_info->GicRdBase);
-
-  /* Enable ITS */
   EnableITS(ItsBase);
-
-  /* Get RDBase Depending on GITS_TYPER.PTA */
   RDBase = GetRDBaseFormat(its_index);
 
-  /* Map Device using MAPD */
-  WriteCmdQMAPD(its_index, (uint64_t *)(ItsCommandBase), device_id,
-                g_gic_its_info->GicIts[its_index].ITTBase,
-                g_gic_its_info->GicIts[its_index].IDBits, 0x1 /*Valid*/);
-  /* Map Collection using MAPC */
-  WriteCmdQMAPC(its_index, (uint64_t *)(ItsCommandBase),
-                0x1 /*Clctn_ID*/, RDBase, 0x1 /*Valid*/);
-  /* Map Interrupt using MAPI */
-  WriteCmdQMAPI(its_index, (uint64_t *)(ItsCommandBase), device_id, int_id, 0x1 /*Clctn_ID*/);
-  /* Invalid Entry */
-  WriteCmdQINV(its_index, (uint64_t *)(ItsCommandBase), device_id, int_id);
-  /* ITS SYNC Command */
-  WriteCmdQSYNC(its_index, (uint64_t *)(ItsCommandBase), RDBase);
+  if (map_device)
+    WriteCmdQMAPD(its_index, (uint64_t *)ItsCommandBase, device_id,
+                  device->itt_pa, g_gic_its_info->GicIts[its_index].IDBits, 1);
+  WriteCmdQMAPC(its_index, (uint64_t *)ItsCommandBase, 1, RDBase, 1);
+  WriteCmdQMAPI(its_index, (uint64_t *)ItsCommandBase, device_id, int_id, 1);
+  WriteCmdQINV(its_index, (uint64_t *)ItsCommandBase, device_id, int_id);
+  WriteCmdQSYNC(its_index, (uint64_t *)ItsCommandBase, RDBase);
 
   TestExecuteBarrier();
-
-  /* Update the CWRITER Register so that all the commands from Command queue gets executed.*/
-  value = ((g_cwriter_ptr[its_index] * NUM_BYTES_IN_DW));
-  val_mmio_write64((ItsBase + ARM_GITS_CWRITER), value);
-
-  /* Check CREADR value which ensures Command Queue is processed */
-  PollTillCommandQueueDone(its_index);
+  value = g_cwriter_ptr[its_index] * NUM_BYTES_IN_DW;
+  val_mmio_write64(ItsBase + ARM_GITS_CWRITER, value);
+  /* Preserve tracking and backing memory if setup commands did not complete. */
+  if (PollTillCommandQueueDone(its_index) != ACS_STATUS_PASS)
+    return ACS_STATUS_ERR;
   TestExecuteBarrier();
 
+  event->setup_complete = 1;
   return ACS_STATUS_PASS;
 }
 
+/**
+ * Disable ITS and invalidate its private table caches while backing memory is
+ * still accessible. IHI0069H.b 12.19.13 guarantees this when GITS_TYPER.INV=1.
+ * Otherwise use the platform cache-maintenance operation, if implemented.
+ * Keep ITS disabled until the caller has changed PAS and completed GPT maintenance,
+ * so no translation can refill the caches in the intervening NS window.
+ * On timeout, leave ITS disabled and retain its allocations; it is unsafe to
+ * restore BASERs or free memory before quiescence has been established.
+ */
+uint32_t val_gic_its_invalidate_cache_and_suspend(uint32_t its_index, ITS_CACHE_STATE *state)
+{
+  uint64_t base;
+  uint32_t i, count, has_inv, status;
+
+  if (state == NULL || !g_its_setup_done || g_gic_its_info == NULL ||
+      its_index >= g_gic_its_info->GicNumIts)
+    return ACS_STATUS_ERR;
+
+  state->suspended = 0;
+  state->basers_invalidated = 0;
+
+  base = g_gic_its_info->GicIts[its_index].Base;
+  has_inv = !!(val_mmio_read64(base + ARM_GITS_TYPER) & ARM_GITS_TYPER_INV);
+
+  /* Save writable control bits and stop ITS while the ITT is still NS. */
+  state->ctlr = val_mmio_read(base + ARM_GITS_CTLR) & ~ARM_GITS_CTLR_QUIESCENT;
+  val_mmio_write(base + ARM_GITS_CTLR, state->ctlr & ~ARM_GITS_CTLR_ENABLE);
+  TestExecuteBarrier();
+
+  /* Wait for outstanding accesses and cached mapping writes to complete. */
+  for (count = 0; count < WAIT_ITS_COMMAND_DONE; count++) {
+    if (val_mmio_read(base + ARM_GITS_CTLR) & ARM_GITS_CTLR_QUIESCENT)
+      break;
+  }
+
+  if (count == WAIT_ITS_COMMAND_DONE) {
+    val_print(ACS_PRINT_ERR, " ITS failed to become quiescent for PAS change", 0);
+    return ACS_STATUS_ERR;
+  }
+
+  /* Quiescence commits cached state but does not prove queued commands ran. */
+  if (val_mmio_read64(base + ARM_GITS_CREADR) !=
+      val_mmio_read64(base + ARM_GITS_CWRITER)) {
+    val_print(ACS_PRINT_ERR, " ITS commands incomplete before PAS change", 0);
+    val_mmio_write(base + ARM_GITS_CTLR, state->ctlr);
+    TestExecuteBarrier();
+    return ACS_STATUS_ERR;
+  }
+
+  /* INV=0 needs a platform-specific operation instead of BASER invalidation. */
+  if (!has_inv) {
+    status = pal_gic_its_invalidate_cache(base);
+
+    if (status != 0) {
+      if (status == NOT_IMPLEMENTED) {
+        /* Unsupported hooks leave hardware unchanged, so ITS can be restored. */
+        val_mmio_write(base + ARM_GITS_CTLR, state->ctlr);
+        TestExecuteBarrier();
+        val_print(ACS_PRINT_WARN, " ITS cache invalidation is not implemented by PAL", 0);
+        return ACS_STATUS_SKIP;
+      }
+
+      /* A failed hook may have changed hardware; retain memory and keep ITS stopped. */
+      val_print(ACS_PRINT_ERR, " PAL ITS cache invalidation failed", 0);
+      return ACS_STATUS_ERR;
+    }
+
+    /* The hook completed invalidation; leave ITS stopped for the PAS update. */
+    TestExecuteBarrier();
+    state->suspended = 1;
+    return ACS_STATUS_PASS;
+  }
+
+  /* Save descriptors before clearing Valid to invalidate their table caches. */
+  for (i = 0; i < ARM_NUM_GITS_BASER; i++)
+    state->baser[i] = val_mmio_read64(base + ARM_GITS_BASER(i));
+
+  /* Record saved state before any write so partial invalidation can be undone. */
+  state->suspended = 1;
+  state->basers_invalidated = 1;
+
+  for (i = 0; i < ARM_NUM_GITS_BASER; i++) {
+    if (state->baser[i] & ARM_GITS_BASER_VALID) {
+      val_mmio_write64(base + ARM_GITS_BASER(i),
+                      state->baser[i] & ~ARM_GITS_BASER_VALID);
+
+      /* Complete the register write before changing the backing memory PAS. */
+      if (val_mmio_read64(base + ARM_GITS_BASER(i)) & ARM_GITS_BASER_VALID) {
+        val_print(ACS_PRINT_ERR, " ITS failed to invalidate table descriptor", 0);
+        val_gic_its_resume_after_pas_change(its_index, state);
+        return ACS_STATUS_ERR;
+      }
+    }
+  }
+
+  /* Caller changes PAS before invoking the matching resume operation. */
+  TestExecuteBarrier();
+  state->suspended = 1;
+  return ACS_STATUS_PASS;
+}
+
+/**
+ * Restore table descriptors and control state after the caller completes the PAS
+ * update and GPT maintenance. Also used to unwind a failed PAS update.
+ * On restoration failure, retain allocations because ITS may still reference them.
+ */
+uint32_t val_gic_its_resume_after_pas_change(uint32_t its_index, ITS_CACHE_STATE *state)
+{
+  uint64_t base;
+  uint32_t i;
+
+  if (state == NULL || !state->suspended || g_gic_its_info == NULL ||
+      its_index >= g_gic_its_info->GicNumIts)
+    return ACS_STATUS_ERR;
+
+  base = g_gic_its_info->GicIts[its_index].Base;
+
+  /* BASERs can only be restored while ITS remains disabled and quiescent. */
+  if ((val_mmio_read(base + ARM_GITS_CTLR) &
+       (ARM_GITS_CTLR_ENABLE | ARM_GITS_CTLR_QUIESCENT)) != ARM_GITS_CTLR_QUIESCENT)
+    return ACS_STATUS_ERR;
+
+  /* The PAL path preserves BASERs; only the architected path rewrites them. */
+  for (i = 0; i < ARM_NUM_GITS_BASER; i++) {
+    if (state->basers_invalidated && (state->baser[i] & ARM_GITS_BASER_VALID)) {
+      val_mmio_write64(base + ARM_GITS_BASER(i), state->baser[i]);
+
+      if (val_mmio_read64(base + ARM_GITS_BASER(i)) != state->baser[i]) {
+        val_print(ACS_PRINT_ERR, " ITS failed to restore table descriptor", 0);
+        return ACS_STATUS_ERR;
+      }
+    }
+  }
+
+  /* Make restored descriptors visible before restoring the original enable state. */
+  TestExecuteBarrier();
+  val_mmio_write(base + ARM_GITS_CTLR, state->ctlr);
+  TestExecuteBarrier();
+
+  if ((val_mmio_read(base + ARM_GITS_CTLR) & ARM_GITS_CTLR_ENABLE) !=
+      (state->ctlr & ARM_GITS_CTLR_ENABLE))
+    return ACS_STATUS_ERR;
+
+  state->suspended = 0;
+  return ACS_STATUS_PASS;
+}
+
+/* Allocate a device ITT without submitting ITS mapping commands. */
+uint32_t val_gic_its_alloc_device_itt(uint32_t its_index, uint32_t device_id)
+{
+  if (!g_its_setup_done || (g_device_itts == NULL) ||
+      (its_index >= g_gic_its_info->GicNumIts))
+    return ACS_STATUS_ERR;
+
+  if (ItsFindDeviceITT(its_index, device_id) != NULL)
+    return ACS_STATUS_PASS;
+
+  return ItsAllocateDeviceITT(its_index, device_id) == NULL ?
+         ACS_STATUS_ERR : ACS_STATUS_PASS;
+}
+
+/* Return an existing device ITT without allocating or changing mappings. */
+uint64_t val_gic_its_get_itt_base(uint32_t its_index, uint32_t device_id)
+{
+  ITS_DEVICE_ITT *device;
+
+  if (!g_its_setup_done || (g_device_itts == NULL) ||
+      (its_index >= g_gic_its_info->GicNumIts))
+    return 0;
+  device = ItsFindDeviceITT(its_index, device_id);
+  return device == NULL ? 0 : device->itt_pa;
+}
+
+/* Return the allocated ITT size without allocating or changing mappings. */
+uint32_t val_gic_its_get_itt_size(uint32_t its_index, uint32_t device_id)
+{
+  ITS_DEVICE_ITT *device;
+
+  if (!g_its_setup_done || (g_device_itts == NULL) ||
+      (its_index >= g_gic_its_info->GicNumIts))
+    return 0;
+  device = ItsFindDeviceITT(its_index, device_id);
+  return device == NULL ? 0 : device->itt_size;
+}
 
 uint32_t val_gic_its_get_max_lpi(void)
 {
@@ -828,12 +1172,18 @@ uint32_t val_gic_its_init(void)
   }
   val_memory_set(g_device_tables, (uint32_t)state_size, 0);
 
+  g_device_itts = val_memory_calloc(g_gic_its_info->GicNumIts, sizeof(*g_device_itts));
+  if (g_device_itts == NULL)
+    return ACS_STATUS_ERR;
+
   g_cwriter_ptr = (uint32_t *)pal_aligned_alloc(MEM_ALIGN_4K,
                                                 sizeof(uint32_t) * (g_gic_its_info->GicNumIts));
 
   if (g_cwriter_ptr == NULL) {
     val_print(ACS_PRINT_ERR, " ITS : Could Not Allocate Memory CWriteR. Test may not pass.", 0);
     g_device_tables = NULL;
+    val_memory_free(g_device_itts);
+    g_device_itts = NULL;
     return ACS_STATUS_ERR;
   }
 

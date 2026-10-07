@@ -100,6 +100,7 @@
 
 /* GITS_CTLR Register Bits */
 #define ARM_GITS_CTLR_ENABLE        (1 << 0)
+#define ARM_GITS_CTLR_QUIESCENT     (1u << 31)
 
 /* GITS_BASER Register Bits */
 #define ARM_NUM_GITS_BASER                          8
@@ -128,7 +129,9 @@
 #define ARM_GITS_TYPER_DevBits(its_typer)           ((its_typer >> 13) & 0x1F)
 #define ARM_GITS_TYPER_CIDBits(its_typer)           ((its_typer >> 32) & 0xF)
 #define ARM_GITS_TYPER_IDbits(its_typer)            ((its_typer >> 8) & 0x1F)
+#define ARM_GITS_TYPER_ITTEntrySize(its_typer)       ((its_typer >> 4) & 0xF)
 #define ARM_GITS_TYPER_PTA                          (1 << 19)
+#define ARM_GITS_TYPER_INV                          (1ULL << 46)
 
 /* GITS_CREADR Bits */
 #define ARM_GITS_CREADR_STALL       (1 << 0)
@@ -198,9 +201,25 @@ uint32_t val_gic_its_gicr_lpi_support(uint64_t rd_base);
 
 
 void val_gic_its_EnableLPIsRD(uint64_t rd_base);
+
+/* Saved state while ITS table caches are invalidated for an ITT PAS change. */
+typedef struct {
+  uint64_t baser[ARM_NUM_GITS_BASER]; /* Original descriptors for the INV=1 path. */
+  uint32_t ctlr;                      /* Original control value without Quiescent. */
+  uint32_t suspended;                 /* Saved state is available for resume. */
+  uint32_t basers_invalidated;        /* Resume must restore the saved BASERs. */
+} ITS_CACHE_STATE;
+
+/* Caller must quiesce all interrupt sources targeting this ITS first. */
+uint32_t val_gic_its_invalidate_cache_and_suspend(uint32_t its_index, ITS_CACHE_STATE *state);
+uint32_t val_gic_its_resume_after_pas_change(uint32_t its_index, ITS_CACHE_STATE *state);
+
+uint32_t val_gic_its_alloc_device_itt(uint32_t its_index, uint32_t device_id);
+uint64_t val_gic_its_get_itt_base(uint32_t its_index, uint32_t device_id);
+uint32_t val_gic_its_get_itt_size(uint32_t its_index, uint32_t device_id);
 uint32_t val_gic_its_create_lpi_map(uint32_t its_index, uint32_t device_id,
                             uint32_t int_id, uint32_t Priority);
-void val_gic_its_clear_lpi_map(uint32_t its_index, uint32_t device_id, uint32_t int_id);
+uint32_t val_gic_its_clear_lpi_map(uint32_t its_index, uint32_t device_id, uint32_t int_id);
 
 uint64_t val_gic_its_get_translater_addr(uint32_t its_index);
 uint32_t val_gic_its_get_max_lpi(void);

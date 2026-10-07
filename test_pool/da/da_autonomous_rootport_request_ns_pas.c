@@ -37,8 +37,10 @@
 #define TEST_DESC "Autonomously initiated by the RP over its host interface "
 #define TEST_RULE "RMJNLW"
 
-static uint32_t irq_pending;
+/* Updated by the ISR while payload polls for delivery. */
+static volatile uint32_t irq_pending;
 static uint32_t lpi_int_id = 0x204c;
+static uint32_t active_int_id;
 
 extern GIC_ITS_INFO    *g_gic_its_info;
 
@@ -49,8 +51,8 @@ intr_handler(void)
   /* Clear the interrupt pending state */
   irq_pending = 0;
 
-  val_print(ACS_PRINT_INFO, " Received MSI interrupt %x       ", lpi_int_id);
-  val_gic_end_of_interrupt(lpi_int_id);
+  val_print(ACS_PRINT_INFO, " Received MSI interrupt %x       ", active_int_id);
+  val_gic_end_of_interrupt(active_int_id);
   return;
 }
 
@@ -82,10 +84,12 @@ payload(void)
   uint32_t stream_id = 0;
   uint32_t its_id = 0;
   uint32_t its_index;
+  ITS_CACHE_STATE its_cache_state;
   uint32_t msi_index = 0;
   uint32_t msi_cap_offset = 0;
   uint32_t use_msix;
-  uint64_t itt_base;
+  uint64_t itt_base, itt_entry_pa, itt_entry_offset;
+  uint32_t itt_size, itt_entry_size;
   uint32_t timeout, rp_aer_offset, value;
 
   pe_index = val_pe_get_index_mpid(val_pe_get_mpid());
@@ -93,7 +97,7 @@ payload(void)
   if (instance == 0)
   {
     val_print(ACS_PRINT_WARN, " No exerciser cards discovered", 0);
-    val_set_status(pe_index, "SKIP", 01);
+    val_set_status(pe_index, "SKIP", 1);
     return;
   }
 
@@ -120,8 +124,7 @@ payload(void)
 
       if (val_pcie_find_capability(erp_bdf, PCIE_ECAP, ECID_AER, &rp_aer_offset) != PCIE_SUCCESS) {
           val_print(ACS_PRINT_ERR, " AER Capability not supported for RP : 0x%x", erp_bdf);
-          val_set_status(pe_index, "FAIL", 02);
-          val_set_status(pe_index, "FAIL", 02);
+          val_set_status(pe_index, "FAIL", 1);
           return;
       }
 
@@ -132,14 +135,14 @@ payload(void)
 
       if (status) {
           val_print(ACS_PRINT_ERR, " iovirt_get_device failed for bdf 0x%x", e_bdf);
-          val_set_status(pe_index, "FAIL", 03);
+          val_set_status(pe_index, "FAIL", 2);
           return;
       }
 
       its_index = val_gic_get_its_index(its_id);
       if (its_index == ACS_INVALID_INDEX) {
           val_print(ACS_PRINT_ERR, " Could not find ITS ID [%x]", its_id);
-          val_set_status(pe_index, "FAIL", 12);
+          val_set_status(pe_index, "FAIL", 3);
           return;
       }
 
@@ -156,34 +159,106 @@ payload(void)
 
       val_pcie_enable_eru(e_bdf);
       val_pcie_enable_eru(erp_bdf);
+      active_int_id = lpi_int_id + instance;
+      val_print(ACS_PRINT_TEST, " Root Port BDF - 0x%x", erp_bdf);
+      val_print(ACS_PRINT_TEST, " LPI INTID - 0x%x", active_int_id);
       test_skip = 0;
       //Enable the Error Reporting bits in the RP's AER ROOT_ERR_CMD register
       val_pcie_read_cfg(erp_bdf, rp_aer_offset + AER_ROOT_ERR_CMD_OFFSET, &value);
       val_pcie_write_cfg(erp_bdf, rp_aer_offset + AER_ROOT_ERR_CMD_OFFSET, (value | 0x7));
 
-      // Program the ITT base as ROOT in GPT
-      itt_base = g_gic_its_info->GicIts[its_index].ITTBase;
-      if (val_add_gpt_entry_el3(itt_base, GPT_ROOT))
-      {
-            val_print(ACS_PRINT_ERR, " DPT Entry adding failed for the Address: 0x%llx", itt_base);
-            val_set_status(pe_index, "FAIL", 04);
-            return;
-      }
-      val_print(ACS_PRINT_INFO, " ITT base is mapped as Root in GPT ", 0);
+      itt_entry_size = ARM_GITS_TYPER_ITTEntrySize(val_mmio_read64(
+          g_gic_its_info->GicIts[its_index].Base + ARM_GITS_TYPER)) + 1;
+      /* EventID indexes the ITT (IHI0069H.b, section 5.2.4). */
+      itt_entry_offset = (uint64_t)(lpi_int_id + instance) * itt_entry_size;
 
-      /* MSI assignment */
-      status = val_gic_request_msi(erp_bdf, device_id, its_id, lpi_int_id + instance, msi_index);
+      /* Protect the selected ITT entry before requesting the Root Port MSI. */
+      status = val_gic_its_alloc_device_itt(its_index, device_id);
       if (status) {
-          val_print(ACS_PRINT_ERR, " MSI Assignment failed for bdf : 0x%x", erp_bdf);
-          val_set_status(pe_index, "FAIL", 05);
+          val_print(ACS_PRINT_ERR, " Could not allocate device ITT", 0);
+          val_set_status(pe_index, "FAIL", 4);
           return;
       }
 
+      itt_base = val_gic_its_get_itt_base(its_index, device_id);
+      itt_size = val_gic_its_get_itt_size(its_index, device_id);
+      if ((itt_base == 0) || (itt_size == 0)) {
+          val_set_status(pe_index, "FAIL", 5);
+          return;
+      }
+      if ((itt_entry_offset >= itt_size) ||
+          (itt_entry_size > itt_size - itt_entry_offset)) {
+          val_print(ACS_PRINT_ERR, " EventID entry exceeds allocated ITT", 0);
+          val_set_status(pe_index, "FAIL", 6);
+          return;
+      }
+      itt_entry_pa = itt_base + itt_entry_offset;
+      if ((itt_entry_pa & (SIZE_4KB - 1)) + itt_entry_size > SIZE_4KB) {
+          val_print(ACS_PRINT_WARN, " ITT entry crosses a 4KB page", 0);
+          val_set_status(pe_index, "SKIP", 2);
+          return;
+      }
       status = val_gic_install_isr(lpi_int_id + instance, intr_handler);
-
       if (status) {
-          val_print(ACS_PRINT_ERR, " Intr handler registration failed: 0x%x", lpi_int_id);
-          val_set_status(pe_index, "FAIL", 06);
+          val_set_status(pe_index, "FAIL", 7);
+          return;
+      }
+
+      /* Complete ITS setup while the ITT is Non-secure, before protecting it. */
+      status = val_gic_its_create_lpi_map(its_index, device_id,
+                                       lpi_int_id + instance, LPI_PRIORITY1);
+      if (status != ACS_STATUS_PASS) {
+          val_set_status(pe_index, "FAIL", 8);
+          return;
+      }
+
+      /* Keep ITS stopped across the PAS change to prevent cache refills. */
+      status = val_gic_its_invalidate_cache_and_suspend(its_index, &its_cache_state);
+      if (status != ACS_STATUS_PASS) {
+          if (status == ACS_STATUS_SKIP) {
+              if (val_gic_free_msi(erp_bdf, device_id, its_id,
+                               lpi_int_id + instance, msi_index) != ACS_STATUS_PASS) {
+                  val_set_status(pe_index, "FAIL", 9);
+                  return;
+              }
+              val_set_status(pe_index, "SKIP", 3);
+          } else {
+              /* ITS may still reference the ITT; retain its allocation on error. */
+              val_set_status(pe_index, "FAIL", 10);
+          }
+          return;
+      }
+
+      if (val_add_gpt_entry_el3(itt_entry_pa, GPT_ROOT))
+      {
+            val_print(ACS_PRINT_ERR, " DPT Entry adding failed for the Address: 0x%llx",
+                      itt_entry_pa);
+            val_set_status(pe_index, "FAIL", 11);
+
+            /* Resume ITS before cleanup submits commands or releases the ITT. */
+            if (val_gic_its_resume_after_pas_change(its_index, &its_cache_state) == ACS_STATUS_PASS)
+              val_gic_free_msi(erp_bdf, device_id, its_id, lpi_int_id + instance, msi_index);
+            return;
+      }
+
+      /* GPT maintenance is complete; resume without recreating the ITS mapping. */
+      if (val_gic_its_resume_after_pas_change(its_index, &its_cache_state) != ACS_STATUS_PASS) {
+          val_set_status(pe_index, "FAIL", 12);
+
+          /* Restore PAS, but retain memory if ITS state could not be restored. */
+          val_add_gpt_entry_el3(itt_entry_pa, GPT_NONSECURE);
+          return;
+      }
+
+      val_print(ACS_PRINT_INFO, " Selected ITT entry is mapped as Root in GPT ", 0);
+
+      status = val_gic_request_msi(erp_bdf, device_id, its_id, lpi_int_id + instance, msi_index);
+      if (status) {
+          val_print(ACS_PRINT_ERR, " MSI Assignment failed for bdf : 0x%x", erp_bdf);
+          val_set_status(pe_index, "FAIL", 13);
+          if (val_add_gpt_entry_el3(itt_entry_pa, GPT_NONSECURE))
+              return;
+          val_gic_free_msi(erp_bdf, device_id, its_id, lpi_int_id + instance, msi_index);
           return;
       }
 
@@ -198,36 +273,64 @@ payload(void)
       if (irq_pending == 0) {
           val_print(ACS_PRINT_ERR,
               " Interrupt triggered PE for bdf : 0x%x, ", e_bdf);
-          val_set_status(pe_index, "FAIL", 7);
-          val_gic_free_msi(e_bdf, device_id, its_id, lpi_int_id + instance, msi_index);
+          val_set_status(pe_index, "FAIL", 14);
+          if (val_add_gpt_entry_el3(itt_entry_pa, GPT_NONSECURE))
+              return;
+          val_gic_free_msi(erp_bdf, device_id, its_id, lpi_int_id + instance, msi_index);
           return;
       }
 
       val_pcie_clear_urd(erp_bdf);
-      val_gic_free_msi(erp_bdf, device_id, its_id, lpi_int_id + instance, msi_index);
-
-      itt_base = g_gic_its_info->GicIts[its_index].ITTBase;
-      if (val_add_gpt_entry_el3(itt_base, GPT_NONSECURE))
+      /* Restore the Root entry before discarding its mapping and ITT. */
+      if (val_add_gpt_entry_el3(itt_entry_pa, GPT_NONSECURE))
       {
-            val_print(ACS_PRINT_ERR, " DPT Entry adding failed for the Address: 0x%llx", itt_base);
-            val_set_status(pe_index, "FAIL", 8);
+            val_print(ACS_PRINT_ERR, " DPT Entry adding failed for the Address: 0x%llx",
+                      itt_entry_pa);
+            val_set_status(pe_index, "FAIL", 15);
             return;
       }
-      val_print(ACS_PRINT_INFO, " ITT base is mapped as Non-Secure in GPT ", 0);
+
+      val_print(ACS_PRINT_INFO, " Selected ITT entry is mapped as Non-Secure in GPT ", 0);
+
+      /* Start the positive phase with a fresh mapping, not a second MAPTI
+       * for an already mapped DeviceID/EventID (IHI0069H.b, section 5.3.12).
+       */
+      /* Stop if teardown timed out; ITS still owns the retained mapping. */
+      if (val_gic_free_msi(erp_bdf, device_id, its_id, lpi_int_id + instance, msi_index)
+          != ACS_STATUS_PASS) {
+          val_set_status(pe_index, "FAIL", 16);
+          return;
+      }
+      status = val_gic_its_alloc_device_itt(its_index, device_id);
+      if (status) {
+          val_set_status(pe_index, "FAIL", 17);
+          return;
+      }
+      itt_base = val_gic_its_get_itt_base(its_index, device_id);
+      if (itt_base == 0) {
+          val_set_status(pe_index, "FAIL", 18);
+          return;
+      }
+      /* Entry size and offset are unchanged for this ITS and EventID. */
+      itt_entry_pa = itt_base + itt_entry_offset;
+      if (val_add_gpt_entry_el3(itt_entry_pa, GPT_NONSECURE)) {
+          val_set_status(pe_index, "FAIL", 19);
+          return;
+      }
+
+      status = val_gic_its_create_lpi_map(its_index, device_id,
+                                       lpi_int_id + instance, LPI_PRIORITY1);
+      if (status != ACS_STATUS_PASS) {
+          val_set_status(pe_index, "FAIL", 20);
+          return;
+      }
 
       /* MSI assignment */
       status = val_gic_request_msi(erp_bdf, device_id, its_id, lpi_int_id + instance, msi_index);
       if (status) {
           val_print(ACS_PRINT_ERR, " MSI Assignment failed for bdf : 0x%x", erp_bdf);
-          val_set_status(pe_index, "FAIL", 9);
-          return;
-      }
-
-      status = val_gic_install_isr(lpi_int_id + instance, intr_handler);
-
-      if (status) {
-          val_print(ACS_PRINT_ERR, " Intr handler registration failed: 0x%x", lpi_int_id);
-          val_set_status(pe_index, "FAIL", 10);
+          val_set_status(pe_index, "FAIL", 21);
+          val_gic_free_msi(erp_bdf, device_id, its_id, lpi_int_id + instance, msi_index);
           return;
       }
 
@@ -239,10 +342,10 @@ payload(void)
           {};
 
       if (timeout == 0) {
-          val_print(ACS_PRINT_ERR, " Interrupt trigger failed for : 0x%x, ", lpi_int_id);
+          val_print(ACS_PRINT_ERR, " Interrupt trigger failed for : 0x%x, ", active_int_id);
           val_print(ACS_PRINT_ERR, " BDF : 0x%x   ", e_bdf);
-          val_set_status(pe_index, "FAIL", 11);
-          val_gic_free_msi(e_bdf, device_id, its_id, lpi_int_id + instance, msi_index);
+          val_set_status(pe_index, "FAIL", 22);
+          val_gic_free_msi(erp_bdf, device_id, its_id, lpi_int_id + instance, msi_index);
           return;
       }
 
@@ -251,7 +354,12 @@ payload(void)
        * Rootport's Device Status Register to clear any pending urd status.
        */
       val_pcie_clear_urd(erp_bdf);
-      val_gic_free_msi(erp_bdf, device_id, its_id, lpi_int_id + instance, msi_index);
+      /* Stop if teardown timed out; ITS still owns the retained mapping. */
+      if (val_gic_free_msi(erp_bdf, device_id, its_id, lpi_int_id + instance, msi_index)
+          != ACS_STATUS_PASS) {
+          val_set_status(pe_index, "FAIL", 23);
+          return;
+      }
 
 
       /* Disable error reporting of Exerciser and upstream Root Port */
@@ -260,8 +368,9 @@ payload(void)
 
     }
 
+  /* No exerciser had a usable Root Port and MSI address configuration. */
   if (test_skip == 1)
-      val_set_status(pe_index, "SKIP", 01);
+      val_set_status(pe_index, "SKIP", 4);
   else
       val_set_status(pe_index, "PASS", 01);
 
