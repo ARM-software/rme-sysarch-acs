@@ -357,3 +357,16 @@ pal_gic_free_irq (
 {
 
 }
+
+/**
+ * Platform fallback for ITS translation-cache invalidation when GITS_TYPER.INV=0.
+ * Called with ITS disabled and quiescent, while the ITT is still Non-secure.
+ * Implementations must preserve mapping data, complete invalidation before
+ * returning success, and leave ITS disabled until VAL resumes it.
+ */
+UINT32
+pal_gic_its_invalidate_cache(UINT64 its_base)
+{
+  (void)its_base;
+  return NOT_IMPLEMENTED;
+}

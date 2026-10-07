@@ -450,19 +450,19 @@ fill_msi_capability(uint32_t bdf, uint32_t cap_offset, uint64_t msi_addr, uint32
 
   @return  status
 **/
-void val_gic_free_msi(uint32_t bdf, uint32_t device_id, uint32_t its_id,
+uint32_t val_gic_free_msi(uint32_t bdf, uint32_t device_id, uint32_t its_id,
                       uint32_t int_id, uint32_t msi_index)
 {
   uint32_t its_index, cap_offset, control;
 
   if (g_gic_its_info == NULL)
-    return;
+    return ACS_STATUS_ERR;
 
   its_index = val_gic_get_its_index(its_id);
   if (its_index >= g_gic_its_info->GicNumIts)
   {
     val_print(ACS_PRINT_ERR, " Could not find ITS ID [%x]", its_id);
-    return;
+    return ACS_STATUS_ERR;
   }
 
   if ((g_gic_its_info->GicRdBase == 0) || (g_gic_its_info->GicDBase == 0))
@@ -479,14 +479,17 @@ void val_gic_free_msi(uint32_t bdf, uint32_t device_id, uint32_t its_id,
     val_pcie_write_cfg(bdf, cap_offset, control & ~MSI_ENABLE_MASK);
   }
 
-  val_gic_its_clear_lpi_map(its_index, device_id, int_id);
+  /* Return teardown failure so callers cannot report a clean pass. */
+  return val_gic_its_clear_lpi_map(its_index, device_id, int_id);
 }
 
 /**
-  @brief   Create the ITS mapping and program MSI-X, or single-message MSI if absent.
+  @brief   Program PCIe MSI-X, or single-message MSI if absent.
+
+  The caller must create the ITS mapping first and owns its cleanup.
 
   @param   bdf          B:D:F for the device
-  @param   device_id    Device ID
+  @param   device_id    Device ID (retained for API compatibility)
   @param   its_id       ITS ID
   @param   int_id       Interrupt ID
   @param   msi_index    MSI-X table index, or zero for single-message MSI
@@ -518,7 +521,7 @@ uint32_t val_gic_request_msi(uint32_t bdf, uint32_t device_id, uint32_t its_id,
   }
 
   msi_addr = val_gic_its_get_translater_addr(its_index);
-  /* MAPI maps EventID == int_id in the existing ITS helper. */
+  /* The ITS helper maps EventID == int_id. */
   msi_data = int_id;
   use_msix = (val_pcie_find_capability(bdf, PCIE_CAP, CID_MSIX, &cap_offset) == PCIE_SUCCESS);
   if (!use_msix)
@@ -540,11 +543,8 @@ uint32_t val_gic_request_msi(uint32_t bdf, uint32_t device_id, uint32_t its_id,
     }
   }
 
-  status = val_gic_its_create_lpi_map(its_index, device_id, int_id, LPI_PRIORITY1);
-  if (status != ACS_STATUS_PASS) {
-    val_print(ACS_PRINT_ERR, " ITS : Failed to create LPI mapping for DeviceID 0x%x", device_id);
-    return status;
-  }
+  (void)device_id;
+  status = ACS_STATUS_PASS;
 
   if (use_msix)
   {
@@ -558,9 +558,6 @@ uint32_t val_gic_request_msi(uint32_t bdf, uint32_t device_id, uint32_t its_id,
   }
   else
     fill_msi_capability(bdf, cap_offset, msi_addr, msi_data);
-
-  if (status != ACS_STATUS_PASS)
-    val_gic_its_clear_lpi_map(its_index, device_id, int_id);
 
   return status;
 }
