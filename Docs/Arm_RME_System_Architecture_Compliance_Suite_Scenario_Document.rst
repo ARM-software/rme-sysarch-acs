@@ -480,7 +480,7 @@ Testcase checklist
 
     -
 
-      RNULL: GIC ITS memory accesses are only to non-secure memory.
+      RMZJXC: Every requester in the system is subjected to the PAS protection check.
 
     -
 
