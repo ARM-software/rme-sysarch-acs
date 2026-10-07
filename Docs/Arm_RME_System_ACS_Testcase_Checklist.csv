@@ -5,7 +5,7 @@ Sl No,Rule ID,Rule Description,Coverage,Notes,Exerciser PAL APIs Used
 4,RYXFMV,Requesters outside MMU/SMMU translation are SSD-tagged with an Access PAS.,Not covered,Requires DAP/debug-access support to generate and tag non-MMU/SMMU requests.,
 5,RSCDLL,"Once assigned, the value of an Access PAS cannot be altered.",Not covered,Access PAS tag mutation is internal behavior and not directly observable by ACS.,
 6,RYKVJK,A PAS filter enforces the PAS protection check by permitting access to a Resource only if the Access PAS matches a Resource PAS associated with that Resource.,rme_pas_filter_functionality,,
-7,RMZJXC,Every requester in the system is subjected to the PAS protection check.,rme_pcie_devices_support_gpc,PCIe exerciser VIP required,"pal_exerciser_set_param (CFG_TXN_ATTRIBUTES, DMA_ATTRIBUTES); pal_exerciser_ops (START_DMA)"
+7,RMZJXC,Every requester in the system is subjected to the PAS protection check.,"rme_pcie_devices_support_gpc, gic_its_subjected_to_gpc_check",PCIe exerciser VIP required,"pal_exerciser_set_param (CFG_TXN_ATTRIBUTES, DMA_ATTRIBUTES); pal_exerciser_ops (START_DMA); pal_exerciser_ops (GENERATE_MSI)"
 8,RWRGTF,Access to the Root PAS is only permitted for Trusted requesters.,Not covered,Trusted requester access policy is not generically observable by ACS.,
 9,RKGDVK,GPT-based PAS assignment requires a single PA per PAS and page-granular resources.,"rme_resources_aligned_to_granularity, rme_resources_are_not_physically_aliased",,
 10,RWJNMD,On-chip Resource GPC relies only on GPT storage with equivalent integrity and replay protection.,Not covered,"GPT storage location, integrity, and replay protection are implementation details.",
@@ -221,5 +221,4 @@ Sl No,Rule ID,Rule Description,Coverage,Notes,Exerciser PAL APIs Used
 220,RFMHST,SET_INTERFACE_RESP returns the response header for SET_INTERFACE completion.,tdisp_rfmhst_set_interface_resp_format,,
 221,RGRPDP,GET_DEV_PROP_REQ queries Arm TDISP VDM device properties.,tdisp_rgrpdp_get_dev_prop_req,,
 222,RGHDCB,GET_DEV_PROP_RESP returns Arm TDISP VDM device properties and register details.,tdisp_rghdcb_get_dev_prop_resp_format,,
-223,RNULL,,gic_its_subjected_to_gpc_check,PCIe exerciser VIP required,pal_exerciser_ops (GENERATE_MSI)
-224,RNULL,,cxl_rplcmc_type3_target_ckid,CXL Type-3 endpoint required,
+223,RNULL,,cxl_rplcmc_type3_target_ckid,CXL Type-3 endpoint required,
