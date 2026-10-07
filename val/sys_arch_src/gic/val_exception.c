@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022, 2025, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022, 2025-2026, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,6 +20,7 @@
 #include "include/val.h"
 #include "include/val_common.h"
 #include "include/val_pe.h"
+#include "include/val_gic_support.h"
 
 typedef void (*rme_fp) (uint64_t, void *);
 rme_fp g_esr_handler[4];
@@ -65,6 +66,17 @@ void val_gic_vector_table_init(void)
 
 uint32_t val_gic_rme_install_isr(uint32_t interrupt_id, void (*isr)(void))
 {
+  if (interrupt_id >= NUM_ARM_MAX_INTERRUPT)
+      return ACS_STATUS_ERR;
+
+  /* ITS mapping APIs manage LPI properties. Do not access SGI/PPI/SPI
+   * enable registers when installing a handler for an LPI.
+   */
+  if (interrupt_id >= LPI_MIN_ID) {
+      g_intr_handler[interrupt_id] = (irq_handler) isr;
+      return ACS_STATUS_PASS;
+  }
+
   /* Step 1: Disable Interrupt before registering Handler */
   val_gic_disableInterruptSource(interrupt_id);
 
