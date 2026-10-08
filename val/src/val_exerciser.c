@@ -41,17 +41,15 @@ void val_exerciser_create_info_table(void)
   pcie_device_bdf_table *bdf_table;
   CXL_COMPONENT_TABLE *cxl_table;
 
-  bdf_table = val_pcie_bdf_table_ptr();
-  /* if no bdf table ptr return error */
-  if (bdf_table->num_entries == 0)
-  {
-      val_print(ACS_PRINT_DEBUG, " No BDFs discovered            ", 0);
-      return;
-  }
-
   g_exerciser_info_table.num_exerciser = 0;
   g_cxl_exerciser_info_table.num_exerciser = 0;
-  num_bdf = bdf_table->num_entries;
+
+  bdf_table = val_pcie_bdf_table_ptr();
+  num_bdf = (bdf_table != NULL) ? bdf_table->num_entries : 0;
+  /* CXL discovery must also run when the ordinary PCIe table is empty. */
+  if (num_bdf == 0)
+      val_print(ACS_PRINT_DEBUG, " No BDFs discovered            ", 0);
+
   while (num_bdf-- != 0)
   {
 
@@ -59,9 +57,9 @@ void val_exerciser_create_info_table(void)
       /* Probe pcie device Function with this bdf */
       if (val_pcie_read_cfg(Bdf, TYPE01_VIDR, &reg_value) == PCIE_NO_MAPPING)
       {
-          /* Return if there is a bdf mapping issue */
+          /* Skip this BDF so other PCIe and CXL devices can still be discovered. */
           val_print(ACS_PRINT_ERR, " BDF 0x%x mapping issue", Bdf);
-          return;
+          continue;
       }
 
       /* Store the Function's BDF if there was a valid response */
