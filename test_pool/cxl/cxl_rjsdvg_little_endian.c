@@ -172,18 +172,15 @@ payload(void)
 {
   uint32_t pe_index = val_pe_get_index_mpid(val_pe_get_mpid());
   pcie_device_bdf_table *bdf_tbl = val_pcie_bdf_table_ptr();
+  uint32_t num_bdf = (bdf_tbl != NULL) ? bdf_tbl->num_entries : 0;
   uint32_t failures = 0;
   uint32_t test_skip = 1;
 
-  if ((bdf_tbl == NULL) || (bdf_tbl->num_entries == 0))
-  {
-    val_print(ACS_PRINT_DEBUG, " PCIe device table absent - skipping RJSDVG", 0);
-    val_set_status(pe_index, "SKIP", 01);
-    return;
-  }
+  if (num_bdf == 0)
+    val_print(ACS_PRINT_DEBUG, " No PCIe BDF entries discovered", 0);
 
   /* Scan the PCIe BDF table for RME-DA DVSECs exposed on non-coherent root ports. */
-  for (uint32_t tbl_index = 0; tbl_index < bdf_tbl->num_entries; ++tbl_index)
+  for (uint32_t tbl_index = 0; tbl_index < num_bdf; ++tbl_index)
   {
     uint32_t bdf = bdf_tbl->device[tbl_index].bdf;
     uint32_t port_type = val_pcie_device_port_type(bdf);

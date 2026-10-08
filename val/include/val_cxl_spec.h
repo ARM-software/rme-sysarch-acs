@@ -45,13 +45,16 @@
 
 /* Per-entry fields (offsets from start of an entry)
    DW0 layout (little endian):
-     [7:0]   BAR Indicator (BAR number in [2:0]; upper bits reserved)
+     [2:0]   BAR Indicator
+     [7:3]   Reserved
      [15:8]  Block Identifier (8-bit)
-     [31:16] Reserved
-   DW1: 32-bit Register Offset (relative to BAR base)
+     [31:16] Register Offset bits [31:16]
+   DW1: Register Offset bits [63:32] (relative to BAR base)
+   Register Offset bits [15:0] are zero (64 KiB alignment).
 */
 #define CXL_RL_ENTRY_DW0_OFF            0x00
-#define CXL_RL_ENTRY_REG_OFF            0x04    /* 32b offset */
+#define CXL_RL_ENTRY_DW1_OFF            0x04
+#define CXL_RL_ENTRY_OFFSET_LOW_MASK    0xFFFF0000u
 
 /* Block IDs commonly seen (8-bit identifiers per RL DW0[15:8]) */
 #define CXL_REG_BLOCK_COMPONENT         0x01    /* CXL Component Registers */
@@ -151,7 +154,7 @@
 
 /* ---- CXL Register Locator entry fields (DW0) ---- */
 #define CXL_RL_ENTRY_BIR_SHIFT         0
-#define CXL_RL_ENTRY_BIR_MASK          0xFF
+#define CXL_RL_ENTRY_BIR_MASK          0x7
 #define CXL_RL_ENTRY_BLOCKID_SHIFT     8
 #define CXL_RL_ENTRY_BLOCKID_MASK      0xFF
 

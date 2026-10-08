@@ -216,7 +216,7 @@ uint32_t val_pcie_register_bitfields_check(uint64_t *bf_info_table,
                                            uint32_t table_size,
                                            VAL_DVSEC_SELECT dvsec_select);
 uint32_t val_pcie_function_header_type(uint32_t bdf);
-void val_pcie_get_mmio_bar(uint32_t bdf, void *base);
+void val_pcie_get_mmio_bar(uint32_t bdf, uint64_t *base);
 uint32_t val_pcie_get_downstream_function(uint32_t bdf, uint32_t *dsf_bdf);
 uint32_t val_pcie_get_rootport(uint32_t bdf, uint32_t *rp_bdf);
 uint32_t val_pcie_get_link_exposure(uint32_t bdf, uint32_t *exposed);

@@ -39,7 +39,7 @@ payload(void)
   pcie_device_bdf_table *bdf_tbl_ptr;
   static uint32_t tbl_index;
   uint32_t bdf, dsf_bdf;
-  uint32_t bar_base;
+  uint64_t bar_base;
   uint32_t pgt_attr_el3;
   uint32_t data;
   uint64_t va;
