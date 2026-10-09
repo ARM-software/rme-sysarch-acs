@@ -122,13 +122,14 @@ payload(void)
           shared_data->shared_data_access[0].data = TEST_DATA;
           shared_data->shared_data_access[1].addr = va;
           shared_data->shared_data_access[1].access_type = READ_DATA;
+          shared_data->shared_data_access[1].data = 0;
           if (val_pe_access_mut_el3())
           {
               val_print(ACS_PRINT_ERR, " Failed to access Bar address: 0x%lx", bar_base);
               test_fail++;
               continue;
           }
-          data = shared_data->shared_data_access[0].data;
+          data = shared_data->shared_data_access[1].data;
 
           /* The Request should be allowed by the RP */
           if (data != TEST_DATA)
