@@ -819,9 +819,9 @@ UINT32 pal_is_legacy_tz_enabled(void)
 {
   return (UINT32)RmeCfgGetU64(L"IS_LEGACY_TZ_ENABLED", IS_LEGACY_TZ_ENABLED_CT);
 }
-UINT32 pal_is_ns_encryption_programmable(void)
+UINT32 pal_is_ns_encryption_enabled_and_programmable(void)
 {
-  return (UINT32)RmeCfgGetU64(L"IS_NS_ENCRYPTION_PROGRAMMABLE", IS_NS_ENCRYPTION_PROGRAMMABLE_CT);
+  return (UINT32)RmeCfgGetU64(L"NS_ENCRYPTION_ENABLED_AND_PROGRAMMABLE", NS_ENCRYPTION_ENABLED_AND_PROGRAMMABLE_CT);
 }
 UINT32 pal_is_pas_filter_mode_programmable(void)
 {
