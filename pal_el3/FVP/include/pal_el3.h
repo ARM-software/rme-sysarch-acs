@@ -22,8 +22,7 @@
 #include <stdbool.h>
 #include <pal_el3_pcie_ide.h>
 
-void pal_el3_enable_ns_encryption(void);
-void pal_el3_disable_ns_encryption(void);
+uint32_t pal_el3_disable_ns_encryption(void);
 void pal_el3_prog_legacy_tz(int enable);
 void pal_el3_pas_filter_active_mode(int enable);
 

@@ -885,7 +885,7 @@ void pal_mem_region_create_info_table(MEM_REGN_INFO_TABLE *gpc_table,
                                       MEM_REGN_INFO_TABLE *pas_table);
 
 uint32_t pal_is_legacy_tz_enabled(void);
-uint32_t pal_is_ns_encryption_programmable(void);
+uint32_t pal_is_ns_encryption_enabled_and_programmable(void);
 uint32_t pal_is_pas_filter_mode_programmable(void);
 uint32_t pal_is_coherent_da_supported(void);
 #endif /* __PAL_INTERFACE_H__ */

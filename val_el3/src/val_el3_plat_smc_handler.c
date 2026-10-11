@@ -147,11 +147,30 @@ void plat_arm_acs_smc_handler(uint64_t services, uint64_t arg0, uint64_t arg1, u
       val_el3_memory_set((uint64_t *)arg0, arg1, arg2);
       break;
     case RME_NS_ENCRYPTION:
-      INFO("RME Non-secure Encryption Enable/Disable service\n");
-      if (arg0 == SET)
-        val_el3_enable_ns_encryption();
-      else
-        val_el3_disable_ns_encryption();
+      INFO("RME Non-secure encryption disable attempt service\n");
+      if (arg0 == CLEAR) {
+        shared_data->status_code = val_el3_disable_ns_encryption();
+        if (shared_data->status_code != 0) {
+          const char *msg = "EL3: NS encryption disable attempt unsupported or failed";
+          size_t i = 0;
+
+          while (msg[i] && i < sizeof(shared_data->error_msg) - 1) {
+              shared_data->error_msg[i] = msg[i];
+              i++;
+          }
+          shared_data->error_msg[i] = '\0';
+        }
+      } else {
+        shared_data->status_code = 1;
+        const char *msg = "EL3: NS encryption only supports a disable attempt";
+        size_t i = 0;
+
+        while (msg[i] && i < sizeof(shared_data->error_msg) - 1) {
+            shared_data->error_msg[i] = msg[i];
+            i++;
+        }
+        shared_data->error_msg[i] = '\0';
+      }
       break;
     case RME_READ_AND_CMPR_REG_MSD:
       INFO("RME Registers Read and Compare service\n");
@@ -228,6 +247,7 @@ void plat_arm_acs_smc_handler(uint64_t services, uint64_t arg0, uint64_t arg1, u
         shared_data->status_code = 0xFFFFFFFF;
         const char *msg = "EL3: Unknown SMC service";
         int i = 0;
+
         while (msg[i] && i < sizeof(shared_data->error_msg) - 1) {
               shared_data->error_msg[i] = msg[i]; i++;
         }

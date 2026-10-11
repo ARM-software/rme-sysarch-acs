@@ -646,6 +646,27 @@ requirements are met.
     - Validation Abstraction Layer
 
 
+NS encryption immutability test configuration
+--------------------------------------------
+
+Set ``NS_ENCRYPTION_ENABLED_AND_PROGRAMMABLE`` to 1 only when NS encryption
+was enabled during boot, before ACS was loaded into the affected memory, and
+``pal_el3_disable_ns_encryption()`` implements the platform control through
+which ACS can attempt to disable encryption. The boot-established decision
+must remain unchanged when this control is used. The PAL must return 0 only
+when a real disable attempt was performed, including a write rejected by the
+boot lock. Return a nonzero status if the attempt is unsupported or cannot be
+performed. Default PAL hooks return failure to prevent an empty hook from
+passing the test. Otherwise, leave the flag at
+0 to skip ``rme_ns_encryption_is_immutable``.
+
+This flag replaces ``IS_NS_ENCRYPTION_PROGRAMMABLE``; the old flag alone does
+not establish that NS encryption was enabled at boot. The test does not enable
+NS encryption at runtime. It validates the enabled-at-boot case by comparing
+NS scratch-page data before and after a disable attempt; it does not directly
+read back the encryption control state.
+
+
 License
 =======
 

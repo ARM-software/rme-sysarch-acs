@@ -18,19 +18,12 @@
 #include <val_el3_security.h>
 
 /**
- * @brief Enable Non-secure encryption at EL3 via PAL.
+ * @brief Attempt to disable Non-secure encryption at EL3 via PAL.
+ * @return 0 if the attempt completed, nonzero if unsupported or failed.
  */
-void val_el3_enable_ns_encryption(void)
+uint32_t val_el3_disable_ns_encryption(void)
 {
-  pal_el3_enable_ns_encryption();
-}
-
-/**
- * @brief Disable Non-secure encryption at EL3 via PAL.
- */
-void val_el3_disable_ns_encryption(void)
-{
-  pal_el3_disable_ns_encryption();
+  return pal_el3_disable_ns_encryption();
 }
 
 /**

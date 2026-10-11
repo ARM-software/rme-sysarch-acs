@@ -33,27 +33,19 @@
 #define CXL_RP_IDE_KM_STATE_ACTIVE         (1u << 1)
 
 /**
- * @brief Enable Non-secure encryption in platform-specific manner.
+ * @brief Attempt to disable Non-secure encryption in a platform-specific manner.
  *
- * Partner must implement IMPLEMNTATION_DEFINED mechanism to enable NS encryption.
+ * Partner must attempt the platform control write; the boot decision must remain
+ * unchanged. An empty hook does not establish immutability.
+ *
+ * @return 0 if a disable attempt was performed, nonzero if unsupported or failed.
+ *         A write rejected by the boot lock is a completed attempt, not failure.
  */
-void pal_el3_enable_ns_encryption(void)
+uint32_t pal_el3_disable_ns_encryption(void)
 {
   //Partner shall implement their own IMPLEMNTATION_DEFINED
-  //register for enabling and disabling the NS_Encryption
-  return;
-}
-
-/**
- * @brief Disable Non-secure encryption in platform-specific manner.
- *
- * Partner must implement IMPLEMNTATION_DEFINED mechanism to disable NS encryption.
- */
-void pal_el3_disable_ns_encryption(void)
-{
-  //Partner shall implement their own IMPLEMNTATION_DEFINED
-  //register for enabling and disabling the NS_Encryption
-  return;
+  //register for attempting to disable NS encryption
+  return 1;
 }
 
 /**

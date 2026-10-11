@@ -121,13 +121,13 @@ void
 }
 
 /**
- * @brief Check if non-secure memory encryption is programmable on this platform.
+ * @brief Check if NS encryption was enabled at boot and a disable control is available.
  *
- * @return 1 if programmable, 0 otherwise.
+ * @return 1 if both conditions are met, 0 otherwise.
  */
-uint32_t val_is_ns_encryption_programmable(void)
+uint32_t val_is_ns_encryption_enabled_and_programmable(void)
 {
-    return pal_is_ns_encryption_programmable();
+    return pal_is_ns_encryption_enabled_and_programmable();
 }
 
 /**

@@ -30,27 +30,23 @@
 #define TEST_RULE  "RVSMPS"
 
 /*
- * @brief  The test validates that the NS_Encryption is immutabe once set
- * 1. Map VA to PA as Nonsecure access PAS in MMU.
- * 2. Store the data, wt_ns_data in PA.
- * 3. Issue CMO to PoPA for PA.
- * 4. Enable NS_Encryption and issue CMO to PoPA for PA again.
- * 5. Now read the data, 'rd_data_encrpt_enbl' from PA and observe it is different
- *    from wt_ns_data.
- * 6. Disable NS_Encryption and issue CMO to PoPA for PA again.
- * 7. Now read the data, 'rd_data_encrpt_disbl'.
- * 8. Set the test result to FAIL if both the data are different otherwise PASS.
+ * @brief Validate that NS encryption enabled at boot cannot be disabled.
+ * 1. Skip unless NS encryption was enabled at boot and a disable control exists.
+ * 2. Map a scratch page as Non-secure at EL3 and write known data.
+ * 3. Issue CMO to PoPA and verify the original data can be read.
+ * 4. Attempt to disable NS encryption and issue CMO to PoPA again.
+ * 5. Read the page and fail if the data differs from the original value.
  */
 static
 void payload(void)
 {
 
   uint32_t index = val_pe_get_index_mpid(val_pe_get_mpid()), attr;
-  uint64_t PA, VA_NS, size, wt_ns_data, rd_data_encrpt_enbl, rd_data_encrpt_disbl;
+  uint64_t PA, VA_NS, size, wt_ns_data, rd_data_before_disable, rd_data_after_disable;
 
-  if (!val_is_ns_encryption_programmable()) {
-    val_print(ACS_PRINT_ERR, "  The test is Skipped as the NS_Enrypition is \
-                    not programmable in this model", 0);
+  if (!val_is_ns_encryption_enabled_and_programmable()) {
+    val_print(ACS_PRINT_ERR,
+              " NS encryption must be enabled at boot with a disable control available", 0);
     val_set_status(index, "SKIP", 01);
     return;
   }
@@ -92,23 +88,8 @@ void payload(void)
     return;
   }
 
-  //Enable NS Encryption
-  val_print(ACS_PRINT_TEST, " Enabling NS_Encryption and issuing CMO to PoPA for PA", 0);
-  if (val_enable_ns_encryption()) {
-    val_print(ACS_PRINT_ERR, " Failed to enable NS_Encryption", 0);
-    val_set_status(index, "FAIL", 04);
-    return;
-  }
-
-  //CMO to PoPA for PA
-  if (val_data_cache_ops_by_pa_el3(PA, NONSECURE_PAS)) {
-    val_print(ACS_PRINT_ERR, " Failed to issue CMO for PA = 0x%llx", PA);
-    val_set_status(index, "FAIL", 05);
-    return;
-  }
-
   //Read VA_NS
-  val_print(ACS_PRINT_TEST, " Reading PA_NS after enabling NS_Encryption", 0);
+  val_print(ACS_PRINT_TEST, " Reading PA_NS before attempting to disable NS encryption", 0);
   shared_data->num_access = 1;
   shared_data->shared_data_access[0].addr = VA_NS;
   shared_data->shared_data_access[0].access_type = READ_DATA;
@@ -119,12 +100,18 @@ void payload(void)
     val_set_status(index, "FAIL", 06);
     return;
   }
-  rd_data_encrpt_enbl = shared_data->shared_data_access[0].data;
+  rd_data_before_disable = shared_data->shared_data_access[0].data;
+  if (rd_data_before_disable != wt_ns_data) {
+    val_print(ACS_PRINT_ERR, " NS data does not match before the disable attempt", 0);
+    val_set_status(index, "FAIL", 10);
+    return;
+  }
 
-  //Disable NS Enryption
-  val_print(ACS_PRINT_TEST, " Disabling NS_Encryption and issuing CMO to PoPA for PA", 0);
+  //Attempt to disable NS encryption; the boot decision must remain unchanged
+  val_print(ACS_PRINT_TEST,
+            " Attempting to disable NS encryption and issuing CMO to PoPA for PA", 0);
   if (val_disable_ns_encryption()) {
-    val_print(ACS_PRINT_ERR, " Failed to disable NS_Encryption", 0);
+    val_print(ACS_PRINT_ERR, " NS encryption disable attempt unsupported or failed", 0);
     val_set_status(index, "FAIL", 07);
     return;
   }
@@ -148,24 +135,15 @@ void payload(void)
     val_set_status(index, "FAIL", 9);
     return;
   }
-  rd_data_encrpt_disbl = shared_data->shared_data_access[0].data;
+  rd_data_after_disable = shared_data->shared_data_access[0].data;
 
-  //If data read after enabling NSEncryption is expected to be
-  //same as the one read after disbling it.
   val_print(ACS_PRINT_DEBUG, " The data written on VA_NS = 0x%lx", wt_ns_data);
   val_print(ACS_PRINT_DEBUG,
-                  "  The data read after enabling NS_Encryption = 0x%lx", rd_data_encrpt_enbl);
+            " The data read before the disable attempt = 0x%lx", rd_data_before_disable);
   val_print(ACS_PRINT_DEBUG,
-                  "  The data read after disabling NS_Encryption = 0x%lx", rd_data_encrpt_disbl);
-  val_print(ACS_PRINT_DEBUG, " The test expectes both the read data to be the same", 0);
-  if (wt_ns_data == rd_data_encrpt_enbl) {
-    val_print(ACS_PRINT_ERR, " The Encryption is not enabled", 0);
-    val_set_status(index, "FAIL", 10);
-  }
-
-  if (rd_data_encrpt_enbl != rd_data_encrpt_disbl) {
-    val_print(ACS_PRINT_ERR, " Both the data read after enabling and \
-                    disabling NS_Encryption are different", 0);
+            " The data read after the disable attempt = 0x%lx", rd_data_after_disable);
+  if (rd_data_after_disable != wt_ns_data) {
+    val_print(ACS_PRINT_ERR, " NS data changed after attempting to disable encryption", 0);
     val_set_status(index, "FAIL", 11);
   }
   else
