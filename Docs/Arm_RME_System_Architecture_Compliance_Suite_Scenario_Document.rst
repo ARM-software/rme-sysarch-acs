@@ -335,17 +335,17 @@ Testcase checklist
 
     -
 
-      1. NSencryption(enable=1).
-      2. Once enabled then we cannot disable by calling NSencryption(enable=0).
-      3. Store data1 in PA1_NS.
-      4. Read PA1_NS will return data1.
-      5. CMO to PoPA for PA1.
-      6. Enable NS encryption.
-      7. CMO to PoPA for PA1.
-      8. Read of PA1_NS will return data2 which is not same as data1.
-      9. Disable NS encryption.
-      10. CMO to PoPA.
-      11. Read of PA1 still returns data2.
+      1. Enable NS encryption during boot, before loading ACS into NS memory.
+      2. Skip unless NS_ENCRYPTION_ENABLED_AND_PROGRAMMABLE is set. This flag
+         indicates NS encryption was enabled at boot and a platform control is
+         available to attempt disabling it; runtime changes must remain blocked.
+      3. Map a scratch page PA1_NS as Non-secure at EL3 and store data1.
+      4. CMO to PoPA for PA1_NS.
+      5. Read PA1_NS and verify it returns data1; fail otherwise.
+      6. Attempt to disable NS encryption through EL3.
+      7. CMO to PoPA for PA1_NS.
+      8. Read PA1_NS and verify it still returns data1; fail otherwise.
+
 
   * -
 

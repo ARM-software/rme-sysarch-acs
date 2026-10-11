@@ -241,7 +241,7 @@ Arm RME ACS test suite may run at higher privilege level. An attacker may utiliz
 Below tests are not qualified in model. These are expected to pass in any valid RME system.
   - test_pool/legacy_system/*.c - Require Legacy TZ support.
   - test_pool/rme/pas_filter_check_in_inactive_mode.c - Model Issue.
-  - test_pool/rme/rme_ns_encryption_is_immutable.c - Require NS encryption to be programmable.
+  - test_pool/rme/rme_ns_encryption_is_immutable.c - Requires NS encryption enabled at boot and a platform disable control.
   - test_pool/rme/rme_data_encryption_with_different_tweak.c - Model limitation.
   - test_pool/da/da_rootport_write_protect_full_protect_property.c - ImpDef RP write-protect and full-protect registers not present in Model.
   - test_pool/da/da_interconnect_regs_rmsd_protected.c - ImpDef interconnect registers not present in Model.

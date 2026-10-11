@@ -121,9 +121,9 @@ pal_is_legacy_tz_enabled(void)
 }
 
 uint32_t
-pal_is_ns_encryption_programmable(void)
+pal_is_ns_encryption_enabled_and_programmable(void)
 {
-    return IS_NS_ENCRYPTION_PROGRAMMABLE;
+    return NS_ENCRYPTION_ENABLED_AND_PROGRAMMABLE;
 }
 
 uint32_t
