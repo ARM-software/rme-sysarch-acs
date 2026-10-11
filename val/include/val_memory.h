@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022-2023, 2025, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2023, 2025-2026, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -58,7 +58,7 @@ extern uint64_t val_sctlr_read(uint64_t el_num);
 extern uint64_t val_ttbr0_read(uint64_t el_num);
 extern uint64_t val_read_current_el(void);
 
-uint32_t val_is_ns_encryption_programmable(void);
+uint32_t val_is_ns_encryption_enabled_and_programmable(void);
 uint32_t val_is_pas_filter_mode_programmable(void);
 
 #endif // __RME_ACS_MEMORY_H__
