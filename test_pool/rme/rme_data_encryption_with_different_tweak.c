@@ -46,9 +46,14 @@ void payload(void)
   size = val_get_min_tg();
   PA = val_get_free_pa(size, size);
   VA_S = val_get_free_va(size);
-  VA_S_NXT_BLK = val_get_free_va(size);
   VA_NS = val_get_free_va(size);
-  VA_NS_NXT_BLK = val_get_free_va(size);
+  /*
+   * Both 128-bit blocks are in the same translation page. Preserve
+   * the 16-byte offset in the VA; a separate page mapping would mask PA + 16
+   * back to the PA page base and alias the two blocks.
+   */
+  VA_S_NXT_BLK = VA_S + 16;
+  VA_NS_NXT_BLK = VA_NS + 16;
   attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(NON_SHAREABLE) | PGT_ENTRY_AP_RW);
 
   PA_NXT_BLK = PA + 16;
@@ -64,26 +69,10 @@ void payload(void)
       val_set_status(index, "FAIL", 02);
       return;
   }
-  if (val_add_mmu_entry_el3(VA_S_NXT_BLK, PA_NXT_BLK,
-                           (attr | LOWER_ATTRS(PAS_ATTR(SECURE_PAS)))))
-  {
-      val_print(ACS_PRINT_ERR,
-        "\n  Failed to add MMU entry for VA_S_NXT_BLK 0x%llx", VA_S_NXT_BLK);
-      val_set_status(index, "FAIL", 03);
-      return;
-  }
   if (val_add_mmu_entry_el3(VA_NS, PA, (attr | LOWER_ATTRS(PAS_ATTR(NONSECURE_PAS)))))
   {
       val_print(ACS_PRINT_ERR, "\n  Failed to add MMU entry for VA_NS 0x%llx", VA_NS);
       val_set_status(index, "FAIL", 04);
-      return;
-  }
-  if (val_add_mmu_entry_el3(VA_NS_NXT_BLK, PA_NXT_BLK,
-                            (attr | LOWER_ATTRS(PAS_ATTR(NONSECURE_PAS)))))
-  {
-      val_print(ACS_PRINT_ERR,
-        "\n  Failed to add MMU entry for VA_NS_NXT_BLK 0x%llx", VA_NS_NXT_BLK);
-      val_set_status(index, "FAIL", 05);
       return;
   }
 
