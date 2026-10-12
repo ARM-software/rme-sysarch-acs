@@ -38,6 +38,7 @@
 #define RME_CMO_POE               0x14
 #define RME_GET_SHARED_MEM        0x15
 #define EL3_IDE_KM                0x16
+#define EL3_PCIE_IDE_KM           0x17
 
 /* General Defines used by tests */
 #define INIT_DATA            0x11
@@ -57,6 +58,9 @@
 #define IDE_ENABLE           1
 #define IDE_DISABLE          2
 #define IDE_GET_BASE         3
+#define IDE_PCIE_KEY_PROG    5
+#define IDE_PCIE_KEY_GO      6
+#define IDE_PCIE_KEY_STOP    7
 
 /* smmu root register configuration */
 #define SMMU_ROOT_RME_IMPL_CHK 0x1

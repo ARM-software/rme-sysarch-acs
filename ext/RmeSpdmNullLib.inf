@@ -28,6 +28,7 @@
   LIBRARY_CLASS                  = SpdmCryptLib
   LIBRARY_CLASS                  = PciDoeRequesterLib
   LIBRARY_CLASS                  = CxlIdeKmRequesterLib
+  LIBRARY_CLASS                  = PciIdeKmRequesterLib
   LIBRARY_CLASS                  = CxlTspRequesterLib
   LIBRARY_CLASS                  = PciTdispRequesterLib
 
