@@ -176,6 +176,10 @@ payload(void)
           {
               val_print(ACS_PRINT_ERR, " TDISP RUN state fail for bdf: 0x%x", bdf);
               test_fail++;
+              if (val_ide_set_sel_stream(rp_bdf, count, 0))
+                  test_fail++;
+              if (val_ide_set_sel_stream(ep_bdf, count, 0))
+                  test_fail++;
               continue;
           }
 
@@ -189,27 +193,22 @@ payload(void)
               /* Fall through to unlock before next iteration */
           }
 
-          /* Write-detect makes RP IDE Insecure. Disable its stream before
-           * endpoint configuration/DOE accesses used by TDISP cleanup.
-           */
-          if (val_ide_set_sel_stream(rp_bdf, count, 0))
-              test_fail++;
-
           /* Unlock only if we actually locked */
           if (ep_locked) {
-              val_device_unlock(ep_bdf);
+              if (val_device_unlock(ep_bdf) != ACS_STATUS_PASS)
+                  test_fail++;
               ep_locked = 0;
           }
-          if (val_ide_set_sel_stream(ep_bdf, count, 0))
-              test_fail++;
       }
 
       /* Disable TDISP in RP; ensure endpoint is not left locked */
       if (ep_locked) {
-          val_device_unlock(ep_bdf);
+          if (val_device_unlock(ep_bdf) != ACS_STATUS_PASS)
+              test_fail++;
           ep_locked = 0;
       }
-      val_pcie_disable_tdisp(rp_bdf);
+      if (val_pcie_disable_tdisp(rp_bdf))
+          test_fail++;
   }
 
   if (ide_unsupported && !test_fail)

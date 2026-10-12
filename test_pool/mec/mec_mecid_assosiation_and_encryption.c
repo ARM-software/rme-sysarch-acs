@@ -63,6 +63,7 @@ payload(void)
   uint64_t cfg_addr;
   uint32_t str_index;
   uint32_t rp_locked;
+  uint32_t rlm_mapped, table_mecid;
   uint32_t device_id, its_id;
   uint32_t page_size = val_memory_page_size();
   smmu_master_attributes_t master;
@@ -157,6 +158,9 @@ payload(void)
 
   for (instance = 0; instance < num_exercisers; ++instance)
   {
+      pgt_desc.pgt_base = 0u;
+      rlm_mapped = 0u;
+      table_mecid = MECID1;
       /* if init fail moves to next exerciser */
       if (val_exerciser_init(instance))
           continue;
@@ -422,6 +426,7 @@ payload(void)
           test_fail++;
           goto free_mem;
       }
+      rlm_mapped = 1u;
 
       /* DMA from DRAM -> DEVICE followed by DEVICE -> DRAM using MECID1 */
       val_exerciser_set_param(DMA_ATTRIBUTES, (uint64_t)dram_buf_in_virt, dma_len, instance);
@@ -450,7 +455,15 @@ payload(void)
           goto free_mem;
       }
 
-      /* Resotre MECID back to MECID1 to destroy SMMU page tables */
+      /* Stop SMMU use of the first table before destroying it. */
+      if (val_rlm_configure_mecid(VAL_GMECID) || val_smmu_rlm_unmap_el3(&master))
+      {
+          test_fail++;
+          goto free_mem;
+      }
+      rlm_mapped = 0u;
+
+      /* Restore MECID1 to access the first table during destruction. */
       if (val_rlm_configure_mecid(MECID1))
       {
           val_print(ACS_PRINT_ERR, " Failed to configure MECID1", 0);
@@ -464,6 +477,9 @@ payload(void)
           test_fail++;
           goto free_mem;
       }
+
+      /* The first table is no longer live after successful destruction. */
+      pgt_desc.pgt_base = 0u;
 
       /* MECID must be VAL_GMECID to access STE, and change the STE.MECID to MECID2 */
       if (val_rlm_configure_mecid(VAL_GMECID))
@@ -487,6 +503,7 @@ payload(void)
           test_fail++;
           goto free_mem;
       }
+      table_mecid = MECID2;
       pgt_desc.pgt_base = (uint64_t) NULL;
       if (val_rlm_pgt_create(mem_desc, &pgt_desc))
       {
@@ -509,6 +526,7 @@ payload(void)
           test_fail++;
           goto free_mem;
       }
+      rlm_mapped = 1u;
 
       /* DMA from DRAM -> DEVICE followed by DEVICE -> DRAM using MECID1 */
       val_exerciser_set_param(DMA_ATTRIBUTES, (uint64_t)dram_buf_in_virt, dma_len, instance);
@@ -538,6 +556,34 @@ payload(void)
       }
 
 free_mem:
+      /* STE accesses use GMECID; table destruction uses the table's MECID. */
+      if (val_rlm_configure_mecid(VAL_GMECID))
+      {
+          test_fail++;
+          goto ide_cleanup;
+      }
+      if (rlm_mapped)
+      {
+          if (val_smmu_rlm_unmap_el3(&master))
+          {
+              test_fail++;
+              goto ide_cleanup;
+          }
+          rlm_mapped = 0u;
+      }
+      if (pgt_desc.pgt_base)
+      {
+          if (val_rlm_configure_mecid(table_mecid) || val_rlm_pgt_destroy(&pgt_desc))
+          {
+              test_fail++;
+              goto ide_cleanup;
+          }
+      }
+      if (val_rlm_configure_mecid(VAL_GMECID))
+      {
+          test_fail++;
+          goto ide_cleanup;
+      }
       pgt_attr_el3 = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(OUTER_SHAREABLE)
                      | GET_ATTR_INDEX(DEV_MEM_nGnRnE) | PGT_ENTRY_AP_RW | PAS_ATTR(NONSECURE_PAS));
 
@@ -561,15 +607,14 @@ free_mem:
       /* Return the buffer to the heap manager */
       val_memory_free_pages(dram_buf_in_virt, TEST_DATA_NUM_PAGES);
 
-      /* Restore MECID to GMECID */
+ide_cleanup:
+      /* Restore GMECID even if buffer cleanup or setup failed. */
       if (val_rlm_configure_mecid(VAL_GMECID))
       {
-          val_print(ACS_PRINT_ERR, " free_mem: Failed to restore GMECID", 0);
+          val_print(ACS_PRINT_ERR, " Cleanup: Failed to restore GMECID", 0);
           test_fail++;
-          goto ide_cleanup;
       }
-ide_cleanup:
-      /* Unlock and disable RP traffic before stopping keys through DOE. */
+      /* Clear the RP lock before shared IDE teardown. */
       if (rp_locked && val_pcie_read_cfg(rp_bdf, da_cap_base + RMEDA_CTL2, &reg_value))
           test_fail++;
       else if (rp_locked)
@@ -581,11 +626,8 @@ ide_cleanup:
           if (val_pe_access_mut_el3())
               test_fail++;
       }
-      if (val_ide_set_sel_stream(rp_bdf, count, 0))
-          test_fail++;
+      /* Shared cleanup stops TDISP and IDE keys, then closes SPDM. */
       if (val_device_unlock(bdf))
-          test_fail++;
-      if (val_ide_set_sel_stream(bdf, count, 0))
           test_fail++;
       if (val_pcie_disable_tdisp(rp_bdf))
           test_fail++;

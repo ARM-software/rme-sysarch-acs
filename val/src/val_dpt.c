@@ -129,17 +129,14 @@ val_dpt_ide_stop(uint32_t ep_bdf, uint32_t rp_bdf, uint32_t ep_count,
 
   if (!count)
     return status;
-  /* Disable RP traffic before DOE cleanup, retaining Stream ID for KEY_STOP. */
+  /* Unlock the RP block, then use shared TDISP/IDE/session teardown. */
   if (dpt_ide_set_lock(rp_bdf, count, 0))
     status = ACS_STATUS_ERR;
-  if (val_ide_set_sel_stream(rp_bdf, count, 0))
-    status = ACS_STATUS_ERR;
+  if (val_device_unlock(ep_bdf) != ACS_STATUS_PASS)
+    return ACS_STATUS_ERR;
   if (val_ide_program_address_range(rp_bdf, count, 0, 0, 0))
     status = ACS_STATUS_ERR;
-  if (val_device_unlock(ep_bdf) != ACS_STATUS_PASS)
-    status = ACS_STATUS_ERR;
-  if (val_ide_set_sel_stream(ep_bdf, ep_count, 0))
-    status = ACS_STATUS_ERR;
+  (void)ep_count;
   return status;
 }
 
