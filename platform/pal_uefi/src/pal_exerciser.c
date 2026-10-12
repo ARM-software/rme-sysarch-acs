@@ -103,7 +103,7 @@ pal_exerciser_find_error_injection_capability (
   UINT32 PtrOffset;
   UINT64 NxtPtr = 0;
 
-  Ecam = pal_pcie_get_mcfg_ecam();
+  Ecam = pal_pcie_get_mcfg_ecam_for_bdf(Bdf);
   NxtPtr = PCIE_CAP_OFFSET;
 
   /* Serach in PCIe extended configuration space */
@@ -150,7 +150,7 @@ pal_exerciser_find_pcie_capability (
   UINT32 PtrMask;
   UINT32 PtrOffset;
 
-  Ecam = pal_pcie_get_mcfg_ecam();
+  Ecam = pal_pcie_get_mcfg_ecam_for_bdf(Bdf);
   NxtPtr = PCIE_CAP_OFFSET;
 
   if (Value == 1) {
@@ -199,7 +199,7 @@ UINT32 pal_exerciser_set_param (
   UINT64 Ecam;
 
   Base = pal_exerciser_get_ecsr_base(Bdf,0);
-  Ecam = pal_pcie_get_mcfg_ecam(); // Getting the ECAM address
+  Ecam = pal_pcie_get_mcfg_ecam_for_bdf(Bdf); // Getting the ECAM address
 
   switch (Type) {
 
@@ -249,7 +249,8 @@ UINT32 pal_exerciser_set_param (
                 }
             case TXN_ADDR_TYPE:
                 /* Change Address Type for DMA Transaction.*/
-                Data = pal_mmio_read(Base + DMACTL1) & ~(0x3u << 10);
+                Data = pal_mmio_read(Base + DMACTL1);
+                Data &= ~(0x3u << 10);
                 switch (Value2)
                 {
                     case AT_UNTRANSLATED:
@@ -261,6 +262,8 @@ UINT32 pal_exerciser_set_param (
                     case AT_RESERVED:
                         Data |= (0x3u << 10);
                         break;
+                    default:
+                        return 1;
                 }
                 pal_mmio_write(Base + DMACTL1, Data);
                 return 0;
@@ -306,8 +309,10 @@ UINT32 pal_exerciser_set_param (
         return 0;
 
     case EXERCISER_SEC_SID:
-        pal_mmio_write(Base + SEC_SID_CTL,
-                       (UINT32)Value1 & (CXL_SEC_SID_VALID | CXL_SEC_SID_REALM));
+        /* Setting Non-secure and releasing the override are distinct operations. */
+        Data = (Value1 == EXERCISER_SEC_SID_DEFAULT) ? 0u :
+               ((UINT32)(Value1 & SEC_SID_VALUE_REG_MASK) | SEC_SID_VALUE_REG_VALID);
+        pal_mmio_write(Base + SEC_SID_VALUE_REG, Data);
         return 0;
 
     case EXERCISER_ATS_REQUEST_ATTRIBUTES:
@@ -381,6 +386,9 @@ pal_exerciser_get_param (
       case EXERCISER_CXL_CMD_DATA0:
           *Value1 = (UINT64)pal_mmio_read(Base + CXL_CMD_DATA0_LO);
           *Value1 |= ((UINT64)pal_mmio_read(Base + CXL_CMD_DATA0_HI)) << 32;
+          return 0;
+      case EXERCISER_SEC_SID:
+          *Value1 = (UINT64)(pal_mmio_read(Base + SEC_SID_VALUE_REG) & SEC_SID_VALUE_REG_MASK);
           return 0;
       case CFG_TXN_ATTRIBUTES:
       case TRANSACTION_TYPE:
@@ -490,7 +498,7 @@ pal_exerciser_ops (
   UINT32 CapabilityOffset = 0;
   UINT32 data;
   Base = pal_exerciser_get_ecsr_base(Bdf,0);
-  Ecam = pal_pcie_get_mcfg_ecam(); // Getting the ECAM address
+  Ecam = pal_pcie_get_mcfg_ecam_for_bdf(Bdf); // Getting the ECAM address
   switch(Ops){
 
     case START_DMA:
@@ -575,32 +583,45 @@ pal_exerciser_ops (
         return 0;
 
     case CXL_CMD_START:
+        {
         UINT32 cmd;
-        UINT32 status;
+        UINT32 opcode;
 
-        cmd = pal_mmio_read(Base + CXL_CMD_OP);
-        status = cmd & CXL_CMD_STATUS_MASK;
-        if (status == CXL_CMD_STATUS_ERR)
-            pal_mmio_write(Base + CXL_CMD_OP,
-                           (cmd & CXL_CMD_OP_MASK) | CXL_CMD_CLEAR_ERR);
+        cmd = pal_mmio_read(Base + CXL_CMD_REG);
+        rme_print(ACS_PRINT_DEBUG, L" CXL_CMD_START prev cmd 0x%x", cmd);
+        opcode = cmd & CXL_CMD_OP_MASK;
+        if ((cmd & CXL_CMD_STATUS_MASK) == CXL_CMD_STATUS_ERR)
+        {
+            UINT32 idx;
 
-        cmd &= CXL_CMD_OP_MASK;
-        pal_mmio_write(Base + CXL_CMD_OP, cmd | CXL_CMD_TRIGGER);
+            pal_mmio_write(Base + CXL_CMD_REG, opcode | CXL_CMD_CLEAR_ERR);
+            for (idx = 0u; idx < 10000u; ++idx)
+            {
+                data = pal_mmio_read(Base + CXL_CMD_REG);
+                if ((data & CXL_CMD_STATUS_MASK) != CXL_CMD_STATUS_ERR)
+                    break;
+            }
+            if (idx == 10000u)
+                return 1;
+        }
+
+        pal_mmio_write(Base + CXL_CMD_REG, opcode | CXL_CMD_TRIGGER);
+        rme_print(ACS_PRINT_DEBUG, L" CXL_CMD_REG trigger write 0x%x",
+                  opcode | CXL_CMD_TRIGGER);
         for (UINT32 idx = 0u; idx < 10000u; ++idx)
         {
-            data = pal_mmio_read(Base + CXL_CMD_OP);
-            status = data & CXL_CMD_STATUS_MASK;
-            if (status == CXL_CMD_STATUS_ERR)
+            data = pal_mmio_read(Base + CXL_CMD_REG);
+            if ((data & CXL_CMD_STATUS_MASK) == CXL_CMD_STATUS_DONE)
+                return 0;
+            if ((data & CXL_CMD_STATUS_MASK) == CXL_CMD_STATUS_ERR)
             {
-                rme_print(ACS_PRINT_DEBUG, L" CXL_CMD_START error status 0x%x", data);
+                rme_print(ACS_PRINT_DEBUG, L" CXL_CMD_START error cmd 0x%x", data);
                 return 1;
             }
-
-            if (status == CXL_CMD_STATUS_DONE)
-                return 0;
         }
         rme_print(ACS_PRINT_DEBUG, L" CXL_CMD_START timed out for BDF 0x%x", Bdf);
         return 1;
+        }
 
     case START_TXN_MONITOR:
         pal_mmio_write(Base + TXN_CTRL_BASE, TXN_START);
@@ -650,8 +671,7 @@ pal_cda_tdi_snoop_attempt (
     return 1;
   *Result = 0u;
 
-  SecSid = CXL_SEC_SID_VALID |
-           ((PasRealm != 0u) ? CXL_SEC_SID_REALM : 0u);
+  SecSid = (PasRealm != 0u) ? SEC_SID_VALUE_REG_MASK : 0u;
   Status = pal_exerciser_set_param(EXERCISER_SEC_SID,
                                    SecSid,
                                    0u,
@@ -679,7 +699,7 @@ pal_cda_tdi_snoop_attempt (
                                      NULL,
                                      Bdf);
 
-  (void)pal_exerciser_set_param(EXERCISER_SEC_SID, 0u, 0u, Bdf);
+  (void)pal_exerciser_set_param(EXERCISER_SEC_SID, EXERCISER_SEC_SID_DEFAULT, 0u, Bdf);
   if (Status != 0u)
     return 1;
 
@@ -822,7 +842,7 @@ pal_is_bdf_exerciser(UINT32 bdf)
 {
   UINT64 Ecam;
   UINT32 vendor_dev_id;
-  Ecam = pal_pcie_get_mcfg_ecam();
+  Ecam = pal_pcie_get_mcfg_ecam_for_bdf(bdf);
 
   vendor_dev_id = pal_mmio_read(Ecam + pal_exerciser_get_pcie_config_offset(bdf));
   if (vendor_dev_id == EXERCISER_ID)

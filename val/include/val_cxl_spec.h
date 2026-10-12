@@ -48,14 +48,13 @@
      [2:0]   BAR Indicator
      [7:3]   Reserved
      [15:8]  Block Identifier (8-bit)
-     [31:16] Register Block Offset A[31:16]
-   DW1: Register Block Offset A[63:32]
-   The offset is relative to the BAR base and 64-KB aligned (A[15:0] = 0).
+     [31:16] Register Offset bits [31:16]
+   DW1: Register Offset bits [63:32] (relative to BAR base)
+   Register Offset bits [15:0] are zero (64 KiB alignment).
 */
 #define CXL_RL_ENTRY_DW0_OFF            0x00
-#define CXL_RL_ENTRY_REG_OFF            0x04    /* Register Offset High */
-#define CXL_RL_BLOCK_OFFSET(dw0, dw1) \
-    (((uint64_t)(dw1) << 32) | ((uint64_t)(dw0) & 0xFFFF0000u))
+#define CXL_RL_ENTRY_DW1_OFF            0x04
+#define CXL_RL_ENTRY_OFFSET_LOW_MASK    0xFFFF0000u
 
 /* Block IDs commonly seen (8-bit identifiers per RL DW0[15:8]) */
 #define CXL_REG_BLOCK_COMPONENT         0x01    /* CXL Component Registers */

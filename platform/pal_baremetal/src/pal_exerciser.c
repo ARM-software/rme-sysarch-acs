@@ -168,7 +168,8 @@ uint32_t pal_exerciser_set_param(EXERCISER_PARAM_TYPE Type, uint64_t Value1, uin
                 return 0;
             case TXN_ADDR_TYPE:
                 /* Change Address Type for DMA Transaction.*/
-                Data = pal_mmio_read(Base + DMACTL1) & ~(0x3u << 10);
+                Data = pal_mmio_read(Base + DMACTL1);
+                Data &= ~(0x3u << 10);
                 switch (Value2)
                 {
                     case AT_UNTRANSLATED:
@@ -180,6 +181,8 @@ uint32_t pal_exerciser_set_param(EXERCISER_PARAM_TYPE Type, uint64_t Value1, uin
                     case AT_RESERVED:
                         Data |= (0x3u << 10);
                         break;
+                    default:
+                        return 1;
                 }
                 pal_mmio_write(Base + DMACTL1, Data);
                 return 0;
@@ -250,8 +253,10 @@ uint32_t pal_exerciser_set_param(EXERCISER_PARAM_TYPE Type, uint64_t Value1, uin
         return 0;
 
       case EXERCISER_SEC_SID:
-        pal_mmio_write(Base + SEC_SID_CTL,
-                       (uint32_t)Value1 & (CXL_SEC_SID_VALID | CXL_SEC_SID_REALM));
+        /* Setting Non-secure and releasing the override are distinct operations. */
+        Data = (Value1 == EXERCISER_SEC_SID_DEFAULT) ? 0u :
+               ((uint32_t)(Value1 & SEC_SID_VALUE_REG_MASK) | SEC_SID_VALUE_REG_VALID);
+        pal_mmio_write(Base + SEC_SID_VALUE_REG, Data);
         return 0;
 
       case EXERCISER_ATS_REQUEST_ATTRIBUTES:
@@ -402,6 +407,9 @@ uint32_t pal_exerciser_get_param(EXERCISER_PARAM_TYPE Type, uint64_t *Value1, ui
           *Value1 = tx_attr;
           *Value2 = addr_low | ((uint64_t)addr_high << 32);
           return 0;
+      case EXERCISER_SEC_SID:
+          *Value1 = (uint64_t)(pal_mmio_read(Base + SEC_SID_VALUE_REG) & SEC_SID_VALUE_REG_MASK);
+          return 0;
       default:
           return 1;
   }
@@ -532,27 +540,39 @@ uint32_t pal_exerciser_ops(EXERCISER_OPS Ops, uint64_t Param, uint32_t Bdf)
     case CXL_CMD_START:
         {
         uint32_t cmd;
-        uint32_t status;
+        uint32_t opcode;
 
-        cmd = pal_mmio_read(Base + CXL_CMD_OP);
-        status = cmd & CXL_CMD_STATUS_MASK;
-        if (status == CXL_CMD_STATUS_ERR)
-            pal_mmio_write(Base + CXL_CMD_OP,
-                           (cmd & CXL_CMD_OP_MASK) | CXL_CMD_CLEAR_ERR);
+        cmd = pal_mmio_read(Base + CXL_CMD_REG);
+        print(ACS_PRINT_DEBUG, " CXL_CMD_START prev cmd 0x%x", cmd);
+        opcode = cmd & CXL_CMD_OP_MASK;
+        if ((cmd & CXL_CMD_STATUS_MASK) == CXL_CMD_STATUS_ERR)
+        {
+            uint32_t idx;
 
-        cmd &= CXL_CMD_OP_MASK;
-        pal_mmio_write(Base + CXL_CMD_OP, cmd | CXL_CMD_TRIGGER);
+            pal_mmio_write(Base + CXL_CMD_REG, opcode | CXL_CMD_CLEAR_ERR);
+            for (idx = 0u; idx < 10000u; ++idx)
+            {
+                data = pal_mmio_read(Base + CXL_CMD_REG);
+                if ((data & CXL_CMD_STATUS_MASK) != CXL_CMD_STATUS_ERR)
+                    break;
+            }
+            if (idx == 10000u)
+                return 1;
+        }
+
+        pal_mmio_write(Base + CXL_CMD_REG, opcode | CXL_CMD_TRIGGER);
+        print(ACS_PRINT_DEBUG, " CXL_CMD_REG trigger write 0x%x",
+              opcode | CXL_CMD_TRIGGER);
         for (uint32_t idx = 0u; idx < 10000u; ++idx)
         {
-            data = pal_mmio_read(Base + CXL_CMD_OP);
-            status = data & CXL_CMD_STATUS_MASK;
-            if (status == CXL_CMD_STATUS_ERR)
+            data = pal_mmio_read(Base + CXL_CMD_REG);
+            if ((data & CXL_CMD_STATUS_MASK) == CXL_CMD_STATUS_DONE)
+                return 0;
+            if ((data & CXL_CMD_STATUS_MASK) == CXL_CMD_STATUS_ERR)
             {
-                print(ACS_PRINT_DEBUG, " CXL_CMD_START error status 0x%x", data);
+                print(ACS_PRINT_DEBUG, " CXL_CMD_START error cmd 0x%x", data);
                 return 1;
             }
-            if (status == CXL_CMD_STATUS_DONE)
-                return 0;
         }
         print(ACS_PRINT_DEBUG, " CXL_CMD_START timed out for BDF 0x%x", Bdf);
         return 1;
@@ -596,8 +616,7 @@ pal_cda_tdi_snoop_attempt(uint32_t Bdf, uint64_t TargetHpa,
         return 1;
     *Result = 0u;
 
-    sec_sid = CXL_SEC_SID_VALID |
-              ((PasRealm != 0u) ? CXL_SEC_SID_REALM : 0u);
+    sec_sid = (PasRealm != 0u) ? SEC_SID_VALUE_REG_MASK : 0u;
     status = pal_exerciser_set_param(EXERCISER_SEC_SID,
                                       sec_sid,
                                       0u,
@@ -625,7 +644,7 @@ pal_cda_tdi_snoop_attempt(uint32_t Bdf, uint64_t TargetHpa,
                                          NULL,
                                          Bdf);
 
-    (void)pal_exerciser_set_param(EXERCISER_SEC_SID, 0u, 0u, Bdf);
+    (void)pal_exerciser_set_param(EXERCISER_SEC_SID, EXERCISER_SEC_SID_DEFAULT, 0u, Bdf);
     if (status != 0u)
         return 1;
 

@@ -128,7 +128,7 @@ LD_LIBS += -lmbedtls
 endif
 
 #Flags
-C_FLAGS = -g -gdwarf-4 -nostdinc -Werror -Wall -Wmissing-include-dirs -Wunused -Wdisabled-optimization -Wvla -Wshadow -Wno-unused-parameter -Wredundant-decls -Wunused-but-set-variable -Wmaybe-uninitialized -Wpacked-bitfield-compat -Wshift-overflow=2 -Wlogical-op -Wno-error=deprecated-declarations -Wno-error=cpp -march=armv8-a -mgeneral-regs-only -mstrict-align -ffunction-sections -fdata-sections -ffreestanding -fno-builtin -fno-common -Os -std=gnu99 -fno-omit-frame-pointer -fno-stack-protector
+C_FLAGS = -g -gdwarf-4 -nostdinc -Werror -Wall -Wmissing-include-dirs -Wunused -Wdisabled-optimization -Wvla -Wshadow -Wno-unused-parameter -Wredundant-decls -Wunused-but-set-variable -Wmaybe-uninitialized -Wpacked-bitfield-compat -Wshift-overflow=2 -Wlogical-op -Wno-error=deprecated-declarations -Wno-error=cpp -march=armv8-a -mbranch-protection=standard -mgeneral-regs-only -mstrict-align -ffunction-sections -fdata-sections -ffreestanding -fno-builtin -fno-common -Os -std=gnu99 -fno-omit-frame-pointer -fno-stack-protector
 
 ASM_FLAGS = -g -Wa,-gdwarf-4 -nostdinc -Werror -Wall -Wmissing-include-dirs -Wunused -Wdisabled-optimization -Wvla -Wshadow -Wno-unused-parameter -Wredundant-decls -Wunused-but-set-variable -Wmaybe-uninitialized -Wpacked-bitfield-compat -Wshift-overflow=2 -Wlogical-op -Wno-error=deprecated-declarations -Wno-error=cpp -march=armv8-a -ffreestanding -Wa,--fatal-warnings
 

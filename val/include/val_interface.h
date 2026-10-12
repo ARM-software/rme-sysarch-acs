@@ -136,6 +136,7 @@ uint32_t check_gpr_after_reset(void);
 uint32_t val_smmu_check_rmeda_el3(uint64_t smmu_base);
 uint32_t val_rlm_smmu_init(uint64_t num_smmu, uint64_t *smmu_base_arr);
 uint32_t val_smmu_rlm_map_el3(smmu_master_attributes_t *smmu_attr, pgt_descriptor_t *pgt_attr);
+uint32_t val_smmu_rlm_unmap_el3(smmu_master_attributes_t *smmu_attr);
 uint32_t val_smmu_gpt_invalidate_el3(smmu_master_attributes_t *smmu_attr);
 void val_register_create_info_table(uint64_t *register_info_table);
 uint32_t val_dpt_add_entry(uint64_t translated_addr, uint64_t smmu_index_and_access);
@@ -212,6 +213,7 @@ void val_gic_free_irq(uint32_t irq_num, uint32_t mapped_irq_num);
 void val_gic_set_intr_trigger(uint32_t int_id, INTR_TRIGGER_INFO_TYPE_e trigger_type);
 uint32_t val_gic_get_intr_trigger_type(uint32_t int_id, INTR_TRIGGER_INFO_TYPE_e *trigger_type);
 uint32_t val_gic_its_configure(void);
+uint32_t val_gic_get_its_index(uint32_t its_id);
 uint32_t val_gic_request_msi(uint32_t bdf, uint32_t device_id, uint32_t its_id, uint32_t int_id,
                              uint32_t msi_index);
 void val_gic_free_msi(uint32_t bdf, uint32_t device_id, uint32_t its_id, uint32_t int_id,

@@ -106,21 +106,21 @@ payload(void)
       }
 
       test_skip = 0;
+      locked = 0;
 
       /* Disable RMEDA_CTL1.TDISP_EN*/
       if (val_pcie_disable_tdisp(rp_bdf))
       {
           val_print(ACS_PRINT_ERR, " Unable to unset tdisp_en for BDF: 0x%x", rp_bdf);
           test_fail++;
-          continue;
+          goto cleanup_unlock;
       }
 
-      locked = 0;
       if (val_device_lock(e_bdf))
       {
           val_print(ACS_PRINT_ERR, " Failed to lock the device: 0x%lx", e_bdf);
           test_fail++;
-          continue;
+          goto cleanup_unlock;
       }
       locked = 1;
 
@@ -156,8 +156,7 @@ cleanup_unlock:
   if ((bdf_tbl_ptr == NULL) || (bdf_tbl_ptr->num_entries == 0))
   {
       val_print(ACS_PRINT_WARN, " No PCIe BDF entries discovered", 0);
-      val_set_status(pe_index, "SKIP", 01);
-      return;
+      goto test_done;
   }
 
   while (tbl_index < bdf_tbl_ptr->num_entries)
@@ -188,7 +187,12 @@ cleanup_unlock:
           }
           locked_rp = 1;
 
-          val_pcie_disable_tdisp(rp_bdf);
+          if (val_pcie_disable_tdisp(rp_bdf))
+          {
+              val_print(ACS_PRINT_ERR, " Failed to disable TDISP for BDF: 0x%x", rp_bdf);
+              test_fail++;
+              goto cleanup_unlock_rp;
+          }
           val_pcie_get_mmio_bar(rp_bdf, &Bar_Base);
 
           if (!Bar_Base)
@@ -228,10 +232,11 @@ cleanup_unlock_rp:
       }
   }
 
-  if (test_skip)
-      val_set_status(pe_index, "SKIP", 01);
-  else if (test_fail)
+test_done:
+  if (test_fail)
       val_set_status(pe_index, "FAIL", 01);
+  else if (test_skip)
+      val_set_status(pe_index, "SKIP", 01);
   else
       val_set_status(pe_index, "PASS", 01);
 

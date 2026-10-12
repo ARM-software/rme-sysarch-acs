@@ -45,7 +45,7 @@ payload(void)
   static uint32_t tbl_index;
   uint32_t bdf, rp_bdf;
   uint32_t da_cap_base;
-  uint32_t bar_base;
+  uint64_t bar_base;
   uint32_t pgt_attr_el3;
   uint32_t data;
   uint64_t va;

@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022-2023, 2025, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2023, 2025-2026, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -204,7 +204,7 @@ pal_print(CHAR8 *string, UINT64 data)
     UINTN BufferSize = 1;
     EFI_STATUS Status = 0;
     BufferSize = AsciiSPrint(Buffer, 1024, string, data);
-    AsciiPrint(Buffer);
+    AsciiPrint("%a", Buffer);
     Status = ShellWriteFile(g_rme_log_file_handle, &BufferSize, (VOID*)Buffer);
     if(EFI_ERROR(Status))
       rme_print(ACS_PRINT_ERR, L" Error in writing to log file");

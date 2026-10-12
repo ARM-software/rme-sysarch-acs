@@ -32,8 +32,8 @@
 #include "val/sys_arch_src/gic/its/val_gic_its.h"
 
 #define TEST_NAME "gic_its_subjected_to_gpc_check"
-#define TEST_DESC  "To check if GIC ITS mem accesses are only to NS memory "
-#define TEST_RULE  "RNULL"
+#define TEST_DESC  "Check ITS table accesses are subject to PAS protection "
+#define TEST_RULE  "RMZJXC"
 
 static uint32_t irq_pending;
 static uint32_t lpi_int_id = 0x204c;
@@ -53,7 +53,7 @@ intr_handler(void)
 }
 
 /**
- * @brief The test validates that the ITS access is always Non-secure in nature.
+ * @brief Validate PAS protection for ITS table accesses (RMZJXC).
  * 1. The Exerciser is initialised by setting command register for Memory Space Enable and
  *    Bus Master Enable.
  * 2. GIC ITS is configured by initialising ITS along with CommandQueue, Device and
@@ -87,6 +87,7 @@ payload(void)
     uint32_t device_id = 0;
     uint32_t stream_id = 0;
     uint32_t its_id = 0;
+    uint32_t its_index;
     uint64_t its_base = 0, itt_base;
 
     if (val_pcie_get_info(PCIE_INFO_NUM_ECAM, 0) == 0) {
@@ -154,7 +155,14 @@ payload(void)
         return;
     }
 
-    itt_base = g_gic_its_info->GicIts[its_id].ITTBase;
+    its_index = val_gic_get_its_index(its_id);
+    if (its_index == ACS_INVALID_INDEX) {
+        val_print(ACS_PRINT_ERR, " Could not find ITS ID [%x]", its_id);
+        val_set_status(index, "FAIL", 13);
+        return;
+    }
+
+    itt_base = g_gic_its_info->GicIts[its_index].ITTBase;
     val_print(ACS_PRINT_INFO, " itt_base: 0x%lx", itt_base);
     if (val_add_gpt_entry_el3(itt_base, GPT_NONSECURE))
     {
@@ -240,7 +248,7 @@ payload(void)
      * Program one of the ITT bases with secure, Root or Realm PA
      * and expect a fault when GIC tries to access it
     **/
-    itt_base = g_gic_its_info->GicIts[its_id].ITTBase;
+    itt_base = g_gic_its_info->GicIts[its_index].ITTBase;
     if (val_add_gpt_entry_el3(itt_base, GPT_ROOT))
     {
         val_print(ACS_PRINT_ERR, " Failed to add GPT entry for PA 0x%llx", itt_base);

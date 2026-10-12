@@ -456,6 +456,11 @@ The programmed value applies to subsequent CHI-C2C DMA until changed or
 reset. A PAL must report failure if SEC_SID control is requested for an
 endpoint that does not support it.
 
+To release the override and restore the exerciser's default SEC_SID selection,
+pass `EXERCISER_SEC_SID_DEFAULT` as `sec_sid`. The reference PAL clears the
+register, including its valid bit. This differs from programming `0b00`,
+which explicitly selects Non-secure while leaving the override enabled.
+
 ## License
 
 Arm RME System ACS is distributed under the Apache License 2.0. See

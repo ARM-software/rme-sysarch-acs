@@ -480,6 +480,19 @@
 #define PCIE_PCI (1 << 0b0111)
 #define PCIe_ALL (iEP_RP | iEP_EP | RP | EP | RCEC | RCiEP)
 
+/* MSI Capabilities. Control masks apply to the DWORD at the capability base. */
+#define MSI_ENABLE_MASK             (1U << 16)
+#define MSI_MME_MASK                (7U << 20)
+#define MSI_64BIT_ADDR_MASK         (1U << 23)
+#define MSI_VECTOR_MASK_CAP_MASK    (1U << 24)
+#define MSI_MSG_ADDR_OFFSET         0x4
+#define MSI_MSG_UPPER_ADDR_OFFSET   0x8
+#define MSI_MSG_DATA_32_OFFSET      0x8
+#define MSI_MSG_DATA_64_OFFSET      0xC
+#define MSI_VECTOR_MASK_32_OFFSET   0xC
+#define MSI_VECTOR_MASK_64_OFFSET   0x10
+#define MSI_MSG_DATA_MASK           0xFFFFU
+
 /* MSI-X Capabilities */
 #define MSI_X_ENABLE_SHIFT          31
 

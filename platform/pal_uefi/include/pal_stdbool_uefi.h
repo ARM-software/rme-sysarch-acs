@@ -18,13 +18,6 @@
 #ifndef PAL_STDBOOL_UEFI_H_
 #define PAL_STDBOOL_UEFI_H_
 
-#include <Base.h>
-
-#ifndef __bool_true_false_are_defined
-typedef BOOLEAN bool;
-#define true  TRUE
-#define false FALSE
-#define __bool_true_false_are_defined 1
-#endif
+#include <stdbool.h>
 
 #endif /* PAL_STDBOOL_UEFI_H_ */

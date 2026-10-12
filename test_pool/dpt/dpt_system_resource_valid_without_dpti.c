@@ -56,6 +56,7 @@ payload(void)
   smmu_master_attributes_t master;
   memory_region_descriptor_t mem_desc_array[2], *mem_desc;
   pgt_descriptor_t pgt_desc;
+  uint32_t rlm_mapped;
   uint64_t translated_addr, m_vir_addr, dram_buf_in_phys;
 
   pe_index = val_pe_get_index_mpid(val_pe_get_mpid());
@@ -102,6 +103,8 @@ payload(void)
 
   for (instance = 0; instance < num_exercisers; ++instance)
   {
+      pgt_desc.pgt_base = 0;
+      rlm_mapped = 0;
       /* if init fail moves to next exerciser */
       if (val_exerciser_init(instance))
           continue;
@@ -353,6 +356,7 @@ payload(void)
           test_fail++;
           goto free_mem;
       }
+      rlm_mapped = 1;
 
       /* Send an ATS Translation Request for the VA */
       val_exerciser_set_param(DMA_ATTRIBUTES, (uint64_t)dram_buf_in_virt, dma_len, instance);
@@ -420,6 +424,22 @@ payload(void)
 free_mem:
       val_exerciser_ops(ATS_INV_CACHE, 0, instance);
 
+      if (val_pcie_find_capability(bdf, PCIE_ECAP, ECID_ATS, &cap_base) == PCIE_SUCCESS)
+      {
+          val_pcie_read_cfg(bdf, cap_base + ATS_CTRL, &reg_value);
+          reg_value &= ATS_CACHING_DIS;
+          val_pcie_write_cfg(bdf, cap_base + ATS_CTRL, reg_value);
+      }
+
+      if (pgt_desc.pgt_base &&
+          ((rlm_mapped && val_smmu_rlm_unmap_el3(&master)) ||
+           val_rlm_pgt_destroy(&pgt_desc)))
+      {
+          val_print(ACS_PRINT_ERR, " Failed to release Realm page table for instance %4x",
+                    instance);
+          test_fail++;
+      }
+
       pgt_attr_el3 = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(NON_SHAREABLE) |
       PGT_ENTRY_AP_RW | PAS_ATTR(NONSECURE_PAS));
       //Clear the memory and it's protection by making it NS
@@ -445,14 +465,6 @@ free_mem:
 
       /* Return the buffer to the heap manager */
       val_memory_free_pages(dram_buf_in_virt, TEST_DATA_NUM_PAGES);
-
-      val_print(ACS_PRINT_DEBUG, " Disabling the ATS Cache for exerciser: 0x%x", bdf);
-      if (val_pcie_find_capability(bdf, PCIE_ECAP, ECID_ATS, &cap_base) == PCIE_SUCCESS)
-      {
-          val_pcie_read_cfg(bdf, cap_base + ATS_CTRL, &reg_value);
-          reg_value &= ATS_CACHING_DIS;
-          val_pcie_write_cfg(bdf, cap_base + ATS_CTRL, reg_value);
-      }
 
       val_pcie_disable_tdisp(rp_bdf);
       val_device_unlock(bdf);

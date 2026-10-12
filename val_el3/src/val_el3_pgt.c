@@ -734,12 +734,16 @@ void val_el3_get_tcr_info(TCR_EL3_INFO *tcr_el3)
  * @param mem_desc    Memory region descriptor to be mapped.
  * @return 0 on success, 1 on failure.
  */
+static void free_translation_table(uint64_t *tt_base, uint32_t bits_at_this_level,
+                                   uint32_t this_level);
+
 static uint32_t fill_translation_table(tt_descriptor_t tt_desc,
                                        memory_region_descriptor_t *mem_desc)
 {
     uint64_t block_size = 0x1ull << tt_desc.size_log2;
     uint64_t input_address, output_address, filled_tables, table_index, max_allowed_mem;
     uint64_t *tt_base_next_level, *table_desc;
+    uint32_t allocated_next_level;
     tt_descriptor_t tt_desc_next_level;
 
     INFO("      tt_desc.level: %d\n", tt_desc.level);
@@ -797,7 +801,8 @@ static uint32_t fill_translation_table(tt_descriptor_t tt_desc,
         If there's a block descriptor, allocate new page, else use the already populated address.
         Block descriptor info will be overwritten in case its there.
         */
-        if (*table_desc == 0 || IS_PGT_ENTRY_BLOCK(*table_desc))
+        allocated_next_level = (*table_desc == 0 || IS_PGT_ENTRY_BLOCK(*table_desc));
+        if (allocated_next_level)
         {
             tt_base_next_level = val_el3_memory_alloc(SIZE_4KB, SIZE_4KB);
             if (tt_base_next_level == NULL)
@@ -829,7 +834,11 @@ static uint32_t fill_translation_table(tt_descriptor_t tt_desc,
 
         if (fill_translation_table(tt_desc_next_level, mem_desc))
         {
-            val_el3_memory_free(tt_base_next_level);
+            if (allocated_next_level) {
+                free_translation_table(tt_base_next_level, bits_p_level,
+                                       tt_desc_next_level.level);
+                val_el3_memory_free(tt_base_next_level);
+            }
             return 1;
         }
 
@@ -854,6 +863,7 @@ uint32_t val_el3_realm_pgt_create(memory_region_descriptor_t *mem_desc, pgt_desc
     uint64_t *tt_base;
     tt_descriptor_t tt_desc;
     uint32_t num_pgt_levels, page_size_log2;
+    uint32_t allocated_root;
     memory_region_descriptor_t *mem_desc_iter;
 
     pg_size = SIZE_4KB;
@@ -867,13 +877,15 @@ uint32_t val_el3_realm_pgt_create(memory_region_descriptor_t *mem_desc, pgt_desc
     /* check whether input page descriptor has base addr of translation table
        to use. If the pgt_base member is NULL allocate a page to create a new
        table, else update existing translation table */
-    if (pgt_desc->pgt_base == (uint64_t) NULL) {
+    allocated_root = pgt_desc->pgt_base == (uint64_t) NULL;
+    if (allocated_root) {
         tt_base = (uint64_t *) val_el3_memory_alloc(SIZE_4KB, SIZE_4KB);
         if (tt_base == NULL) {
             ERROR("      val_pgt_create: page allocation failed\n");
             return 1;
         }
         val_el3_memory_set(tt_base, pg_size, 0);
+        pgt_desc->pgt_base = (uint64_t)val_el3_memory_virt_to_phys(tt_base);
     }
     else
         tt_base = (uint64_t *) pgt_desc->pgt_base;
@@ -890,13 +902,13 @@ uint32_t val_el3_realm_pgt_create(memory_region_descriptor_t *mem_desc, pgt_desc
             (mem_desc_iter->physical_address & (uint64_t)(pg_size - 1)) != 0)
             {
                 ERROR("      val_pgt_create: address alignment error\n");
-                return 1;
+                goto create_failed;
             }
 
         if (mem_desc_iter->physical_address >= (0x1ull << pgt_desc->oas))
         {
             ERROR("      val_pgt_create: output address size error\n");
-            return 1;
+            goto create_failed;
         }
 
         if (mem_desc_iter->virtual_address >= (0x1ull << pgt_desc->ias))
@@ -913,7 +925,7 @@ uint32_t val_el3_realm_pgt_create(memory_region_descriptor_t *mem_desc, pgt_desc
         {
             ERROR("      val_pgt_create: input page_size 0x%x \
                             not supported\n", (0x1 << pgt_desc->vtcr.tg_size_log2));
-            return 1;
+            goto create_failed;
         }
 #endif
         tt_desc.input_base = mem_desc_iter->virtual_address & ((0x1ull << pgt_desc->ias) - 1);
@@ -927,14 +939,18 @@ uint32_t val_el3_realm_pgt_create(memory_region_descriptor_t *mem_desc, pgt_desc
 
         if (fill_translation_table(tt_desc, mem_desc_iter))
         {
-            val_el3_memory_free(tt_base);
-            return 1;
+            goto create_failed;
         }
     }
 
     pgt_desc->pgt_base = (uint64_t)val_el3_memory_virt_to_phys(tt_base);
 
     return 0;
+
+create_failed:
+    if (allocated_root)
+        val_el3_realm_pgt_destroy(pgt_desc);
+    return 1;
 }
 
 /**
@@ -988,7 +1004,7 @@ void val_el3_realm_pgt_destroy(pgt_descriptor_t *pgt_desc)
     INFO("      val_pgt_destroy: pgt_base = %lx\n", pgt_desc->pgt_base);
     page_size_log2 = val_el3_log2_page_size(pg_size);
     bits_p_level =  page_size_log2 - 3;
-    pgt_addr_mask = ((0x1ull << (pgt_desc->ias - page_size_log2)) - 1) << page_size_log2;
+    pgt_addr_mask = val_el3_pgt_desc_addr_mask(page_size_log2);
     num_pgt_levels = (pgt_desc->ias - page_size_log2 + bits_p_level - 1)/bits_p_level;
     num_pgt_levels = (num_pgt_levels > 4)?4:num_pgt_levels;
     bits_at_root_level =
@@ -998,4 +1014,5 @@ void val_el3_realm_pgt_destroy(pgt_descriptor_t *pgt_desc)
 
     free_translation_table(pgt_base_virt, bits_at_root_level, 4 - num_pgt_levels);
     val_el3_memory_free(pgt_base_virt);
+    pgt_desc->pgt_base = 0;
 }

@@ -48,7 +48,6 @@
 #define RDRVTK_ALLOWED_BACKING 0x1122334455667788ULL
 #define RDRVTK_DENIED_BACKING  0x8877665544332211ULL
 #define RDRVTK_PASS_PARTIAL  0xAC500001u
-#define SEC_SID_NONSECURE    0x0u
 #define SEC_SID_REALM        0x2u
 
 #define RMECDA_CTL1_TDISP_EN_MASK  0x1u
@@ -1195,7 +1194,7 @@ cleanup:
   if (sec_sid_set != 0u)
   {
     if (val_exerciser_set_param_by_bdf(EXERCISER_SEC_SID,
-                                       SEC_SID_NONSECURE,
+                                       EXERCISER_SEC_SID_DEFAULT,
                                        0u,
                                        context->endpoint_bdf) != 0u)
       result = ACS_STATUS_FAIL;

@@ -81,8 +81,10 @@ payload(void)
   uint32_t device_id = 0;
   uint32_t stream_id = 0;
   uint32_t its_id = 0;
+  uint32_t its_index;
   uint32_t msi_index = 0;
   uint32_t msi_cap_offset = 0;
+  uint32_t use_msix;
   uint64_t itt_base;
   uint32_t timeout, rp_aer_offset, value;
 
@@ -104,22 +106,16 @@ payload(void)
       e_bdf = val_exerciser_get_bdf(instance);
       val_print(ACS_PRINT_TEST, " Exerciser BDF - 0x%x", e_bdf);
 
-      val_pcie_enable_eru(e_bdf);
       if (val_pcie_get_rootport(e_bdf, &erp_bdf))
           continue;
 
-      val_pcie_enable_eru(erp_bdf);
-
-      /* Search for MSI-X Capability */
-      if (val_pcie_find_capability(e_bdf, PCIE_CAP, CID_MSIX, &msi_cap_offset)) {
-          val_print(ACS_PRINT_ERR, " No MSI-X Capability, Skipping for Bdf 0x%x", e_bdf);
+      /* The RP generates the interrupt; the EP only injects the error. */
+      use_msix = (val_pcie_find_capability(erp_bdf, PCIE_CAP, CID_MSIX,
+                                          &msi_cap_offset) == PCIE_SUCCESS);
+      if (!use_msix &&
+          val_pcie_find_capability(erp_bdf, PCIE_CAP, CID_MSI, &msi_cap_offset)) {
+          val_print(ACS_PRINT_WARN, " No MSI/MSI-X Capability for RP Bdf 0x%x, skipping", erp_bdf);
           continue;
-      }
-
-      if (val_pcie_find_capability(erp_bdf, PCIE_CAP, CID_MSIX, &msi_cap_offset)) {
-          val_print(ACS_PRINT_ERR, " No MSI-X Capability for RP Bdf 0x%x", erp_bdf);
-          val_set_status(pe_index, "FAIL", 01);
-          return;
       }
 
       if (val_pcie_find_capability(erp_bdf, PCIE_ECAP, ECID_AER, &rp_aer_offset) != PCIE_SUCCESS) {
@@ -140,13 +136,33 @@ payload(void)
           return;
       }
 
+      its_index = val_gic_get_its_index(its_id);
+      if (its_index == ACS_INVALID_INDEX) {
+          val_print(ACS_PRINT_ERR, " Could not find ITS ID [%x]", its_id);
+          val_set_status(pe_index, "FAIL", 12);
+          return;
+      }
+
+      /* Check MSI addressability before protecting the ITT. */
+      if (!use_msix) {
+          val_pcie_read_cfg(erp_bdf, msi_cap_offset, &value);
+          if (!(value & MSI_64BIT_ADDR_MASK) &&
+              (val_gic_its_get_translater_addr(its_index) >> 32)) {
+              val_print(ACS_PRINT_WARN,
+                  " 32-bit MSI cannot address GITS_TRANSLATER for RP Bdf 0x%x, skipping", erp_bdf);
+              continue;
+          }
+      }
+
+      val_pcie_enable_eru(e_bdf);
+      val_pcie_enable_eru(erp_bdf);
       test_skip = 0;
       //Enable the Error Reporting bits in the RP's AER ROOT_ERR_CMD register
       val_pcie_read_cfg(erp_bdf, rp_aer_offset + AER_ROOT_ERR_CMD_OFFSET, &value);
       val_pcie_write_cfg(erp_bdf, rp_aer_offset + AER_ROOT_ERR_CMD_OFFSET, (value | 0x7));
 
       // Program the ITT base as ROOT in GPT
-      itt_base = g_gic_its_info->GicIts[its_id].ITTBase;
+      itt_base = g_gic_its_info->GicIts[its_index].ITTBase;
       if (val_add_gpt_entry_el3(itt_base, GPT_ROOT))
       {
             val_print(ACS_PRINT_ERR, " DPT Entry adding failed for the Address: 0x%llx", itt_base);
@@ -190,7 +206,7 @@ payload(void)
       val_pcie_clear_urd(erp_bdf);
       val_gic_free_msi(erp_bdf, device_id, its_id, lpi_int_id + instance, msi_index);
 
-      itt_base = g_gic_its_info->GicIts[its_id].ITTBase;
+      itt_base = g_gic_its_info->GicIts[its_index].ITTBase;
       if (val_add_gpt_entry_el3(itt_base, GPT_NONSECURE))
       {
             val_print(ACS_PRINT_ERR, " DPT Entry adding failed for the Address: 0x%llx", itt_base);

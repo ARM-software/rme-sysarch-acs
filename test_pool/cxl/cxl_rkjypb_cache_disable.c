@@ -160,6 +160,7 @@ payload(void)
   {
     uint32_t role;
     uint32_t bdf;
+    uint32_t host_index;
     uint64_t component_base;
     uint64_t cap_base;
     uint32_t status;
@@ -186,11 +187,22 @@ payload(void)
 
     tested_ports = 1u;
 
-    status = val_cxl_find_component_register_base(bdf, &component_base);
-    if (status != ACS_STATUS_PASS)
+    host_index = (uint32_t)val_cxl_get_component_info(
+                   CXL_COMPONENT_INFO_HOST_BRIDGE_INDEX, comp);
+    if (host_index == CXL_COMPONENT_INVALID_INDEX)
     {
       val_print(ACS_PRINT_ERR,
-                " RKJYPB: failed to locate component regs for RP 0x%x",
+                " RKJYPB: failed to locate host bridge for RP 0x%x",
+                bdf);
+      failure_count++;
+      continue;
+    }
+
+    component_base = val_cxl_get_info(CXL_INFO_COMPONENT_BASE, host_index);
+    if (component_base == 0u)
+    {
+      val_print(ACS_PRINT_ERR,
+                " RKJYPB: failed to locate CHBCR for RP 0x%x",
                 bdf);
       failure_count++;
       continue;
@@ -202,7 +214,7 @@ payload(void)
     if (status != ACS_STATUS_PASS)
     {
       val_print(ACS_PRINT_ERR,
-                " RKJYPB: missing CXL Extended Security Capability on RP 0x%x",
+                " RKJYPB: missing CXL Extended Security Capability in CHBCR for RP 0x%x",
                 bdf);
       failure_count++;
       continue;

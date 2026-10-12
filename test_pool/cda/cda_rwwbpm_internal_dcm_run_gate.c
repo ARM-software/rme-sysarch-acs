@@ -43,7 +43,7 @@
 #define RMECDA_CTL1_LINK_STR_LOCK_MASK (1u << 1)
 #define DECODER_SLOT CXL_HDM_DECODER_SLOT_DEFAULT
 #define DMA_TEST_LENGTH ((uint32_t)sizeof(uint64_t))
-#define SEC_SID_REALM_VALID ((1u << 31) | (1u << 1))
+#define SEC_SID_REALM 0x2u
 
 #define RUN_BASELINE_VALUE  0x0123456789ABCDEFull
 #define RUN_WRITE_VALUE     0xF0E1D2C3B4A59687ull
@@ -957,7 +957,7 @@ exercise_rule(TEST_CONTEXT *context)
      * differs from the positive transaction only in its TDISP state.
      */
     if (val_exerciser_set_param_by_bdf(EXERCISER_SEC_SID,
-                                       SEC_SID_REALM_VALID,
+                                       SEC_SID_REALM,
                                        0u,
                                        context->endpoint_bdf) != 0u)
     {
@@ -1226,7 +1226,7 @@ exercise_rule(TEST_CONTEXT *context)
 cleanup:
   if ((sec_sid_programmed != 0u) &&
       (val_exerciser_set_param_by_bdf(EXERCISER_SEC_SID,
-                                      0u,
+                                      EXERCISER_SEC_SID_DEFAULT,
                                       0u,
                                       context->endpoint_bdf) != 0u))
     result = ACS_STATUS_FAIL;

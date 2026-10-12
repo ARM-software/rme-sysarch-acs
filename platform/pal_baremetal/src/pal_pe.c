@@ -148,10 +148,10 @@ PalAllocateSecondaryStack(uint64_t mpidr)
 #else
       /* Use shared region for secondary stacks so all PEs can see them early. */
       base = (uint64_t)PLATFORM_SHARED_REGION_BASE;
-      aligned_base = (base + 63u) & ~63u;
+      aligned_base = (base + 63ULL) & ~63ULL;
       stack_base = ((uint64_t)PLATFORM_SHARED_REGION_BASE +
                     (uint64_t)PLATFORM_SHARED_REGION_SIZE) - size;
-      stack_base &= ~63u;
+      stack_base &= ~63ULL;
 
       /* Put stacks at the top to avoid clashing with shared test data at base. */
       if (stack_base < (aligned_base + size)) {

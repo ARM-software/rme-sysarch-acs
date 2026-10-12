@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022-2023, 2025, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2023, 2025-2026, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -138,7 +138,7 @@ val_gic_install_isr(uint32_t int_id, void (*isr)(void))
       return val_gic_rme_install_isr(int_id, isr);
   else {
       ret_val = pal_gic_install_isr(int_id, isr);
-      if (int_id > 31 && int_id < 1024) {
+      if (isr != NULL && int_id > 31 && int_id < 1024) {
           /**** UEFI GIC code is not enabling interrupt in the Distributor ***/
           /**** So, do this here as a fail-safe. Remove if PAL guarantees this ***/
           val_mmio_write(val_gic_get_gicd_base() + GICD_ISENABLER + (4 * reg_offset),
@@ -275,14 +275,17 @@ its_fail:
 
 /**
   @brief   This function gets ITS Index in g_gic_its_info for its_id
-           1. Caller       -  VAL Layer
+           1. Caller       -  VAL Layer and Test Suite
            2. Prerequisite -  val_gic_its_configure
   @param   its_id ID of the ITS Block
-  @return  Index in ITS Info Block
+  @return  Index in ITS Info Block, or ACS_INVALID_INDEX if not found
 **/
-uint32_t get_its_index(uint32_t its_id)
+uint32_t val_gic_get_its_index(uint32_t its_id)
 {
   uint32_t  index;
+
+  if (g_gic_its_info == NULL)
+    return ACS_INVALID_INDEX;
 
   for (index = 0; index < g_gic_its_info->GicNumIts; index++)
   {
@@ -396,20 +399,66 @@ uint32_t fill_msi_x_table(uint32_t bdf, uint32_t msi_index, uint64_t msi_addr, u
 }
 
 /**
-  @brief   This function clear the MSI related mappings.
+  @brief   Program a single MSI message. The caller validates the address and data.
+**/
+static void
+fill_msi_capability(uint32_t bdf, uint32_t cap_offset, uint64_t msi_addr, uint32_t msi_data)
+{
+  uint32_t control, value, data_offset, mask_offset;
+
+  val_pcie_read_cfg(bdf, cap_offset, &control);
+  /* Disable MSI while programming and allocate one message (MME = 0). */
+  control &= ~(MSI_ENABLE_MASK | MSI_MME_MASK);
+  val_pcie_write_cfg(bdf, cap_offset, control);
+
+  val_pcie_write_cfg(bdf, cap_offset + MSI_MSG_ADDR_OFFSET, (uint32_t)msi_addr);
+  if (control & MSI_64BIT_ADDR_MASK)
+  {
+    val_pcie_write_cfg(bdf, cap_offset + MSI_MSG_UPPER_ADDR_OFFSET, (uint32_t)(msi_addr >> 32));
+    data_offset = MSI_MSG_DATA_64_OFFSET;
+    mask_offset = MSI_VECTOR_MASK_64_OFFSET;
+  }
+  else
+  {
+    data_offset = MSI_MSG_DATA_32_OFFSET;
+    mask_offset = MSI_VECTOR_MASK_32_OFFSET;
+  }
+
+  /* Preserve the upper halfword when updating the 16-bit Message Data field. */
+  val_pcie_read_cfg(bdf, cap_offset + data_offset, &value);
+  val_pcie_write_cfg(bdf, cap_offset + data_offset, (value & ~MSI_MSG_DATA_MASK) | msi_data);
+
+  if (control & MSI_VECTOR_MASK_CAP_MASK)
+  {
+    val_pcie_read_cfg(bdf, cap_offset + mask_offset, &value);
+    val_pcie_write_cfg(bdf, cap_offset + mask_offset, value & ~1U);
+  }
+
+  /* MSI is a memory write; enable bus mastering without writing RW1C Status bits. */
+  val_pcie_read_cfg(bdf, TYPE01_CR, &value);
+  val_pcie_write_cfg(bdf, TYPE01_CR, (value & 0xFFFFU) | (1U << CR_BME_SHIFT));
+  val_pcie_write_cfg(bdf, cap_offset, control | MSI_ENABLE_MASK);
+}
+
+/**
+  @brief   Disable the MSI source and clear its ITS mapping.
+           Like MSI-X teardown, this does not restore pre-request configuration.
 
   @param   bdf          B:D:F for the device
   @param   int_id       Interrupt ID
-  @param   msi_index    msi index in the table
+  @param   msi_index    MSI-X table index, or zero for single-message MSI
 
   @return  status
 **/
 void val_gic_free_msi(uint32_t bdf, uint32_t device_id, uint32_t its_id,
                       uint32_t int_id, uint32_t msi_index)
 {
-  uint32_t its_index;
+  uint32_t its_index, cap_offset, control;
 
-  its_index = get_its_index(its_id);
+  if (g_gic_its_info == NULL)
+    return;
+
+  its_index = val_gic_get_its_index(its_id);
   if (its_index >= g_gic_its_info->GicNumIts)
   {
     val_print(ACS_PRINT_ERR, " Could not find ITS ID [%x]", its_id);
@@ -421,20 +470,28 @@ void val_gic_free_msi(uint32_t bdf, uint32_t device_id, uint32_t its_id,
     val_print(ACS_PRINT_ERR, "GICD/GICRD Base Invalid value.", 0);
   }
 
+  /* Quiesce the source before removing the translation. */
+  if (val_pcie_find_capability(bdf, PCIE_CAP, CID_MSIX, &cap_offset) == PCIE_SUCCESS)
+    clear_msi_x_table(bdf, msi_index);
+  else if (val_pcie_find_capability(bdf, PCIE_CAP, CID_MSI, &cap_offset) == PCIE_SUCCESS)
+  {
+    val_pcie_read_cfg(bdf, cap_offset, &control);
+    val_pcie_write_cfg(bdf, cap_offset, control & ~MSI_ENABLE_MASK);
+  }
+
   val_gic_its_clear_lpi_map(its_index, device_id, int_id);
-  clear_msi_x_table(bdf, msi_index);
 }
 
 /**
-  @brief   This function creates the MSI mappings, and programs the MSI Table.
+  @brief   Create the ITS mapping and program MSI-X, or single-message MSI if absent.
 
   @param   bdf          B:D:F for the device
   @param   device_id    Device ID
   @param   its_id       ITS ID
   @param   int_id       Interrupt ID
-  @param   msi_index    msi index in the table
+  @param   msi_index    MSI-X table index, or zero for single-message MSI
 
-  @return  status
+  @return  PASS on success, SKIP if no usable capability/address, ERR on invalid input
 **/
 uint32_t val_gic_request_msi(uint32_t bdf, uint32_t device_id, uint32_t its_id,
                              uint32_t int_id, uint32_t msi_index)
@@ -442,12 +499,12 @@ uint32_t val_gic_request_msi(uint32_t bdf, uint32_t device_id, uint32_t its_id,
   uint32_t status;
   uint64_t msi_addr;
   uint32_t msi_data;
-  uint32_t its_index;
+  uint32_t its_index, cap_offset, control, use_msix;
 
-   if ((g_gic_its_info == NULL) || (g_gic_its_info->GicNumIts == 0))
+  if ((g_gic_its_info == NULL) || (g_gic_its_info->GicNumIts == 0))
     return ACS_STATUS_ERR;
 
-  its_index = get_its_index(its_id);
+  its_index = val_gic_get_its_index(its_id);
 
   if (its_index >= g_gic_its_info->GicNumIts) {
     val_print(ACS_PRINT_ERR, " Could not find ITS ID [%x]", its_id);
@@ -460,13 +517,50 @@ uint32_t val_gic_request_msi(uint32_t bdf, uint32_t device_id, uint32_t its_id,
     return ACS_STATUS_ERR;
   }
 
-  val_gic_its_create_lpi_map(its_index, device_id, int_id, LPI_PRIORITY1);
-
   msi_addr = val_gic_its_get_translater_addr(its_index);
+  /* MAPI maps EventID == int_id in the existing ITS helper. */
   msi_data = int_id;
+  use_msix = (val_pcie_find_capability(bdf, PCIE_CAP, CID_MSIX, &cap_offset) == PCIE_SUCCESS);
+  if (!use_msix)
+  {
+    if (val_pcie_find_capability(bdf, PCIE_CAP, CID_MSI, &cap_offset) != PCIE_SUCCESS)
+      return ACS_STATUS_SKIP;
 
+    if (msi_index != 0 || msi_data > MSI_MSG_DATA_MASK)
+    {
+      val_print(ACS_PRINT_ERR, " MSI requires index zero and a 16-bit EventID for BDF 0x%x", bdf);
+      return ACS_STATUS_ERR;
+    }
 
-  status = fill_msi_x_table(bdf, msi_index, msi_addr, msi_data);
+    val_pcie_read_cfg(bdf, cap_offset, &control);
+    if (!(control & MSI_64BIT_ADDR_MASK) && (msi_addr >> 32))
+    {
+      val_print(ACS_PRINT_WARN, " 32-bit MSI cannot address GITS_TRANSLATER for BDF 0x%x", bdf);
+      return ACS_STATUS_SKIP;
+    }
+  }
+
+  status = val_gic_its_create_lpi_map(its_index, device_id, int_id, LPI_PRIORITY1);
+  if (status != ACS_STATUS_PASS) {
+    val_print(ACS_PRINT_ERR, " ITS : Failed to create LPI mapping for DeviceID 0x%x", device_id);
+    return status;
+  }
+
+  if (use_msix)
+  {
+    /* MSI and MSI-X must not be enabled simultaneously. */
+    if (val_pcie_find_capability(bdf, PCIE_CAP, CID_MSI, &cap_offset) == PCIE_SUCCESS)
+    {
+      val_pcie_read_cfg(bdf, cap_offset, &control);
+      val_pcie_write_cfg(bdf, cap_offset, control & ~MSI_ENABLE_MASK);
+    }
+    status = fill_msi_x_table(bdf, msi_index, msi_addr, msi_data);
+  }
+  else
+    fill_msi_capability(bdf, cap_offset, msi_addr, msi_data);
+
+  if (status != ACS_STATUS_PASS)
+    val_gic_its_clear_lpi_map(its_index, device_id, int_id);
 
   return status;
 }
@@ -486,7 +580,7 @@ uint32_t val_gic_its_get_base(uint32_t its_id, uint64_t *its_base)
    if ((g_gic_its_info == NULL) || (g_gic_its_info->GicNumIts == 0))
     return ACS_STATUS_ERR;
 
-  its_index = get_its_index(its_id);
+  its_index = val_gic_get_its_index(its_id);
 
   if (its_index >= g_gic_its_info->GicNumIts) {
     val_print(ACS_PRINT_ERR, " Could not find ITS ID [%x]", its_id);

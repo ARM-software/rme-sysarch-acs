@@ -62,6 +62,46 @@ pal_pcie_get_mcfg_ecam()
   return (Entry->BaseAddress);
 }
 
+UINT64
+pal_pcie_get_mcfg_ecam_for_bdf(UINT32 Bdf)
+{
+  EFI_ACPI_MEMORY_MAPPED_ENHANCED_CONFIGURATION_SPACE_BASE_ADDRESS_ALLOCATION_STRUCTURE *Entry;
+  UINT32 Length;
+  UINT32 Segment;
+  UINT32 Bus;
+
+  if (PLATFORM_OVERRIDE_PCIE_ECAM_BASE)
+      return PLATFORM_OVERRIDE_PCIE_ECAM_BASE;
+
+  gMcfgHdr = (EFI_ACPI_MEMORY_MAPPED_CONFIGURATION_BASE_ADDRESS_TABLE_HEADER *) pal_get_mcfg_ptr();
+  if (gMcfgHdr == NULL) {
+      rme_print(ACS_PRINT_WARN, L" ACPI - MCFG Table not found. Setting ECAM Base to 0. ");
+      return 0;
+  }
+
+  Length = sizeof(EFI_ACPI_MEMORY_MAPPED_CONFIGURATION_BASE_ADDRESS_TABLE_HEADER);
+  if (gMcfgHdr->Header.Length < Length) {
+      rme_print(ACS_PRINT_ERR, L" Invalid MCFG table length 0x%x", gMcfgHdr->Header.Length);
+      return 0;
+  }
+
+  Segment = PCIE_EXTRACT_BDF_SEG(Bdf);
+  Bus = PCIE_EXTRACT_BDF_BUS(Bdf);
+  Entry = (EFI_ACPI_MEMORY_MAPPED_ENHANCED_CONFIGURATION_SPACE_BASE_ADDRESS_ALLOCATION_STRUCTURE *) (gMcfgHdr + 1);
+
+  while (gMcfgHdr->Header.Length - Length >= sizeof(*Entry)) {
+      if ((Entry->PciSegmentGroupNumber == Segment) &&
+          (Bus >= Entry->StartBusNumber) && (Bus <= Entry->EndBusNumber))
+          return Entry->BaseAddress;
+
+      Entry++;
+      Length += sizeof(EFI_ACPI_MEMORY_MAPPED_ENHANCED_CONFIGURATION_SPACE_BASE_ADDRESS_ALLOCATION_STRUCTURE);
+  }
+
+  rme_print(ACS_PRINT_ERR, L" MCFG entry not found for BDF 0x%x", Bdf);
+  return 0;
+}
+
 
 /**
   @brief  Fill the PCIE Info table with the details of the PCIe sub-system

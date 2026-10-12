@@ -692,6 +692,9 @@ typedef enum {
     TRANSACTION_RECORD = 0x17
 } EXERCISER_PARAM_TYPE;
 
+/* Release the SEC_SID override and restore the exerciser's default selection. */
+#define EXERCISER_SEC_SID_DEFAULT 0xFFFFFFFFu
+
 #define EXERCISER_TXN_ATTR_READ              (1u << 1)
 #define EXERCISER_TXN_ATTR_CONFIG            (1u << 2)
 #define EXERCISER_TXN_ATTR_CACHE_MAINTENANCE (1u << 3)
@@ -738,8 +741,6 @@ typedef enum {
 /* Normalized PAL observations, not architectural host-port register bits. */
 #define CXL_SNOOP_RESULT_HOST_ACCEPTED         (1u << 3)
 #define CXL_SNOOP_RESULT_HOST_REJECTED         (1u << 4)
-#define CXL_SEC_SID_REALM                     (1u << 1)
-#define CXL_SEC_SID_VALID                     (1u << 31)
 
 uint32_t pal_cda_tdi_snoop_attempt(uint32_t bdf, uint64_t target_hpa,
                                    uint32_t pas_realm, uint32_t *result);

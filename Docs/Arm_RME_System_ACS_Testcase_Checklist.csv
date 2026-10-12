@@ -5,7 +5,7 @@ Sl No,Rule ID,Rule Description,Coverage,Notes,Exerciser PAL APIs Used
 4,RYXFMV,Requesters outside MMU/SMMU translation are SSD-tagged with an Access PAS.,Not covered,Requires DAP/debug-access support to generate and tag non-MMU/SMMU requests.,
 5,RSCDLL,"Once assigned, the value of an Access PAS cannot be altered.",Not covered,Access PAS tag mutation is internal behavior and not directly observable by ACS.,
 6,RYKVJK,A PAS filter enforces the PAS protection check by permitting access to a Resource only if the Access PAS matches a Resource PAS associated with that Resource.,rme_pas_filter_functionality,,
-7,RMZJXC,Every requester in the system is subjected to the PAS protection check.,rme_pcie_devices_support_gpc,PCIe exerciser VIP required,"pal_exerciser_set_param (CFG_TXN_ATTRIBUTES, DMA_ATTRIBUTES); pal_exerciser_ops (START_DMA)"
+7,RMZJXC,Every requester in the system is subjected to the PAS protection check.,"rme_pcie_devices_support_gpc, gic_its_subjected_to_gpc_check",PCIe exerciser VIP required,"pal_exerciser_set_param (CFG_TXN_ATTRIBUTES, DMA_ATTRIBUTES); pal_exerciser_ops (START_DMA); pal_exerciser_ops (GENERATE_MSI)"
 8,RWRGTF,Access to the Root PAS is only permitted for Trusted requesters.,Not covered,Trusted requester access policy is not generically observable by ACS.,
 9,RKGDVK,GPT-based PAS assignment requires a single PA per PAS and page-granular resources.,"rme_resources_aligned_to_granularity, rme_resources_are_not_physically_aliased",,
 10,RWJNMD,On-chip Resource GPC relies only on GPT storage with equivalent integrity and replay protection.,Not covered,"GPT storage location, integrity, and replay protection are implementation details.",
@@ -74,7 +74,7 @@ Sl No,Rule ID,Rule Description,Coverage,Notes,Exerciser PAL APIs Used
 73,RCMMDG,"For any cache before the PoPA, cache prefetching across granule-boundary is allowed only after querying the GPC for the PAS association of the next granule.",Not covered,Cache prefetch behavior is not directly software-observable.,
 74,RPSGCM,A cache maintenance operation performed on a Clean cache entry never results with a write of entry content past the PoPA.,Not covered,Clean-cache writeback behavior is not directly software-observable.,
 75,RJRJSQ,An RME coherent interconnect complies with a Distributed Virtual Memory (DVM) version that supports Realm Translation Regimes and TLB Invalidate by PA operations.,rme_interconnect_supports_tlbi_pa,,
-76,RDNFTD,A PA of an access to a PCIe Root Port is associated with a PAS until reaching the Root Port.,da_rootport_tdisp_disabled,PCIe exerciser VIP required,"pal_exerciser_set_param (DMA_ATTRIBUTES); pal_exerciser_ops (START_DMA)"
+76,RDNFTD,A PA of an access to a PCIe Root Port is associated with a PAS until reaching the Root Port.,da_rootport_tdisp_disabled,"PCIe exerciser VIP required; indirect coverage through the Root-PAS access path. Source TEST_RULE lists only RRNQNM and RGKHSZ.","pal_exerciser_set_param (DMA_ATTRIBUTES); pal_exerciser_ops (START_DMA)"
 77,RTTPLM,Interconnect registers that control mapping of PAs to PCIe Root Ports are implemented as MSD-Protected registers (MPRs).,da_interconnect_regs_rmsd_protected,,
 78,RXZTPC,"RME-DA host bridge BDF, ECAM, and memory-range assignments are static or trusted-controlled.",Planned,,
 79,RKSPKN,Encryption keys or any other confidential memory encryption context that is used by an MPE are stored in registers that are reset to a known default value on an RME system reset.,Not covered,MPE key storage is implementation-defined and not directly observable.,
@@ -97,7 +97,7 @@ Sl No,Rule ID,Rule Description,Coverage,Notes,Exerciser PAL APIs Used
 96,RNXJKQ,"When TDISP is enabled, IDE keys, confidential state, and protected payload registers are RMSD full-protect.",da_rootport_write_protect_full_protect_property,,
 97,RPCRFM,"When TDISP is enabled, protected RP configuration registers are RMSD write-detect.",da_rmsd_write_detect_property,,
 98,RHCMWC,"When RMEDA_CTL1.TDISP_EN transitions from 1 to 0, all hosted IDE Streams transition to IDE Insecure state.",da_ide_state_tdisp_disable,,
-99,RRNQNM,"When TDISP is disabled, Root Ports clear/reject protected T-bit or XT-bit traffic.",da_rootport_tdisp_disabled,PCIe exerciser VIP required,"pal_exerciser_set_param (DMA_ATTRIBUTES); pal_exerciser_ops (START_DMA)"
+99,RRNQNM,"When TDISP is disabled, Root Ports clear both T-bit and XT-bit or reject incoming protected requests, and reject with error outgoing requests requiring either bit to be set.",da_rootport_tdisp_disabled,PCIe exerciser VIP required,"pal_exerciser_set_param (DMA_ATTRIBUTES); pal_exerciser_ops (START_DMA)"
 100,RNPGJV,The RMEDA_CTL registers are RMSD write-protect by hardware default.,da_ctl_regs_rmsd_write_protect_property,,
 101,RNWSJB,All RPs in an RME-DA system must implement the RME-DA DVSEC.,da_dvsec_register_config,,
 102,RYHQQL,Selective IDE register-block lock state controls register protection and stream lock state.,da_selective_ide_register_property,,
@@ -195,7 +195,7 @@ Sl No,Rule ID,Rule Description,Coverage,Notes,Exerciser PAL APIs Used
 194,RGTPGZ,"When Root external debugging is enabled, the RNVS confidential parameters are either inaccessible, scrubbed, or populated with debug values.",Not covered,External debug requires a common debugger/test interface unavailable to ACS.,
 195,RRHGKX,"Access to a Secured Arm CCA system through an external debug or test interface, including debug access ports, JTAG ports, and scan interfaces is disabled by default.",Not covered,External debug requires a common debugger/test interface unavailable to ACS.,
 196,RQLPNL,External debug power-up requests are permitted only through trusted power control.,Not covered,External debug requires a common debugger/test interface unavailable to ACS.,
-197,RHJHRL,RME system reset resets Trusted requesters/subsystems and clears confidential state by trusted mechanisms.,Not covered,Full trusted-state reset coverage is platform specific.,
+197,RHJHRL,RME system reset resets Trusted requesters/subsystems and clears confidential state by trusted mechanisms.,Not covered,Full trusted-state reset coverage requires platform-specific instrumentation; generic ACS cannot establish GPR contents at reset assertion or capture them before boot firmware overwrites them.,
 198,RKKSQB,"An RME system reset propagates to PEs as either a Cold reset, Warm reset, or Error recovery reset.",rme_system_reset_propagation_to_all_pe,,
 199,RHLKZP,An RME system reset might propagate to any component that implements RAS [12] as an Error recovery reset.,Not covered,RAS error-recovery reset propagation is implementation-specific.,
 200,RSSGMJ,"The reset of a system component that affects the RME security guarantee can only be controlled by MSD or a Trusted subsystem, or driven by an RME system reset.",Not covered,Security-affecting reset controls are implementation/platform specific.,
@@ -221,5 +221,4 @@ Sl No,Rule ID,Rule Description,Coverage,Notes,Exerciser PAL APIs Used
 220,RFMHST,SET_INTERFACE_RESP returns the response header for SET_INTERFACE completion.,tdisp_rfmhst_set_interface_resp_format,,
 221,RGRPDP,GET_DEV_PROP_REQ queries Arm TDISP VDM device properties.,tdisp_rgrpdp_get_dev_prop_req,,
 222,RGHDCB,GET_DEV_PROP_RESP returns Arm TDISP VDM device properties and register details.,tdisp_rghdcb_get_dev_prop_resp_format,,
-223,RNULL,,gic_its_subjected_to_gpc_check,PCIe exerciser VIP required,pal_exerciser_ops (GENERATE_MSI)
-224,RNULL,,cxl_rplcmc_type3_target_ckid,CXL Type-3 endpoint required,
+223,RNULL,,cxl_rplcmc_type3_target_ckid,CXL Type-3 endpoint required,

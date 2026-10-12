@@ -18,12 +18,136 @@
 #include "val_gic_its.h"
 #include "include/val_gic_support.h"
 #include "include/val.h"
+#include "include/val_pe.h"
 
 uint64_t ArmReadMpidr(void);
 
 extern GIC_ITS_INFO    *g_gic_its_info;
 static uint32_t        *g_cwriter_ptr;
 static uint32_t        g_its_setup_done;
+
+/* Geometry saved during ITS initialization and used when mapping a DeviceID.
+ * A NULL l1_base denotes a flat Device Table, fully allocated during init.
+ */
+typedef struct {
+  uint64_t *l1_base;       /* CPU address of the indirect table's L1 descriptors. */
+  uint64_t id_count;      /* DeviceID limit, exclusive. */
+  uint32_t l1_entries;    /* Number of descriptors in the allocated L1 table. */
+  uint32_t l2_entries;    /* Number of Device Table entries in one L2 page. */
+  uint32_t page_size;     /* L2 allocation size and alignment, in bytes. */
+} ITS_DEVICE_TABLE;
+
+typedef ITS_DEVICE_TABLE ITS_DEVICE_TABLES[ARM_NUM_GITS_BASER];
+static ITS_DEVICE_TABLES *g_device_tables;
+
+/* An indirect L1 descriptor carries the L2 PA in bits [51:12]. */
+#define ITS_L2_PA_MASK 0x000FFFFFFFFFF000ULL
+
+/**
+  @brief   Allocate and initialize one L2 table page.
+
+           Clear the page and complete cache cleaning before the caller
+           publishes its descriptor in the L1 table.
+
+  @param   page_size  Allocation size and alignment, in bytes.
+  @return  Valid L1 descriptor containing the L2 physical address, or zero
+           if allocation or physical address validation fails.
+**/
+static uint64_t ItsAllocateL2(uint32_t page_size)
+{
+  void *page = val_aligned_alloc(page_size, page_size);
+  uint64_t pa;
+
+  if (page == NULL)
+    return 0;
+
+  pa = (uint64_t)val_memory_virt_to_phys(page);
+  /* Reject an address that cannot be represented in an aligned L1 descriptor. */
+  if ((pa == 0) || (pa & ~ITS_L2_PA_MASK) || (pa & (page_size - 1)))
+    return 0;
+
+  val_memory_set(page, page_size, 0);
+  val_pe_cache_clean_range((uint64_t)page, page_size);
+  TestExecuteBarrier();
+
+  return pa | ARM_GITS_BASER_VALID;
+}
+
+/**
+  @brief   Ensure that Device Table memory backs the requested DeviceID.
+
+           Reuse an existing L2 page or allocate and publish a missing page
+           before MAPD. When unmapping, check existing backing without
+           allocating a previously unused page.
+
+  @param   its_index    Index of the ITS in the GIC ITS information table.
+  @param   device_id    DeviceID whose Device Table entry is required.
+  @param   allocate_l2  1 to allocate missing backing for mapping;
+                       0 to check existing backing for unmapping.
+  @return  ACS_STATUS_PASS if backing is available; ACS_STATUS_ERR for an
+           invalid ITS or DeviceID, missing backing, or allocation failure.
+**/
+static uint32_t ItsEnsureDeviceTable(uint32_t its_index, uint32_t device_id,
+                                    uint32_t allocate_l2)
+{
+  uint32_t baser_index;
+  uint32_t l1_index;
+  uint32_t device_table_found = 0;
+  uint64_t descriptor;
+  uint64_t typer;
+  ITS_DEVICE_TABLE *table;
+  uint64_t *entry;
+
+  if ((g_gic_its_info == NULL) || (g_device_tables == NULL) ||
+      (its_index >= g_gic_its_info->GicNumIts))
+    return ACS_STATUS_ERR;
+
+  /* Check the hardware DeviceID width before accessing any table metadata. */
+  typer = val_mmio_read64(g_gic_its_info->GicIts[its_index].Base + ARM_GITS_TYPER);
+  if ((uint64_t)device_id >= (1ULL << (ARM_GITS_TYPER_DevBits(typer) + 1)))
+    return ACS_STATUS_ERR;
+
+  for (baser_index = 0; baser_index < ARM_NUM_GITS_BASER; baser_index++) {
+    table = &g_device_tables[its_index][baser_index];
+    /* Non-Device BASERs have no saved Device Table geometry. */
+    if (table->id_count == 0)
+      continue;
+
+    device_table_found = 1;
+    /* A capped flat table can support fewer IDs than the hardware advertises. */
+    if ((uint64_t)device_id >= table->id_count)
+      return ACS_STATUS_ERR;
+    if (table->l1_base == NULL)
+      continue; /* A direct Device Table is fully backed during ITS init. */
+
+    /* Each L1 descriptor backs one contiguous range of DeviceIDs in an L2 page.
+     * Check the allocated L1 size, which can also be capped during init.
+     */
+    l1_index = device_id / table->l2_entries;
+    if (l1_index >= table->l1_entries)
+      return ACS_STATUS_ERR;
+
+    entry = &table->l1_base[l1_index];
+    /* Reuse existing backing; never overwrite a valid L1 descriptor. */
+    if (*entry & ARM_GITS_BASER_VALID)
+      continue;
+    if (!allocate_l2)
+      return ACS_STATUS_ERR;
+
+    descriptor = ItsAllocateL2(table->page_size);
+    if (descriptor == 0) {
+      val_print(ACS_PRINT_ERR, " ITS : L2 allocation failed for DeviceID 0x%x", device_id);
+      return ACS_STATUS_ERR;
+    }
+
+    /* Publish the cleared L2 page before making its L1 entry valid. */
+    *entry = descriptor;
+    val_pe_cache_clean_range((uint64_t)entry, sizeof(*entry));
+    TestExecuteBarrier();
+  }
+
+  return device_table_found ? ACS_STATUS_PASS : ACS_STATUS_ERR;
+}
 
 uint32_t GET_NUM_BITS(uint64_t value)
 {
@@ -130,7 +254,9 @@ ArmGicSetItsCommandQueueBase(
 uint32_t ArmGicSetItsTables(uint32_t its_index)
 {
   uint32_t                Pages;
-  uint32_t                TableSize, entry_size;
+  uint32_t                entry_size;
+  uint64_t                TableSize;
+  uint64_t                id_count, flat_table_capacity;
   uint64_t                its_baser, its_typer;
   uint8_t                 it, table_type;
   uint64_t                write_value, read_value;
@@ -139,9 +265,11 @@ uint32_t ArmGicSetItsTables(uint32_t its_index)
   uint64_t                ItsBase;
   uint64_t                indirect_supported = 0, max_page_size = 0;
   uint64_t                lvl2_entries, lvl2_bits, lvl1_bits;
-  uint64_t                baser_pgsz = 0x00, indirect_table;
+  uint64_t                baser_pgsz = 0x00;
+  uint64_t                indirect_table; /* 1: L1 descriptors point to L2 pages; 0: flat table. */
   uint64_t                *lvl1_ptr = NULL;
   uint64_t                temp_val;
+  ITS_DEVICE_TABLE        *device_table;
 
   ItsBase = g_gic_its_info->GicIts[its_index].Base;
 
@@ -151,6 +279,14 @@ uint32_t ArmGicSetItsTables(uint32_t its_index)
     its_baser = val_mmio_read64(ItsBase + ARM_GITS_BASER(it));
     table_type = ARM_GITS_BASER_GET_TYPE(its_baser);
     entry_size = ARM_GITS_BASER_GET_ENTRY_SIZE(its_baser);
+
+    /* Only table BASERs are relevant, and each one must be probed independently. */
+    if ((table_type != ARM_GITS_TBL_TYPE_DEVICE) &&
+        (table_type != ARM_GITS_TBL_TYPE_CLCN))
+      continue;
+    indirect_supported = 0;
+    max_page_size = 0;
+    baser_pgsz = 0;
 
     its_typer = val_mmio_read64(ItsBase + ARM_GITS_TYPER);
     DevBits = ARM_GITS_TYPER_DevBits(its_typer);
@@ -196,11 +332,18 @@ uint32_t ArmGicSetItsTables(uint32_t its_index)
    /* reset the register to original value */
     val_mmio_write64(ItsBase + ARM_GITS_BASER(it), its_baser);
 
+    if (max_page_size == 0) {
+      val_print(ACS_PRINT_ERR, " ITS : No supported BASER page size", 0);
+      return ACS_STATUS_ERR;
+    }
+
     if (table_type == ARM_GITS_TBL_TYPE_DEVICE) {
-      TableSize = (1 << (DevBits+1))*(entry_size+1); // Assuming Single Level Table
+      id_count = 1ULL << (DevBits + 1);
+      TableSize = id_count * (entry_size + 1); // Assuming Single Level Table
 
     } else if (table_type == ARM_GITS_TBL_TYPE_CLCN) {
-      TableSize = (1 << (CIDBits+1))*(entry_size+1); // Assuming Single Level Table
+      id_count = 1ULL << (CIDBits + 1);
+      TableSize = id_count * (entry_size + 1); // Assuming Single Level Table
 
     } else {
       continue;
@@ -223,7 +366,7 @@ uint32_t ArmGicSetItsTables(uint32_t its_index)
       }
 
       // level 1 needs 64 bits i.e 8 bytes
-      TableSize = (1 << (lvl1_bits))*ARM_GITS_BASER_INDIRECT_LVL1_ENTRY_SIZE;
+      TableSize = (1ULL << lvl1_bits)*ARM_GITS_BASER_INDIRECT_LVL1_ENTRY_SIZE;
       if (TableSize > max_page_size*ARM_GITS_BASER_MAX_PAGES) {
         val_print(ACS_PRINT_WARN,  " ITS : Level 1 table size exceeded limit", 0);
         val_print(ACS_PRINT_WARN, " max did size will not be supported..", 0);
@@ -245,6 +388,9 @@ uint32_t ArmGicSetItsTables(uint32_t its_index)
 
   TableSize = Pages*max_page_size;
 
+  /* For an indirect table, TableSize now describes only the L1 descriptors.
+   * For a flat table, this allocation contains the Device/Collection entries.
+   */
   Address = (uint64_t)val_aligned_alloc(max_page_size, TableSize);
 
   if (!Address) {
@@ -254,18 +400,29 @@ uint32_t ArmGicSetItsTables(uint32_t its_index)
 
   val_memory_set((void *)Address,  TableSize, 0);
 
-  if (indirect_table == 1) {
+  /* Keep Device Table L1 entries invalid/sparse.
+   * Collection Tables remain eagerly backed because MAPC needs them at init.
+   */
+  if ((indirect_table == 1) && (table_type == ARM_GITS_TBL_TYPE_CLCN)) {
     lvl1_ptr = (uint64_t *)(Address);
-    for (int i = 0; i < (1 << lvl1_bits); i++) {
-      temp_val = (uint64_t)val_aligned_alloc(max_page_size, max_page_size);
-      val_memory_set((void *)temp_val,  max_page_size, 0);
-      temp_val =  temp_val | ARM_GITS_BASER_VALID;
+    for (uint64_t i = 0; (i < (1ULL << lvl1_bits)) &&
+                         (i < TableSize / sizeof(*lvl1_ptr)); i++) {
+      temp_val = ItsAllocateL2((uint32_t)max_page_size);
+      if (temp_val == 0) {
+        val_print(ACS_PRINT_ERR, " ITS : Could not allocate Collection Table L2 page", 0);
+        return ACS_STATUS_ERR;
+      }
       lvl1_ptr[i] = temp_val;
     }
   }
 
+  /* Make cleared L1 data/descriptors visible before BASER.Valid is set. */
+  val_pe_cache_clean_range(Address, TableSize);
+  TestExecuteBarrier();
+
   write_value = val_mmio_read64(ItsBase + ARM_GITS_BASER(it));
-  write_value = write_value & (~ARM_GITS_BASER_PA_MASK);
+  write_value &= ~(ARM_GITS_BASER_PA_MASK | ARM_GITS_BASER_INDIRECT |
+                   ARM_GITS_BASER_PAGE_MASK | 0xFFULL);
   if (indirect_table ==  1) {
     write_value = write_value | ARM_GITS_BASER_INDIRECT;
   }
@@ -275,6 +432,25 @@ uint32_t ArmGicSetItsTables(uint32_t its_index)
   write_value = write_value | (Pages-1);
   write_value = write_value | ((7ULL << 59) | (7ULL << 53) | (2ULL << 10));
   val_mmio_write64(ItsBase + ARM_GITS_BASER(it), write_value);
+
+  /* Save the Device Table geometry for on-demand MAPD allocation. */
+  if (table_type == ARM_GITS_TBL_TYPE_DEVICE) {
+    device_table = &g_device_tables[its_index][it];
+    device_table->id_count = id_count;
+    if (!indirect_table) {
+      /* Limit DeviceIDs to the entries actually backed by the flat allocation. */
+      flat_table_capacity = TableSize / (entry_size + 1);
+      if (flat_table_capacity < id_count)
+        device_table->id_count = flat_table_capacity;
+    }
+    device_table->page_size = (uint32_t)max_page_size;
+    if (indirect_table) {
+      /* Keep the L1 CPU address so later mappings can publish new L2 pages. */
+      device_table->l1_base = (uint64_t *)Address;
+      device_table->l1_entries = TableSize / sizeof(*lvl1_ptr);
+      device_table->l2_entries = (uint32_t)lvl2_entries;
+    }
+  }
   }
 
   /* Allocate Memory for Interrupt Translation Table */
@@ -478,6 +654,10 @@ void val_gic_its_clear_lpi_map(uint32_t its_index, uint32_t device_id, uint32_t 
   if (!g_its_setup_done)
     return;
 
+  /* Unmapping must not allocate an unused L2 page. */
+  if (ItsEnsureDeviceTable(its_index, device_id, 0) != ACS_STATUS_PASS)
+    return;
+
   ItsBase        = g_gic_its_info->GicIts[its_index].Base;
   ItsCommandBase = g_gic_its_info->GicIts[its_index].CommandQBase;
 
@@ -507,8 +687,8 @@ void val_gic_its_clear_lpi_map(uint32_t its_index, uint32_t device_id, uint32_t 
 
 }
 
-void val_gic_its_create_lpi_map(uint32_t its_index, uint32_t device_id,
-                            uint32_t int_id, uint32_t Priority)
+uint32_t val_gic_its_create_lpi_map(uint32_t its_index, uint32_t device_id,
+                                uint32_t int_id, uint32_t Priority)
 {
   uint64_t    value;
   uint64_t    RDBase;
@@ -516,7 +696,13 @@ void val_gic_its_create_lpi_map(uint32_t its_index, uint32_t device_id,
   uint64_t    ItsCommandBase;
 
   if (!g_its_setup_done)
-    return;
+    return ACS_STATUS_ERR;
+
+  /* Allocate/clear only the L2 page containing this MAPD DeviceID. */
+  if (ItsEnsureDeviceTable(its_index, device_id, 1) != ACS_STATUS_PASS) {
+    val_print(ACS_PRINT_ERR, " ITS : Device Table unavailable for DeviceID 0x%x", device_id);
+    return ACS_STATUS_ERR;
+  }
 
   ItsBase        = g_gic_its_info->GicIts[its_index].Base;
   ItsCommandBase = g_gic_its_info->GicIts[its_index].CommandQBase;
@@ -557,6 +743,7 @@ void val_gic_its_create_lpi_map(uint32_t its_index, uint32_t device_id,
   PollTillCommandQueueDone(its_index);
   TestExecuteBarrier();
 
+  return ACS_STATUS_PASS;
 }
 
 
@@ -622,13 +809,32 @@ uint32_t val_gic_its_init(void)
 {
   uint32_t    Status;
   uint32_t    index;
+  uint64_t    state_size;
+
+  if (g_its_setup_done)
+    return ACS_STATUS_PASS;
+  if ((g_gic_its_info == NULL) || (g_gic_its_info->GicNumIts == 0))
+    return ACS_STATUS_ERR;
+
+  /* Allocate per-ITS/BASER metadata used by the sparse Device Table path. */
+  state_size = (uint64_t)g_gic_its_info->GicNumIts * sizeof(*g_device_tables);
+  if (state_size > 0xFFFFFFFFULL)
+    return ACS_STATUS_ERR;
+
+  g_device_tables = val_aligned_alloc(MEM_ALIGN_4K, (uint32_t)state_size);
+  if (g_device_tables == NULL) {
+    val_print(ACS_PRINT_ERR, " ITS : Could Not Allocate Device Table state", 0);
+    return ACS_STATUS_ERR;
+  }
+  val_memory_set(g_device_tables, (uint32_t)state_size, 0);
 
   g_cwriter_ptr = (uint32_t *)pal_aligned_alloc(MEM_ALIGN_4K,
                                                 sizeof(uint32_t) * (g_gic_its_info->GicNumIts));
 
   if (g_cwriter_ptr == NULL) {
     val_print(ACS_PRINT_ERR, " ITS : Could Not Allocate Memory CWriteR. Test may not pass.", 0);
-    return 0;
+    g_device_tables = NULL;
+    return ACS_STATUS_ERR;
   }
 
   for (index = 0; index < g_gic_its_info->GicNumIts; index++)

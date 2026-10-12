@@ -854,11 +854,20 @@ static uint32_t
 val_cxl_ext_security_capability_base(uint32_t component_index, uint64_t *base_out)
 {
   const CXL_COMPONENT_ENTRY *entry = val_cxl_get_component_entry(component_index);
+  uint64_t host_component_base;
 
-  if ((entry == NULL) || (entry->component_reg_base == 0u) || (base_out == NULL))
+  if ((entry == NULL) || (base_out == NULL))
     return ACS_STATUS_ERR;
 
-  return val_cxl_find_capability(entry->component_reg_base,
+  if (entry->host_bridge_index == CXL_COMPONENT_INVALID_INDEX)
+    return ACS_STATUS_SKIP;
+
+  host_component_base = val_cxl_get_info(CXL_INFO_COMPONENT_BASE,
+                                         entry->host_bridge_index);
+  if (host_component_base == 0u)
+    return ACS_STATUS_ERR;
+
+  return val_cxl_find_capability(host_component_base,
                                  CXL_CAPID_EXT_SECURITY,
                                  base_out);
 }
@@ -2293,6 +2302,13 @@ static int val_cxl_get_mmio_bar_host_pa(uint32_t bdf, uint8_t bir,
     return (*bar_base_out) ? PCIE_SUCCESS : VAL_CXL_BAR_ERR_ZERO;
 }
 
+/* Register offsets are 64 KiB aligned and span both locator DWORDs. */
+static inline uint64_t
+val_cxl_register_locator_offset(uint32_t dw0, uint32_t dw1)
+{
+  return ((uint64_t)dw1 << 32) | (uint64_t)(dw0 & CXL_RL_ENTRY_OFFSET_LOW_MASK);
+}
+
 /**
   @brief   Locate the primary CXL component register block for a PCIe function.
 
@@ -2345,12 +2361,12 @@ val_cxl_find_component_register_base(uint32_t bdf, uint64_t *component_base)
     if (val_pcie_read_cfg(bdf, entry_offset + CXL_RL_ENTRY_DW0_OFF, &dw0))
       continue;
 
-    if (val_pcie_read_cfg(bdf, entry_offset + CXL_RL_ENTRY_REG_OFF, &dw1))
+    if (val_pcie_read_cfg(bdf, entry_offset + CXL_RL_ENTRY_DW1_OFF, &dw1))
       continue;
 
     bar_num = (uint8_t)CXL_RL_BAR_NUM(dw0);
     block_id = (uint16_t)((dw0 >> CXL_RL_ENTRY_BLOCKID_SHIFT) & CXL_RL_ENTRY_BLOCKID_MASK);
-    reg_off = CXL_RL_BLOCK_OFFSET(dw0, dw1);
+    reg_off = val_cxl_register_locator_offset(dw0, dw1);
 
     if (val_cxl_get_mmio_bar_host_pa(bdf, bar_num, &bar_pa, NULL) != PCIE_SUCCESS)
       continue;
@@ -2629,7 +2645,7 @@ static void val_cxl_parse_register_locator(uint32_t bdf,
     ent_off_cfg = ecap_off + CXL_RL_HDR_OFFSET_ENTRIES;
     for (i = 0; i < num_entries; i++, ent_off_cfg += CXL_RL_ENTRY_SIZE) {
         if (val_pcie_read_cfg(bdf, ent_off_cfg + CXL_RL_ENTRY_DW0_OFF, &dw0) ||
-            val_pcie_read_cfg(bdf, ent_off_cfg + CXL_RL_ENTRY_REG_OFF, &dw1)) {
+            val_pcie_read_cfg(bdf, ent_off_cfg + CXL_RL_ENTRY_DW1_OFF, &dw1)) {
             val_print(ACS_PRINT_INFO, " ERROR in CXL Summary :: RL[%ld]: entry read failed",
                         (uint64_t)i);
             continue;
@@ -2639,7 +2655,7 @@ static void val_cxl_parse_register_locator(uint32_t bdf,
         bir      = (uint8_t)((dw0 >> CXL_RL_ENTRY_BIR_SHIFT)    & CXL_RL_ENTRY_BIR_MASK);
         block_id = (uint8_t)((dw0 >> CXL_RL_ENTRY_BLOCKID_SHIFT) & CXL_RL_ENTRY_BLOCKID_MASK);
         bar_num = (uint8_t)CXL_RL_BAR_NUM(bir);
-        reg_off = CXL_RL_BLOCK_OFFSET(dw0, dw1);
+        reg_off = val_cxl_register_locator_offset(dw0, dw1);
         {
             bar_st = val_cxl_get_mmio_bar_host_pa(bdf, bar_num, &bar_base, &bar_is64);
             if (bar_st != PCIE_SUCCESS) {

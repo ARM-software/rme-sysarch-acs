@@ -43,7 +43,6 @@
 #define RSHSXK_SRC_PATTERN 0xA5u
 #define RSHSXK_DST_PATTERN 0x5Au
 
-#define SEC_SID_NONSECURE 0x0u
 #define SEC_SID_REALM     0x2u
 
 #if ENABLE_SPDM
@@ -847,7 +846,7 @@ cleanup:
    */
   if ((sec_sid_programmed != 0u) &&
       (val_exerciser_set_param_by_bdf(EXERCISER_SEC_SID,
-                                      SEC_SID_NONSECURE,
+                                      EXERCISER_SEC_SID_DEFAULT,
                                       0u,
                                       device->endpoint_bdf) != 0u))
     result = ACS_STATUS_FAIL;

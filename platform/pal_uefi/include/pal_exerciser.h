@@ -59,12 +59,16 @@
 #define ATS_REPLY     0x038
 #define TXN_TRACE     0x40
 #define TXN_CTRL_BASE 0x44
-#define SEC_SID_CTL      0x94
-#define CXL_CMD_OP       0x80
+#define SEC_SID_VALUE_REG 0x94
+#define CXL_CMD_REG      0x80
+#define CXL_CMD_OP       CXL_CMD_REG
 #define CXL_CMD_ADDR_LO  0x84
 #define CXL_CMD_ADDR_HI  0x88
 #define CXL_CMD_DATA0_LO 0x8C
 #define CXL_CMD_DATA0_HI 0x90
+/* FastSim's CHI C2C SEC_SID register requires bit 31 to mark the SID valid. */
+#define SEC_SID_VALUE_REG_VALID (1u << 31)
+#define SEC_SID_VALUE_REG_MASK (1u << 1)
 #define PCI_MAX_BUS     255
 #define PCI_MAX_DEVICE  31
 
@@ -103,14 +107,16 @@
 #define ERR_CODE_SHIFT         20
 #define FATAL_SHIFT            31
 #define ERROR_INJECT_BIT       17
-#define CXL_SEC_SID_REALM       (1u << 1)
-#define CXL_SEC_SID_VALID       (1u << 31)
-#define CXL_CMD_OP_MASK         0xFu
-#define CXL_CMD_STATUS_MASK     (0xFu << 8)
-#define CXL_CMD_STATUS_DONE     (0x1u << 8)
-#define CXL_CMD_STATUS_ERR      (0x2u << 8)
-#define CXL_CMD_CLEAR_ERR       (1u << 30)
-#define CXL_CMD_TRIGGER         (1u << 31)
+#define CXL_CMD_OP_MASK       0xFu
+#define CXL_CMD_STATUS_MASK   (0xFu << 8)
+#define CXL_CMD_STATUS_DONE   (0x1u << 8)
+#define CXL_CMD_STATUS_ERR    (0x2u << 8)
+#define CXL_CMD_CLEAR_ERR     (1u << 30)
+#define CXL_CMD_TRIGGER       (1u << 31)
+
+#define CXL_CMD_OP_BACKDOOR_READ64  0x1u
+#define CXL_CMD_OP_BACKDOOR_WRITE64 0x2u
+#define CXL_CMD_OP_BISNP            0x3u
 
 #define PCI_CAP_PTR_OFFSET 8
 #define PCIE_CAP_PTR_OFFSET 20
@@ -178,6 +184,9 @@ typedef enum {
     EXERCISER_ATS_REQUEST_ATTRIBUTES = 0x16,
     TRANSACTION_RECORD = 0x17
 } EXERCISER_PARAM_TYPE;
+
+/* Release the SEC_SID override and restore the exerciser's default selection. */
+#define EXERCISER_SEC_SID_DEFAULT 0xFFFFFFFFu
 
 #define EXERCISER_TXN_ATTR_READ              (1u << 1)
 #define EXERCISER_TXN_ATTR_CONFIG            (1u << 2)
@@ -327,6 +336,7 @@ UINT64 pal_mmio_read64(UINT64 addr);
 VOID pal_mmio_write(UINT64 addr, UINT32 data);
 VOID pal_mmio_write64(UINT64 addr, UINT64 data);
 UINT64 pal_pcie_get_mcfg_ecam();
+UINT64 pal_pcie_get_mcfg_ecam_for_bdf(UINT32 Bdf);
 UINT64 pal_exerciser_get_pcie_config_offset(UINT32 Bdf);
 UINT32 pal_exerciser_find_pcie_capability(UINT32 ID, UINT32 Bdf, UINT32 Value, UINT32 *Offset);
 UINT32 pal_exerciser_set_param(EXERCISER_PARAM_TYPE Type, UINT64 Value1, UINT64 Value2, UINT32 Bdf);

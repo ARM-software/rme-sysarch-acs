@@ -212,6 +212,7 @@ uint32_t pal_pcie_scan_bridge_devices_and_check_memtype(uint32_t seg, uint32_t b
 {
 
   uint32_t Bus, Dev, Func;
+  uint32_t secondary_bus, subordinate_bus;
   uint32_t status = 0;
   uint64_t ecam_base;
   uint32_t reg_value, header_type;
@@ -219,14 +220,24 @@ uint32_t pal_pcie_scan_bridge_devices_and_check_memtype(uint32_t seg, uint32_t b
   uint8_t  mem_type;
 
 
+  if (pal_pcie_ecam_base(seg, bus, dev, fn) == 0)
+      return status;
+
   pal_pcie_read_cfg(seg, bus, dev, fn, BUS_NUM_REG_OFFSET, &reg_value);
-  for (Bus = 0; Bus < PCIE_MAX_BUS; Bus++)
+  secondary_bus = (reg_value >> SECBN_SHIFT) & SECBN_MASK;
+  subordinate_bus = (reg_value >> SUBBN_SHIFT) & SUBBN_MASK;
+
+  for (Bus = secondary_bus; Bus <= subordinate_bus; Bus++)
   {
+    /* Only access downstream buses covered by a configured ECAM range. */
+    ecam_base = pal_pcie_ecam_base(seg, Bus, 0, 0);
+    if (ecam_base == 0)
+        continue;
+
     for (Dev = 0; Dev < PCIE_MAX_DEV; Dev++)
     {
       for (Func = 0; Func < PCIE_MAX_FUNC; Func++)
       {
-        ecam_base = pal_pcie_ecam_base(seg, Bus, Dev, Func);
         header_type = pal_mmio_read(ecam_base +
                         Bus * PCIE_MAX_DEV * PCIE_MAX_FUNC * PCIE_CFG_SIZE +
                         Dev * PCIE_MAX_FUNC * PCIE_CFG_SIZE +
@@ -235,17 +246,13 @@ uint32_t pal_pcie_scan_bridge_devices_and_check_memtype(uint32_t seg, uint32_t b
 
         if(PCIE_HEADER_TYPE(header_type) == TYPE0_HEADER)
         {
-          if ((Bus >= ((reg_value >> SECBN_SHIFT) & SECBN_MASK)) &&
-              ((Bus <= ((reg_value >> SUBBN_SHIFT) & SUBBN_MASK))))
+          pal_pcie_read_cfg(seg, Bus, Dev, Func, BAR0_OFFSET, &data);
+          if (data)
           {
-            pal_pcie_read_cfg(seg, Bus, Dev, Func, BAR0_OFFSET, &data);
-            if (data)
-            {
-              mem_type = data & 0x6;
-              if (mem_type != 0) {
-                status = 1;
-                break;
-              }
+            mem_type = data & 0x6;
+            if (mem_type != 0) {
+              status = 1;
+              break;
             }
           }
         }

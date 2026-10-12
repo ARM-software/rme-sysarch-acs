@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022-2025, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2026, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -33,6 +33,68 @@ static EFI_ACPI_6_1_MULTIPLE_APIC_DESCRIPTION_TABLE_HEADER *gMadtHdr;
 
 EFI_HARDWARE_INTERRUPT_PROTOCOL *gInterrupt = NULL;
 EFI_HARDWARE_INTERRUPT2_PROTOCOL *gInterrupt2 = NULL;
+
+#define ACS_MAX_REGISTERED_INTERRUPTS  256
+
+typedef struct {
+  HARDWARE_INTERRUPT_SOURCE  Source;
+  VOID                       (*Handler)(VOID);
+} ACS_INTERRUPT_HANDLER_ENTRY;
+
+static ACS_INTERRUPT_HANDLER_ENTRY gAcsInterruptHandlers[ACS_MAX_REGISTERED_INTERRUPTS];
+
+static
+VOID
+EFIAPI
+pal_gic_interrupt_handler(
+  IN HARDWARE_INTERRUPT_SOURCE Source,
+  IN EFI_SYSTEM_CONTEXT        SystemContext
+  )
+{
+  UINTN Index;
+
+  (VOID)SystemContext;
+
+  for (Index = 0; Index < ACS_MAX_REGISTERED_INTERRUPTS; Index++) {
+    if ((gAcsInterruptHandlers[Index].Handler != NULL) &&
+        (gAcsInterruptHandlers[Index].Source == Source)) {
+      gAcsInterruptHandlers[Index].Handler();
+      return;
+    }
+  }
+}
+
+static
+BOOLEAN
+pal_gic_store_interrupt_handler(
+  IN HARDWARE_INTERRUPT_SOURCE Source,
+  IN VOID                      (*Handler)(VOID)
+  )
+{
+  UINTN Index;
+  UINTN FreeIndex = ACS_MAX_REGISTERED_INTERRUPTS;
+
+  for (Index = 0; Index < ACS_MAX_REGISTERED_INTERRUPTS; Index++) {
+    if ((gAcsInterruptHandlers[Index].Handler != NULL) &&
+        (gAcsInterruptHandlers[Index].Source == Source)) {
+      gAcsInterruptHandlers[Index].Handler = Handler;
+      return TRUE;
+    }
+
+    if ((FreeIndex == ACS_MAX_REGISTERED_INTERRUPTS) &&
+        (gAcsInterruptHandlers[Index].Handler == NULL)) {
+      FreeIndex = Index;
+    }
+  }
+
+  if (FreeIndex == ACS_MAX_REGISTERED_INTERRUPTS) {
+    return FALSE;
+  }
+
+  gAcsInterruptHandlers[FreeIndex].Source = Source;
+  gAcsInterruptHandlers[FreeIndex].Handler = Handler;
+  return TRUE;
+}
 
 UINT64
 pal_get_madt_ptr();
@@ -180,14 +242,27 @@ pal_gic_install_isr(UINT32 int_id,  VOID (*isr)())
     return 0xFFFFFFFF;
   }
 
+  if (isr == NULL) {
+    Status = gInterrupt->RegisterInterruptSource(gInterrupt, int_id, NULL);
+    if (EFI_ERROR(Status)) {
+      return 0xFFFFFFFF;
+    }
+    pal_gic_store_interrupt_handler(int_id, NULL);
+    return 0;
+  }
+
+  if (!pal_gic_store_interrupt_handler(int_id, isr)) {
+    return 0xFFFFFFFF;
+  }
+
   //First disable the interrupt to enable a clean handoff to our Interrupt handler.
   gInterrupt->DisableInterruptSource(gInterrupt, int_id);
 
   //Register our handler
-  Status = gInterrupt->RegisterInterruptSource (gInterrupt, int_id, isr);
+  Status = gInterrupt->RegisterInterruptSource (gInterrupt, int_id, pal_gic_interrupt_handler);
   if (EFI_ERROR(Status)) {
     Status =  gInterrupt->RegisterInterruptSource (gInterrupt, int_id, NULL);  //Deregister existing handler
-    Status = gInterrupt->RegisterInterruptSource (gInterrupt, int_id, isr);  //register our Handler.
+    Status = gInterrupt->RegisterInterruptSource (gInterrupt, int_id, pal_gic_interrupt_handler);  //register our Handler.
     //Even if this fails. there is nothing we can do in UEFI mode
   }
 
