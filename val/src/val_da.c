@@ -49,6 +49,8 @@ typedef struct {
   uint32_t             tdi_locked;
   uint32_t             ide_configured;
   uint32_t             rp_bdf;
+  uint32_t             ep_count;
+  uint32_t             rp_count;
   uint32_t             rp_keys_programmed;
   uint8_t              stream_id;
   val_spdm_context_t   ctx;
@@ -489,6 +491,8 @@ val_pcie_ide_establish_streams(uint32_t bdf, uint32_t rp_bdf,
   /* Record RP and Stream ID in the EP session slot for setup and cleanup */
   slot = spdm_find_slot(bdf);
   slot->rp_bdf = rp_bdf;
+  slot->ep_count = ep_count;
+  slot->rp_count = rp_count;
   slot->stream_id = (uint8_t)stream_id;
   selector.stream_id = (uint8_t)stream_id;
 
@@ -686,8 +690,6 @@ cleanup:
               " Setup status: 0x%x", status);
     val_print(ACS_PRINT_ERR, " EP BDF: 0x%x", bdf);
     val_print(ACS_PRINT_ERR, " RP BDF: 0x%x", rp_bdf);
-    (void)val_ide_set_sel_stream(rp_bdf, rp_count, 0);
-    (void)val_ide_set_sel_stream(bdf, ep_count, 0);
     (void)val_device_unlock(bdf);
   }
   if (result != ACS_STATUS_PASS && status == ACS_STATUS_SKIP)
@@ -865,7 +867,7 @@ val_device_lock(uint32_t bdf)
   return ACS_STATUS_PASS;
 
 fallback_close:
-  /* Stop any partially locked interface/IDE and release the session. */
+  /* Shared cleanup stops TDISP and IDE before closing the secured session. */
   (void)val_device_unlock(bdf);
   return ACS_STATUS_ERR;
 #else
@@ -890,28 +892,54 @@ val_device_unlock(uint32_t bdf)
 
   uint32_t cleanup_failed = 0u;
 
+  /* Stop TDISP while the secured SPDM session and IDE keys remain available. */
   if (slot->tdi_locked) {
+    uint8_t tdi_state;
+
     status = val_spdm_send_pci_tdisp_stop_interface(&slot->ctx, slot->session_id,
                                                   &interface_id);
     if (status != ACS_STATUS_PASS)
       cleanup_failed = 1u;
+    else {
+      status = val_spdm_send_pci_tdisp_get_interface_state(&slot->ctx, slot->session_id,
+                                                          &interface_id, &tdi_state);
+      if (status != ACS_STATUS_PASS || tdi_state != PCI_TDISP_INTERFACE_STATE_CONFIG_UNLOCKED)
+        cleanup_failed = 1u;
+      else
+        slot->tdi_locked = 0u;
+    }
   }
   if (slot->ide_configured) {
     PCIE_IDE_SELECTOR selector = {0};
 
+    /* Follow TF-RMM teardown: EP TX, RP TX, EP RX, then RP RX.
+     * Complete all three substreams at one port before moving to its partner.
+     * Preserve the first failure while attempting the remaining cleanup.
+     */
     selector.stream_id = slot->stream_id;
-    for (uint32_t direction = 0; direction < 2; ++direction) {
-      selector.direction = (uint8_t)direction;
+    for (uint32_t pass = 0; pass < 2; ++pass) {
+      selector.direction = pass == 0u ? PCIE_IDE_TX : PCIE_IDE_RX;
       for (uint32_t sub = 0; sub < 3; ++sub) {
+        uint8_t key_sub_stream = (uint8_t)((sub << 4) | (selector.direction << 1));
+
         if (LIBSPDM_STATUS_IS_ERROR(pci_ide_km_key_set_stop(NULL, slot->ctx.spdm_context,
-              &slot->session_id, slot->stream_id, (uint8_t)((sub << 4) | (direction << 1)), 0)))
-          cleanup_failed = 1u;
-        selector.sub_stream = (uint8_t)sub;
-        if (slot->rp_keys_programmed &&
-            val_pcie_rp_ide_key_stop(slot->rp_bdf, &selector) != ACS_STATUS_PASS)
+              &slot->session_id, slot->stream_id, key_sub_stream, 0)))
           cleanup_failed = 1u;
       }
+      if (slot->rp_keys_programmed) {
+        for (uint32_t sub = 0; sub < 3; ++sub) {
+          selector.sub_stream = (uint8_t)sub;
+          if (val_pcie_rp_ide_key_stop(slot->rp_bdf, &selector) != ACS_STATUS_PASS)
+            cleanup_failed = 1u;
+        }
+      }
     }
+
+    /* ACS also leaves both stream blocks disabled for the next test. */
+    if (val_ide_set_sel_stream(bdf, slot->ep_count, 0) != ACS_STATUS_PASS)
+      cleanup_failed = 1u;
+    if (val_ide_set_sel_stream(slot->rp_bdf, slot->rp_count, 0) != ACS_STATUS_PASS)
+      cleanup_failed = 1u;
   }
 
   status = val_spdm_session_close(&slot->ctx, slot->session_id);
