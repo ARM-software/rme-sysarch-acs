@@ -1489,8 +1489,9 @@ val_cxl_ide_establish_link(uint32_t root_index,
   status = val_cxl_root_port_ide_program_and_enable(root_port->bdf,
                                                      (uint8_t)stream_id,
                                                      0,
-                                                     (const CXL_IDE_KEY_BUFFER *)&rx_key,
-                                                     (const CXL_IDE_KEY_BUFFER *)&tx_key);
+                                                     /* EP TX feeds RP RX; EP RX consumes RP TX. */
+                                                     (const CXL_IDE_KEY_BUFFER *)&tx_key,
+                                                     (const CXL_IDE_KEY_BUFFER *)&rx_key);
   if (status != ACS_STATUS_PASS) {
     val_print(ACS_PRINT_ERR,
               " RP IDE_KM programming failed (RP BDF 0x%x)",

@@ -42,6 +42,7 @@ static
 void
 payload(void)
 {
+  uint32_t ide_unsupported = 0;
 
   uint32_t pe_index;
   uint32_t instance, num_exercisers;
@@ -154,19 +155,17 @@ payload(void)
       count = 1;
       stream_id = val_generate_stream_id();
 
-      status = val_ide_establish_stream(bdf, count, stream_id,
-                                     bdf);
-      if (status)
+      /* S-SPDM and matching EP/RP keys must precede the Secure-state check. */
+      status = val_pcie_ide_establish(bdf, rp_bdf, count, stream_id,
+                                     PCIE_CREATE_BDF_PACKED(bdf));
+      if (status == ACS_STATUS_SKIP)
       {
-          val_print(ACS_PRINT_ERR, " Failed to establish stream for bdf: 0x%x", bdf);
-          test_fail++;
-          goto cleanup_instance;
+          ide_unsupported = 1;
+          goto cleanup_tdisp;
       }
-      status = val_ide_establish_stream(rp_bdf, count, stream_id,
-                                     bdf);
-      if (status)
+      if (status != ACS_STATUS_PASS)
       {
-          val_print(ACS_PRINT_ERR, " Failed to establish stream for RP bdf: 0x%x", rp_bdf);
+          val_print(ACS_PRINT_ERR, " Failed to establish PCIe IDE for bdf: 0x%x", bdf);
           test_fail++;
           goto cleanup_instance;
       }
@@ -405,7 +404,10 @@ cleanup_instance:
       }
 
       /* Per-instance cleanup: unlock device and disable TDISP */
-      val_device_unlock(bdf);
+      if (val_device_unlock(bdf) != ACS_STATUS_PASS)
+          test_fail++;
+      (void)val_ide_set_sel_stream(bdf, count, 0);
+      (void)val_ide_set_sel_stream(rp_bdf, count, 0);
 cleanup_tdisp:
       if (val_pcie_disable_tdisp(rp_bdf))
       {
@@ -414,7 +416,9 @@ cleanup_tdisp:
       }
   }
 
-  if (test_skip)
+  if (ide_unsupported && !test_fail)
+      val_set_status(pe_index, "SKIP", 01);
+  else if (test_skip)
       val_set_status(pe_index, "SKIP", 01);
   else if (test_fail)
       val_set_status(pe_index, "FAIL", 05);

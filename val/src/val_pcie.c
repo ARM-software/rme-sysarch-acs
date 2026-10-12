@@ -61,6 +61,12 @@ val_pcie_read_cfg(uint32_t bdf, uint32_t offset, uint32_t *data)
 
   *data = PCIE_UNKNOWN_RESPONSE;
 
+  if (offset > PCIE_CFG_SIZE - sizeof(*data) || (offset & 3u) != 0u) {
+      val_print(ACS_PRINT_ERR, " Invalid config read BDF: 0x%x", bdf);
+      val_print(ACS_PRINT_ERR, " Config offset: 0x%x", offset);
+      return PCIE_NO_MAPPING;
+  }
+
   if ((bus >= PCIE_MAX_BUS) || (dev >= PCIE_MAX_DEV) || (func >= PCIE_MAX_FUNC)) {
      val_print(ACS_PRINT_ERR, " Invalid Bus/Dev/Func  %x", bdf);
      return PCIE_NO_MAPPING;
@@ -85,6 +91,13 @@ val_pcie_read_cfg(uint32_t bdf, uint32_t offset, uint32_t *data)
 
   if (ecam_base == 0) {
       val_print(ACS_PRINT_ERR, " Read PCIe_CFG: ECAM Base is zero for bdf %x", bdf);
+      return PCIE_NO_MAPPING;
+  }
+
+  if ((ecam_base & (PCIE_CFG_SIZE - 1u)) != 0u) {
+      val_print(ACS_PRINT_ERR, " Invalid ECAM base: 0x%llx", ecam_base);
+      val_print(ACS_PRINT_ERR, " Config read BDF: 0x%x", bdf);
+      val_print(ACS_PRINT_ERR, " Config offset: 0x%x", offset);
       return PCIE_NO_MAPPING;
   }
 
@@ -1122,8 +1135,10 @@ val_pcie_device_port_type(uint32_t bdf)
   /* Get the PCI Express Capability structure offset and
    * use that offset to read pci express capabilities register
    */
-  val_pcie_find_capability(bdf, PCIE_CAP, CID_PCIECS, &pciecs_base);
-  val_pcie_read_cfg(bdf, pciecs_base + CIDR_OFFSET, &reg_value);
+  if (val_pcie_find_capability(bdf, PCIE_CAP, CID_PCIECS, &pciecs_base) != PCIE_SUCCESS ||
+      val_pcie_read_cfg(bdf, pciecs_base + CIDR_OFFSET, &reg_value) != PCIE_SUCCESS ||
+      reg_value == PCIE_UNKNOWN_RESPONSE)
+      return 0;
 
   /* Read Device/Port bits [7:4] in Function's PCIe Capabilities register */
   dp_type = (reg_value >> ((PCIECR_OFFSET - CIDR_OFFSET)*8 +
@@ -1157,46 +1172,59 @@ uint32_t
 val_pcie_find_capability(uint32_t bdf, uint32_t cid_type, uint32_t cid, uint32_t *cid_offset)
 {
 
-  uint32_t reg_value;
+  uint32_t reg_value = PCIE_UNKNOWN_RESPONSE;
   uint32_t next_cap_offset;
   uint32_t ret;
+  uint32_t minimum, limit, shift, mask, id_mask;
+  uint32_t visited[PCIE_CFG_SIZE / 32u] = {0};
+
+  if (cid_offset == NULL)
+      return PCIE_CAP_NOT_FOUND;
 
   if (cid_type == PCIE_CAP) {
-
-      /* Serach in PCIe configuration space */
       ret = val_pcie_read_cfg(bdf, TYPE01_CPR, &reg_value);
-      if (ret == PCIE_NO_MAPPING || reg_value == PCIE_UNKNOWN_RESPONSE)
-          return ret;
-
-      next_cap_offset = (reg_value & TYPE01_CPR_MASK);
-      while (next_cap_offset)
-      {
-          val_pcie_read_cfg(bdf, next_cap_offset, &reg_value);
-          if ((reg_value & PCIE_CIDR_MASK) == cid)
-          {
-              *cid_offset = next_cap_offset;
-              return PCIE_SUCCESS;
-          }
-          next_cap_offset = ((reg_value >> PCIE_NCPR_SHIFT) & PCIE_NCPR_MASK);
-      }
-  } else if (cid_type == PCIE_ECAP)
-  {
-
-      /* Serach in PCIe extended configuration space */
+      if (ret != PCIE_SUCCESS || reg_value == PCIE_UNKNOWN_RESPONSE)
+          return PCIE_CAP_NOT_FOUND;
+      next_cap_offset = reg_value & TYPE01_CPR_MASK;
+      minimum = 0x40u;
+      limit = 0x100u;
+      shift = PCIE_NCPR_SHIFT;
+      mask = PCIE_NCPR_MASK;
+      id_mask = PCIE_CIDR_MASK;
+  } else if (cid_type == PCIE_ECAP) {
       next_cap_offset = PCIE_ECAP_START;
-      while (next_cap_offset)
-      {
-          val_pcie_read_cfg(bdf, next_cap_offset, &reg_value);
-          if ((reg_value & PCIE_ECAP_CIDR_MASK) == cid)
-          {
-              *cid_offset = next_cap_offset;
-              return PCIE_SUCCESS;
-          }
-          next_cap_offset = ((reg_value >> PCIE_ECAP_NCPR_SHIFT) & PCIE_ECAP_NCPR_MASK);
-      }
+      minimum = PCIE_ECAP_START;
+      limit = PCIE_CFG_SIZE;
+      shift = PCIE_ECAP_NCPR_SHIFT;
+      mask = PCIE_ECAP_NCPR_MASK;
+      id_mask = PCIE_ECAP_CIDR_MASK;
+  } else {
+      return PCIE_CAP_NOT_FOUND;
   }
 
-  /* The capability was not found */
+  while (next_cap_offset != 0u) {
+      if (next_cap_offset < minimum || next_cap_offset >= limit ||
+          (next_cap_offset & 3u) != 0u)
+          break;
+      if (visited[next_cap_offset / 32u] & (1u << (next_cap_offset % 32u)))
+          break;
+      visited[next_cap_offset / 32u] |= 1u << (next_cap_offset % 32u);
+
+      ret = val_pcie_read_cfg(bdf, next_cap_offset, &reg_value);
+      if (ret != PCIE_SUCCESS || reg_value == PCIE_UNKNOWN_RESPONSE)
+          break;
+      if ((reg_value & id_mask) == cid) {
+          *cid_offset = next_cap_offset;
+          return PCIE_SUCCESS;
+      }
+      next_cap_offset = (reg_value >> shift) & mask;
+  }
+
+  if (next_cap_offset != 0u) {
+      val_print(ACS_PRINT_ERR, " Invalid capability chain, BDF: 0x%x", bdf);
+      val_print(ACS_PRINT_ERR, " Capability offset: 0x%x", next_cap_offset);
+      val_print(ACS_PRINT_ERR, " Last capability header: 0x%x", reg_value);
+  }
   return PCIE_CAP_NOT_FOUND;
 }
 
@@ -3047,6 +3075,7 @@ uint32_t
 val_pcie_get_bar_index(uint32_t bdf, uint64_t bar_address, uint32_t *bar_index)
 {
     uint32_t index = 0;
+    uint32_t lower_index;
     uint32_t bar_low32bits;
     uint32_t bar_high32bits;
     uint64_t base_address;
@@ -3057,6 +3086,7 @@ val_pcie_get_bar_index(uint32_t bdf, uint64_t bar_address, uint32_t *bar_index)
     *bar_index = ACS_INVALID_INDEX;
 
     while (index < TYPE0_MAX_BARS) {
+        lower_index = index;
         base_address = 0u;
         bar_low32bits = 0u;
         bar_high32bits = 0u;
@@ -3094,7 +3124,8 @@ val_pcie_get_bar_index(uint32_t bdf, uint64_t bar_address, uint32_t *bar_index)
 
             /* Check if the given BAR address matches this base address */
             if (base_address == bar_address) {
-                *bar_index = index;
+                /* A 64-bit BAR is identified by its lower register. */
+                *bar_index = lower_index;
                 return 0;  // Return the BAR index
             }
         }

@@ -63,10 +63,11 @@ payload()
   uint32_t saved_uncorr_mask;
   uint32_t da_cap_base, ide_cap_base;
   uint32_t reg_value;
-  uint32_t num_sel_ide_stream_supp;
+  uint32_t num_sel_ide_stream_supp, num_ep_streams;
   uint32_t count;
   uint32_t test_fails = 0;
   uint32_t test_skip = 1;
+  uint32_t ide_unsupported = 0;
   uint32_t status;
 
   instance = val_exerciser_get_info(EXERCISER_NUM_CARDS);
@@ -132,6 +133,12 @@ payload()
         continue;
     }
 
+    if (val_ide_get_num_sel_str(e_bdf, &num_ep_streams) || !num_ep_streams)
+    {
+        val_print(ACS_PRINT_WARN, " No IDE streams on EP BDF: 0x%x", e_bdf);
+        continue;
+    }
+
     /* Enable TDISP for the RP. */
     if (val_pcie_enable_tdisp(erp_bdf))
     {
@@ -164,8 +171,13 @@ payload()
     count = 0;
     while (count++ < num_sel_ide_stream_supp)
     {
-        status = val_ide_establish_stream(erp_bdf, count, val_generate_stream_id(),
-                                     e_bdf);
+        status = val_pcie_ide_establish_streams(e_bdf, erp_bdf, 1u, count, val_generate_stream_id(),
+                                        PCIE_CREATE_BDF_PACKED(e_bdf));
+        if (status == ACS_STATUS_SKIP)
+        {
+            ide_unsupported = 1;
+            goto aer_cleanup;
+        }
         if (status)
         {
             val_print(ACS_PRINT_ERR, " Failed to establish stream for bdf: 0x%x", erp_bdf);
@@ -178,7 +190,7 @@ payload()
         {
             val_print(ACS_PRINT_ERR, " Errror injection failed for BDF: 0x%x", e_bdf);
             test_fails++;
-            continue;
+            goto stream_cleanup;
         }
 
         status = val_get_sel_str_status(erp_bdf, count, &reg_value);
@@ -186,24 +198,24 @@ payload()
         {
             val_print(ACS_PRINT_ERR, " Failed to get SEL_STR state for BDF: 0x%x", erp_bdf);
             test_fails++;
-            continue;
+            goto stream_cleanup;
         }
 
         if (reg_value != STREAM_STATE_INSECURE)
         {
             val_print(ACS_PRINT_ERR, " SEL_STR is not in Insecure for BDF: 0x%x", erp_bdf);
             test_fails++;
-            continue;
+            goto stream_cleanup;
         }
 
-        status = val_ide_set_sel_stream(erp_bdf, count, 0);
-        if (status)
-        {
-            val_print(ACS_PRINT_ERR, " Failed to disable SEL_STR for BDF: 0x%x", erp_bdf);
+stream_cleanup:
+        /* Observe Insecure first; disable RP IDE before SPDM cleanup. */
+        if (val_ide_set_sel_stream(erp_bdf, count, 0))
             test_fails++;
-            continue;
-        }
-
+        if (val_device_unlock(e_bdf) != ACS_STATUS_PASS)
+            test_fails++;
+        if (val_ide_set_sel_stream(e_bdf, 1u, 0))
+            test_fails++;
         val_ide_program_rid_base_limit_valid(erp_bdf, count, 0, 0, 0);
 
     }
@@ -231,7 +243,9 @@ port_cleanup:
     val_pcie_clear_urd(erp_bdf);
   }
 
-  if (test_skip)
+  if (ide_unsupported && !test_fails)
+      val_set_status(pe_index, "SKIP", 01);
+  else if (test_skip)
       val_set_status(pe_index, "SKIP", 01);
   else if (test_fails)
       val_set_status(pe_index, "FAIL", 01);

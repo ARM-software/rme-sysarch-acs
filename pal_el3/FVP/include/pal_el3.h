@@ -20,6 +20,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <pal_el3_pcie_ide.h>
 
 void pal_el3_enable_ns_encryption(void);
 void pal_el3_disable_ns_encryption(void);
@@ -31,6 +32,7 @@ typedef struct {
   uint32_t iv[3];
 } CXL_IDE_KEY_BUFFER;
 
+
 uint32_t pal_cxl_root_port_ide_program_and_enable(uint64_t bar0_base,
                                                    uint8_t stream_id,
                                                    uint8_t key_slot,
@@ -41,5 +43,16 @@ uint32_t pal_cxl_root_port_ide_disable(uint64_t bar0_base,
                                         uint8_t key_slot);
 uint32_t pal_cxl_root_port_ide_get_km_base(uint64_t bar0_base,
                                             uint64_t *ide_km_base);
+
+/* Platform PAL owns the RP configuration and key register layout. */
+uint32_t pal_pcie_rp_ide_cfg_address(uint64_t ecam_base, uint32_t rp_id, uint64_t *cfg);
+uint32_t pal_pcie_rp_ide_km_address(uint64_t cfg, PCIE_IDE_RP_REGISTERS *registers);
+uint32_t pal_pcie_rp_ide_key_program(PCIE_IDE_RP_REGISTERS const *registers,
+                                    PCIE_IDE_SELECTOR const *selector,
+                                    PCIE_IDE_KEY const *key);
+uint32_t pal_pcie_rp_ide_key_go(PCIE_IDE_RP_REGISTERS const *registers,
+                               PCIE_IDE_SELECTOR const *selector);
+uint32_t pal_pcie_rp_ide_key_stop(PCIE_IDE_RP_REGISTERS const *registers,
+                               PCIE_IDE_SELECTOR const *selector);
 
 #endif /* PAL_EL3_H */

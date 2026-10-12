@@ -4,14 +4,15 @@ Subject: [PATCH] rme-sysarch-acs changes for TF-A v2.15
 
 Retain the platform memory mappings required by the suite. The ACS EL3
 implementation is linked separately after the normal TF-A build.
+Allow ACS accesses from all PAS in both PCIe MMIO apertures.
 
 Signed-off-by: Shyamanth RH <shyamanth.rh@arm.com>
 ---
  include/plat/arm/common/arm_def.h         | 13 ++++++++++---
  plat/arm/board/fvp/fvp_common.c           |  2 ++
- plat/arm/board/fvp/include/fvp_pas_def.h  |  4 ++--
+ plat/arm/board/fvp/include/fvp_pas_def.h  |  6 +++---
  plat/arm/board/fvp/include/platform_def.h |  8 ++++----
- 4 files changed, 17 insertions(+), 8 deletions(-)
+ 4 files changed, 18 insertions(+), 9 deletions(-)
 diff --git a/include/plat/arm/common/arm_def.h b/include/plat/arm/common/arm_def.h
 index 715dea85f..38468ae60 100644
 --- a/include/plat/arm/common/arm_def.h
@@ -59,7 +60,7 @@ diff --git a/plat/arm/board/fvp/include/fvp_pas_def.h b/plat/arm/board/fvp/inclu
 index 8ef783def..5c5f2d9b6 100644
 --- a/plat/arm/board/fvp/include/fvp_pas_def.h
 +++ b/plat/arm/board/fvp/include/fvp_pas_def.h
-@@ -92,11 +92,11 @@
+@@ -92,14 +92,14 @@
  
  #define	ARM_PAS_KERNEL_1		GPT_MAP_REGION_GRANULE(ARM_PAS_4_BASE, \
  							       ARM_PAS_4_SIZE, \
@@ -73,6 +74,10 @@ index 8ef783def..5c5f2d9b6 100644
  
  #define	ARM_PAS_PCI_MEM_2		GPT_MAP_REGION_GRANULE(PLAT_ARM_PCI_MEM_2_BASE, \
  							       PLAT_ARM_PCI_MEM_2_SIZE, \
+-							       GPT_GPI_NS)
++							       GPT_GPI_ANY)
+ /*
+  * REALM and Shared area share the same PAS, so consider them a single
 diff --git a/plat/arm/board/fvp/include/platform_def.h b/plat/arm/board/fvp/include/platform_def.h
 index 08491255c..00dcfae70 100644
 --- a/plat/arm/board/fvp/include/platform_def.h

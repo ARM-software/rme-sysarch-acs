@@ -46,6 +46,7 @@ payload(void)
   uint32_t sel_ide_str_supported;
   uint32_t test_fail = 0;
   uint32_t test_skip = 1;
+  uint32_t ide_unsupported = 0;
   uint32_t stream_id;
   uint32_t count;
   uint32_t status;
@@ -153,21 +154,19 @@ payload(void)
       for (index = 0; index < table_entries; index++)
       {
           bf_entry = (pcie_cfgreg_bitfield_entry *)&(bf_info_table18[index]);
+          val_print(ACS_PRINT_TEST, " Write-detect table entry: %d", index);
 
-          status = val_ide_establish_stream(ep_bdf, count, stream_id,
-                                     ep_bdf);
+          /* Establish SPDM and matching EP/RP keys before enabling IDE. */
+          status = val_pcie_ide_establish(ep_bdf, rp_bdf, count, stream_id,
+                                          PCIE_CREATE_BDF_PACKED(ep_bdf));
+          if (status == ACS_STATUS_SKIP)
+          {
+              ide_unsupported = 1;
+              break;
+          }
           if (status)
           {
               val_print(ACS_PRINT_ERR, " Failed to establish stream for bdf: 0x%x", bdf);
-              test_fail++;
-              continue;
-          }
-
-          status = val_ide_establish_stream(rp_bdf, count, stream_id,
-                                     ep_bdf);
-          if (status)
-          {
-              val_print(ACS_PRINT_ERR, " Failed to establish stream for RP bdf: 0x%x", bdf);
               test_fail++;
               continue;
           }
@@ -190,11 +189,19 @@ payload(void)
               /* Fall through to unlock before next iteration */
           }
 
+          /* Write-detect makes RP IDE Insecure. Disable its stream before
+           * endpoint configuration/DOE accesses used by TDISP cleanup.
+           */
+          if (val_ide_set_sel_stream(rp_bdf, count, 0))
+              test_fail++;
+
           /* Unlock only if we actually locked */
           if (ep_locked) {
               val_device_unlock(ep_bdf);
               ep_locked = 0;
           }
+          if (val_ide_set_sel_stream(ep_bdf, count, 0))
+              test_fail++;
       }
 
       /* Disable TDISP in RP; ensure endpoint is not left locked */
@@ -205,7 +212,9 @@ payload(void)
       val_pcie_disable_tdisp(rp_bdf);
   }
 
-  if (test_skip)
+  if (ide_unsupported && !test_fail)
+      val_set_status(pe_index, "SKIP", 01);
+  else if (test_skip)
       val_set_status(pe_index, "SKIP", 01);
   else if (test_fail++)
       val_set_status(pe_index, "FAIL", 01);

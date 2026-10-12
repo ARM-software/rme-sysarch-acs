@@ -40,6 +40,7 @@ static
 void
 payload(void)
 {
+  uint32_t ide_unsupported = 0;
   uint32_t pe_index;
   pcie_device_bdf_table *bdf_tbl_ptr;
   static uint32_t tbl_index;
@@ -96,40 +97,42 @@ payload(void)
               continue;
           }
 
+          count = 1;
+
           /* Enable the TDISP_EN bit in the RME-DA DVSEC register */
           if (val_pcie_enable_tdisp(rp_bdf))
           {
               val_print(ACS_PRINT_ERR, " Unable to set tdisp_en for BDF: 0x%x", bdf);
               test_fail++;
-              continue;
+              goto ide_cleanup;
           }
 
           /* Map the Bar address to realm PAS */
           va = val_get_free_va(val_get_min_tg());
           pgt_attr_el3 = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(OUTER_SHAREABLE)
                           | GET_ATTR_INDEX(DEV_MEM_nGnRnE) | PGT_ENTRY_AP_RW | PAS_ATTR(REALM_PAS));
-          val_add_mmu_entry_el3(va, bar_base, pgt_attr_el3);
+          if (val_add_mmu_entry_el3(va, bar_base, pgt_attr_el3))
+          {
+              test_fail++;
+              goto ide_cleanup;
+          }
 
-          count = 1;
           stream_id = val_generate_stream_id();
 
           /* Establish IDE Stream between RootPort and Endpoint*/
-          status = val_ide_establish_stream(bdf, count, stream_id,
-                                         bdf);
-          if (status)
+          /* Establish SPDM and matching EP/RP keys before enabling IDE. */
+          status = val_pcie_ide_establish(bdf, rp_bdf, count, stream_id,
+                                          PCIE_CREATE_BDF_PACKED(bdf));
+          if (status == ACS_STATUS_SKIP)
+          {
+              ide_unsupported = 1;
+              goto ide_cleanup;
+          }
+          if (status != ACS_STATUS_PASS)
           {
               val_print(ACS_PRINT_ERR, " Failed to establish stream for bdf: 0x%x", bdf);
               test_fail++;
-              continue;
-          }
-
-          status = val_ide_establish_stream(rp_bdf, count, stream_id,
-                                         bdf);
-          if (status)
-          {
-              val_print(ACS_PRINT_ERR, " Failed to estab stream for RP bdf: 0x%x", rp_bdf);
-              test_fail++;
-              continue;
+              goto ide_cleanup;
           }
 
           /* Transition the Endpoint to TDISP RUN state */
@@ -137,7 +140,7 @@ payload(void)
           {
               val_print(ACS_PRINT_ERR, " Failed to lock the device: 0x%lx", bdf);
               test_fail++;
-              continue;
+              goto ide_cleanup;
           }
 
           data = 0;
@@ -163,12 +166,22 @@ payload(void)
               test_fail++;
           }
 
-          /* Best-effort: return device to unlocked state */
-          val_device_unlock(bdf);
+ide_cleanup:
+          /* Disable RP traffic before stopping keys over DOE. */
+          if (val_ide_set_sel_stream(rp_bdf, count, 0))
+              test_fail++;
+          if (val_device_unlock(bdf) != ACS_STATUS_PASS)
+              test_fail++;
+          if (val_ide_set_sel_stream(bdf, count, 0))
+              test_fail++;
+          if (val_pcie_disable_tdisp(rp_bdf))
+              test_fail++;
       }
   }
 
-  if (test_skip)
+  if (ide_unsupported && !test_fail)
+      val_set_status(pe_index, "SKIP", 01);
+  else if (test_skip)
       val_set_status(pe_index, "SKIP", 01);
   else if (test_fail)
       val_set_status(pe_index, "FAIL", test_fail);
