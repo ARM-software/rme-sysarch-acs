@@ -882,12 +882,12 @@ Testcase checklist
       1. Retrieve the BAR of the Endpoint (skipping this step if the Endpoint lacks an MMIO BAR), identify the RootPort for the Endpoint, and enable the TDISP_EN bit in the RME-DA DVSEC register.
       2. Map the BAR address to Realm PAS, establish an IDE Stream between the RootPort and Endpoint, and transition the Endpoint to the TDISP RUN state.
       3. Perform write and read operations at the BAR address from the Realm world.
-      4. Additionally, retrieve the BAR of the Endpoint (skipping if it lacks an MMIO BAR), enable the TDISP_EN bit in the RME-DA DVSEC register, and map the BAR address to Non-Secure PAS.
+      4. For da_ide_tbit_0_for_root_request, iterate over Root Ports and select the first Endpoint beneath each Root Port that has an MMIO BAR. Skip a Root Port if no such Endpoint exists. Enable the TDISP_EN bit in the RME-DA DVSEC register and map the selected BAR address to Non-Secure PAS.
       5. Perform write and read operations at the BAR address from the Root world.
       6. The request should be accepted by the RootPort, confirming that the IDE-Tbit is set appropriately based on the PAS mapping.
 
       da_outgoing_realm_rqst_ide_tbit_1: This test checks that an outgoing request with IDE-Tbit set to 1 is accepted by the RootPort when the BAR address is mapped to Realm PAS.
-      da_ide_tbit_0_for_root_request: This test checks that an outgoing request with IDE-Tbit set to 0 is accepted by the RootPort when the BAR address is mapped to Non-Secure PAS.
+      da_ide_tbit_0_for_root_request: This test checks once per eligible RootPort that an outgoing request with IDE-Tbit set to 0 is accepted when the selected Endpoint BAR address is mapped to Non-Secure PAS.
 
       Similarly, the request should also be allowed by the RootPort when the BAR address is mapped to Non-Secure PAS.
 
