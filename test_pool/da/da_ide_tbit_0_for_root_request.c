@@ -43,7 +43,8 @@ payload(void)
   uint32_t pe_index;
   pcie_device_bdf_table *bdf_tbl_ptr;
   static uint32_t tbl_index;
-  uint32_t bdf, rp_bdf;
+  uint32_t ep_index;
+  uint32_t ep_bdf, rp_bdf, parent_bdf;
   uint32_t da_cap_base;
   uint64_t bar_base;
   uint32_t pgt_attr_el3;
@@ -65,24 +66,39 @@ payload(void)
 
   while (tbl_index < bdf_tbl_ptr->num_entries)
   {
-      bdf = bdf_tbl_ptr->device[tbl_index++].bdf;
-      dp_type = val_pcie_device_port_type(bdf);
+      rp_bdf = bdf_tbl_ptr->device[tbl_index++].bdf;
+      dp_type = val_pcie_device_port_type(rp_bdf);
 
-      if (dp_type == EP)
+      if ((dp_type == RP) || (dp_type == iEP_RP))
       {
-          /* Get the BAR of the endpoint */
-          val_pcie_get_mmio_bar(bdf, &bar_base);
+          /* Select one endpoint with an MMIO BAR below this Root Port. */
+          bar_base = 0;
+          ep_index = 0;
+          while (ep_index < bdf_tbl_ptr->num_entries)
+          {
+              ep_bdf = bdf_tbl_ptr->device[ep_index++].bdf;
+              if (val_pcie_device_port_type(ep_bdf) != EP)
+                  continue;
 
-          /* Skip this function if it doesn't have mmio BAR */
+              if (val_pcie_get_rootport(ep_bdf, &parent_bdf) || (parent_bdf != rp_bdf))
+                  continue;
+
+              val_pcie_get_mmio_bar(ep_bdf, &bar_base);
+              if (bar_base)
+                  break;
+          }
+
           if (!bar_base)
-             continue;
-
-          if (val_pcie_get_rootport(bdf, &rp_bdf))
-             continue;
+          {
+              val_print(ACS_PRINT_WARN,
+                        " No endpoint with an MMIO BAR found for RP BDF: 0x%x", rp_bdf);
+              continue;
+          }
 
           test_skip = 0;
 
-          val_print(ACS_PRINT_TEST, " Checking BDF: 0x%x", bdf);
+          val_print(ACS_PRINT_TEST, " Checking RP BDF: 0x%x", rp_bdf);
+          val_print(ACS_PRINT_TEST, " Using EP BDF: 0x%x", ep_bdf);
 
           /* Get the PCIE DVSEC Capability register */
           if (val_pcie_find_da_capability(rp_bdf, &da_cap_base) != PCIE_SUCCESS)
@@ -134,7 +150,7 @@ payload(void)
           /* The Request should be allowed by the RP */
           if (data != TEST_DATA)
           {
-              val_print(ACS_PRINT_ERR, " Request rejected by RP BDF: %x", bdf);
+              val_print(ACS_PRINT_ERR, " Request rejected by RP BDF: %x", rp_bdf);
               test_fail++;
           }
       }
