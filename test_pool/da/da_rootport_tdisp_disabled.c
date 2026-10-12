@@ -143,6 +143,7 @@ cleanup_unlock:
           if (val_device_unlock(e_bdf)) {
               val_print(ACS_PRINT_ERR,
                         " Failed to unlock the device: 0x%lx", e_bdf);
+              test_fail++;
           }
       }
 
@@ -234,6 +235,7 @@ cleanup_unlock_rp:
               if (val_device_unlock(dsf_bdf)) {
                   val_print(ACS_PRINT_ERR,
                             " Failed to unlock the device: 0x%lx", dsf_bdf);
+                  test_fail++;
               }
           }
       }

@@ -118,6 +118,7 @@ payload(void)
   uint32_t bdf, rp_bdf, da_cap_base, cap_base;
   uint32_t dma_len, test_data_blk_size;
   uint32_t status, reg_value;
+  uint32_t ats_changed, ats_capability, saved_ats_control;
   uint32_t count;
   uint32_t ide_active, target_ide_count;
   void *dram_buf_in_virt;
@@ -135,9 +136,9 @@ payload(void)
   pgt_descriptor_t pgt_desc;
   uint32_t rlm_mapped;
   uint64_t translated_addr, m_vir_addr, bar_buf_in_phys, dram_buf_in_phys;
-  uint32_t tgt_e_bdf, tgt_rp_bdf, tgt_instance, tgt_bar_size;
-  uint64_t tgt_bar_base;
-  uint32_t index, original_bar;
+  uint32_t tgt_e_bdf, tgt_rp_bdf, tgt_instance;
+  uint64_t tgt_bar_base, tgt_bar_size;
+  uint32_t index;
 
   pe_index = val_pe_get_index_mpid(val_pe_get_mpid());
 
@@ -184,6 +185,7 @@ payload(void)
   for (instance = 0; instance < num_exercisers; ++instance)
   {
       pgt_desc.pgt_base = 0;
+      ats_changed = 0;
       rlm_mapped = 0;
       dram_buf_in_virt = NULL;
       ide_active = 0;
@@ -211,9 +213,6 @@ payload(void)
       if (val_pcie_find_capability(bdf, PCIE_ECAP, ECID_ATS, &cap_base) != PCIE_SUCCESS)
             continue;
 
-      val_pcie_read_cfg(bdf, cap_base + ATS_CTRL, &reg_value);
-      reg_value |= ATS_CACHING_EN;
-      val_pcie_write_cfg(bdf, cap_base + ATS_CTRL, reg_value);
 
       if (get_target_exer_bdf(bdf, rp_bdf, &tgt_e_bdf, &tgt_rp_bdf, &tgt_bar_base, &tgt_instance))
       {
@@ -233,33 +232,17 @@ payload(void)
           continue;
       }
 
-      /* Probe the lower BAR register and restore its original value. */
-      if (val_pcie_read_cfg(tgt_e_bdf, TYPE01_BAR + index * 4, &original_bar) ||
-          original_bar == PCIE_UNKNOWN_RESPONSE)
-      {
-          test_fail++;
-          continue;
-      }
-      val_pcie_write_cfg(tgt_e_bdf, TYPE01_BAR + index * 4, BAR_SIZE_PROBE);
-      status = val_pcie_read_cfg(tgt_e_bdf, TYPE01_BAR + index * 4, &tgt_bar_size);
-      val_pcie_write_cfg(tgt_e_bdf, TYPE01_BAR + index * 4, original_bar);
-      if (status || tgt_bar_size == PCIE_UNKNOWN_RESPONSE || !tgt_bar_size)
+      /* Size both DWORDs of a 64-bit BAR and restore the BAR and decode state. */
+      if (val_pcie_get_memory_bar_size(tgt_e_bdf, index, &tgt_bar_size))
       {
           val_print(ACS_PRINT_ERR, " Target BAR size probe failed, BDF: 0x%x", tgt_e_bdf);
           test_fail++;
           continue;
       }
 
-      if (tgt_bar_size & 0x1)
-          tgt_bar_size &= ~0x3;  // I/O space
-      else
-          tgt_bar_size &= ~0xF;  // Memory space
-
-      tgt_bar_size = ~(tgt_bar_size) + 1;
-
       /* Clear only the target range used by this iteration. */
       dma_len = (tgt_bar_size < test_data_blk_size / 2u) ?
-                  tgt_bar_size : test_data_blk_size / 2u;
+                  (uint32_t)tgt_bar_size : test_data_blk_size / 2u;
       val_memory_set((void *)tgt_bar_base, dma_len, 0);
 
       test_skip = 0;
@@ -282,14 +265,13 @@ payload(void)
       if (status == ACS_STATUS_SKIP)
       {
           ide_unsupported = 1;
-          val_pcie_disable_tdisp(rp_bdf);
-          continue;
+          goto ide_cleanup;
       }
       if (status)
       {
           val_print(ACS_PRINT_ERR, " Failed to establish stream for bdf: 0x%x", bdf);
           test_fail++;
-          continue;
+          goto ide_cleanup;
       }
 
       ide_active = 1;
@@ -351,6 +333,18 @@ payload(void)
           test_fail++;
           goto ide_cleanup;
       }
+
+      /* Enable ATS only after target and IDE setup checks have succeeded. */
+      if (val_pcie_find_capability(bdf, PCIE_ECAP, ECID_ATS, &ats_capability) ||
+          val_pcie_read_cfg(bdf, ats_capability + ATS_CTRL, &saved_ats_control))
+      {
+          test_fail++;
+          goto ide_cleanup;
+      }
+      ats_changed = 1;
+      val_pcie_write_cfg(bdf, ats_capability + ATS_CTRL,
+                         saved_ats_control | ATS_CACHING_EN);
+
 
       /* Create a buffer of size TEST_DMA_SIZE in DRAM */
       dram_buf_in_virt = val_memory_alloc_pages(TEST_DATA_NUM_PAGES);
@@ -602,6 +596,8 @@ free_mem:
           val_print(ACS_PRINT_ERR, " Failed to release Realm page table for instance %4x",
                     instance);
           test_fail++;
+          /* Keep mapped buffers reserved when page-table teardown fails. */
+          goto ide_cleanup;
       }
 
       /* Restore the target BAR mapping independently of buffer allocation. */
@@ -628,13 +624,20 @@ free_mem:
       }
 
 ide_cleanup:
+      /* Restore requester controls on setup failures as well as normal exits. */
+      if (ats_changed)
+      {
+          val_exerciser_ops(ATS_INV_CACHE, 0, instance);
+          val_pcie_write_cfg(bdf, ats_capability + ATS_CTRL, saved_ats_control);
+      }
       if (target_ide_count && val_dpt_ide_stop(tgt_e_bdf, tgt_rp_bdf, 1u, target_ide_count))
           test_fail++;
       if (ide_active && val_dpt_ide_stop(bdf, rp_bdf, count, count))
           test_fail++;
-      val_pcie_disable_tdisp(rp_bdf);
-      if (tgt_rp_bdf != rp_bdf)
-          val_pcie_disable_tdisp(tgt_rp_bdf);
+      if (val_pcie_disable_tdisp(rp_bdf))
+          test_fail++;
+      if (tgt_rp_bdf != rp_bdf && val_pcie_disable_tdisp(tgt_rp_bdf))
+          test_fail++;
 
   }
 

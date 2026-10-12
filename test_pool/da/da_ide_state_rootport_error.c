@@ -87,11 +87,9 @@ payload()
     e_bdf = val_exerciser_get_bdf(instance);
     val_print(ACS_PRINT_TEST, " Exerciser BDF - 0x%x", e_bdf);
 
-    val_pcie_enable_eru(e_bdf);
     if (val_pcie_get_rootport(e_bdf, &erp_bdf))
         continue;
 
-    val_pcie_enable_eru(erp_bdf);
 
     /*Check AER capability for exerciser and its RP */
     if (val_pcie_find_capability(e_bdf, PCIE_ECAP, ECID_AER, &aer_offset) != PCIE_SUCCESS) {
@@ -138,6 +136,10 @@ payload()
         val_print(ACS_PRINT_WARN, " No IDE streams on EP BDF: 0x%x", e_bdf);
         continue;
     }
+
+    /* Enable reporting only after capability checks have completed. */
+    val_pcie_enable_eru(e_bdf);
+    val_pcie_enable_eru(erp_bdf);
 
     /* Enable TDISP for the RP. */
     if (val_pcie_enable_tdisp(erp_bdf))
@@ -209,12 +211,8 @@ payload()
         }
 
 stream_cleanup:
-        /* Observe Insecure first; disable RP IDE before SPDM cleanup. */
-        if (val_ide_set_sel_stream(erp_bdf, count, 0))
-            test_fails++;
+        /* Complete the state assertion before shared TDISP/IDE teardown. */
         if (val_device_unlock(e_bdf) != ACS_STATUS_PASS)
-            test_fails++;
-        if (val_ide_set_sel_stream(e_bdf, 1u, 0))
             test_fails++;
         val_ide_program_rid_base_limit_valid(erp_bdf, count, 0, 0, 0);
 

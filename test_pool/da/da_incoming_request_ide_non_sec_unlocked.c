@@ -101,7 +101,8 @@ payload(void)
           val_print(ACS_PRINT_ERR, " Failed to lock the device: 0x%lx", bdf);
           test_fail++;
           /* Disable TDISP before moving to next instance */
-          val_pcie_disable_tdisp(rp_bdf);
+          if (val_pcie_disable_tdisp(rp_bdf))
+          test_fail++;
           continue;
       }
 
@@ -146,9 +147,11 @@ instance_cleanup:
         dram_buf_in_virt = NULL;
       }
       /* Always unlock and disable TDISP after this instance */
-      val_device_unlock(bdf);
+      if (val_device_unlock(bdf) != ACS_STATUS_PASS)
+          test_fail++;
       val_print(ACS_PRINT_DEBUG, " Disabling TDISP for RP: 0x%x", rp_bdf);
-      val_pcie_disable_tdisp(rp_bdf);
+      if (val_pcie_disable_tdisp(rp_bdf))
+          test_fail++;
   }
 
   if (test_skip)

@@ -147,12 +147,8 @@ payload(void)
            }
 
 stream_cleanup:
-          /* Stop keys over SPDM with RP IDE disabled, then close the session. */
-          if (val_ide_set_sel_stream(bdf, count, 0))
-              test_fail++;
+          /* Use the shared EP TX/RP TX/EP RX/RP RX key-stop sequence. */
           if (val_device_unlock(ep_bdf) != ACS_STATUS_PASS)
-              test_fail++;
-          if (val_ide_set_sel_stream(ep_bdf, 1u, 0))
               test_fail++;
           val_ide_program_rid_base_limit_valid(bdf, count, 0, 0, 0);
 

@@ -304,9 +304,10 @@ stream_cleanup:
               break;
           }
           /* Restore the key's Stream ID so PAL STOP resolves the original block. */
-          if (val_ide_program_stream_id(bdf, count, setup_stream_id) ||
-              val_device_unlock(ep_bdf) != ACS_STATUS_PASS ||
-              val_ide_set_sel_stream(ep_bdf, 1u, 0))
+          if (val_ide_program_stream_id(bdf, count, setup_stream_id))
+              test_fail++;
+          /* A failed ID restore must not suppress session/key cleanup. */
+          if (val_device_unlock(ep_bdf) != ACS_STATUS_PASS)
               test_fail++;
           active_stream = 0;
       }
@@ -317,6 +318,11 @@ port_cleanup:
           val_pcie_read_cfg(bdf, da_cap_base + RMEDA_CTL2, &reg_value) != PCIE_SUCCESS ||
           (reg_value & lock_mask))
           test_fail++;
+      if (active_stream)
+      {
+          if (val_device_unlock(ep_bdf) != ACS_STATUS_PASS)
+              test_fail++;
+      }
       if (val_pcie_disable_tdisp(bdf) ||
           val_pcie_read_cfg(bdf, da_cap_base + RMEDA_CTL1, &reg_value) != PCIE_SUCCESS ||
           (reg_value & 1u))
@@ -324,15 +330,7 @@ port_cleanup:
           val_print(ACS_PRINT_ERR, " Failed to disable TDISP for BDF: 0x%x", bdf);
           test_fail++;
       }
-      if (active_stream)
-      {
-          if (val_ide_set_sel_stream(bdf, active_stream, 0))
-              test_fail++;
-          if (val_device_unlock(ep_bdf) != ACS_STATUS_PASS)
-              test_fail++;
-          if (val_ide_set_sel_stream(ep_bdf, 1u, 0))
-              test_fail++;
-      }
+
 
   }
 
