@@ -35,6 +35,15 @@ void val_da_get_next_rid_values(uint32_t *current_base_offset,
                     uint32_t *next_rid_limit,
                     uint32_t *next_rid_base);
 
+uint32_t val_device_session_open(uint32_t bdf);
+/* Stream block numbers are local to each port; Stream ID is shared. */
+/* IDE setup returns PASS, ERR, or SKIP when the RP backend is unsupported. */
+uint32_t val_pcie_ide_establish_streams(uint32_t bdf, uint32_t rp_bdf,
+                                        uint32_t ep_count, uint32_t rp_count,
+                                        uint32_t stream_id, uint32_t rid);
+uint32_t val_pcie_ide_establish(uint32_t bdf, uint32_t rp_bdf, uint32_t count,
+                                uint32_t stream_id, uint32_t rid);
+
 uint32_t
 val_device_lock(uint32_t bdf);
 
@@ -62,6 +71,10 @@ val_ide_program_stream_id(uint32_t bdf, uint32_t str_cnt, uint32_t stream_id);
 
 uint32_t
 val_ide_set_sel_stream(uint32_t bdf, uint32_t str_cnt, uint32_t enable);
+
+uint32_t
+val_ide_program_address_range(uint32_t bdf, uint32_t str_cnt,
+                              uint64_t base, uint64_t limit, uint32_t valid);
 
 uint32_t
 val_ide_get_num_sel_str(uint32_t bdf, uint32_t *num_sel_str);

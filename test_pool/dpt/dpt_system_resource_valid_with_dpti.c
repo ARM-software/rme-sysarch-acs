@@ -37,6 +37,7 @@ static
 void
 payload(void)
 {
+  uint32_t ide_unsupported = 0;
   uint32_t pe_index;
   uint32_t instance, num_exercisers;
   uint32_t bdf, rp_bdf, da_cap_base, cap_base;
@@ -147,20 +148,18 @@ payload(void)
       count = 1;
       stream_id = val_generate_stream_id();
 
-      status = val_ide_establish_stream(bdf, count, stream_id,
-                                     bdf);
+      /* Establish SPDM and matching EP/RP keys before enabling IDE. */
+      status = val_pcie_ide_establish(bdf, rp_bdf, count, stream_id,
+                                      PCIE_CREATE_BDF_PACKED(bdf));
+      if (status == ACS_STATUS_SKIP)
+      {
+          ide_unsupported = 1;
+          val_pcie_disable_tdisp(rp_bdf);
+          continue;
+      }
       if (status)
       {
           val_print(ACS_PRINT_ERR, " Failed to establish stream for bdf: 0x%x", bdf);
-          test_fail++;
-          continue;
-      }
-
-      status = val_ide_establish_stream(rp_bdf, count, stream_id,
-                                     bdf);
-      if (status)
-      {
-          val_print(ACS_PRINT_ERR, " Failed to establish stream for RP bdf: 0x%x", rp_bdf);
           test_fail++;
           continue;
       }
@@ -194,7 +193,7 @@ payload(void)
           val_print(ACS_PRINT_ERR,
             " Failed to access RMEDA_CTL2 = 0x%llx", va1 + da_cap_base + RMEDA_CTL2);
           test_fail++;
-          continue;
+          goto ide_cleanup;
       }
 
       val_pcie_read_cfg(rp_bdf, da_cap_base + RMEDA_CTL2, &reg_value);
@@ -203,7 +202,7 @@ payload(void)
       /* Map the MMIO bar to REALM PAS */
       val_pcie_get_mmio_bar(bdf, &bar_base);
       if (bar_base == 0)
-          continue;
+          goto ide_cleanup;
 
       va2 = val_get_free_va(val_get_min_tg());
       pgt_attr_el3 = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(OUTER_SHAREABLE)
@@ -213,7 +212,7 @@ payload(void)
           val_print(ACS_PRINT_ERR,
             " Failed to add MMU entry for bar_base: 0x%lx", bar_base);
           test_fail++;
-          continue;
+          goto ide_cleanup;
       }
 
       /* Transition the EP to TDISP RUN state */
@@ -221,7 +220,7 @@ payload(void)
       {
           val_print(ACS_PRINT_ERR, " Failed to lock the device: 0x%lx", bdf);
           test_fail++;
-          continue;
+          goto ide_cleanup;
       }
 
       /* Create a buffer of size TEST_DMA_SIZE in DRAM */
@@ -234,7 +233,7 @@ payload(void)
           val_print(ACS_PRINT_ERR,
             " Failed to add GPT entry for PA 0x%llx", dram_buf_in_phys);
           test_fail++;
-          continue;
+          goto ide_cleanup;
       }
       pgt_attr_el3 = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(OUTER_SHAREABLE)
                         | GET_ATTR_INDEX(DEV_MEM_nGnRnE) | PGT_ENTRY_AP_RW | PAS_ATTR(REALM_PAS));
@@ -245,7 +244,7 @@ payload(void)
           val_print(ACS_PRINT_ERR, " Failed to add MMU entry for dram_buf_in_virt: 0x%llx",
                     (uint64_t)dram_buf_in_virt);
           test_fail++;
-          continue;
+          goto ide_cleanup;
       }
 
 
@@ -254,7 +253,7 @@ payload(void)
       {
           val_print(ACS_PRINT_ERR, " Failed to set memory to 0 for instance %4x", instance);
           test_fail++;
-          continue;
+          goto ide_cleanup;
       }
       val_pe_cache_clean_invalidate_range((uint64_t)dram_buf_in_virt,
                                           (uint64_t)(test_data_blk_size));
@@ -267,7 +266,7 @@ payload(void)
           val_print(ACS_PRINT_ERR, " Failed to set memory to 0x%x for ", TEST_DATA);
           val_print(ACS_PRINT_ERR, "0x%4x ", instance);
           test_fail++;
-          continue;
+          goto ide_cleanup;
       }
       val_pe_cache_clean_invalidate_range((uint64_t)dram_buf_in_virt, (uint64_t)(dma_len));
 
@@ -288,7 +287,7 @@ payload(void)
                 val_print(ACS_PRINT_ERR, " Exerciser %x smmu disable error", instance);
                 val_set_status(pe_index, "FAIL", 02);
                 test_fail++;
-                continue;
+                goto ide_cleanup;
           }
       }
 
@@ -458,7 +457,7 @@ free_mem:
                     " free_mem: Failed to add MMU entry for dram_buf_in_virt: 0x%llx",
                     (uint64_t)dram_buf_in_virt);
           test_fail++;
-          continue;
+          goto ide_cleanup;
       }
 
       if (val_memory_set_el3((uint64_t *)dram_buf_in_virt, test_data_blk_size, 0))
@@ -466,7 +465,7 @@ free_mem:
           val_print(ACS_PRINT_ERR,
                     " free_mem: Failed to set memory to 0 for instance %4x", instance);
           test_fail++;
-          continue;
+          goto ide_cleanup;
       }
       val_pe_cache_clean_invalidate_range((uint64_t)dram_buf_in_virt,
                                           (uint64_t)(test_data_blk_size));
@@ -474,11 +473,16 @@ free_mem:
       /* Return the buffer to the heap manager */
       val_memory_free_pages(dram_buf_in_virt, TEST_DATA_NUM_PAGES);
 
+ide_cleanup:
+      /* Disable the stream before stopping keys, keeping DOE accessible. */
+      if (val_dpt_ide_stop(bdf, rp_bdf, count, count))
+          test_fail++;
       val_pcie_disable_tdisp(rp_bdf);
-      val_device_unlock(bdf);
   }
 
-  if (test_skip)
+  if (ide_unsupported && !test_fail)
+      val_set_status(pe_index, "SKIP", 01);
+  else if (test_skip)
       val_set_status(pe_index, "SKIP", 01);
   else if (test_fail)
       val_set_status(pe_index, "FAIL", 04);

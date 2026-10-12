@@ -23,3 +23,5 @@
 
 [Includes]
   ../val/include
+  ../val_el3/include
+  ../pal_el3/include

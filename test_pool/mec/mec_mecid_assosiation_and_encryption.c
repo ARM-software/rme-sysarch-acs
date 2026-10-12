@@ -45,6 +45,7 @@ static
 void
 payload(void)
 {
+  uint32_t ide_unsupported = 0;
 
   uint32_t pe_index;
   uint32_t instance, num_exercisers, num_smmu;
@@ -61,6 +62,7 @@ payload(void)
   uint64_t pgt_attr_el3;
   uint64_t cfg_addr;
   uint32_t str_index;
+  uint32_t rp_locked;
   uint32_t device_id, its_id;
   uint32_t page_size = val_memory_page_size();
   smmu_master_attributes_t master;
@@ -174,6 +176,7 @@ payload(void)
       }
 
       test_skip = 0;
+      rp_locked = 0;
 
       /* Enable RMEDA_CTL1.TDISP_EN*/
       if (val_pcie_enable_tdisp(rp_bdf))
@@ -186,25 +189,28 @@ payload(void)
       count = 1;
       stream_id = val_generate_stream_id();
 
-      status = val_ide_establish_stream(bdf, count, stream_id,
-                                     bdf);
+      /* Establish SPDM and matching EP/RP keys before enabling IDE. */
+      status = val_pcie_ide_establish(bdf, rp_bdf, count, stream_id,
+                                      PCIE_CREATE_BDF_PACKED(bdf));
+      if (status == ACS_STATUS_SKIP)
+      {
+          ide_unsupported = 1;
+          val_pcie_disable_tdisp(rp_bdf);
+          continue;
+      }
       if (status)
       {
           val_print(ACS_PRINT_ERR, " Failed to establish stream for bdf: 0x%x", bdf);
           test_fail++;
+          val_pcie_disable_tdisp(rp_bdf);
           continue;
       }
 
-      status = val_ide_establish_stream(rp_bdf, count, stream_id,
-                                     bdf);
-      if (status)
+      if (val_pcie_read_cfg(rp_bdf, da_cap_base + RMEDA_CTL2, &reg_value))
       {
-          val_print(ACS_PRINT_ERR, " Failed to establish stream for RP bdf: 0x%x", rp_bdf);
           test_fail++;
-          continue;
+          goto ide_cleanup;
       }
-
-      val_pcie_read_cfg(rp_bdf, da_cap_base + RMEDA_CTL2, &reg_value);
       val_print(ACS_PRINT_DEBUG, " RMEDA_CTL2 before write = 0x%llx", reg_value);
 
       /* Lock the corresponding Selective IDE register block in RMEDA_CTL2 register */
@@ -222,27 +228,32 @@ payload(void)
       {
         val_print(ACS_PRINT_ERR, " Failed to add MMU entry for cfg_addr: 0x%lx", cfg_addr);
         test_fail++;
-        continue;
+        goto ide_cleanup;
       }
 
       shared_data->num_access = 1;
       shared_data->shared_data_access[0].addr = va1 + da_cap_base + RMEDA_CTL2;
-      shared_data->shared_data_access[0].data = sel_str_lock_bit;
+      shared_data->shared_data_access[0].data = reg_value | sel_str_lock_bit;
       shared_data->shared_data_access[0].access_type = WRITE_DATA;
+      rp_locked = 1;
       if (val_pe_access_mut_el3())
       {
           val_print(ACS_PRINT_ERR,
             "  Failed to access RMEDA_CTL2 = 0x%llx", va1 + da_cap_base + RMEDA_CTL2);
           test_fail++;
-          continue;
+          goto ide_cleanup;
       }
-      val_pcie_read_cfg(rp_bdf, da_cap_base + RMEDA_CTL2, &reg_value);
+      if (val_pcie_read_cfg(rp_bdf, da_cap_base + RMEDA_CTL2, &reg_value))
+      {
+          test_fail++;
+          goto ide_cleanup;
+      }
       val_print(ACS_PRINT_DEBUG, " RMEDA_CTL2 after write = 0x%llx", reg_value);
 
       /* Map the MMIO bar to REALM PAS */
       val_pcie_get_mmio_bar(bdf, &bar_base);
       if (bar_base == 0)
-          continue;
+          goto ide_cleanup;
 
       va2 = val_get_free_va(val_get_min_tg());
       pgt_attr_el3 = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(OUTER_SHAREABLE)
@@ -252,18 +263,24 @@ payload(void)
           val_print(ACS_PRINT_ERR,
             " Failed to add MMU entry for bar_base: 0x%llx", bar_base);
           test_fail++;
-          continue;
+          goto ide_cleanup;
       }
 
       if (val_device_lock(bdf))
       {
           val_print(ACS_PRINT_ERR, " Failed to lock the device: 0x%lx", bdf);
           test_fail++;
-          continue;
+          goto ide_cleanup;
       }
 
       /* Create a buffer of size TEST_DMA_SIZE in DRAM */
       dram_buf_in_virt = val_memory_alloc_pages(TEST_DATA_NUM_PAGES);
+      if (dram_buf_in_virt == NULL)
+      {
+          val_print(ACS_PRINT_ERR, " Failed to allocate DMA buffer", 0);
+          test_fail++;
+          goto ide_cleanup;
+      }
       dram_buf_in_phys = (uint64_t)val_memory_virt_to_phys(dram_buf_in_virt);
 
       val_print(ACS_PRINT_DEBUG, "VA: %lx", (uint64_t)dram_buf_in_virt);
@@ -305,7 +322,7 @@ payload(void)
           if (val_smmu_enable(master.smmu_index)) {
                 val_print(ACS_PRINT_ERR, " Exerciser %x smmu disable error", instance);
                 test_fail++;
-                continue;
+                goto free_mem;
           }
       }
 
@@ -321,14 +338,14 @@ payload(void)
           val_print(ACS_PRINT_ERR,
             " Failed to configure MECID1 for instance %4x", instance);
           test_fail++;
-          continue;
+          goto free_mem;
       }
 
       if (val_rlm_configure_mecid(MECID1))
       {
           val_print(ACS_PRINT_ERR, " Failed to configure MECID1", 0);
           test_fail++;
-          continue;
+          goto free_mem;
       }
 
       /* Set the buffer to value 0 */
@@ -521,10 +538,6 @@ payload(void)
       }
 
 free_mem:
-      /* Ensure device is returned to unlocked state and RP TDISP disabled. */
-      val_pcie_disable_tdisp(rp_bdf);
-      val_device_unlock(bdf);
-
       pgt_attr_el3 = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(OUTER_SHAREABLE)
                      | GET_ATTR_INDEX(DEV_MEM_nGnRnE) | PGT_ENTRY_AP_RW | PAS_ATTR(NONSECURE_PAS));
 
@@ -535,13 +548,13 @@ free_mem:
                     " free_mem: Failed to add MMU entry for dram_buf_in_virt: 0x%llx",
                     (uint64_t)dram_buf_in_virt);
           test_fail++;
-          continue;
+          goto ide_cleanup;
       }
       if (val_memory_set_el3((uint64_t *)dram_buf_in_virt, dma_len * 2, 0))
       {
           val_print(ACS_PRINT_ERR, " free_mem: Failed to set memory for dram_buf_in_virt", 0);
           test_fail++;
-          continue;
+          goto ide_cleanup;
       }
       val_pe_cache_clean_invalidate_range((uint64_t)dram_buf_in_virt, (uint64_t)(dma_len * 2));
 
@@ -553,8 +566,30 @@ free_mem:
       {
           val_print(ACS_PRINT_ERR, " free_mem: Failed to restore GMECID", 0);
           test_fail++;
-          continue;
+          goto ide_cleanup;
       }
+ide_cleanup:
+      /* Unlock and disable RP traffic before stopping keys through DOE. */
+      if (rp_locked && val_pcie_read_cfg(rp_bdf, da_cap_base + RMEDA_CTL2, &reg_value))
+          test_fail++;
+      else if (rp_locked)
+      {
+          shared_data->num_access = 1;
+          shared_data->shared_data_access[0].addr = va1 + da_cap_base + RMEDA_CTL2;
+          shared_data->shared_data_access[0].data = reg_value & ~sel_str_lock_bit;
+          shared_data->shared_data_access[0].access_type = WRITE_DATA;
+          if (val_pe_access_mut_el3())
+              test_fail++;
+      }
+      if (val_ide_set_sel_stream(rp_bdf, count, 0))
+          test_fail++;
+      if (val_device_unlock(bdf))
+          test_fail++;
+      if (val_ide_set_sel_stream(bdf, count, 0))
+          test_fail++;
+      if (val_pcie_disable_tdisp(rp_bdf))
+          test_fail++;
+
   }
 
 
@@ -564,7 +599,9 @@ free_mem:
       test_fail++;
   }
 
-  if (test_skip)
+  if (ide_unsupported && !test_fail)
+      val_set_status(pe_index, "SKIP", 01);
+  else if (test_skip)
       val_set_status(pe_index, "SKIP", 01);
   else if (test_fail)
       val_set_status(pe_index, "FAIL", 8);

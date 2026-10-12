@@ -26,6 +26,7 @@
  "${VAL_DIR}/src/val_status.c"
  "${VAL_DIR}/src/val_pe.c"
  "${VAL_DIR}/src/val_da.c"
+ "${VAL_DIR}/src/val_ide_km.c"
  "${VAL_DIR}/src/val_dpt.c"
  "${VAL_DIR}/src/val_mec.c"
  "${VAL_DIR}/src/val_test_entry_rme.c"
@@ -86,6 +87,8 @@ set(_val_private_includes
   ${VAL_DIR}/sys_arch_src/smmu_v3/
   ${ROOT_DIR}/baremetal_app/
   ${ROOT_DIR}/val_el3/
+  ${ROOT_DIR}/val_el3/include/
+  ${ROOT_DIR}/pal_el3/include/
   ${PAL_DIR}/include/
   ${PAL_DIR}/${TARGET}/include/
   ${PAL_DIR}/src/AArch64/
@@ -122,6 +125,7 @@ if(ENABLE_SPDM)
     spdm_crypt_lib
     spdm_crypt_ext_lib
     cxl_ide_km_requester_lib
+    pci_ide_km_requester_lib
     pci_doe_requester_lib
     cxl_tsp_requester_lib
     pci_tdisp_requester_lib
