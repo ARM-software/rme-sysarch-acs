@@ -281,7 +281,8 @@ PLATFORM_OVERRIDE_CXL_INFO_TABLE platform_cxl_cfg = {
     .device[0].rp_count           = PLATFORM_OVERRIDE_CXL_HB0_RP_COUNT,
     .device[0].rp_bdf[0]          = PLATFORM_OVERRIDE_CXL_HB0_RP0_BDF,
     .device[0].rp_bdf[1]          = PLATFORM_OVERRIDE_CXL_HB0_RP1_BDF,
-    .device[0].rp_bdf[2]          = PLATFORM_OVERRIDE_CXL_HB0_RP2_BDF
+    .device[0].rp_bdf[2]          = PLATFORM_OVERRIDE_CXL_HB0_RP2_BDF,
+    .device[0].rp_bdf[3]          = PLATFORM_OVERRIDE_CXL_HB0_RP3_BDF
     #endif
 };
 

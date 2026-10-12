@@ -125,8 +125,10 @@ primary_cpu_entry:
      * This prevents re-use of stale data cache entries from
      * prior bootloader stages.
      */
-    adr x0, __TEXT_START__
-    adr x1, __TEXT_END__
+    adrp x0, __TEXT_START__
+    add  x0, x0, :lo12:__TEXT_START__
+    adrp x1, __TEXT_END__
+    add  x1, x1, :lo12:__TEXT_END__
     sub x1, x1, x0
     bl  val_inv_icache_range
 

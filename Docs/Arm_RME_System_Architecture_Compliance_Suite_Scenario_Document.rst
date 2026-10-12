@@ -5,9 +5,6 @@ Arm RME System Architecture Compliance Suite - Scenario Document
 .. contents:: Contents
   :depth: 2
 
-For CDA test scenarios, see the
-`CDA Scenario Document <Arm_RME_System_Architecture_Compliance_Suite_CDA_Scenario_Document.rst>`_.
-
 Testcase checklist
 ==================
 
@@ -140,7 +137,7 @@ Testcase checklist
 
     -
 
-      RQDPVN: Any PAS other than the Non-secure PAS must have encryption enabled.
+      RQDPVN: Any PAS other than the Non-secure PAS must have encryption enabled
 
     -
 
@@ -1273,20 +1270,17 @@ Testcase checklist
 
     -
 
-      1. Select a CHI-C2C-capable CXL root port that exposes the RME-CDA DVSEC and locate a downstream CHI-C2C exerciser endpoint. Skip the test if no such endpoint is available.
-      2. Select a CFMWS-backed DCM window and a same-sized aligned address range that is outside every host-visible CFMWS window. Save the original RMECDA_CTL1 value and the original host and endpoint HDM decoder state for cleanup.
-      3. Clear RMECDA_CTL1.TDISP_EN and RMECDA_CTL1.LINK_STR_LOCK through Root access for the ACS setup phase, then program both host and endpoint HDM decoders to the same CFMWS-backed DCM window. This establishes a valid, non-aliased address-decoder configuration before protection is enabled.
-      4. Set RMECDA_CTL1.TDISP_EN and RMECDA_CTL1.LINK_STR_LOCK through Root access and verify the bits read back as set before testing register protection.
-      5. While the TDI is still CONFIG_UNLOCKED, attempt to mutate the endpoint HDM decoder to the non-host-visible address range and reread the decoder. Fail the test if the decoder base or size changes. This verifies that an address-decoder register affecting DCM access is already protected before the DSM accepts LOCK_INTERFACE.
-      6. Open an SPDM session to the endpoint TDI, issue TDISP GET_VERSION and GET_CAPABILITIES, and keep the interface in CONFIG_UNLOCKED state.
-      7. Send Arm TDISP VDM GET_DEV_PROP and validate that the response framing and PROPERTIES reserved bits are correct. Save the PROPERTIES field and the opaque implementation-defined REGISTER_LIST bytes returned before LOCK_INTERFACE.
-      8. Send TDISP LOCK_INTERFACE_REQUEST and verify that the TDI reaches CONFIG_LOCKED state.
-      9. Send GET_DEV_PROP again and verify that PROPERTIES and REGISTER_LIST size are unchanged after LOCK_INTERFACE. If REGISTER_LIST is non-empty, compare the pre-lock and post-lock REGISTER_LIST bytes and fail if the DSM-provided validation blob changed across lock.
-      10. If REGISTER_LIST is empty, query TDISP GET_DEVICE_INTERFACE_REPORT and require PCI_TDISP_INTERFACE_INFO.NO_UPDATE_AFTER_LOCK to be set. This is the generic observable for devices whose RME-sensitive registers are DSM-owned or globally locked rather than exposed through GET_DEV_PROP.
-      11. While the TDI is CONFIG_LOCKED, repeat the endpoint HDM decoder mutation attempt to the non-host-visible address range and reread the decoder. Fail the test if the decoder base or size changes after lock.
-      12. Stop the TDI interface, close the SPDM session, clear RMECDA protection for cleanup, restore original decoder state, restore RMECDA_CTL1, and report PASS only when the protected decoder state cannot be mutated before or after LOCK_INTERFACE and the DSM property/register-list observable is stable across LOCK_INTERFACE.
+      1. Require SPDM/TDISP requester support. Select a CHI-C2C-capable CXL root port that exposes the RME-CDA DVSEC and locate a downstream CHI-C2C exerciser endpoint. Skip the test if these prerequisites are unavailable.
+      2. Select a CFMWS-backed DCM window and a same-sized aligned address range that is outside every host-visible CFMWS window. Save the original RMECDA_CTL1 value and any readable host and endpoint HDM decoder configuration for cleanup.
+      3. Clear RMECDA_CTL1.TDISP_EN and RMECDA_CTL1.LINK_STR_LOCK through Root access, then program both host and endpoint HDM decoders to the same CFMWS-backed DCM window while the interface is unlocked. This establishes the valid decoder configuration used for the lock check.
+      4. Open an SPDM session to the endpoint TDI and issue TDISP GET_VERSION and GET_CAPABILITIES. Skip if the required session setup is unavailable.
+      5. Before LOCK_INTERFACE, send Arm TDISP VDM GET_DEV_PROP, validate the response framing and PROPERTIES reserved bits, and save PROPERTIES and the opaque implementation-defined REGISTER_LIST bytes.
+      6. Send TDISP LOCK_INTERFACE_REQUEST and verify that the TDI reaches CONFIG_LOCKED state.
+      7. Send GET_DEV_PROP again and verify that PROPERTIES, REGISTER_LIST size, and REGISTER_LIST bytes are unchanged across LOCK_INTERFACE. For the host-programmable HDM decoder exercised by this scenario, an empty REGISTER_LIST is a failure.
+      8. While the TDI is CONFIG_LOCKED, read the endpoint decoder base and size, attempt to program the non-host-visible address range, and reread the decoder. Fail if the base or size changes. Unchanged decoder readback is required regardless of whether the programming helper reports success or rejection.
+      9. Stop the TDI interface if locked, close the SPDM session, clear RMECDA protection, restore the saved readable decoder configuration, and restore RMECDA_CTL1. Report PASS only when the property/register-list checks, post-lock decoder protection check, and cleanup succeed. Cleanup failure fails the test.
 
-      Note: The GET_DEV_PROP REGISTER_LIST encoding is implementation-defined. ACS compares the returned bytes across LOCK_INTERFACE and checks protection of the standard HDM decoder registers. If the register list is empty, the test checks NO_UPDATE_AFTER_LOCK in the interface report.
+      Note: The GET_DEV_PROP REGISTER_LIST encoding is implementation-defined. ACS compares the returned bytes as an opaque value and checks write protection of the endpoint HDM decoder after LOCK_INTERFACE.
 
   * -
 
@@ -1794,16 +1788,17 @@ Testcase checklist
 
     -
 
-      RFZBMW: An RME-CDA coherent device must not permit an external access to DCM to specify PAS==Realm unless the TDI is in the RUN TDISP state and the coherent link IDE stream is active.
+      RFZBMW: An RME-CDA coherent device does not permit an external access to DCM to specify Access PAS == Realm if the access did not arrive over an IDE Stream provisioned through TDISP.
 
     -
 
-      1. Select a CHI-C2C-capable CXL root port that exposes the RME-CDA DVSEC and a downstream CHI-C2C exerciser endpoint, program host and endpoint decoders for a CXL.mem window, and derive the selected DCM page's DPA from the endpoint decoder.
-      2. Establish an SPDM session, transition the endpoint TDI to RUN, establish CXL IDE, and enable RMECDA_CTL1.TDISP_EN and RMECDA_CTL1.LINK_STR_LOCK.
+      1. Select a CHI-C2C-capable CXL root port that exposes the RME-CDA DVSEC and a downstream CHI-C2C exerciser endpoint advertising PAS_CHECK==TRUE. Program host and endpoint decoders for a CXL.mem window and derive the selected DCM page's DPA from the endpoint decoder.
+      2. Save RMECDA_CTL1, enable RMECDA_CTL1.TDISP_EN and RMECDA_CTL1.LINK_STR_LOCK, and verify the control readback. Establish an SPDM session, transition the endpoint TDI to RUN, establish CXL IDE, and verify that IDE is active. Keep the TDI in RUN throughout both access checks so that IDE protection is the condition being varied.
       3. Assign a selected host-visible DCM page to Realm.
-      4. Issue an external write followed by a read that specifies PAS==Realm while IDE is active and verify the read returns the written value.
-      5. Disable the IDE stream while keeping the TDI in RUN, restore a known baseline value at the same Realm-assigned DCM page, and re-issue the same external PAS==Realm access.
-      6. Verify that the IDE-disabled external PAS==Realm access is rejected. Stop the TDISP session before cleanup; any subsequent DCM media readback is diagnostic because the CONFIG_UNLOCKED transition can scrub the old contents.
+      4. Issue an external write followed by a read that specifies Access PAS == Realm while IDE is active and verify the read returns the written value.
+      5. Seed a known baseline value through the DPA media backdoor, then disable the IDE stream. Verify that IDE is inactive and the TDI remains in RUN.
+      6. Re-issue the external Access PAS == Realm access and verify that it is rejected. Stop the TDI interface and close the SPDM session before cleanup; any subsequent DCM media readback is diagnostic because the CONFIG_UNLOCKED transition can scrub the old contents.
+      7. Restore RMECDA_CTL1 through Root PAS and verify its readback, clear the test's Realm DCM assignment, and restore the saved host and endpoint decoder configuration and host target list. Report a failure if cleanup fails.
 
   * -
 

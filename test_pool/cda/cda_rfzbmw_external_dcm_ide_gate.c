@@ -169,7 +169,41 @@ program_host_target_list(uint32_t bdf,
 }
 
 static uint32_t
-restore_context_state(const TEST_CONTEXT *context)
+restore_rmecda_ctl1(TEST_CONTEXT *context)
+{
+  uint32_t readback;
+
+  if (context == NULL)
+    return ACS_STATUS_ERR;
+
+  if (context->rmecda_ctl1_valid == 0u)
+    return ACS_STATUS_PASS;
+
+  if (context->rmecda_cfg_va == 0u)
+    return ACS_STATUS_ERR;
+
+  /* RMECDA_CTL1 is write-protected from Non-secure accesses while TDISP is enabled. */
+  if ((write_from_root(context->rmecda_cfg_va + context->rmecda_cap_base +
+                        RMECDA_CTL1_OFFSET,
+                        context->rmecda_ctl1_orig) != ACS_STATUS_PASS) ||
+      (read_from_root(context->rmecda_cfg_va + context->rmecda_cap_base +
+                       RMECDA_CTL1_OFFSET, &readback) != ACS_STATUS_PASS))
+    return ACS_STATUS_ERR;
+
+  if (readback != context->rmecda_ctl1_orig)
+  {
+    val_print(ACS_PRINT_ERR, " RFZBMW: RMECDA_CTL1 restore readback 0x%x", readback);
+    val_print(ACS_PRINT_ERR, " RFZBMW: expected RMECDA_CTL1 0x%x", context->rmecda_ctl1_orig);
+    return ACS_STATUS_ERR;
+  }
+
+  /* Keep the saved state available for retry until restoration is verified. */
+  context->rmecda_ctl1_valid = 0u;
+  return ACS_STATUS_PASS;
+}
+
+static uint32_t
+restore_context_state(TEST_CONTEXT *context)
 {
   uint32_t restore_status;
   uint64_t comp_base;
@@ -178,34 +212,10 @@ restore_context_state(const TEST_CONTEXT *context)
   if (context == NULL)
     return ACS_STATUS_ERR;
 
+  if (restore_rmecda_ctl1(context) != ACS_STATUS_PASS)
+    return ACS_STATUS_ERR;
+
   restore_status = ACS_STATUS_PASS;
-
-  if ((context->rmecda_ctl1_valid != 0u) && (context->rmecda_cfg_va != 0u) &&
-      (write_from_root(context->rmecda_cfg_va + context->rmecda_cap_base +
-                       RMECDA_CTL1_OFFSET,
-                       context->rmecda_ctl1_orig) != ACS_STATUS_PASS))
-  {
-    restore_status = ACS_STATUS_ERR;
-  }
-
-  if (context->host_target_valid != 0u)
-  {
-    comp_base = val_cxl_get_info(CXL_INFO_COMPONENT_BASE, context->host_index);
-    if ((comp_base != 0u) &&
-        (val_cxl_find_capability(comp_base,
-                                 CXL_CAPID_HDM_DECODER,
-                                 &hdm_cap_base) == ACS_STATUS_PASS))
-    {
-      val_mmio_write(hdm_cap_base + CXL_HDM_DECODER_TARGET_LOW(DECODER_SLOT),
-                     context->host_target_low_orig);
-      val_mmio_write(hdm_cap_base + CXL_HDM_DECODER_TARGET_HIGH(DECODER_SLOT),
-                     context->host_target_high_orig);
-    }
-    else
-    {
-      restore_status = ACS_STATUS_ERR;
-    }
-  }
 
   if ((context->endpoint_index != CXL_COMPONENT_INVALID_INDEX) &&
       (context->endpoint_decoder_size_orig != 0u) &&
@@ -218,65 +228,39 @@ restore_context_state(const TEST_CONTEXT *context)
     restore_status = ACS_STATUS_ERR;
   }
 
-  if ((context->host_index != CXL_COMPONENT_INVALID_INDEX) &&
-      (context->host_decoder_size_orig != 0u) &&
-      (val_cxl_program_host_decoder(context->host_index,
+  /* Restore the target list while the host decoder is uncommitted. */
+  if (val_cxl_restore_host_decoder(context->host_index,
                                     DECODER_SLOT,
                                     context->host_decoder_base_orig,
-                                    context->host_decoder_size_orig)
-       != ACS_STATUS_PASS))
+                                    context->host_decoder_size_orig,
+                                    context->host_target_valid,
+                                    context->host_target_low_orig,
+                                    context->host_target_high_orig) != ACS_STATUS_PASS)
   {
     restore_status = ACS_STATUS_ERR;
   }
 
-  return restore_status;
-}
-
-static uint32_t
-restore_rmecda_ctl1(TEST_CONTEXT *context)
-{
-  uint32_t status;
-
-  if (context == NULL)
-    return ACS_STATUS_ERR;
-
-  if ((context->rmecda_ctl1_valid == 0u) || (context->rmecda_cfg_va == 0u))
-    return ACS_STATUS_PASS;
-
-  status = write_from_root(context->rmecda_cfg_va + context->rmecda_cap_base +
-                           RMECDA_CTL1_OFFSET,
-                           context->rmecda_ctl1_orig);
-  context->rmecda_ctl1_valid = 0u;
-
-  return status;
-}
-
-static void
-best_effort_restore_rmecda_ctl1_cfg(TEST_CONTEXT *context)
-{
-  uint32_t readback;
-
-  if (context == NULL)
-    return;
-
-  if (context->rmecda_ctl1_valid == 0u)
-    return;
-
-  val_pcie_write_cfg(context->root_bdf,
-                     context->rmecda_cap_base + RMECDA_CTL1_OFFSET,
-                     context->rmecda_ctl1_orig);
-
-  if ((val_pcie_read_cfg(context->root_bdf,
-                         context->rmecda_cap_base + RMECDA_CTL1_OFFSET,
-                         &readback) == PCIE_SUCCESS) &&
-      (readback != context->rmecda_ctl1_orig))
+  /* An originally empty host window still has a saved target list. */
+  if ((context->host_decoder_size_orig == 0u) && (context->host_target_valid != 0u))
   {
-    val_print(ACS_PRINT_WARN,
-              " RFZBMW: non-SMC RMECDA_CTL1 restore readback 0x%x",
-              readback);
+    comp_base = val_cxl_get_info(CXL_INFO_COMPONENT_BASE, context->host_index);
+    if ((comp_base == 0u) ||
+        (val_cxl_find_capability(comp_base, CXL_CAPID_HDM_DECODER, &hdm_cap_base)
+         != ACS_STATUS_PASS))
+      return ACS_STATUS_ERR;
+
+    val_mmio_write(hdm_cap_base + CXL_HDM_DECODER_TARGET_LOW(DECODER_SLOT),
+                   context->host_target_low_orig);
+    val_mmio_write(hdm_cap_base + CXL_HDM_DECODER_TARGET_HIGH(DECODER_SLOT),
+                   context->host_target_high_orig);
+    if ((val_mmio_read(hdm_cap_base + CXL_HDM_DECODER_TARGET_LOW(DECODER_SLOT)) !=
+         context->host_target_low_orig) ||
+        (val_mmio_read(hdm_cap_base + CXL_HDM_DECODER_TARGET_HIGH(DECODER_SLOT)) !=
+         context->host_target_high_orig))
+      restore_status = ACS_STATUS_ERR;
   }
 
-  context->rmecda_ctl1_valid = 0u;
+  return restore_status;
 }
 
 static uint32_t
@@ -564,6 +548,7 @@ access_realm_dcm_rejected(uint32_t root_bdf,
                           volatile uint64_t *mapped)
 {
   uint32_t access_status;
+  uint32_t fault_seen;
 
   if (mapped == NULL)
     return ACS_STATUS_ERR;
@@ -571,23 +556,20 @@ access_realm_dcm_rejected(uint32_t root_bdf,
   if (aer_offset != 0u)
     val_cxl_aer_clear(root_bdf, aer_offset);
 
-  /*
-   * Expected RFZBMW rejects must use the access_mut path.  The normal MUT
-   * write path reports this model's reject as a non-GPF exception, so use the
-   * same terminal fault-stimulus pattern as the host-side GPC CDA test.
-   */
+  /* Use the protected store path so an expected rejection can be recovered. */
   val_memory_clear_el3_access_state();
   shared_data->access_mut = SET;
   shared_data->arg1 = (uint64_t)mapped;
   shared_data->exception_expected = SET;
 
   access_status = val_pe_access_mut_el3();
+  fault_seen = (shared_data->exception_generated == SET);
   val_memory_clear_el3_access_state();
 
   if (access_status != 0u)
-    return ACS_STATUS_FAIL;
+    return ACS_STATUS_ERR;
 
-  return ACS_STATUS_PASS;
+  return (fault_seen != 0u) ? ACS_STATUS_PASS : ACS_STATUS_FAIL;
 }
 
 static uint32_t
@@ -816,7 +798,6 @@ exercise_rule(TEST_CONTEXT *context)
   uint32_t aer_offset;
   uint32_t realm_assigned;
   uint32_t dcm_cleanup_allowed;
-  uint32_t negative_stimulus_done;
   uint32_t ide_enabled;
   uint32_t session_active;
   uint32_t root_ide_active;
@@ -866,7 +847,6 @@ exercise_rule(TEST_CONTEXT *context)
   val_memory_set(&spdm_ctx, sizeof(spdm_ctx), 0);
   realm_assigned = 0u;
   dcm_cleanup_allowed = 1u;
-  negative_stimulus_done = 0u;
   ide_enabled = 0u;
   session_active = 0u;
   session_id = 0u;
@@ -1021,15 +1001,12 @@ exercise_rule(TEST_CONTEXT *context)
   }
   else
   {
-    negative_stimulus_done = 1u;
     result = ACS_STATUS_PASS;
   }
 
   /*
-   * Leave the RFZBMW stimulus state by moving the TDI out of RUN before any
-   * media readback or DCM sideband cleanup.  Re-establishing IDE here requires
-   * IDE_KM EL3 services, which are not safe immediately after the expected
-   * rejected access on this model.
+   * Both access checks are complete. Move the TDI out of RUN before restoring
+   * configuration and clearing the test's Realm assignment.
    */
   status = stop_tdisp_session(context->endpoint_bdf, &spdm_ctx, session_id);
   session_active = 0u;
@@ -1069,7 +1046,7 @@ exercise_rule(TEST_CONTEXT *context)
 cleanup:
   val_memory_clear_el3_access_state();
 
-  if ((negative_stimulus_done == 0u) && (context->rmecda_ctl1_valid != 0u))
+  if (context->rmecda_ctl1_valid != 0u)
   {
     val_print(ACS_PRINT_INFO, " RFZBMW: restoring RMECDA_CTL1 before DCM cleanup", 0);
     if (restore_rmecda_ctl1(context) != ACS_STATUS_PASS)
@@ -1082,22 +1059,6 @@ cleanup:
     {
       val_print(ACS_PRINT_INFO, " RFZBMW: RMECDA_CTL1 restored", 0);
     }
-  }
-  else if (negative_stimulus_done != 0u)
-  {
-    val_print(ACS_PRINT_INFO,
-              " RFZBMW: terminal reject observed; avoiding post-reject SMC cleanup",
-              0);
-    best_effort_restore_rmecda_ctl1_cfg(context);
-    /*
-     * RMECDA_CTL1 can remain enabled after the terminal reject. In that state
-     * post-reject EL3 config or HDM decoder writes are not safe, so do not
-     * attempt further decoder restore operations from this test.
-     */
-    context->host_target_valid = 0u;
-    context->host_decoder_size_orig = 0u;
-    context->endpoint_decoder_size_orig = 0u;
-    dcm_cleanup_allowed = 0u;
   }
 
   if ((realm_assigned != 0u) && (dcm_cleanup_allowed != 0u))
@@ -1114,7 +1075,8 @@ cleanup:
   }
   else if (realm_assigned != 0u)
   {
-    val_print(ACS_PRINT_WARN, " RFZBMW: skipped DCM assignment cleanup", 0);
+    val_print(ACS_PRINT_ERR, " RFZBMW: skipped DCM assignment cleanup", 0);
+    result = ACS_STATUS_FAIL;
   }
 
   if (ide_enabled != 0u)

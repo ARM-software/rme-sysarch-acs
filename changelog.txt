@@ -7,7 +7,7 @@ Test Updates:
 * Added dependent coverage reporting for RNSMGT using RSHSXK and RJSYPS results.
 Infrastructure and Documentation:
 * Added shared VAL helpers and PAL interfaces for CDA stimulus, setup, and observation.
-* Added standalone CDA scenarios in RST and HTML and updated the rule-to-test checklist.
+* Updated CDA scenarios and the rule-to-test checklist.
 * Converted the validation methodology to RST and updated platform porting documentation.
 
 

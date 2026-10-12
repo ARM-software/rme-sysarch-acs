@@ -226,9 +226,11 @@ val_cxl_aer_read_uncorr(uint32_t bdf,
   if (status_out == NULL)
     return ACS_STATUS_ERR;
 
-  val_pcie_read_cfg(bdf,
-                    aer_offset + AER_UNCORR_STATUS_OFFSET,
-                    status_out);
+  if (val_pcie_read_cfg(bdf,
+                        aer_offset + AER_UNCORR_STATUS_OFFSET,
+                        status_out) != PCIE_SUCCESS)
+    return ACS_STATUS_ERR;
+
   return ACS_STATUS_PASS;
 }
 

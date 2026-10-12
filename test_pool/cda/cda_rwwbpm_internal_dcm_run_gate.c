@@ -1181,6 +1181,14 @@ exercise_rule(TEST_CONTEXT *context)
                               test_hpa,
                               EDMA_FROM_DEVICE);
 
+  /* A setup error does not demonstrate rejection of a non-RUN access. */
+  if (status == ACS_STATUS_ERR)
+  {
+    val_print(ACS_PRINT_ERR, " RWWBPM: negative DCM DMA setup failed", 0);
+    result = ACS_STATUS_FAIL;
+    goto cleanup;
+  }
+
   if (val_cxl_exerciser_backdoor_read64(context->endpoint_bdf,
                                          test_dpa,
                                          &observed) != ACS_STATUS_PASS)

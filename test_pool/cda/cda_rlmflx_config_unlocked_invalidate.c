@@ -950,9 +950,15 @@ exercise_rule(TEST_CONTEXT *context)
   observed = 0u;
   host_fault = 0u;
   status = val_memory_read64_el3_protected(realm_alias, &observed, &host_fault);
-  (void)val_cxl_aer_read_uncorr(context->root_bdf,
-                                context->aer_offset,
-                                &aer_uncorr);
+  if (val_cxl_aer_read_uncorr(context->root_bdf,
+                              context->aer_offset,
+                              &aer_uncorr) != ACS_STATUS_PASS)
+  {
+    val_print(ACS_PRINT_ERR, " RLMFLX: failed to read root-port AER status", 0);
+    result = ACS_STATUS_FAIL;
+    goto cleanup;
+  }
+
   val_print(ACS_PRINT_DEBUG, " RLMFLX: re-RUN host read status %u", status);
   val_print(ACS_PRINT_DEBUG, " RLMFLX: re-RUN host read fault %u", host_fault);
   val_print(ACS_PRINT_DEBUG, " RLMFLX: re-RUN host observed 0x%llx", observed);
@@ -1040,7 +1046,8 @@ cleanup:
       }
       else
       {
-        val_print(ACS_PRINT_WARN, " RLMFLX: second IDE cleanup failed", 0);
+        val_print(ACS_PRINT_ERR, " RLMFLX: second IDE cleanup failed", 0);
+        result = ACS_STATUS_FAIL;
       }
     }
 
@@ -1049,7 +1056,8 @@ cleanup:
                                  &interface_id_second,
                                  0u) != ACS_STATUS_PASS)
     {
-      val_print(ACS_PRINT_WARN, " RLMFLX: second TDISP cleanup failed", 0);
+      val_print(ACS_PRINT_ERR, " RLMFLX: second TDISP cleanup failed", 0);
+      result = ACS_STATUS_FAIL;
     }
   }
 
@@ -1064,12 +1072,23 @@ cleanup:
       {
         ide_enabled = 0u;
       }
+      else
+      {
+        val_print(ACS_PRINT_ERR, " RLMFLX: IDE cleanup failed", 0);
+        result = ACS_STATUS_FAIL;
+      }
     }
 
     if (tdi_stopped != 0u)
-      (void)val_spdm_session_close(&spdm_ctx, session_id);
+      status = val_spdm_session_close(&spdm_ctx, session_id);
     else
-      (void)val_tdisp_stop_if_needed(&spdm_ctx, session_id, &interface_id, 0u);
+      status = val_tdisp_stop_if_needed(&spdm_ctx, session_id, &interface_id, 0u);
+
+    if (status != ACS_STATUS_PASS)
+    {
+      val_print(ACS_PRINT_ERR, " RLMFLX: session cleanup failed", 0);
+      result = ACS_STATUS_FAIL;
+    }
   }
 
   if (realm_assigned != 0u)
@@ -1080,7 +1099,8 @@ cleanup:
                                       0u,
                                       NULL) != ACS_STATUS_PASS)
     {
-      val_print(ACS_PRINT_WARN, " RLMFLX: failed to clear Realm DCM assignment", 0);
+      val_print(ACS_PRINT_ERR, " RLMFLX: failed to clear Realm DCM assignment", 0);
+      result = ACS_STATUS_FAIL;
     }
   }
 
@@ -1102,7 +1122,10 @@ cleanup:
     (void)val_dpt_invalidate_all(master.smmu_index);
 
   if (val_smmu_restore_dpt_coverage(&dpt_cfg_state) != ACS_STATUS_PASS)
+  {
+    val_print(ACS_PRINT_ERR, " RLMFLX: DPT configuration cleanup failed", 0);
     result = ACS_STATUS_ERR;
+  }
 
   if (pgt_desc_old.pgt_base != 0u)
     (void)val_add_gpt_entry_el3(pgt_desc_old.pgt_base, GPT_ANY);
