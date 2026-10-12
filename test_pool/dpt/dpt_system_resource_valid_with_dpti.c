@@ -43,6 +43,7 @@ payload(void)
   uint32_t bdf, rp_bdf, da_cap_base, cap_base;
   uint32_t dma_len, test_data_blk_size;
   uint32_t status, reg_value;
+  uint32_t ats_changed, ats_capability, saved_ats_control;
   uint32_t count;
   void *dram_buf_in_virt, *dram_buf_in_virt2;
   uint64_t va1, va2, bar_base;
@@ -105,7 +106,9 @@ payload(void)
   for (instance = 0; instance < num_exercisers; ++instance)
   {
       pgt_desc.pgt_base = 0;
+      ats_changed = 0;
       rlm_mapped = 0;
+      dram_buf_in_virt = NULL;
       /* if init fail moves to next exerciser */
       if (val_exerciser_init(instance))
           continue;
@@ -131,10 +134,6 @@ payload(void)
 
       test_skip = 0;
 
-      val_print(ACS_PRINT_DEBUG, " Enabling the ATS Cache for the exerciser: 0x%x", bdf);
-      val_pcie_read_cfg(bdf, cap_base + ATS_CTRL, &reg_value);
-      reg_value |= ATS_CACHING_EN;
-      val_pcie_write_cfg(bdf, cap_base + ATS_CTRL, reg_value);
 
       /* Enable RMEDA_CTL1.TDISP_EN*/
       if (val_pcie_enable_tdisp(rp_bdf))
@@ -161,6 +160,8 @@ payload(void)
       {
           val_print(ACS_PRINT_ERR, " Failed to establish stream for bdf: 0x%x", bdf);
           test_fail++;
+          if (val_pcie_disable_tdisp(rp_bdf))
+              test_fail++;
           continue;
       }
 
@@ -181,7 +182,7 @@ payload(void)
       {
         val_print(ACS_PRINT_ERR, " Failed to add MMU entry for cfg_addr: 0x%lx", cfg_addr);
         test_fail++;
-        continue;
+        goto ide_cleanup;
       }
 
       shared_data->num_access = 1;
@@ -223,8 +224,26 @@ payload(void)
           goto ide_cleanup;
       }
 
+      /* Enable ATS only after target and IDE setup checks have succeeded. */
+      if (val_pcie_find_capability(bdf, PCIE_ECAP, ECID_ATS, &ats_capability) ||
+          val_pcie_read_cfg(bdf, ats_capability + ATS_CTRL, &saved_ats_control))
+      {
+          test_fail++;
+          goto ide_cleanup;
+      }
+      ats_changed = 1;
+      val_pcie_write_cfg(bdf, ats_capability + ATS_CTRL,
+                         saved_ats_control | ATS_CACHING_EN);
+
+
       /* Create a buffer of size TEST_DMA_SIZE in DRAM */
       dram_buf_in_virt = val_memory_alloc_pages(TEST_DATA_NUM_PAGES);
+      if (dram_buf_in_virt == NULL)
+      {
+          val_print(ACS_PRINT_ERR, " DMA buffer allocation failed", 0);
+          test_fail++;
+          goto ide_cleanup;
+      }
       dram_buf_in_phys = (uint64_t)val_memory_virt_to_phys(dram_buf_in_virt);
 
       /* Change the AccessPAS of the buffer to Realm PAS */
@@ -233,18 +252,18 @@ payload(void)
           val_print(ACS_PRINT_ERR,
             " Failed to add GPT entry for PA 0x%llx", dram_buf_in_phys);
           test_fail++;
-          goto ide_cleanup;
+          goto free_mem;
       }
       pgt_attr_el3 = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(OUTER_SHAREABLE)
                         | GET_ATTR_INDEX(DEV_MEM_nGnRnE) | PGT_ENTRY_AP_RW | PAS_ATTR(REALM_PAS));
 
       if (val_add_mmu_entry_el3((uint64_t)dram_buf_in_virt,
-                                (uint64_t)dram_buf_in_virt, pgt_attr_el3))
+                                dram_buf_in_phys, pgt_attr_el3))
       {
           val_print(ACS_PRINT_ERR, " Failed to add MMU entry for dram_buf_in_virt: 0x%llx",
                     (uint64_t)dram_buf_in_virt);
           test_fail++;
-          goto ide_cleanup;
+          goto free_mem;
       }
 
 
@@ -253,7 +272,7 @@ payload(void)
       {
           val_print(ACS_PRINT_ERR, " Failed to set memory to 0 for instance %4x", instance);
           test_fail++;
-          goto ide_cleanup;
+          goto free_mem;
       }
       val_pe_cache_clean_invalidate_range((uint64_t)dram_buf_in_virt,
                                           (uint64_t)(test_data_blk_size));
@@ -266,7 +285,7 @@ payload(void)
           val_print(ACS_PRINT_ERR, " Failed to set memory to 0x%x for ", TEST_DATA);
           val_print(ACS_PRINT_ERR, "0x%4x ", instance);
           test_fail++;
-          goto ide_cleanup;
+          goto free_mem;
       }
       val_pe_cache_clean_invalidate_range((uint64_t)dram_buf_in_virt, (uint64_t)(dma_len));
 
@@ -287,7 +306,7 @@ payload(void)
                 val_print(ACS_PRINT_ERR, " Exerciser %x smmu disable error", instance);
                 val_set_status(pe_index, "FAIL", 02);
                 test_fail++;
-                goto ide_cleanup;
+                goto free_mem;
           }
       }
 
@@ -446,38 +465,46 @@ free_mem:
           val_print(ACS_PRINT_ERR, " Failed to release Realm page table for instance %4x",
                     instance);
           test_fail++;
+          /* Keep mapped buffers reserved when page-table teardown fails. */
+          goto ide_cleanup;
       }
 
       pgt_attr_el3 = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(NON_SHAREABLE) |
       PGT_ENTRY_AP_RW | PAS_ATTR(NONSECURE_PAS));
-      //Clear the memory and it's protection by making it NS
-      if (val_add_mmu_entry_el3((uint64_t)dram_buf_in_virt, dram_buf_in_phys, pgt_attr_el3))
+      /* Restore the buffer before returning it to the allocator. A failed
+       * restore leaves it reserved rather than reusing Realm-protected memory.
+       */
+      if (dram_buf_in_virt != NULL)
       {
-          val_print(ACS_PRINT_ERR,
-                    " free_mem: Failed to add MMU entry for dram_buf_in_virt: 0x%llx",
-                    (uint64_t)dram_buf_in_virt);
-          test_fail++;
-          goto ide_cleanup;
+          if (val_add_mmu_entry_el3((uint64_t)dram_buf_in_virt,
+                                   dram_buf_in_phys, pgt_attr_el3))
+          {
+              test_fail++;
+              goto ide_cleanup;
+          }
+          if (val_memory_set_el3((uint64_t *)dram_buf_in_virt, test_data_blk_size, 0))
+          {
+              test_fail++;
+              goto ide_cleanup;
+          }
+          val_pe_cache_clean_invalidate_range((uint64_t)dram_buf_in_virt,
+                                              test_data_blk_size);
+          val_memory_free_pages(dram_buf_in_virt, TEST_DATA_NUM_PAGES);
+          dram_buf_in_virt = NULL;
       }
-
-      if (val_memory_set_el3((uint64_t *)dram_buf_in_virt, test_data_blk_size, 0))
-      {
-          val_print(ACS_PRINT_ERR,
-                    " free_mem: Failed to set memory to 0 for instance %4x", instance);
-          test_fail++;
-          goto ide_cleanup;
-      }
-      val_pe_cache_clean_invalidate_range((uint64_t)dram_buf_in_virt,
-                                          (uint64_t)(test_data_blk_size));
-
-      /* Return the buffer to the heap manager */
-      val_memory_free_pages(dram_buf_in_virt, TEST_DATA_NUM_PAGES);
 
 ide_cleanup:
-      /* Disable the stream before stopping keys, keeping DOE accessible. */
+      /* Restore requester controls on setup failures as well as normal exits. */
+      if (ats_changed)
+      {
+          val_exerciser_ops(ATS_INV_CACHE, 0, instance);
+          val_pcie_write_cfg(bdf, ats_capability + ATS_CTRL, saved_ats_control);
+      }
+      /* Use shared TDISP/IDE teardown before clearing the RP associations. */
       if (val_dpt_ide_stop(bdf, rp_bdf, count, count))
           test_fail++;
-      val_pcie_disable_tdisp(rp_bdf);
+      if (val_pcie_disable_tdisp(rp_bdf))
+          test_fail++;
   }
 
   if (ide_unsupported && !test_fail)

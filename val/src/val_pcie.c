@@ -3134,3 +3134,82 @@ val_pcie_get_bar_index(uint32_t bdf, uint64_t bar_address, uint32_t *bar_index)
 
     return 1; // Not found
 }
+
+/**
+ * @brief Probe an endpoint memory BAR size while preserving its configuration.
+ *
+ * @param bdf Endpoint BDF.
+ * @param bar_index Lower BAR register index, starting at zero.
+ * @param size Output size in bytes, including sizes above 4 GiB.
+ * @return PCIE_SUCCESS on success, or PCIE_NO_MAPPING on invalid/probe failure.
+ */
+uint32_t
+val_pcie_get_memory_bar_size(uint32_t bdf, uint32_t bar_index, uint64_t *size)
+{
+    uint32_t offset, low, high = 0u, command, check;
+    uint32_t mask_low = 0u, mask_high = 0u, status;
+    uint32_t is_64;
+    uint64_t mask;
+
+    if (size == NULL || bar_index >= TYPE0_MAX_BARS)
+        return PCIE_NO_MAPPING;
+    *size = 0u;
+    offset = TYPE01_BAR + bar_index * sizeof(uint32_t);
+
+    if (val_pcie_read_cfg(bdf, offset, &low) || low == PCIE_UNKNOWN_RESPONSE ||
+        (low & 1u) != 0u)
+        return PCIE_NO_MAPPING;
+
+    is_64 = ((low >> BAR_MDT_SHIFT) & BAR_MDT_MASK) == BITS_64;
+    if (!is_64 && ((low >> BAR_MDT_SHIFT) & BAR_MDT_MASK) != BITS_32)
+        return PCIE_NO_MAPPING;
+    if (is_64 && (bar_index + 1u >= TYPE0_MAX_BARS ||
+                  val_pcie_read_cfg(bdf, offset + sizeof(uint32_t), &high)))
+        return PCIE_NO_MAPPING;
+    if (val_pcie_read_cfg(bdf, TYPE01_CR, &command) || command == PCIE_UNKNOWN_RESPONSE)
+        return PCIE_NO_MAPPING;
+
+    /* Disable I/O and memory decode. Write zero to the Status RW1C fields. */
+    command &= 0xffffu;
+    val_pcie_write_cfg(bdf, TYPE01_CR, command & ~3u);
+    status = val_pcie_read_cfg(bdf, TYPE01_CR, &check);
+    if (status || (check & 0xffffu) != (command & ~3u))
+    {
+        status = PCIE_NO_MAPPING;
+        goto restore_command;
+    }
+
+    /* A 64-bit size mask must be read with both DWORDs set to all ones. */
+    val_pcie_write_cfg(bdf, offset, BAR_SIZE_PROBE);
+    if (is_64)
+        val_pcie_write_cfg(bdf, offset + sizeof(uint32_t), BAR_SIZE_PROBE);
+    status = val_pcie_read_cfg(bdf, offset, &mask_low);
+    if (is_64 && val_pcie_read_cfg(bdf, offset + sizeof(uint32_t), &mask_high))
+        status = PCIE_NO_MAPPING;
+
+    /* Restore BARs before restoring address decode, even if a probe read failed. */
+    if (is_64)
+        val_pcie_write_cfg(bdf, offset + sizeof(uint32_t), high);
+    val_pcie_write_cfg(bdf, offset, low);
+    if (val_pcie_read_cfg(bdf, offset, &check) || check != low)
+        status = PCIE_NO_MAPPING;
+    if (is_64 && (val_pcie_read_cfg(bdf, offset + sizeof(uint32_t), &check) || check != high))
+        status = PCIE_NO_MAPPING;
+
+restore_command:
+    val_pcie_write_cfg(bdf, TYPE01_CR, command);
+    if (val_pcie_read_cfg(bdf, TYPE01_CR, &check) || (check & 0xffffu) != command)
+        status = PCIE_NO_MAPPING;
+    if (status || mask_low == PCIE_UNKNOWN_RESPONSE)
+        return PCIE_NO_MAPPING;
+
+    /* Extend 32-bit masks so two's complement produces a 64-bit byte count. */
+    mask = ((uint64_t)(is_64 ? mask_high : ~(uint32_t)0) << 32) | (mask_low & ~0xfu);
+    *size = ~mask + 1u;
+    if (*size == 0u || (*size & (*size - 1u)) != 0u)
+    {
+        *size = 0u;
+        return PCIE_NO_MAPPING;
+    }
+    return PCIE_SUCCESS;
+}

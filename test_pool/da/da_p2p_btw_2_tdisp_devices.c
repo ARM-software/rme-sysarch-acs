@@ -215,12 +215,14 @@ payload(void)
 
 test_clean:
       val_print(ACS_PRINT_DEBUG, " Putting the devices back into unlocked state", 0);
-      if (req_locked)
-          val_device_unlock(req_e_bdf);
-      if (tgt_locked)
-          val_device_unlock(tgt_e_bdf);
-      val_pcie_disable_tdisp(req_rp_bdf);
-      val_pcie_disable_tdisp(tgt_rp_bdf);
+      if (req_locked && val_device_unlock(req_e_bdf) != ACS_STATUS_PASS)
+          test_fails++;
+      if (tgt_locked && val_device_unlock(tgt_e_bdf) != ACS_STATUS_PASS)
+          test_fails++;
+      if (val_pcie_disable_tdisp(req_rp_bdf))
+          test_fails++;
+      if (val_pcie_disable_tdisp(tgt_rp_bdf))
+          test_fails++;
       /* Clear Error Status Bits */
       val_pcie_clear_device_status_error(req_rp_bdf);
       val_pcie_clear_sig_target_abort(req_rp_bdf);

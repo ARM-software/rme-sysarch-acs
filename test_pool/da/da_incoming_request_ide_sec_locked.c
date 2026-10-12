@@ -403,11 +403,9 @@ cleanup_instance:
           val_memory_free_pages(dram_buf_in_virt, TEST_DATA_NUM_PAGES);
       }
 
-      /* Per-instance cleanup: unlock device and disable TDISP */
+      /* Shared cleanup stops TDISP and IDE keys, then closes SPDM. */
       if (val_device_unlock(bdf) != ACS_STATUS_PASS)
           test_fail++;
-      (void)val_ide_set_sel_stream(bdf, count, 0);
-      (void)val_ide_set_sel_stream(rp_bdf, count, 0);
 cleanup_tdisp:
       if (val_pcie_disable_tdisp(rp_bdf))
       {

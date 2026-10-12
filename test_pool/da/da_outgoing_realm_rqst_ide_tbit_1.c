@@ -167,12 +167,8 @@ payload(void)
           }
 
 ide_cleanup:
-          /* Disable RP traffic before stopping keys over DOE. */
-          if (val_ide_set_sel_stream(rp_bdf, count, 0))
-              test_fail++;
+          /* Shared cleanup stops TDISP and IDE keys, then closes SPDM. */
           if (val_device_unlock(bdf) != ACS_STATUS_PASS)
-              test_fail++;
-          if (val_ide_set_sel_stream(bdf, count, 0))
               test_fail++;
           if (val_pcie_disable_tdisp(rp_bdf))
               test_fail++;
