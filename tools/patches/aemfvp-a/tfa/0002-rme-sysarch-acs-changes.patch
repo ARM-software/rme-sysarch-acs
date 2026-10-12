@@ -5,26 +5,27 @@ Subject: [PATCH 2/2] rme-sysarch-acs-changes
 
 Signed-off-by: Shyamanth RH <shyamanth.rh@arm.com>
 ---
- bl31/bl31.mk                              |  8 ++++++++
+ bl31/bl31.mk                              |  9 +++++++++
  include/plat/arm/common/arm_def.h         | 13 ++++++++++---
  plat/arm/board/fvp/fvp_common.c           |  2 ++
- plat/arm/board/fvp/include/fvp_pas_def.h  |  4 ++--
+ plat/arm/board/fvp/include/fvp_pas_def.h  |  6 +++---
  plat/arm/board/fvp/include/platform_def.h |  8 ++++----
  plat/arm/board/fvp/platform.mk            |  6 ++++++
  plat/arm/common/arm_common.mk             |  2 +-
  plat/arm/common/arm_sip_svc.c             |  2 +-
- 8 files changed, 34 insertions(+), 11 deletions(-)
+ 8 files changed, 36 insertions(+), 12 deletions(-)
 
 diff --git a/bl31/bl31.mk b/bl31/bl31.mk
 index e39091528..8a9cf387f 100644
 --- a/bl31/bl31.mk
 +++ b/bl31/bl31.mk
-@@ -54,6 +54,14 @@ BL31_SOURCES		+=	bl31/bl31_main.c				\
+@@ -54,6 +54,15 @@ BL31_SOURCES		+=	bl31/bl31_main.c				\
  
  VENDOR_EL3_SRCS		+=	services/el3/ven_el3_svc.c
  
 +PLAT_INCLUDES += -I${ACS_HOME}/val_el3/include/ \
 +                  -I${ACS_HOME}/val/include/ \
++                  -I${ACS_HOME}/pal_el3/include/ \
 +                  -I${ACS_HOME}/pal_el3/FVP/include/
 +
 +BL31_SOURCES +=  $(wildcard $(ACS_HOME)/val_el3/src/*.c) \
@@ -81,7 +82,7 @@ diff --git a/plat/arm/board/fvp/include/fvp_pas_def.h b/plat/arm/board/fvp/inclu
 index 6b9728618..e202f0540 100644
 --- a/plat/arm/board/fvp/include/fvp_pas_def.h
 +++ b/plat/arm/board/fvp/include/fvp_pas_def.h
-@@ -96,11 +96,11 @@
+@@ -96,14 +96,14 @@
  
  #define	ARM_PAS_KERNEL_1		GPT_MAP_REGION_GRANULE(ARM_PAS_4_BASE, \
  							       ARM_PAS_4_SIZE, \
@@ -95,6 +96,10 @@ index 6b9728618..e202f0540 100644
  
  #define	ARM_PAS_PCI_MEM_2		GPT_MAP_REGION_GRANULE(PLAT_ARM_PCI_MEM_2_BASE, \
  							       PLAT_ARM_PCI_MEM_2_SIZE, \
+-							       GPT_GPI_NS)
++							       GPT_GPI_ANY)
+ /*
+  * REALM and Shared area share the same PAS, so consider them a single
 diff --git a/plat/arm/board/fvp/include/platform_def.h b/plat/arm/board/fvp/include/platform_def.h
 index f412ec04c..8391fed8c 100644
 --- a/plat/arm/board/fvp/include/platform_def.h

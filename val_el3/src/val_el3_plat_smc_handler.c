@@ -18,6 +18,7 @@
 #include <val_el3_exception.h>
 #include <val_el3_memory.h>
 #include <val_el3_pe.h>
+#include <val_el3_pcie_ide.h>
 #include <val_el3_pgt.h>
 #include <val_el3_security.h>
 #include <val_el3_smmu.h>
@@ -86,6 +87,10 @@ void plat_arm_acs_smc_handler(uint64_t services, uint64_t arg0, uint64_t arg1, u
     case RME_ACCESS_MUT:
       INFO("RME MEMORY ACCESS SERVICE\n");
       val_el3_access_mut();
+      break;
+    case EL3_PCIE_IDE_KM:
+      shared_data->status_code = val_el3_pcie_ide_km_handle(shared_data->arg0,
+                                                         shared_data->arg1);
       break;
     case EL3_IDE_KM:
       INFO("EL3 IDE_KM service \n");

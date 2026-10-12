@@ -61,10 +61,11 @@ payload(void)
   pcie_device_bdf_table *bdf_tbl_ptr;
   uint32_t tbl_index;
   uint32_t dp_type;
-  uint32_t bdf;
+  uint32_t bdf, ep_bdf, num_ep_streams;
   uint32_t reg_value;
   uint32_t test_fail = 0;
   uint32_t test_skip = 1;
+  uint32_t ide_unsupported = 0;
   uint32_t count;
   uint32_t status;
   uint32_t pgt_attr_el3;
@@ -73,7 +74,7 @@ payload(void)
   uint64_t cfg_addr;
   uint32_t da_cap_base;
   uint32_t ide_cap_base;
-  uint32_t stream_id;
+  uint32_t stream_id, setup_stream_id;
   uint32_t str_base;
   uint32_t str_size;
   uint32_t num_test_streams;
@@ -134,6 +135,14 @@ payload(void)
           continue;
       }
 
+      /* Establish keys with a downstream EP before testing the RP block. */
+      if (val_pcie_get_downstream_function(bdf, &ep_bdf) ||
+          val_ide_get_num_sel_str(ep_bdf, &num_ep_streams) || !num_ep_streams)
+      {
+          val_print(ACS_PRINT_WARN, " No IDE partner for RP BDF: 0x%x", bdf);
+          continue;
+      }
+
       /* RMEDA_CTL2 has no lock bits for Selective IDE streams with index > 31. */
       num_test_streams = num_sel_streams;
       if (num_test_streams > MAX_LOCKABLE_IDE_STREAMS)
@@ -141,6 +150,7 @@ payload(void)
       lock_mask = num_test_streams == MAX_LOCKABLE_IDE_STREAMS ?
                   0xFFFFFFFFu : (1u << num_test_streams) - 1;
       active_stream = 0;
+
 
       if (val_pcie_enable_tdisp(bdf) ||
           val_pcie_read_cfg(bdf, da_cap_base + RMEDA_CTL1, &reg_value) != PCIE_SUCCESS ||
@@ -183,10 +193,16 @@ payload(void)
               goto port_cleanup;
           }
 
-          /* The setup helper accepts an unpacked BDF and checks the Secure state. */
+          /* Program matching keys and establish Secure at both ports. */
           active_stream = count;
-          status = val_ide_establish_stream(bdf, count, val_generate_stream_id(),
-                                           bdf);
+          setup_stream_id = val_generate_stream_id();
+          status = val_pcie_ide_establish_streams(ep_bdf, bdf, 1u, count, setup_stream_id,
+                                          PCIE_CREATE_BDF_PACKED(ep_bdf));
+          if (status == ACS_STATUS_SKIP)
+          {
+              ide_unsupported = 1;
+              goto port_cleanup;
+          }
           if (status)
           {
               val_print(ACS_PRINT_ERR, " Failed to establish stream for bdf: 0x%x", bdf);
@@ -287,6 +303,11 @@ stream_cleanup:
               test_fail++;
               break;
           }
+          /* Restore the key's Stream ID so PAL STOP resolves the original block. */
+          if (val_ide_program_stream_id(bdf, count, setup_stream_id) ||
+              val_device_unlock(ep_bdf) != ACS_STATUS_PASS ||
+              val_ide_set_sel_stream(ep_bdf, 1u, 0))
+              test_fail++;
           active_stream = 0;
       }
 
@@ -303,12 +324,21 @@ port_cleanup:
           val_print(ACS_PRINT_ERR, " Failed to disable TDISP for BDF: 0x%x", bdf);
           test_fail++;
       }
-      if (active_stream && val_ide_set_sel_stream(bdf, active_stream, 0))
-          test_fail++;
+      if (active_stream)
+      {
+          if (val_ide_set_sel_stream(bdf, active_stream, 0))
+              test_fail++;
+          if (val_device_unlock(ep_bdf) != ACS_STATUS_PASS)
+              test_fail++;
+          if (val_ide_set_sel_stream(ep_bdf, 1u, 0))
+              test_fail++;
+      }
 
   }
 
-  if (test_skip)
+  if (ide_unsupported && !test_fail)
+      val_set_status(pe_index, "SKIP", 01);
+  else if (test_skip)
       val_set_status(pe_index, "SKIP", 01);
   else if (test_fail)
       val_set_status(pe_index, "FAIL", 01);

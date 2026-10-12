@@ -78,6 +78,7 @@
   SpdmCryptLib|ShellPkg/Application/rme-acs/ext/RmeSpdmCryptLib.inf
   PciDoeRequesterLib|ShellPkg/Application/rme-acs/ext/RmePciDoeRequesterLib.inf
   CxlIdeKmRequesterLib|ShellPkg/Application/rme-acs/ext/RmeCxlIdeKmRequesterLib.inf
+  PciIdeKmRequesterLib|ShellPkg/Application/rme-acs/ext/RmePciIdeKmRequesterLib.inf
   CxlTspRequesterLib|ShellPkg/Application/rme-acs/ext/RmeCxlTspRequesterLib.inf
   PciTdispRequesterLib|ShellPkg/Application/rme-acs/ext/RmePciTdispRequesterLib.inf
   SpdmDeviceSecretLib|SecurityPkg/DeviceSecurity/SpdmLib/SpdmDeviceSecretLibNull.inf
@@ -96,6 +97,7 @@
   SpdmCryptLib|ShellPkg/Application/rme-acs/ext/RmeSpdmNullLib.inf
   PciDoeRequesterLib|ShellPkg/Application/rme-acs/ext/RmeSpdmNullLib.inf
   CxlIdeKmRequesterLib|ShellPkg/Application/rme-acs/ext/RmeSpdmNullLib.inf
+  PciIdeKmRequesterLib|ShellPkg/Application/rme-acs/ext/RmeSpdmNullLib.inf
   CxlTspRequesterLib|ShellPkg/Application/rme-acs/ext/RmeSpdmNullLib.inf
   PciTdispRequesterLib|ShellPkg/Application/rme-acs/ext/RmeSpdmNullLib.inf
   RngLib|MdePkg/Library/BaseRngLibNull/BaseRngLibNull.inf

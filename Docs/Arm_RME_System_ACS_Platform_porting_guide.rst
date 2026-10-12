@@ -515,6 +515,9 @@ This command runs only the RME module and skips RME test mec_effect_of_popa_cmo.
 
 Note: Platform-specific means the partner must provide their implementation for that PAL API.
 
+For PCIe and CXL Root Port IDE key-management APIs implemented in EL3 PAL, see
+the `IDE-KM PAL porting guide <IDE_KM_PAL_porting_guide.md>`_.
+
 
 4. Prerequisites
 ================

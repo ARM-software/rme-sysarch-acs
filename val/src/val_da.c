@@ -20,8 +20,11 @@
 #include "include/val_pcie.h"
 #include "include/val_da.h"
 #include "include/val_spdm.h"
+#include "include/val_ide_km.h"
 #if ENABLE_SPDM
 #include "industry_standard/pci_tdisp.h"
+#include "library/spdm_return_status.h"
+#include "library/pci_ide_km_requester_lib.h"
 #endif
 
 #include "include/val_memory.h"
@@ -43,6 +46,11 @@ typedef struct {
   uint32_t             in_use;
   uint32_t             bdf;
   uint32_t             session_id;
+  uint32_t             tdi_locked;
+  uint32_t             ide_configured;
+  uint32_t             rp_bdf;
+  uint32_t             rp_keys_programmed;
+  uint8_t              stream_id;
   val_spdm_context_t   ctx;
 } spdm_session_slot_t;
 
@@ -71,6 +79,9 @@ static spdm_session_slot_t *spdm_alloc_slot(uint32_t bdf)
       g_spdm_sessions[i].in_use = 1u;
       g_spdm_sessions[i].bdf = bdf;
       g_spdm_sessions[i].session_id = 0u;
+      g_spdm_sessions[i].tdi_locked = 0u;
+      g_spdm_sessions[i].ide_configured = 0u;
+      g_spdm_sessions[i].rp_keys_programmed = 0u;
       /* ctx will be initialised when session is opened. */
       return &g_spdm_sessions[i];
     }
@@ -407,6 +418,311 @@ val_da_get_next_rid_values(uint32_t *current_base_offset,
   *current_base_offset += RID_ADDR_REG2_SIZE;
 }
 
+
+/**
+ * @brief Open or reuse a secured SPDM session for an endpoint.
+ *
+ * @param bdf Endpoint BDF identifying the session.
+ * @return ACS_STATUS_PASS on success, or ACS_STATUS_ERR on failure.
+ */
+uint32_t
+val_device_session_open(uint32_t bdf)
+{
+#if ENABLE_SPDM
+  spdm_session_slot_t *slot = spdm_alloc_slot(bdf);
+  uint32_t status;
+
+  if (slot == NULL)
+    return ACS_STATUS_ERR;
+
+  if (slot->session_id != 0u)
+    return ACS_STATUS_PASS;
+
+  status = val_spdm_session_open(bdf, &slot->ctx, &slot->session_id);
+  if (status != ACS_STATUS_PASS) {
+    val_spdm_context_deinit(&slot->ctx);
+    spdm_free_slot(slot);
+    return ACS_STATUS_ERR;
+  }
+
+  return ACS_STATUS_PASS;
+#else
+  (void)bdf;
+  val_print(ACS_PRINT_ERR, " PCIe IDE setup requires ENABLE_SPDM", 0);
+  return ACS_STATUS_ERR;
+#endif
+}
+
+/**
+ * @brief Establish a Secure PCIe IDE stream with matching endpoint and RP keys.
+ *
+ * @param bdf Endpoint BDF.
+ * @param rp_bdf Root Port BDF.
+ * @param ep_count Endpoint Selective IDE block number, starting at 1.
+ * @param rp_count Root Port Selective IDE block number, starting at 1.
+ * @param stream_id Eight-bit Stream ID used at both ports.
+ * @param rid Packed Requester ID used for the RID associations.
+ * @return ACS_STATUS_PASS when both ports are Secure, ACS_STATUS_SKIP when the
+ *         RP backend is unsupported, or ACS_STATUS_ERR on setup failure.
+ */
+uint32_t
+val_pcie_ide_establish_streams(uint32_t bdf, uint32_t rp_bdf,
+                               uint32_t ep_count, uint32_t rp_count,
+                               uint32_t stream_id, uint32_t rid)
+{
+#if ENABLE_SPDM
+  spdm_session_slot_t *slot;
+  PCIE_IDE_SELECTOR selector = {0};
+  PCIE_IDE_KEY rp_key;
+  pci_ide_km_aes_256_gcm_key_buffer_t ep_rx, ep_tx;
+  uint32_t regs[PCIE_CFG_SIZE / sizeof(uint32_t)];
+  uint32_t reg_count = PCIE_CFG_SIZE / sizeof(uint32_t);
+  uint32_t i, j, state_ep, state_rp, result = ACS_STATUS_ERR;
+  uint8_t dev_func, bus, segment, max_port, ack, sub;
+  libspdm_return_t status = ACS_STATUS_ERR;
+  char8_t *stage = " PCIe IDE setup: configure stream associations";
+
+  /* Open SPDM session with EP */
+  if (stream_id > 255u || val_device_session_open(bdf) != ACS_STATUS_PASS)
+    return ACS_STATUS_ERR;
+
+  /* Record RP and Stream ID in the EP session slot for setup and cleanup */
+  slot = spdm_find_slot(bdf);
+  slot->rp_bdf = rp_bdf;
+  slot->stream_id = (uint8_t)stream_id;
+  selector.stream_id = (uint8_t)stream_id;
+
+  /* Disable the selected stream at both ports, then program RID and Stream ID */
+  for (i = 0; i < 2; ++i) {
+    uint32_t port = i ? rp_bdf : bdf;
+    uint32_t count = i ? rp_count : ep_count;
+
+    stage = i ? " PCIe IDE setup: RP stream configuration" :
+                " PCIe IDE setup: EP stream configuration";
+    status = val_ide_set_sel_stream(port, count, 0);
+    if (status != ACS_STATUS_PASS)
+      goto cleanup;
+
+    status = val_ide_program_rid_base_limit_valid(port, count, rid, rid, 1);
+    if (status != ACS_STATUS_PASS)
+      goto cleanup;
+
+    status = val_ide_program_stream_id(port, count, stream_id);
+    if (status != ACS_STATUS_PASS)
+      goto cleanup;
+  }
+
+  /* Query EP IDE-KM capabilities and configuration over the SPDM session */
+  stage = " PCIe IDE setup: EP IDE_KM QUERY";
+  status = pci_ide_km_query(NULL, slot->ctx.spdm_context, &slot->session_id, 0,
+                &dev_func, &bus, &segment, &max_port, regs, &reg_count);
+  if (LIBSPDM_STATUS_IS_ERROR(status)) {
+    val_print(ACS_PRINT_ERR, " PCIe IDE_KM QUERY failed: 0x%x", (uint64_t)status);
+    goto cleanup;
+  }
+
+  /* Confirm the responder identifies the EP function selected by the test */
+  if (bus != PCIE_EXTRACT_BDF_BUS(bdf) ||
+      dev_func != ((PCIE_EXTRACT_BDF_DEV(bdf) << 3) | PCIE_EXTRACT_BDF_FUNC(bdf)) ||
+      segment != PCIE_EXTRACT_BDF_SEG(bdf)) {
+    status = ACS_STATUS_ERR;
+    stage = " PCIe IDE setup: EP QUERY identity validation";
+    val_print(ACS_PRINT_ERR, " PCIe IDE_KM QUERY identity mismatch for EP: 0x%x", bdf);
+    goto cleanup;
+  }
+
+  /* Independent keys/IVs for PR/NPR/Cpl in both directions, using key set K0. */
+
+  /* Track IDE setup so cleanup also stops keys after a partial failure */
+  slot->ide_configured = 1u;
+  for (i = 0; i < 3; ++i) {
+
+    /* Encode PR/NPR/Completion in the EP request; zero selects key set K0 */
+    sub = (uint8_t)(i << 4);
+
+    /* Generate separate RX and TX keys for this substream */
+    val_memory_set(&ep_rx, sizeof(ep_rx), 0);
+    val_memory_set(&ep_tx, sizeof(ep_tx), 0);
+    stage = " PCIe IDE setup: generate keys";
+    status = val_spdm_get_random(sizeof(ep_rx.key), (uint8_t *)ep_rx.key);
+    if (status != ACS_STATUS_PASS)
+      goto cleanup;
+
+    status = val_spdm_get_random(sizeof(ep_tx.key), (uint8_t *)ep_tx.key);
+    if (status != ACS_STATUS_PASS)
+      goto cleanup;
+
+    /* Initial invocation field for AES-GCM; the key material is fresh. */
+    ep_rx.iv[0] = ep_tx.iv[0] = 1u;
+
+    /* Program the EP receive key and check transport status and KP_ACK */
+    stage = " PCIe IDE setup: EP RX KEY_PROG";
+    ack = 0xff;
+    status = pci_ide_km_key_prog(NULL, slot->ctx.spdm_context, &slot->session_id,
+                 (uint8_t)stream_id, sub | PCI_IDE_KM_KEY_DIRECTION_RX, 0, &ep_rx, &ack);
+    if (LIBSPDM_STATUS_IS_ERROR(status) || ack != PCI_IDE_KM_KP_ACK_STATUS_SUCCESS) {
+      val_print(ACS_PRINT_ERR, " EP KEY_PROG ACK status: 0x%x", ack);
+      goto cleanup;
+    }
+
+    /* Program the EP transmit key over the same secured SPDM session */
+    stage = " PCIe IDE setup: EP TX KEY_PROG";
+    ack = 0xff;
+    status = pci_ide_km_key_prog(NULL, slot->ctx.spdm_context, &slot->session_id,
+                 (uint8_t)stream_id, sub | PCI_IDE_KM_KEY_DIRECTION_TX, 0, &ep_tx, &ack);
+    if (LIBSPDM_STATUS_IS_ERROR(status) || ack != PCI_IDE_KM_KP_ACK_STATUS_SUCCESS) {
+      val_print(ACS_PRINT_ERR, " EP KEY_PROG ACK status: 0x%x", ack);
+      goto cleanup;
+    }
+
+    /* Program RP RX through EL3 using the matching EP TX key and IFV */
+    selector.sub_stream = (uint8_t)i;
+    selector.direction = PCIE_IDE_RX;
+
+    for (j = 0; j < 8; ++j)
+      rp_key.key[j] = ep_tx.key[j];
+
+    rp_key.initial_ifv = (uint64_t)ep_tx.iv[0] | ((uint64_t)ep_tx.iv[1] << 32);
+    stage = " PCIe IDE setup: RP RX KEY_PROG";
+    status = val_pcie_rp_ide_key_program(rp_bdf, &selector, &rp_key);
+    if (status != ACS_STATUS_PASS)
+      goto cleanup;
+
+    /* Include partially staged RP keys in cleanup if the next call fails. */
+    slot->rp_keys_programmed = 1u;
+
+    /* Program RP TX through EL3 using the matching EP RX key and IFV */
+    selector.direction = PCIE_IDE_TX;
+
+    for (j = 0; j < 8; ++j)
+      rp_key.key[j] = ep_rx.key[j];
+
+    rp_key.initial_ifv = (uint64_t)ep_rx.iv[0] | ((uint64_t)ep_rx.iv[1] << 32);
+    stage = " PCIe IDE setup: RP TX KEY_PROG";
+    status = val_pcie_rp_ide_key_program(rp_bdf, &selector, &rp_key);
+    if (status != ACS_STATUS_PASS)
+      goto cleanup;
+
+    /* Erase the temporary RP key copy after programming this substream */
+    val_memory_set(&rp_key, sizeof(rp_key), 0);
+    slot->rp_keys_programmed = 1u;
+  }
+
+  /* Enable the selected EP and RP streams after all keys have been programmed */
+  stage = " PCIe IDE setup: EP stream enable";
+  status = val_ide_set_sel_stream(bdf, ep_count, 1);
+  if (status != ACS_STATUS_PASS)
+    goto cleanup;
+
+  stage = " PCIe IDE setup: RP stream enable";
+  status = val_ide_set_sel_stream(rp_bdf, rp_count, 1);
+  if (status != ACS_STATUS_PASS)
+    goto cleanup;
+
+  /* Enable receivers at BOTH ports before enabling any transmitter. */
+  for (j = 0; j < 2; ++j) {
+    selector.direction = j ? PCIE_IDE_TX : PCIE_IDE_RX;
+    for (i = 0; i < 3; ++i) {
+      sub = (uint8_t)((i << 4) | (j ? PCI_IDE_KM_KEY_DIRECTION_TX :
+                                                     PCI_IDE_KM_KEY_DIRECTION_RX));
+
+      /* Activate the EP key set through IDE-KM */
+      stage = j ? " PCIe IDE setup: EP TX KEY_GO" : " PCIe IDE setup: EP RX KEY_GO";
+      status = pci_ide_km_key_set_go(NULL, slot->ctx.spdm_context, &slot->session_id,
+                                                  (uint8_t)stream_id, sub, 0);
+      if (LIBSPDM_STATUS_IS_ERROR(status))
+        goto cleanup;
+
+      /* Select the matching RP key set through EL3 */
+      selector.sub_stream = (uint8_t)i;
+      stage = j ? " PCIe IDE setup: RP TX KEY_GO" : " PCIe IDE setup: RP RX KEY_GO";
+      status = val_pcie_rp_ide_key_go(rp_bdf, &selector);
+      if (status != ACS_STATUS_PASS)
+        goto cleanup;
+    }
+
+    /* ACK permits another request; allow receiver readiness before TX starts. */
+    (void)val_time_delay_ms(10);
+  }
+
+  /* Poll both ports; enabling the streams alone does not establish Secure */
+  for (i = 0; i <= 10; ++i) {
+    stage = " PCIe IDE setup: read EP/RP stream state";
+    status = val_get_sel_str_status(bdf, ep_count, &state_ep);
+    if (status != ACS_STATUS_PASS)
+      goto cleanup;
+
+    status = val_get_sel_str_status(rp_bdf, rp_count, &state_rp);
+    if (status != ACS_STATUS_PASS)
+      goto cleanup;
+
+    if (state_ep == STREAM_STATE_SECURE && state_rp == STREAM_STATE_SECURE) {
+      val_print(ACS_PRINT_INFO, " PCIe IDE Secure at both ports, stream 0x%x", stream_id);
+      result = ACS_STATUS_PASS;
+      break;
+    }
+    (void)val_time_delay_ms(1);
+  }
+
+  /* Report the last observed states if the both-port Secure check timed out */
+  if (result != ACS_STATUS_PASS) {
+    stage = " PCIe IDE setup: timeout waiting for EP/RP Secure";
+    status = ACS_STATUS_ERR;
+    val_print(ACS_PRINT_ERR, " EP stream state: 0x%x", state_ep);
+    val_print(ACS_PRINT_ERR, " RP stream state: 0x%x", state_rp);
+  }
+cleanup:
+
+
+  /* Erase temporary key material on both success and failure */
+  val_memory_set(&ep_rx, sizeof(ep_rx), 0);
+  val_memory_set(&ep_tx, sizeof(ep_tx), 0);
+  val_memory_set(&rp_key, sizeof(rp_key), 0);
+  if (result != ACS_STATUS_PASS) {
+
+    /* Report the failing stage, stop setup state and disable both streams */
+    val_print(status == ACS_STATUS_SKIP ? ACS_PRINT_WARN : ACS_PRINT_ERR, stage, 0);
+    val_print(status == ACS_STATUS_SKIP ? ACS_PRINT_WARN : ACS_PRINT_ERR,
+              " Setup status: 0x%x", status);
+    val_print(ACS_PRINT_ERR, " EP BDF: 0x%x", bdf);
+    val_print(ACS_PRINT_ERR, " RP BDF: 0x%x", rp_bdf);
+    (void)val_ide_set_sel_stream(rp_bdf, rp_count, 0);
+    (void)val_ide_set_sel_stream(bdf, ep_count, 0);
+    (void)val_device_unlock(bdf);
+  }
+  if (result != ACS_STATUS_PASS && status == ACS_STATUS_SKIP)
+    return ACS_STATUS_SKIP;
+
+  return result;
+#else
+  (void)bdf;
+  (void)rp_bdf;
+  (void)ep_count;
+  (void)rp_count;
+  (void)stream_id;
+  (void)rid;
+  val_print(ACS_PRINT_ERR, " PCIe IDE setup requires ENABLE_SPDM", 0);
+  return ACS_STATUS_ERR;
+#endif
+}
+
+/**
+ * @brief Establish PCIe IDE using the same block number at both ports.
+ *
+ * @param bdf Endpoint BDF.
+ * @param rp_bdf Root Port BDF.
+ * @param count Selectively addressed IDE block number, starting at 1.
+ * @param stream_id Eight-bit Stream ID used at both ports.
+ * @param rid Packed Requester ID used for the RID associations.
+ * @return Status returned by val_pcie_ide_establish_streams().
+ */
+uint32_t
+val_pcie_ide_establish(uint32_t bdf, uint32_t rp_bdf, uint32_t count,
+                       uint32_t stream_id, uint32_t rid)
+{
+  return val_pcie_ide_establish_streams(bdf, rp_bdf, count, count, stream_id, rid);
+}
+
 uint32_t
 val_device_lock(uint32_t bdf)
 {
@@ -426,24 +742,11 @@ val_device_lock(uint32_t bdf)
   interface_id.function_id = (uint32_t)PCIE_CREATE_BDF_PACKED(bdf);
   interface_id.reserved    = 0ull;
 
-  slot = spdm_alloc_slot(bdf);
-  if (slot == NULL) {
-    val_print(ACS_PRINT_ERR, " SPDM: No free session slot for BDF: 0x%x", bdf);
+  if (val_device_session_open(bdf) != ACS_STATUS_PASS)
     return ACS_STATUS_ERR;
-  }
-
+  slot = spdm_find_slot(bdf);
   ctx = &slot->ctx;
-
-  status = val_spdm_session_open(bdf, ctx, &session_id);
-  if (status == ACS_STATUS_PASS) {
-    val_print(ACS_PRINT_INFO, " SPDM session_open PASS 0x%x", status);
-  } else if (status == ACS_STATUS_SKIP) {
-    val_print(ACS_PRINT_WARN, " SPDM session_open SKIP 0x%x", status);
-    return ACS_STATUS_ERR;
-  } else {
-    val_print(ACS_PRINT_ERR, " SPDM session_open ERR 0x%x", status);
-    return ACS_STATUS_ERR;
-  }
+  session_id = slot->session_id;
 
   val_memory_set(&req_caps, sizeof(req_caps), 0);
   val_memory_set(&rsp_caps, sizeof(rsp_caps), 0);
@@ -480,7 +783,7 @@ val_device_lock(uint32_t bdf)
 
   /* flags, reporting offset and P2P mask are zero */
   lock_param.flags                 = 0;
-  lock_param.default_stream_id     = 0;
+  lock_param.default_stream_id     = slot->ide_configured ? slot->stream_id : 0;
   lock_param.reserved              = 0;
   lock_param.mmio_reporting_offset = 0ull;
   lock_param.bind_p2p_address_mask = 0ull;
@@ -499,6 +802,8 @@ val_device_lock(uint32_t bdf)
     val_print(ACS_PRINT_ERR, " TDISP LOCK_IF ERR 0x%x", status);
     goto fallback_close;
   }
+
+  slot->tdi_locked = 1u;
 
   /* Verify CONFIG_LOCKED then transition to RUN. */
   status = val_spdm_send_pci_tdisp_get_interface_state(ctx,
@@ -560,19 +865,8 @@ val_device_lock(uint32_t bdf)
   return ACS_STATUS_PASS;
 
 fallback_close:
-  status = val_spdm_session_close(ctx, session_id);
-  if (status == ACS_STATUS_PASS)
-    val_print(ACS_PRINT_INFO, " SPDM session_close PASS 0x%x", status);
-  else if (status == ACS_STATUS_SKIP)
-    val_print(ACS_PRINT_WARN, " SPDM session_close SKIP 0x%x", status);
-  else
-    val_print(ACS_PRINT_ERR, " SPDM session_close ERR 0x%x", status);
-
-  if (ctx)
-    val_spdm_context_deinit(ctx);
-
-  spdm_free_slot(slot);
-
+  /* Stop any partially locked interface/IDE and release the session. */
+  (void)val_device_unlock(bdf);
   return ACS_STATUS_ERR;
 #else
   return pal_device_lock(bdf);
@@ -594,15 +888,31 @@ val_device_unlock(uint32_t bdf)
   if (slot == NULL)
     return ACS_STATUS_PASS;
 
-  status = val_spdm_send_pci_tdisp_stop_interface(&slot->ctx,
-                                                  slot->session_id,
+  uint32_t cleanup_failed = 0u;
+
+  if (slot->tdi_locked) {
+    status = val_spdm_send_pci_tdisp_stop_interface(&slot->ctx, slot->session_id,
                                                   &interface_id);
-  if (status == ACS_STATUS_PASS)
-    val_print(ACS_PRINT_INFO, " TDISP STOP_IF PASS 0x%x", status);
-  else if (status == ACS_STATUS_SKIP)
-    val_print(ACS_PRINT_WARN, " TDISP STOP_IF SKIP 0x%x", status);
-  else
-    val_print(ACS_PRINT_ERR,  " TDISP STOP_IF ERR 0x%x", status);
+    if (status != ACS_STATUS_PASS)
+      cleanup_failed = 1u;
+  }
+  if (slot->ide_configured) {
+    PCIE_IDE_SELECTOR selector = {0};
+
+    selector.stream_id = slot->stream_id;
+    for (uint32_t direction = 0; direction < 2; ++direction) {
+      selector.direction = (uint8_t)direction;
+      for (uint32_t sub = 0; sub < 3; ++sub) {
+        if (LIBSPDM_STATUS_IS_ERROR(pci_ide_km_key_set_stop(NULL, slot->ctx.spdm_context,
+              &slot->session_id, slot->stream_id, (uint8_t)((sub << 4) | (direction << 1)), 0)))
+          cleanup_failed = 1u;
+        selector.sub_stream = (uint8_t)sub;
+        if (slot->rp_keys_programmed &&
+            val_pcie_rp_ide_key_stop(slot->rp_bdf, &selector) != ACS_STATUS_PASS)
+          cleanup_failed = 1u;
+      }
+    }
+  }
 
   status = val_spdm_session_close(&slot->ctx, slot->session_id);
   if (status == ACS_STATUS_PASS)
@@ -612,9 +922,11 @@ val_device_unlock(uint32_t bdf)
   else
     val_print(ACS_PRINT_ERR,  " SPDM session_close ERR 0x%x", status);
 
+  if (status != ACS_STATUS_PASS)
+    cleanup_failed = 1u;
   val_spdm_context_deinit(&slot->ctx);
   spdm_free_slot(slot);
-  return ACS_STATUS_PASS;
+  return cleanup_failed ? ACS_STATUS_ERR : ACS_STATUS_PASS;
 #else
   return pal_device_unlock(bdf);
 #endif
@@ -682,7 +994,9 @@ uint32_t val_ide_set_sel_stream(uint32_t bdf, uint32_t str_cnt, uint32_t enable)
           if (enable)
               val_pcie_write_cfg(bdf, current_base_offset + SEL_IDE_CAP_CNTRL_REG, reg_value | 1);
           else
-              val_pcie_write_cfg(bdf, current_base_offset + SEL_IDE_CAP_CNTRL_REG, 0);
+              /* Preserve Stream ID so RP KEY_STOP can resolve the key context. */
+              val_pcie_write_cfg(bdf, current_base_offset + SEL_IDE_CAP_CNTRL_REG,
+                                 reg_value & ~1u);
 
           return 0;
       }
@@ -704,6 +1018,94 @@ uint32_t val_ide_set_sel_stream(uint32_t bdf, uint32_t str_cnt, uint32_t enable)
   return 1;
 }
 
+
+/**
+ * @brief Program the first address association of a disabled Selective IDE stream.
+ *
+ * @param bdf Port BDF.
+ * @param str_cnt Selective IDE block number, starting at 1.
+ * @param base Inclusive base address; encoded at 1 MiB granularity.
+ * @param limit Inclusive limit address; encoded at 1 MiB granularity.
+ * @param valid One to enable the association, zero to invalidate it.
+ * @note PCIe 6.2 section 7.9.26.5.5 defines 1 MiB address granularity.
+ * @return ACS_STATUS_PASS on success, or ACS_STATUS_ERR for an invalid request,
+ *         enabled stream, absent address block, or configuration access failure.
+ */
+uint32_t
+val_ide_program_address_range(uint32_t bdf, uint32_t str_cnt,
+                              uint64_t base, uint64_t limit, uint32_t valid)
+{
+  uint32_t offset, capability, streams, blocks, control, value;
+  const uint32_t stream_header_size = SEL_IDE_CAP_REG_SIZE +
+                                      RID_ADDR_REG1_SIZE + RID_ADDR_REG2_SIZE;
+
+  if (valid > 1u || base > limit || val_pcie_find_capability(bdf, PCIE_ECAP, ECID_IDE, &offset))
+    return ACS_STATUS_ERR;
+
+  if (val_pcie_read_cfg(bdf, offset + IDE_CAP_REG, &capability) ||
+      !(capability & SEL_IDE_STR_MASK))
+    return ACS_STATUS_ERR;
+
+  /* Decode the supported Selective IDE stream count. */
+  streams = ((capability & NUM_SEL_STR_MASK) >> NUM_SEL_STR_SHIFT) + 1u;
+  if (!str_cnt || str_cnt > streams)
+    return ACS_STATUS_ERR;
+
+  /* Skip the capability header and any Link IDE stream blocks. */
+  offset += IDE_CAP_REG_SIZE;
+  if (capability & LINK_IDE_STR_MASK)
+    offset += (((capability & NUM_TC_SUPP_MASK) >> NUM_TC_SUPP_SHIFT) + 1u) *
+              LINK_IDE_BLK_SIZE;
+
+  /* Locate the requested stream using each block's address count. */
+  for (uint32_t stream = 1; stream <= str_cnt; ++stream) {
+    if (offset > PCIE_CFG_SIZE - stream_header_size || val_pcie_read_cfg(bdf, offset, &value))
+      return ACS_STATUS_ERR;
+
+    blocks = (value & NUM_ADDR_ASSO_REG_MASK) >> NUM_ADDR_ASSO_REG_SHIFT;
+    if (blocks > (PCIE_CFG_SIZE - offset - stream_header_size) / IDE_ADDR_REG_BLK_SIZE)
+      return ACS_STATUS_ERR;
+
+    if (stream != str_cnt) {
+      offset += stream_header_size + blocks * IDE_ADDR_REG_BLK_SIZE;
+      continue;
+    }
+
+    /* Require an address block and a disabled stream before writing. */
+    if (!blocks || val_pcie_read_cfg(bdf, offset + SEL_IDE_CAP_CNTRL_REG, &control) ||
+        (control & SEL_IDE_STR_EN_MASK))
+      return ACS_STATUS_ERR;
+
+    offset += stream_header_size;
+
+    /* Remove stale associations before publishing the new valid range. */
+    for (uint32_t block = 0; block < blocks; ++block) {
+      uint32_t address = offset + block * IDE_ADDR_REG_BLK_SIZE;
+      if (val_pcie_read_cfg(bdf, address, &value))
+        return ACS_STATUS_ERR;
+
+      val_pcie_write_cfg(bdf, address, value & ~1u);
+    }
+
+    if (val_pcie_read_cfg(bdf, offset, &control))
+      return ACS_STATUS_ERR;
+
+    /* Write the upper addresses, then publish the range and Valid bit. */
+    val_pcie_write_cfg(bdf, offset + 4u, (uint32_t)(limit >> 32));
+    val_pcie_write_cfg(bdf, offset + 8u, (uint32_t)(base >> 32));
+    value = (control & 0xfeu) | (((uint32_t)(base >> 20) & 0xfffu) << 8) |
+            (((uint32_t)(limit >> 20) & 0xfffu) << 20) | valid;
+    val_pcie_write_cfg(bdf, offset, value);
+
+    /* Verify the programmed association before reporting success. */
+    if (val_pcie_read_cfg(bdf, offset, &control) || control != value)
+      return ACS_STATUS_ERR;
+
+    return ACS_STATUS_PASS;
+  }
+
+  return ACS_STATUS_ERR;
+}
 
 uint32_t val_ide_program_stream_id(uint32_t bdf, uint32_t str_cnt, uint32_t stream_id)
 {
