@@ -1,7 +1,8 @@
 v26.10_RME_C.a.1
 
 Release Highlights:
-* Updated Issue C.a CDA support to Beta quality; CXL remains EAC and TDISP remains Beta.
+* Updated Issue C.a CDA support to Beta quality; CXL remains EAC.
+* Promoted TDISP VDM support from Beta to EAC.
 Test Updates:
 * Expanded the CDA suite to 23 tests covering coherent-device assignment, DCM protection, ATS, snoops, and MECID handling.
 * Added dependent coverage reporting for RNSMGT using RSHSXK and RJSYPS results.

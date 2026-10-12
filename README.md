@@ -24,7 +24,7 @@ Most of the tests are executed from UEFI Shell by executing the RME UEFI shell a
     - Issue C:
       - CDA: BETA
       - CXL: EAC
-      - TDISP: BETA
+      - TDISP VDM: EAC
   - The tests are written for version A.d, B.a and C.a of the Arm Realm Management Extension (RME) System Architecture.
   - The compliance suite is not a substitute for design verification.
 
