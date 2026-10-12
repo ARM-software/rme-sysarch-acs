@@ -682,9 +682,6 @@ void pal_restore_global_test_data(uint64_t nvm_mem, uint32_t *total_tests, uint3
 #define TEST_DDR_REGION_CNT 16
 #define RID_VALID           1
 #define RID_NOT_VALID       0
-
-#define EXERCISER_ID 0xED0113B5 // device id + vendor id
-
 typedef enum {
   TYPE0 = 0x0,
   TYPE1 = 0x1,
