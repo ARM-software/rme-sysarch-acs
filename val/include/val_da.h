@@ -93,6 +93,17 @@ val_rmsd_write_protect_check(uint64_t pa,
                              uint32_t new_value,
                              uint32_t original_value);
 
+/* Also require Root/Realm readback to match new_value in every write_mask bit.
+ * A zero mask retains the existing check that at least one bit changes.
+ * Both APIs restore through Root PAS and verify the original value after each
+ * write attempt, including on error, and stop on any failure.
+ */
+uint32_t
+val_rmsd_write_protect_check_masked(uint64_t pa,
+                                    uint32_t new_value,
+                                    uint32_t original_value,
+                                    uint32_t write_mask);
+
 uint32_t da_dvsec_register_config_entry(uint32_t num_pe);
 uint32_t da_smmu_implementation_entry(uint32_t num_pe);
 uint32_t da_tee_io_capability_entry(uint32_t num_pe);
