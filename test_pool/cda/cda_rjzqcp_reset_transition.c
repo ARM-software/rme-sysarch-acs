@@ -282,7 +282,9 @@ payload(void)
     }
   }
 
-  if (!tested || (exercised == 0u))
+  if (failures)
+    val_set_status(pe_index, "FAIL", failures);
+  else if (!tested || (exercised == 0u))
   {
     val_print(ACS_PRINT_INFO, " No eligible RJZQCP targets exercised", 0);
     val_print(ACS_PRINT_INFO, " Components scanned %u", (uint32_t)component_count);
@@ -295,8 +297,7 @@ payload(void)
     val_print(ACS_PRINT_INFO, " Skipped TSP config/lock %u", skipped_lock_setup);
     val_print(ACS_PRINT_INFO, " Skipped reset trigger %u", skipped_reset);
     val_set_status(pe_index, "SKIP", 01);
-  } else if (failures)
-    val_set_status(pe_index, "FAIL", failures);
+  }
   else
     val_set_status(pe_index, "PASS", 01);
 }

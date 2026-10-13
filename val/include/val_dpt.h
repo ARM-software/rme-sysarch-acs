@@ -42,12 +42,6 @@ dpt_p2p_same_rootport_valid_entry(uint32_t num_pe);
 
 uint32_t
 dpt_p2p_same_rootport_invalid_entry(uint32_t num_pe);
-/* Set or clear one RP stream lock through Root PAS, preserving other streams.
- * count is the one-based stream block number (1..32); lock is zero or one.
- */
-uint32_t
-val_dpt_ide_set_lock(uint32_t rp_bdf, uint32_t count, uint32_t lock);
-
 /* Establish a P2P target link and BAR association, lock its RP stream,
  * and transition the target TDI to RUN.
  * active_count is zero until keys are established; clean up a nonzero count

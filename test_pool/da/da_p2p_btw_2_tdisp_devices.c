@@ -224,7 +224,7 @@ payload(void)
       }
 
       req_ide_active = P2P_IDE_STREAM;
-      if (val_dpt_ide_set_lock(req_rp_bdf, req_ide_active, 1))
+      if (val_ide_set_sel_stream_lock(req_rp_bdf, req_ide_active, 1))
       {
           val_print(ACS_PRINT_ERR, " Failed to lock requester IDE, RP BDF: 0x%x", req_rp_bdf);
           test_fails++;
