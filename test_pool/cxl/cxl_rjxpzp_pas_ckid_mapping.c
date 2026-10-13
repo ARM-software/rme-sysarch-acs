@@ -956,6 +956,15 @@ exercise_root_port(const CXL_COMPONENT_TABLE *table,
     }
 
     val_cxl_aer_clear(root_bdf, aer_offset);
+    status = val_cxl_aer_read_uncorr(root_bdf, aer_offset, &aer_uncorr);
+    if ((status != ACS_STATUS_PASS) || (aer_uncorr != 0u))
+    {
+      val_print(ACS_PRINT_ERR, " RJXPZP: AER not clear for %a",
+                (uint64_t)vector->name);
+      val_print(ACS_PRINT_ERR, " RJXPZP: AER 0x%x", (uint64_t)aer_uncorr);
+      failures++;
+      continue;
+    }
 
     /* Generate a write followed by a read to provoke the mapping logic. */
     shared_data->exception_expected = CLEAR;
@@ -973,7 +982,15 @@ exercise_root_port(const CXL_COMPONENT_TABLE *table,
     }
 
     readback = (uint32_t)shared_data->shared_data_access[1].data;
-    val_cxl_aer_read_uncorr(root_bdf, aer_offset, &aer_uncorr);
+    status = val_cxl_aer_read_uncorr(root_bdf, aer_offset, &aer_uncorr);
+    if (status != ACS_STATUS_PASS)
+    {
+      val_print(ACS_PRINT_ERR,
+                " RJXPZP: Failed to read AER for %a",
+                (uint64_t)vector->name);
+      failures++;
+      continue;
+    }
 
     /* Validate the observed behavior against expectation. */
     if (vector->expectation == EXPECT_SUCCESS)
@@ -995,10 +1012,12 @@ exercise_root_port(const CXL_COMPONENT_TABLE *table,
     }
     else
     {
-      if ((aer_uncorr == 0u) && (readback == pattern))
+      if (aer_uncorr == 0u)
       {
         val_print(ACS_PRINT_ERR,
-                  " RJXPZP: %a unexpected success", (uint64_t)vector->name);
+                  " RJXPZP: %a did not report an uncorrectable error",
+                  (uint64_t)vector->name);
+        val_print(ACS_PRINT_ERR, " RJXPZP: Read 0x%x", (uint64_t)readback);
         failures++;
       }
     }
