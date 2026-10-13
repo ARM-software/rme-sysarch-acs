@@ -2629,6 +2629,7 @@ uint32_t val_pcie_enable_tdisp(uint32_t bdf)
 {
   uint64_t va;
   uint64_t cfg_addr;
+  uint64_t tg, reg_pa;
   uint64_t attr;
   uint32_t cap_base, reg_value;
   uint32_t reg_offset;
@@ -2655,10 +2656,14 @@ uint32_t val_pcie_enable_tdisp(uint32_t bdf)
     return 1;
   }
 
-  va = val_get_free_va(val_get_min_tg());
+  tg = val_get_min_tg();
+  if (!tg || (tg & (tg - 1u)))
+    return 1;
+
+  va = val_get_free_va(tg);
   cfg_addr = val_pcie_get_bdf_config_addr(bdf);
 
-  if (cfg_addr == 0u)
+  if (!cfg_addr || !va || (va & (tg - 1u)))
     return 1;
 
   if (val_pcie_read_cfg(bdf, cap_base + reg_offset, &reg_value) != PCIE_SUCCESS ||
@@ -2669,13 +2674,16 @@ uint32_t val_pcie_enable_tdisp(uint32_t bdf)
   attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(OUTER_SHAREABLE)
                   | GET_ATTR_INDEX(DEV_MEM_nGnRnE) | PGT_ENTRY_AP_RW);
 
-  if (val_add_mmu_entry_el3(va, cfg_addr, (attr | LOWER_ATTRS(PAS_ATTR(ROOT_PAS)))))
+  /* A PCIe function's 4KB configuration space can start partway through a page. */
+  reg_pa = cfg_addr + cap_base + reg_offset;
+  if (val_add_mmu_entry_el3(va, reg_pa & ~(tg - 1u),
+                           (attr | LOWER_ATTRS(PAS_ATTR(ROOT_PAS)))))
   {
     val_print(ACS_PRINT_ERR, " MMU mapping failed for cfg_addr: 0x%llx", cfg_addr);
     return 1;
   }
   shared_data->num_access = 1;
-  shared_data->shared_data_access[0].addr = va + cap_base + reg_offset;
+  shared_data->shared_data_access[0].addr = va + (reg_pa & (tg - 1u));
   shared_data->shared_data_access[0].access_type = WRITE_DATA;
   shared_data->shared_data_access[0].data = write_value;
   if (val_pe_access_mut_el3())
@@ -2702,6 +2710,7 @@ uint32_t val_pcie_disable_tdisp(uint32_t bdf)
 {
   uint64_t va;
   uint64_t cfg_addr;
+  uint64_t tg, reg_pa;
   uint64_t attr;
   uint32_t cap_base, reg_value;
   uint32_t reg_offset;
@@ -2728,10 +2737,14 @@ uint32_t val_pcie_disable_tdisp(uint32_t bdf)
     return 1;
   }
 
-  va = val_get_free_va(val_get_min_tg());
+  tg = val_get_min_tg();
+  if (!tg || (tg & (tg - 1u)))
+    return 1;
+
+  va = val_get_free_va(tg);
   cfg_addr = val_pcie_get_bdf_config_addr(bdf);
 
-  if (cfg_addr == 0u)
+  if (!cfg_addr || !va || (va & (tg - 1u)))
     return 1;
 
   if (val_pcie_read_cfg(bdf, cap_base + reg_offset, &reg_value) != PCIE_SUCCESS ||
@@ -2742,18 +2755,21 @@ uint32_t val_pcie_disable_tdisp(uint32_t bdf)
   attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(OUTER_SHAREABLE)
                   | GET_ATTR_INDEX(DEV_MEM_nGnRnE) | PGT_ENTRY_AP_RW);
 
-  if (val_add_mmu_entry_el3(va, cfg_addr, (attr | LOWER_ATTRS(PAS_ATTR(ROOT_PAS)))))
+  /* A PCIe function's 4KB configuration space can start partway through a page. */
+  reg_pa = cfg_addr + cap_base + reg_offset;
+  if (val_add_mmu_entry_el3(va, reg_pa & ~(tg - 1u),
+                           (attr | LOWER_ATTRS(PAS_ATTR(ROOT_PAS)))))
   {
     val_print(ACS_PRINT_ERR, " MMU mapping failed for cfg_addr: 0x%llx", cfg_addr);
     return 1;
   }
   shared_data->num_access = 1;
-  shared_data->shared_data_access[0].addr = va + cap_base + reg_offset;
+  shared_data->shared_data_access[0].addr = va + (reg_pa & (tg - 1u));
   shared_data->shared_data_access[0].access_type = WRITE_DATA;
   shared_data->shared_data_access[0].data = write_value;
   if (val_pe_access_mut_el3())
   {
-    val_print(ACS_PRINT_ERR, " MUT Access failed for 0x%llx", (va + cap_base + reg_offset));
+    val_print(ACS_PRINT_ERR, " MUT Access failed for 0x%llx", (va + (reg_pa & (tg - 1u))));
     return 1;
   }
 
