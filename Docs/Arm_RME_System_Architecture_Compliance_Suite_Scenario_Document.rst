@@ -669,9 +669,12 @@ Testcase checklist
       Peer-to-Peer transaction between two TDISP devices must be handled correctly.
 
       1. Get two Exerciser EPs under two different RPs.
-      2. Transition both the exerciser into TDISP RUN state.
-      3. Perform a Peer-to-Peer transaction.
-      4. Check the competition is obtained only after it is arrived from the target peer.
+      2. Enable TDISP on both RPs and establish matching EP/RP IDE keys and Secure Selective IDE streams for both peers.
+      3. Program the target RP's address association for the peer BAR read, recheck Secure state at both ends, and lock each RP's stream register block through Root PAS.
+      4. The shared VAL target setup transitions the target exerciser into TDISP RUN state. Transition the requester into RUN and perform a Peer-to-Peer read, checking the DMA result.
+      5. Use shared VAL teardown to unlock the RP stream blocks, stop TDISP and IDE, close the sessions, and clear the address associations. Disable TDISP on both RPs, including on setup and transfer failures.
+
+      The DMA result checks successful transfer only; rejection of completions from an unintended peer requires additional exerciser support and is not verified by this test.
 
   * -
 

@@ -42,7 +42,14 @@ dpt_p2p_same_rootport_valid_entry(uint32_t num_pe);
 
 uint32_t
 dpt_p2p_same_rootport_invalid_entry(uint32_t num_pe);
-/* Establish the target link and BAR association for a DPT P2P test.
+/* Set or clear one RP stream lock through Root PAS, preserving other streams.
+ * count is the one-based stream block number (1..32); lock is zero or one.
+ */
+uint32_t
+val_dpt_ide_set_lock(uint32_t rp_bdf, uint32_t count, uint32_t lock);
+
+/* Establish a P2P target link and BAR association, lock its RP stream,
+ * and transition the target TDI to RUN.
  * active_count is zero until keys are established; clean up a nonzero count
  * with val_dpt_ide_stop(), including when setup subsequently fails.
  */
@@ -50,7 +57,10 @@ uint32_t
 val_dpt_ide_setup_target(uint32_t ep_bdf, uint32_t rp_bdf, uint32_t req_rp_bdf,
                           uint64_t bar, uint64_t size, uint32_t *active_count);
 
-/* Unlock the RP stream and stop both partners before disabling TDISP. */
+/* Unlock the RP stream, stop both partners and clear address associations
+ * before disabling TDISP. Continue cleanup after errors and return ERR if
+ * any step failed. A zero rp_count requires no cleanup.
+ */
 uint32_t
 val_dpt_ide_stop(uint32_t ep_bdf, uint32_t rp_bdf, uint32_t ep_count,
                    uint32_t rp_count);
