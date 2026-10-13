@@ -121,7 +121,6 @@ uint32_t val_add_gpt_entry_el3(uint64_t PA, uint64_t gpi);
 uint32_t val_pe_access_mut_el3(void);
 uint32_t val_data_cache_ops_by_pa_el3(uint64_t PA, uint64_t acc_pas);
 uint32_t val_rme_install_handler_el3(void);
-uint32_t val_enable_ns_encryption(void);
 uint32_t val_disable_ns_encryption(void);
 uint32_t val_read_pe_regs_bfr_low_pwr_el3(void);
 uint32_t val_cmpr_pe_regs_aftr_low_pwr_el3(void);

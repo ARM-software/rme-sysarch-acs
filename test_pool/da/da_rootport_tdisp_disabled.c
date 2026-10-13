@@ -143,6 +143,7 @@ cleanup_unlock:
           if (val_device_unlock(e_bdf)) {
               val_print(ACS_PRINT_ERR,
                         " Failed to unlock the device: 0x%lx", e_bdf);
+              test_fail++;
           }
       }
 
@@ -193,7 +194,8 @@ cleanup_unlock:
               test_fail++;
               goto cleanup_unlock_rp;
           }
-          val_pcie_get_mmio_bar(rp_bdf, &Bar_Base);
+          /* Exercise downstream traffic, rather than RP-local registers. */
+          val_pcie_get_mmio_bar(dsf_bdf, &Bar_Base);
 
           if (!Bar_Base)
               goto cleanup_unlock_rp;
@@ -203,7 +205,13 @@ cleanup_unlock:
           va = val_get_free_va(val_get_min_tg());
           pgt_attr_el3 = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(OUTER_SHAREABLE)
                           | GET_ATTR_INDEX(DEV_MEM_nGnRnE) | PGT_ENTRY_AP_RW | PAS_ATTR(ROOT_PAS));
-          val_add_mmu_entry_el3(va, Bar_Base, pgt_attr_el3);
+          if (val_add_gpt_entry_el3(Bar_Base, GPT_ANY) ||
+              val_add_mmu_entry_el3(va, Bar_Base, pgt_attr_el3))
+          {
+              val_print(ACS_PRINT_ERR, " Failed to map downstream BAR: 0x%llx", Bar_Base);
+              test_fail++;
+              goto cleanup_unlock_rp;
+          }
           shared_data->num_access = 1;
           shared_data->shared_data_access[0].addr = va;
           shared_data->shared_data_access[0].access_type = READ_DATA;
@@ -227,6 +235,7 @@ cleanup_unlock_rp:
               if (val_device_unlock(dsf_bdf)) {
                   val_print(ACS_PRINT_ERR,
                             " Failed to unlock the device: 0x%lx", dsf_bdf);
+                  test_fail++;
               }
           }
       }

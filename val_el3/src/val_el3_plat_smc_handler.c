@@ -18,6 +18,7 @@
 #include <val_el3_exception.h>
 #include <val_el3_memory.h>
 #include <val_el3_pe.h>
+#include <val_el3_pcie_ide.h>
 #include <val_el3_pgt.h>
 #include <val_el3_security.h>
 #include <val_el3_smmu.h>
@@ -90,6 +91,10 @@ uintptr_t plat_arm_acs_smc_handler(unsigned int smc_fid, uint64_t services,
       INFO("RME MEMORY ACCESS SERVICE\n");
       val_el3_access_mut();
       break;
+    case EL3_PCIE_IDE_KM:
+      shared_data->status_code = val_el3_pcie_ide_km_handle(shared_data->arg0,
+                                                         shared_data->arg1);
+      break;
     case EL3_IDE_KM:
       INFO("EL3 IDE_KM service \n");
       if (shared_data->arg0 == IDE_ENABLE) {
@@ -145,11 +150,30 @@ uintptr_t plat_arm_acs_smc_handler(unsigned int smc_fid, uint64_t services,
       val_el3_memory_set((uint64_t *)arg0, arg1, arg2);
       break;
     case RME_NS_ENCRYPTION:
-      INFO("RME Non-secure Encryption Enable/Disable service\n");
-      if (arg0 == SET)
-        val_el3_enable_ns_encryption();
-      else
-        val_el3_disable_ns_encryption();
+      INFO("RME Non-secure encryption disable attempt service\n");
+      if (arg0 == CLEAR) {
+        shared_data->status_code = val_el3_disable_ns_encryption();
+        if (shared_data->status_code != 0) {
+          const char *msg = "EL3: NS encryption disable attempt unsupported or failed";
+          size_t i = 0;
+
+          while (msg[i] && i < sizeof(shared_data->error_msg) - 1) {
+              shared_data->error_msg[i] = msg[i];
+              i++;
+          }
+          shared_data->error_msg[i] = '\0';
+        }
+      } else {
+        shared_data->status_code = 1;
+        const char *msg = "EL3: NS encryption only supports a disable attempt";
+        size_t i = 0;
+
+        while (msg[i] && i < sizeof(shared_data->error_msg) - 1) {
+            shared_data->error_msg[i] = msg[i];
+            i++;
+        }
+        shared_data->error_msg[i] = '\0';
+      }
       break;
     case RME_READ_AND_CMPR_REG_MSD:
       INFO("RME Registers Read and Compare service\n");
@@ -226,6 +250,7 @@ uintptr_t plat_arm_acs_smc_handler(unsigned int smc_fid, uint64_t services,
         shared_data->status_code = 0xFFFFFFFF;
         const char *msg = "EL3: Unknown SMC service";
         int i = 0;
+
         while (msg[i] && i < sizeof(shared_data->error_msg) - 1) {
               shared_data->error_msg[i] = msg[i]; i++;
         }

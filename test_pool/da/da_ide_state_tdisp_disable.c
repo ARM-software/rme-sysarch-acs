@@ -40,11 +40,12 @@ payload(void)
   pcie_device_bdf_table *bdf_tbl_ptr;
   uint32_t tbl_index;
   uint32_t dp_type;
-  uint32_t bdf;
+  uint32_t bdf, ep_bdf, num_ep_streams;
   uint32_t da_cap_base;
   uint32_t reg_value;
   uint32_t test_fail = 0;
   uint32_t test_skip = 1;
+  uint32_t ide_unsupported = 0;
   uint32_t num_sel_str;
   uint32_t count;
   uint32_t status;
@@ -88,19 +89,33 @@ payload(void)
           continue;
       }
 
+      /* A Secure RP stream requires a downstream EP with matching keys. */
+      if (val_pcie_get_downstream_function(bdf, &ep_bdf) ||
+          val_ide_get_num_sel_str(ep_bdf, &num_ep_streams) || !num_ep_streams)
+      {
+          val_print(ACS_PRINT_WARN, " No IDE partner for RP BDF: 0x%x", bdf);
+          continue;
+      }
+
       count = 0;
       while (count++ < num_sel_str)
       {
-          /* Each stream must observe a verified TDISP_EN transition from 1 to 0. */
+          /* Re-enable TDISP for a fresh 1-to-0 transition. */
           if (val_pcie_enable_tdisp(bdf))
           {
               val_print(ACS_PRINT_ERR, " Unable to set tdisp_en for BDF: 0x%x", bdf);
               test_fail++;
-              break;
+              continue;
           }
 
-          status = val_ide_establish_stream(bdf, count, val_generate_stream_id(),
-                                     bdf);
+          /* Establish matching EP/RP keys through IDE-KM. */
+          status = val_pcie_ide_establish_streams(ep_bdf, bdf, 1u, count, val_generate_stream_id(),
+                                          PCIE_CREATE_BDF_PACKED(ep_bdf));
+          if (status == ACS_STATUS_SKIP)
+          {
+              ide_unsupported = 1;
+              goto stream_cleanup;
+          }
           if (status)
           {
               val_print(ACS_PRINT_ERR, " Failed to establish stream for bdf: 0x%x", bdf);
@@ -128,18 +143,15 @@ payload(void)
           {
               val_print(ACS_PRINT_ERR, " Sel Stream is not in Insecure for BDF: 0x%x", bdf);
               test_fail++;
+              goto stream_cleanup;
            }
 
 stream_cleanup:
-          status = val_ide_set_sel_stream(bdf, count, 0);
-          if (status)
-          {
-              val_print(ACS_PRINT_ERR, " Failed to disable Sel Stream for BDF: 0x%x", bdf);
+          /* Use the shared EP TX/RP TX/EP RX/RP RX key-stop sequence. */
+          if (val_device_unlock(ep_bdf) != ACS_STATUS_PASS)
               test_fail++;
-              continue;
-          }
-
           val_ide_program_rid_base_limit_valid(bdf, count, 0, 0, 0);
+
       }
 
       /* Disable the TDISP before moving to next RP */
@@ -151,7 +163,9 @@ stream_cleanup:
 
   }
 
-  if (test_skip)
+  if (ide_unsupported && !test_fail)
+      val_set_status(pe_index, "SKIP", 01);
+  else if (test_skip)
       val_set_status(pe_index, "SKIP", 01);
   else if (test_fail)
       val_set_status(pe_index, "FAIL", 01);

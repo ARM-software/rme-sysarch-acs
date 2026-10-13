@@ -112,6 +112,7 @@ PLAT_INC_FLAGS := $(addprefix -I ,$(strip $(PLAT_INC_DIRS)))
 INCDIRS = -I ${ACS_HOME}/val/include \
           -I ${ACS_HOME}/val_el3/include \
           -I ${PAL_EL3_PATH}/include \
+          -I ${ACS_HOME}/pal_el3/include \
           -I ${TFA_PATH}/include \
           -I ${TFA_PATH}/include/arch/aarch64 \
           -I ${TFA_PATH}/include/lib/libc \

@@ -106,6 +106,7 @@ list(APPEND _libspdm_sources
 # SPDM-EMU helper libraries that provide CXL/DOE/TDISP shims.
 set(_spdm_emu_sources
   ${SPDM_EMU_DIR}/library/cxl_ide_km_requester_lib
+  ${SPDM_EMU_DIR}/library/pci_ide_km_requester_lib
   ${SPDM_EMU_DIR}/library/pci_doe_requester_lib
   ${SPDM_EMU_DIR}/library/cxl_tsp_requester_lib
   ${SPDM_EMU_DIR}/library/pci_tdisp_requester_lib

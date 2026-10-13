@@ -278,28 +278,7 @@ val_rme_install_handler_el3(void)
 }
 
 /**
- *  @brief  This API is called to Enable NS_Encryption at EL3.
- *          Returns 1 on error, 0 on success.
- *  @return 1 on error, 0 on success
-**/
-uint32_t
-val_enable_ns_encryption(void)
-{
-  UserCallSMC(ARM_ACS_SMC_FID, RME_NS_ENCRYPTION, SET, 0, 0);
-  if (val_pe_get_index_mpid(val_pe_get_mpid()) != 0)
-      return shared_data->status_code ? 1 : 0;
-  if (shared_data->status_code != 0) {
-    val_print(ACS_PRINT_ERR, shared_data->error_msg, 0);
-    return 1;
-  }
-  else {
-    val_print(ACS_PRINT_INFO, " EL3: NS_Encryption enabled successfully", 0);
-    return 0;
-  }
-}
-
-/**
- *  @brief  This API is called to Disable NS_Encryption at EL3.
+ *  @brief  This API attempts to disable NS encryption at EL3.
  *          Returns 1 on error, 0 on success.
  *  @return 1 on error, 0 on success
 **/
@@ -314,7 +293,7 @@ val_disable_ns_encryption(void)
     return 1;
   }
   else {
-    val_print(ACS_PRINT_INFO, " EL3: NS_Encryption disabled successfully", 0);
+    val_print(ACS_PRINT_INFO, " EL3: NS encryption disable attempt completed", 0);
     return 0;
   }
 }

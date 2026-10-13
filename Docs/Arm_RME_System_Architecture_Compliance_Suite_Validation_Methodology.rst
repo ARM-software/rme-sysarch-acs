@@ -841,12 +841,10 @@ and platform security-state control.
      - Return the base of the physical MPIDR list.
    * - ``pal_psci_get_conduit``
      - Return the PSCI conduit used by the platform, SMC or HVC.
-   * - ``pal_el3_enable_ns_encryption``
-     - Enable Non-secure encryption when the platform exposes a programmable
-       control.
    * - ``pal_el3_disable_ns_encryption``
-     - Disable Non-secure encryption when the platform exposes a programmable
-       control.
+     - Attempt to disable boot-enabled Non-secure encryption using the platform
+       control. Return zero when an attempt was performed, including a write
+       rejected by the boot lock, and nonzero if the attempt cannot be performed.
    * - ``pal_el3_pas_filter_active_mode``
      - Set or clear the platform PAS-filter active mode using ``enable``.
    * - ``pal_el3_prog_legacy_tz``
@@ -1422,8 +1420,9 @@ Information Tables and Platform Controls
      - Return the number of PAL MMU mappings.
    * - ``pal_is_legacy_tz_enabled``
      - Report the LEGACY_TZ state.
-   * - ``pal_is_ns_encryption_programmable``
-     - Report whether Non-secure encryption is programmable.
+   * - ``pal_is_ns_encryption_enabled_and_programmable``
+     - Report whether Non-secure encryption was enabled at boot and the PAL
+       implements a control through which ACS can attempt to disable it.
    * - ``pal_is_pas_filter_mode_programmable``
      - Report whether PAS-filter mode is programmable.
 

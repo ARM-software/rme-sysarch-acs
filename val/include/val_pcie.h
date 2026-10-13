@@ -236,6 +236,7 @@ uint32_t val_pcie_is_sig_target_abort(uint32_t bdf);
 void val_pcie_clear_sig_target_abort(uint32_t bdf);
 uint32_t val_pcie_mem_get_offset(uint32_t type);
 uint32_t val_pcie_get_bar_index(uint32_t bdf, uint64_t bar_address, uint32_t *bar_index);
+uint32_t val_pcie_get_memory_bar_size(uint32_t bdf, uint32_t bar_index, uint64_t *size);
 void val_pcie_enable_io_space(uint32_t bdf);
 void val_pcie_disable_io_space(uint32_t bdf);
 

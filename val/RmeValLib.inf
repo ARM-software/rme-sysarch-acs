@@ -39,6 +39,7 @@
   src/val_gic_support.c
   src/val_pcie.c
   src/val_cxl.c
+  src/val_ide_km.c
   src/val_cda.c
   src/val_spdm.c
   src/val_tdisp.c
@@ -67,6 +68,7 @@
 
 [Packages]
   MdePkg/MdePkg.dec
+  ShellPkg/Application/rme-acs/uefi_app/RmeAcs.dec
 
 [LibraryClasses]
   SpdmRequesterLib
@@ -75,6 +77,7 @@
   SpdmTransportPciDoeLib
   PciDoeRequesterLib
   CxlIdeKmRequesterLib
+  PciIdeKmRequesterLib
   CxlTspRequesterLib
   PciTdispRequesterLib
   RngLib
