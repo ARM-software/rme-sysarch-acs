@@ -226,7 +226,6 @@ payload(void)
       goto cleanup;
     }
     session_open = 1;
-    test_skip = 0;
 
     /* INTERFACE_ID is not used for response-format validation; use endpoint BDF. */
     interface_id.function_id = (uint32_t)PCIE_CREATE_BDF_PACKED(bdf);
@@ -252,6 +251,7 @@ payload(void)
     status = tdisp_rghdcb_validate_get_dev_prop_resp(bdf, response, response_size);
     if (status != ACS_STATUS_PASS)
       test_fail++;
+    test_skip = 0;
 
   cleanup:
     /* Always close session and disable TDISP before moving to next root port. */
@@ -261,10 +261,10 @@ payload(void)
       val_pcie_disable_tdisp(rp_bdf);
   }
 
-  if (test_skip)
-    val_set_status(pe_index, "SKIP", 01);
-  else if (test_fail)
+  if (test_fail)
     val_set_status(pe_index, "FAIL", 01);
+  else if (test_skip)
+    val_set_status(pe_index, "SKIP", 01);
   else
     val_set_status(pe_index, "PASS", 01);
 }

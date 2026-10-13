@@ -91,37 +91,6 @@ val_rme_dpt_execute_tests(uint32_t num_pe)
 
 }
 
-/* Update one RP stream lock through Root PAS, preserving the other streams. */
-uint32_t
-val_dpt_ide_set_lock(uint32_t rp_bdf, uint32_t count, uint32_t lock)
-{
-  uint32_t capability, value;
-  uint64_t va, cfg, attributes;
-
-  /* All ones is valid when all 32 stream-lock bits are set. */
-  if (!count || count > 32u || lock > 1u ||
-      val_pcie_find_da_capability(rp_bdf, &capability) ||
-      val_pcie_read_cfg(rp_bdf, capability + RMEDA_CTL2, &value))
-    return ACS_STATUS_ERR;
-  value = lock ? value | (1u << (count - 1u)) : value & ~(1u << (count - 1u));
-  cfg = val_pcie_get_bdf_config_addr(rp_bdf);
-  va = val_get_free_va(val_get_min_tg());
-  attributes = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(OUTER_SHAREABLE) |
-                          GET_ATTR_INDEX(DEV_MEM_nGnRnE) | PGT_ENTRY_AP_RW |
-                          PAS_ATTR(ROOT_PAS));
-  if (!cfg || !va || val_add_gpt_entry_el3(cfg, GPT_ANY) ||
-      val_add_mmu_entry_el3(va, cfg, attributes))
-    return ACS_STATUS_ERR;
-  shared_data->num_access = 1;
-  shared_data->shared_data_access[0].addr = va + capability + RMEDA_CTL2;
-  shared_data->shared_data_access[0].data = value;
-  shared_data->shared_data_access[0].access_type = WRITE_DATA;
-  if (val_pe_access_mut_el3() ||
-      val_pcie_read_cfg(rp_bdf, capability + RMEDA_CTL2, &capability) ||
-      capability != value)
-    return ACS_STATUS_ERR;
-  return ACS_STATUS_PASS;
-}
 
 uint32_t
 val_dpt_ide_stop(uint32_t ep_bdf, uint32_t rp_bdf, uint32_t ep_count,
@@ -132,9 +101,11 @@ val_dpt_ide_stop(uint32_t ep_bdf, uint32_t rp_bdf, uint32_t ep_count,
   if (!count)
     return status;
   /* Unlock the RP block, then use shared TDISP/IDE/session teardown. */
-  if (val_dpt_ide_set_lock(rp_bdf, count, 0))
+  if (val_ide_set_sel_stream_lock(rp_bdf, count, 0))
     status = ACS_STATUS_ERR;
   if (val_device_unlock(ep_bdf) != ACS_STATUS_PASS)
+    status = ACS_STATUS_ERR;
+  if (val_ide_program_address_range(rp_bdf, count, 0, 0, 0))
     status = ACS_STATUS_ERR;
   /* A failed TDISP lock may already have closed the session. Ensure both
    * streams are disabled, and continue cleanup after a teardown error.
@@ -186,7 +157,7 @@ val_dpt_ide_setup_target(uint32_t ep_bdf, uint32_t rp_bdf, uint32_t req_rp_bdf,
       (void)val_time_delay_ms(1);
   }
   if (ep_state != STREAM_STATE_SECURE || rp_state != STREAM_STATE_SECURE ||
-      val_dpt_ide_set_lock(rp_bdf, count, 1) || val_device_lock(ep_bdf))
+      val_ide_set_sel_stream_lock(rp_bdf, count, 1) || val_device_lock(ep_bdf))
     return ACS_STATUS_ERR;
   return ACS_STATUS_PASS;
 }
