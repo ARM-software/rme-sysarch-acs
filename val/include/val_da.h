@@ -103,6 +103,11 @@ val_rmsd_write_protect_check_masked(uint64_t pa,
                                     uint32_t new_value,
                                     uint32_t original_value,
                                     uint32_t write_mask);
+/* Byte-sized test for CXL configuration controls adjacent to RW1C status. */
+uint32_t
+val_rmsd_write_protect_check_byte(uint64_t pa,
+                                  uint8_t new_value,
+                                  uint8_t original_value);
 
 uint32_t da_dvsec_register_config_entry(uint32_t num_pe);
 uint32_t da_smmu_implementation_entry(uint32_t num_pe);
