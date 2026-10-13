@@ -72,6 +72,10 @@ val_ide_program_stream_id(uint32_t bdf, uint32_t str_cnt, uint32_t stream_id);
 uint32_t
 val_ide_set_sel_stream(uint32_t bdf, uint32_t str_cnt, uint32_t enable);
 
+/* Set/clear one RP RMEDA_CTL2 lock bit through Root PAS; count starts at 1. */
+uint32_t
+val_ide_set_sel_stream_lock(uint32_t rp_bdf, uint32_t count, uint32_t lock);
+
 uint32_t
 val_ide_program_address_range(uint32_t bdf, uint32_t str_cnt,
                               uint64_t base, uint64_t limit, uint32_t valid);

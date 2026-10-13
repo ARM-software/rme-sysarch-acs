@@ -282,6 +282,12 @@ device_cleanup:
     return;
   }
 
+  if (failures != 0u)
+  {
+    val_set_status(pe_index, "FAIL", failures);
+    return;
+  }
+
   if (encryption_capable == 0u)
   {
     val_print(ACS_PRINT_DEBUG,
@@ -291,11 +297,7 @@ device_cleanup:
     return;
   }
 
-  if (failures != 0u)
-  {
-    val_set_status(pe_index, "FAIL", failures);
-  }
-  else if (evaluated == 0u)
+  if (evaluated == 0u)
   {
     val_set_status(pe_index, "SKIP", 05);
   }
