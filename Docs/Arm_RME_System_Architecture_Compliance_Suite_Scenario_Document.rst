@@ -736,9 +736,12 @@ Testcase checklist
 
     -
 
-      1. Read the RMEDA_CTL registers and check if they can be updated from the Root world.
-      2. Also check if they cannot be updated from the Secure and Non-Secure world.
-      3. RMEDA_CTL registers should behave as write-protect.
+      1. Save the RMEDA_CTL register values and original TDISP_EN state. Fail before writing if a configuration read fails or the configuration address is invalid.
+      2. Set and verify TDISP_EN to 0 through Root PAS, then repeat the checks below with TDISP_EN set to 1.
+      3. Check RMSD write protection of RMEDA_CTL2 from Root, Realm, Secure and Non-secure PAS, using a pattern that toggles every implemented lock bit. Root and Realm readback must match every implemented bit in the requested value.
+      4. Check the same access permissions for RMEDA_CTL1 by attempting to toggle TDISP_EN from each PAS.
+      5. Restore each register through Root PAS and verify its original value after every PAS write attempt, including after an access failure. Stop further protection checks for the port on failure.
+      6. Restore the original TDISP_EN state through Root PAS and verify readback, including after a failed state change.
 
   * -
 
