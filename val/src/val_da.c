@@ -311,6 +311,108 @@ restore_register:
 }
 
 /**
+  @brief Verify RMSD write-protect with byte-sized MMIO accesses.
+
+  Flex Bus Port Control at DVSEC + 0x0c occupies the low halfword of a
+  DWORD whose high halfword is Status, including RW1C fields. A 32-bit
+  write/readback test can clear unrelated status. This helper writes just
+  the selected Control byte and restores it through Root PAS each time.
+
+  @return Number of failed checks (zero on success).
+**/
+uint32_t
+val_rmsd_write_protect_check_byte(uint64_t pa,
+                                  uint8_t new_value,
+                                  uint8_t original_value)
+{
+  static const uint64_t pas_list[] = {ROOT_PAS, REALM_PAS, NONSECURE_PAS, SECURE_PAS};
+  uint64_t tg = val_get_min_tg();
+  uint64_t page, offset, attr, root_va;
+  uint32_t failures = 0u;
+
+  if (tg == 0u)
+    return 1u;
+
+  page = pa & ~(tg - 1u);
+  offset = pa - page;
+  attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(OUTER_SHAREABLE) |
+                     GET_ATTR_INDEX(DEV_MEM_nGnRnE) | PGT_ENTRY_AP_RW);
+  if (val_add_gpt_entry_el3(page, GPT_ANY))
+    return 1u;
+
+  root_va = val_get_free_va(tg);
+  if (val_add_mmu_entry_el3(root_va, page, attr | LOWER_ATTRS(PAS_ATTR(ROOT_PAS))))
+    return 1u;
+
+  for (uint32_t index = 0u; index < 4u; ++index)
+  {
+    uint64_t pas = pas_list[index];
+    uint64_t va = val_get_free_va(tg);
+    uint32_t readback;
+
+    if (val_add_mmu_entry_el3(va, page, attr | LOWER_ATTRS(PAS_ATTR(pas))))
+    {
+      failures++;
+      continue;
+    }
+
+    shared_data->num_access = 1;
+    shared_data->shared_data_access[0].addr = va + offset;
+    shared_data->shared_data_access[0].access_type = WRITE_DATA_BYTE;
+    shared_data->shared_data_access[0].data = new_value;
+    if (val_pe_access_mut_el3())
+    {
+      failures++;
+      goto restore_byte;
+    }
+
+    shared_data->num_access = 1;
+    shared_data->shared_data_access[0].addr = va + offset;
+    shared_data->shared_data_access[0].access_type = READ_DATA_BYTE;
+    if (val_pe_access_mut_el3())
+    {
+      failures++;
+      goto restore_byte;
+    }
+    readback = (uint32_t)shared_data->shared_data_access[0].data & 0xffu;
+
+    if ((pas == ROOT_PAS || pas == REALM_PAS) ?
+        (readback != (uint32_t)new_value) :
+        (readback != (uint32_t)original_value))
+    {
+      val_print(ACS_PRINT_ERR,
+                " RMSD byte write-protect failure at 0x%llx", pa);
+      val_print(ACS_PRINT_ERR, " with PAS 0x%llx", pas);
+      failures++;
+    }
+
+restore_byte:
+    /* Always restore through an authorized PAS.  Restoring through NS/S
+     * cannot recover a failed write-protect implementation. */
+    shared_data->num_access = 1;
+    shared_data->shared_data_access[0].addr = root_va + offset;
+    shared_data->shared_data_access[0].access_type = WRITE_DATA_BYTE;
+    shared_data->shared_data_access[0].data = original_value;
+    if (val_pe_access_mut_el3())
+    {
+      failures++;
+      break;
+    }
+    shared_data->num_access = 1;
+    shared_data->shared_data_access[0].addr = root_va + offset;
+    shared_data->shared_data_access[0].access_type = READ_DATA_BYTE;
+    if (val_pe_access_mut_el3() ||
+        (((uint32_t)shared_data->shared_data_access[0].data & 0xffu) != original_value))
+    {
+      failures++;
+      break;
+    }
+  }
+
+  return failures;
+}
+
+/**
   @brief  Query whether the platform reports coherent DA support.
 
   @return Non-zero when coherent DA is supported, otherwise 0.
