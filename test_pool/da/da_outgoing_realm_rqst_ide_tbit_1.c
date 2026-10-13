@@ -46,7 +46,8 @@ payload(void)
   static uint32_t tbl_index;
   uint32_t bdf, rp_bdf;
   uint32_t da_cap_base;
-  uint64_t bar_base;
+  uint64_t bar_base, bar_size;
+  uint32_t bar_index;
   uint32_t pgt_attr_el3;
   uint32_t data;
   uint64_t va;
@@ -54,6 +55,7 @@ payload(void)
   uint32_t test_skip = 1;
   uint32_t stream_id;
   uint32_t count, dp_type, status;
+  uint32_t tdisp_enabled, address_configured, rp_lock_attempted;
 
   tbl_index = 0;
   pe_index = val_pe_get_index_mpid(val_pe_get_mpid());
@@ -72,6 +74,9 @@ payload(void)
 
       if (dp_type == EP)
       {
+          tdisp_enabled = 0;
+          address_configured = 0;
+          rp_lock_attempted = 0;
 
           /* Get the BAR of the Endpoint */
           val_pcie_get_mmio_bar(bdf, &bar_base);
@@ -106,6 +111,7 @@ payload(void)
               test_fail++;
               goto ide_cleanup;
           }
+          tdisp_enabled = 1;
 
           /* Map the Bar address to realm PAS */
           va = val_get_free_va(val_get_min_tg());
@@ -118,6 +124,28 @@ payload(void)
           }
 
           stream_id = val_generate_stream_id();
+
+          /* Address-routed Realm traffic needs a valid RP BAR association.
+           * Program it while the stream is disabled, before IDE and TDISP lock.
+           */
+          if (val_pcie_get_bar_index(bdf, bar_base, &bar_index) ||
+              val_pcie_get_memory_bar_size(bdf, bar_index, &bar_size) ||
+              !bar_size || bar_base > ~(uint64_t)0 - (bar_size - 1u) ||
+              val_ide_set_sel_stream(rp_bdf, count, 0))
+          {
+              val_print(ACS_PRINT_ERR, " Unable to prepare RP BAR association: 0x%x", rp_bdf);
+              test_fail++;
+              goto ide_cleanup;
+          }
+          /* Track partial programming so cleanup also invalidates it on failure. */
+          address_configured = 1;
+          if (val_ide_program_address_range(rp_bdf, count, bar_base,
+                                            bar_base + bar_size - 1u, 1))
+          {
+              val_print(ACS_PRINT_ERR, " Unable to program RP BAR association: 0x%x", rp_bdf);
+              test_fail++;
+              goto ide_cleanup;
+          }
 
           /* Establish IDE Stream between RootPort and Endpoint*/
           /* Establish SPDM and matching EP/RP keys before enabling IDE. */
@@ -135,6 +163,15 @@ payload(void)
               goto ide_cleanup;
           }
 
+          /* RDVKPF requires the matching RP stream to be Locked and Secure. */
+          rp_lock_attempted = 1;
+          if (val_ide_set_sel_stream_lock(rp_bdf, count, 1))
+          {
+              val_print(ACS_PRINT_ERR, " Unable to lock RP IDE stream: 0x%x", rp_bdf);
+              test_fail++;
+              goto ide_cleanup;
+          }
+
           /* Transition the Endpoint to TDISP RUN state */
           if (val_device_lock(bdf))
           {
@@ -145,7 +182,7 @@ payload(void)
 
           data = 0;
 
-          /* Write and Read the data at Bar address from Root world */
+          /* Write and read the BAR using the Realm PAS mapping at EL3. */
           shared_data->num_access = 2;
           shared_data->shared_data_access[0].addr = va;
           shared_data->shared_data_access[0].access_type = WRITE_DATA;
@@ -157,7 +194,7 @@ payload(void)
             val_print(ACS_PRINT_ERR, " MUT Access failed for va: 0x%lx", va);
             test_fail++;
           }
-          data = shared_data->shared_data_access[0].data;
+          data = shared_data->shared_data_access[1].data;
 
           /* The Request should be accepted by the RP */
           if (data != TEST_DATA)
@@ -167,11 +204,31 @@ payload(void)
           }
 
 ide_cleanup:
+          /* Unlock before shared teardown writes the RP stream registers. */
+          if (rp_lock_attempted && val_ide_set_sel_stream_lock(rp_bdf, count, 0))
+          {
+              val_print(ACS_PRINT_ERR, " Unable to unlock RP IDE stream: 0x%x", rp_bdf);
+              test_fail++;
+          }
           /* Shared cleanup stops TDISP and IDE keys, then closes SPDM. */
           if (val_device_unlock(bdf) != ACS_STATUS_PASS)
               test_fail++;
-          if (val_pcie_disable_tdisp(rp_bdf))
-              test_fail++;
+          if (address_configured)
+          {
+              /* Shared teardown disables the stream; also handle partial setup. */
+              if (val_ide_set_sel_stream(rp_bdf, count, 0) ||
+                  val_ide_program_address_range(rp_bdf, count, 0, 0, 0))
+              {
+                  val_print(ACS_PRINT_ERR, " Unable to clear RP BAR association: 0x%x", rp_bdf);
+                  test_fail++;
+              }
+          }
+          if (tdisp_enabled)
+          {
+              if (val_pcie_disable_tdisp(rp_bdf))
+                  test_fail++;
+              tdisp_enabled = 0;
+          }
       }
   }
 

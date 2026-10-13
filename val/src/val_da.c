@@ -1028,6 +1028,36 @@ val_device_unlock(uint32_t bdf)
 #endif
 }
 
+/* Update one RP stream lock through Root PAS, preserving the other streams. */
+uint32_t
+val_ide_set_sel_stream_lock(uint32_t rp_bdf, uint32_t count, uint32_t lock)
+{
+  uint32_t capability, value;
+  uint64_t va, cfg, attributes;
+
+  if (!count || count > 32u || val_pcie_find_da_capability(rp_bdf, &capability) ||
+      val_pcie_read_cfg(rp_bdf, capability + RMEDA_CTL2, &value))
+    return ACS_STATUS_ERR;
+  value = lock ? value | (1u << (count - 1u)) : value & ~(1u << (count - 1u));
+  cfg = val_pcie_get_bdf_config_addr(rp_bdf);
+  va = val_get_free_va(val_get_min_tg());
+  attributes = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(OUTER_SHAREABLE) |
+                          GET_ATTR_INDEX(DEV_MEM_nGnRnE) | PGT_ENTRY_AP_RW |
+                          PAS_ATTR(ROOT_PAS));
+  if (!cfg || val_add_gpt_entry_el3(cfg, GPT_ANY) ||
+      val_add_mmu_entry_el3(va, cfg, attributes))
+    return ACS_STATUS_ERR;
+  shared_data->num_access = 1;
+  shared_data->shared_data_access[0].addr = va + capability + RMEDA_CTL2;
+  shared_data->shared_data_access[0].data = value;
+  shared_data->shared_data_access[0].access_type = WRITE_DATA;
+  if (val_pe_access_mut_el3() ||
+      val_pcie_read_cfg(rp_bdf, capability + RMEDA_CTL2, &capability) ||
+      capability != value)
+    return ACS_STATUS_ERR;
+  return ACS_STATUS_PASS;
+}
+
 uint32_t val_ide_set_sel_stream(uint32_t bdf, uint32_t str_cnt, uint32_t enable)
 {
   uint32_t reg_value;
