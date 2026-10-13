@@ -51,7 +51,7 @@ typedef struct {
   uint32_t             rp_bdf;
   uint32_t             ep_count;
   uint32_t             rp_count;
-  uint32_t             rp_keys_programmed;
+  uint32_t             rp_key_cleanup_required;
   uint8_t              stream_id;
   val_spdm_context_t   ctx;
 } spdm_session_slot_t;
@@ -83,7 +83,7 @@ static spdm_session_slot_t *spdm_alloc_slot(uint32_t bdf)
       g_spdm_sessions[i].session_id = 0u;
       g_spdm_sessions[i].tdi_locked = 0u;
       g_spdm_sessions[i].ide_configured = 0u;
-      g_spdm_sessions[i].rp_keys_programmed = 0u;
+      g_spdm_sessions[i].rp_key_cleanup_required = 0u;
       /* ctx will be initialised when session is opened. */
       return &g_spdm_sessions[i];
     }
@@ -588,12 +588,11 @@ val_pcie_ide_establish_streams(uint32_t bdf, uint32_t rp_bdf,
 
     rp_key.initial_ifv = (uint64_t)ep_tx.iv[0] | ((uint64_t)ep_tx.iv[1] << 32);
     stage = " PCIe IDE setup: RP RX KEY_PROG";
+    /* PROGRAM can fail after staging keys, so cleanup is required on any attempt. */
+    slot->rp_key_cleanup_required = 1u;
     status = val_pcie_rp_ide_key_program(rp_bdf, &selector, &rp_key);
     if (status != ACS_STATUS_PASS)
       goto cleanup;
-
-    /* Include partially staged RP keys in cleanup if the next call fails. */
-    slot->rp_keys_programmed = 1u;
 
     /* Program RP TX through EL3 using the matching EP RX key and IFV */
     selector.direction = PCIE_IDE_TX;
@@ -609,7 +608,6 @@ val_pcie_ide_establish_streams(uint32_t bdf, uint32_t rp_bdf,
 
     /* Erase the temporary RP key copy after programming this substream */
     val_memory_set(&rp_key, sizeof(rp_key), 0);
-    slot->rp_keys_programmed = 1u;
   }
 
   /* Enable the selected EP and RP streams after all keys have been programmed */
@@ -926,7 +924,7 @@ val_device_unlock(uint32_t bdf)
               &slot->session_id, slot->stream_id, key_sub_stream, 0)))
           cleanup_failed = 1u;
       }
-      if (slot->rp_keys_programmed) {
+      if (slot->rp_key_cleanup_required) {
         for (uint32_t sub = 0; sub < 3; ++sub) {
           selector.sub_stream = (uint8_t)sub;
           if (val_pcie_rp_ide_key_stop(slot->rp_bdf, &selector) != ACS_STATUS_PASS)
