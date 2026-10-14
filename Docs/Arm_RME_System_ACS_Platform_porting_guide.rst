@@ -513,8 +513,23 @@ This command runs only the RME module and skips RME test mec_effect_of_popa_cmo.
    * - ``uint32_t pal_cda_tdi_snoop_attempt(uint32_t bdf, uint64_t target_hpa, uint32_t pas_realm, uint32_t *result);``
      - Platform-specific
      - Platform-specific
+   * - ``uint32_t pal_cda_host_snoop_prepare(uint32_t root_bdf, uint32_t endpoint_bdf, uint64_t permitted_hpa, uint64_t unknown_hpa);``
+     - Platform-specific
+     - Platform-specific
+   * - ``uint32_t pal_cda_host_snoop_trigger(uint32_t endpoint_bdf, uint64_t target_hpa);``
+     - Platform-specific
+     - Platform-specific
+   * - ``uint32_t pal_cda_host_snoop_restore(uint32_t endpoint_bdf);``
+     - Platform-specific
+     - Platform-specific
 
 Note: Platform-specific means the partner must provide their implementation for that PAL API.
+
+For DMA, ATS request attributes and response normalization, ATC-backed DMA,
+CXL/CDA command address domains, and exerciser transaction records, see the
+`Exerciser API porting guide <Exerciser_API_porting_guide.md>`_. The reference
+register layout is in `Exerciser requirements <Exerciser.md>`_; another
+exerciser can implement the same PAL contract without that register layout.
 
 For PCIe and CXL Root Port IDE key-management APIs implemented in EL3 PAL, see
 the `IDE-KM PAL porting guide <IDE_KM_PAL_porting_guide.md>`_.
@@ -582,6 +597,11 @@ must set ``EXERCISER_TXN_ATTR_SNOOP`` only for an actual received snoop, not
 merely a memory read or cache-maintenance request. Device-side DCM assignment
 does not verify host snoop eligibility. A platform that cannot establish the
 preconditions must report unsupported, not supply a fabricated host decision.
+
+Use ``TRANSACTION_RECORD`` to return an incoming transaction's attributes and
+HPA together, then match both against the expected stimulus. Separate legacy
+field reads consume separate trace entries. These are exerciser observations,
+not a requirement for private host-port monitoring or acceptance registers.
 
 Single-PE cache setup
 ----------------------
@@ -721,7 +741,7 @@ requirements are met.
 
 
 NS encryption immutability test configuration
---------------------------------------------
+------------------------------------------------
 
 Set ``NS_ENCRYPTION_ENABLED_AND_PROGRAMMABLE`` to 1 only when NS encryption
 was enabled during boot, before ACS was loaded into the affected memory, and

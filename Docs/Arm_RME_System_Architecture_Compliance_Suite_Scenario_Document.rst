@@ -47,15 +47,11 @@ Testcase checklist
 
     -
 
-      RBJVZS: An access to a Resource is associated with an Access PAS in accordance with the PAS Access Table.
-
-      RGDVSZ: A PA of an access to a memory-mapped peripheral is associated with a PAS until reaching the PAS filter assigned to protect the peripheral.
-
-      RDVPGT: A private PAS filter allows access to a register only if the Access PAS matches a Resource PAS that the register is associated with.
+      RYKVJK: A PAS filter permits access to a Resource only if the Access PAS matches a Resource PAS associated with that Resource.
 
     -
 
-      Accesses with same resource PAS and access PAS are successful otherwise generates fault.
+      Accesses with matching Resource PAS and Access PAS must succeed; mismatching accesses must fault. Use the platform-provided GPC-protected resource list and skip if no resources are supplied.
 
   * -
 
@@ -157,6 +153,8 @@ Testcase checklist
       RYKVJK: A PAS filter enforces the PAS protection check by permitting access to a Resource only if the Access PAS matches a Resource PAS with which that the Resource is associated.
 
       RGDVSZ: A PA of an access to a memory-mapped peripheral is associated with a PAS until reaching the PAS filter assigned to protect the peripheral
+
+      RDVPGT: A private PAS filter permits register access only if the Access PAS matches an associated Resource PAS.
 
     -
 
@@ -451,7 +449,7 @@ Testcase checklist
 
     -
 
-      RKKSQB: All A-profile application PEs in the system implement the Realm Management Extension (RME).
+      RKKSQB: An RME system reset propagates to PEs as either a Cold reset, Warm reset, or Error recovery reset.
 
     -
 
@@ -554,7 +552,7 @@ Testcase checklist
 
   * -
 
-      `legacy_tz_enable_before_resetv <../test_pool/legacy_system/legacy_tz_enable_before_reset.c>`_
+      `legacy_tz_enable_before_reset <../test_pool/legacy_system/legacy_tz_enable_before_reset.c>`_
 
     -
 
@@ -596,6 +594,8 @@ Testcase checklist
 
       1. For each function, read the RMEDA registers (DA Capability) and check the corresponding values and its attribute matches the `RME_System_Architecture_Spec` specification.
       2. No mismatch in both values and attribute properties of the registers
+
+      Note: The test checks DVSEC presence as part of register validation and reports RDVJRV.
 
   * -
 
@@ -1464,7 +1464,7 @@ Testcase checklist
       8. Reprogram the DPT region containing the second output PA with AC=0b00 so that it resolves to the Realm PA space, invalidate the DPT and exerciser ATC, and issue a request with the same Realm attributes for the second IOVA. Require a successful completion with non-zero permissions and the expected translated PA, and verify that TE is set. Reprogramming between requests keeps the test independent of the implemented DPT block granularity.
       9. Stop the TDI session and restore the IDE, ATS, SMMU, DPT, GPT, and allocated-memory state.
 
-      Note: The request attributes are identical for both translations and do not constrain the output PA space. ATS Translation Completion bit[6] carries the SMMU-resolved TE value for a Realm stream. The same bit position carries the PCIe Global attribute in contexts where TE is not applicable.
+      Note: The request attributes are identical for both translations and do not constrain the output PA space. Read the SMMU-resolved TE from the VAL translation result independently of Global. The PAL-normalized response uses bit 9 for TE and bit 6 for Global; these are not ATS wire-field positions.
 
   * -
 
@@ -1760,7 +1760,9 @@ Testcase checklist
     -
 
       1. Enumerate CXL root ports that expose RME-CDA DVSEC.
-      2. Attempt to write RMECDA_CTL1 and RMECDA_CTL2 from RMSD and confirm writes are blocked (write-protect).
+      2. Require PCIe IDE capability and check RMECDA_CTL1 and RMECDA_CTL2 through aliases for all four PAS values. Require Root/Realm writes to update the register and Secure/Non-secure writes to leave it unchanged.
+
+      Note: The current test does not check RMECDA_CTL3 or RMECDA_CTL4.
 
   * -
 
@@ -1774,9 +1776,9 @@ Testcase checklist
 
       1. Select a CHI-C2C-capable CXL root port that exposes the RME-CDA DVSEC and a downstream CHI-C2C exerciser endpoint, then program host and endpoint decoders for a host-visible DCM window.
       2. Read the Arm TDISP device properties and skip the test unless PAS_CHECK is set.
-      3. Select a DCM page, map its HPA as Realm PAS, assign the page to Realm at the device, and seed its corresponding DPA media with a known value.
-      4. Transition the TDI to RUN, establish the coherent-link IDE stream, and verify an external Realm-PAS read through the HPA returns the known value.
-      5. Flush the host cacheline, stop the protected path, remove the device-side Realm association, and seed a different protected value while retaining the Realm GPT association.
+      3. Select a DCM page, mark its HPA as Realm in GPT, map a Realm Device-memory alias, and assign the page to Realm at the device.
+      4. Transition the TDI to RUN, establish the coherent-link IDE stream, and write and read a known value through the external Realm-PAS HPA path. Require readback to match.
+      5. Write a different protected value through the same external HPA path while access is permitted. Stop the protected path and remove the device-side Realm association while retaining the Realm GPT association. The Device-memory alias avoids retaining a PE cache copy across the transition; no direct-DPA access is used.
       6. Re-establish TDI RUN and IDE, then issue the same external Realm-PAS HPA read. Verify that the access faults or does not return the protected media value.
       7. Stop the TDISP session, disable IDE, restore the GPT, decoder, and RME-CDA state, and clear any remaining DCM assignment.
 
@@ -2166,7 +2168,7 @@ Testcase checklist
 
     -
 
-      RTBZM: An access to a cacheable memory Location is associated with a MECID until reaching the PoE.
+      RTRBZM: An access to a cacheable memory Location is associated with a MECID until reaching the PoE.
 
       RMLFBL: External memory assigned to Secure PAS, Realm PAS, or Root PAS must be encrypted using a method that provides a different encryption context for each MECID in the Realm PAS.
 
@@ -2182,7 +2184,7 @@ Testcase checklist
 
   * -
 
-      `mec_cmo_uses_correct_mecid <../test_pool/mec/mec_cmo_uses_correct_mecid.c>`_
+      `mec_effect_of_popa_cmo <../test_pool/mec/mec_effect_of_popa_cmo.c>`_
 
     -
 
@@ -2193,7 +2195,7 @@ Testcase checklist
     -
 
       1. Map VA to PA in Realm PAS.
-      2. Enable MEC, Sect MECID = MECID1.
+      2. Enable MEC, set MECID = MECID1.
       3. Write data1 to VA.
       4. Change MECID = MECID2, Issue CMO(clean and invalidate) to PoPA.
       5. Mark VA as non-cacheable.
@@ -2206,13 +2208,15 @@ Testcase checklist
 
   * -
 
-      `mec_effect_of_popa_cmo <../test_pool/mec/mec_effect_of_popa_cmo.c>`_
+      `mec_cmo_uses_correct_mecid <../test_pool/mec/mec_cmo_uses_correct_mecid.c>`_
 
     -
 
       RKMNQX: Memory accesses resulting from a cache clean operation, due to cache maintenance operations and natural evictions, use the MECID that the entry was cached with.
 
     -
+
+      Require at least two PEs for the multi-PE variants; otherwise skip.
 
       Multi PE Variant 1:
 
@@ -2226,7 +2230,7 @@ Testcase checklist
 
               Map VA to PA in Realm PAS
 
-              Write data1, Issue CMO to PoC
+              Write data1
 
               Set MECID2, issue CMO to PoC
             - Map VA to PA in Realm PAS
@@ -2263,30 +2267,49 @@ Testcase checklist
 
       1. Enable MEC, Set MECID1.
       2. Map VA to PA in Realm PAS.
-      3. Write data1, Issue CMO to PoC.
+      3. Write data1 with MECID1.
       4. Set MECID2.
       5. Issue CMO to PoC.
       6. Set MECID1.
       7. read VA, read data == data1.
 
-      Repeat the above for CMOs to PoE and PoPA.
+      Repeat the single-PE scenario for CMOs to PoE and PoPA.
 
       Reads to VA in above steps are as specified in the scenarios.
 
 
 
-Out of Compliance scope rules
-=============================
+Planned Test Scenarios
+======================
 
-The following rules are out of compliance scope due to the following reasons:
+Tests for the following rules are planned for the next release. These rules
+are not yet covered by an implemented scenario and are tracked as ``Planned``
+in the testcase checklist. Test algorithms and PAL dependencies will be
+documented when the tests are implemented.
 
-- No specific scenario possible. It is partially/fully tested as a part of other scenarios.
-- PE ACS has tested this feature using memory transaction from PE.
-- Lack of common debugger available for testing.
-- Other resources, like System PMU events, IDE_KM, RNVS registers are impdef.
-- Lack of non-a-profile processor for testing.
-- Dependency on Non-Arm IP/ implementation defined features.
-- Some coherent-device internal behavior lacks portable stimulus or observation.
+.. list-table::
+    :header-rows: 1
+    :widths: 15 85
+
+    * - **Rule**
+      - **Requirement**
+    * - RPXDQJ
+      - Any access from a TDISP-compliant device in an RME-DA system is subject to SMMU translation.
+    * - RXZTPC
+      - Host-bridge BDF, ECAM, and memory-range assignments are defined statically or exclusively controlled by MSD firmware or a Trusted subsystem.
+    * - RMJSFF
+      - If an SMMU supports XT extensions, every Root Port must either support XT extensions or override incoming XT to zero.
+    * - RJXRNG
+      - XT-capable Root Ports handle outgoing and incoming TLPs according to XT enablement, T-bit, and traffic type.
+
+Rules Outside Current ACS Test Scope
+====================================
+
+The following rules have no implemented ACS scenario that validates the stated
+requirement. They are marked ``Not covered`` in the testcase checklist, whose
+Notes column gives the reason for each rule. Some require implementation-defined
+controls or observation; others do not yet have a dedicated test. Related
+access tests do not establish complete coverage of these requirements.
 
 Architectural requirements remain applicable independently of ACS test
 availability.
@@ -2455,8 +2478,6 @@ availability.
         RZCJHY: The access control path that protects SMEM is not affected by state from non-shielded memory.
 
         RXBKYB: All bus and interconnect decoding components between the point where the Access PAS is assigned and the PoPA are PAS tag aware.
-
-        RLCXDB: Completion of a PoPA CMO for a given PA guarantees that both: Any dirty cached or transient state associated with the PA before the PoPA has been cleaned to after the PoPA. Any cached or transient state associated with the PA before the PoPA has been invalidated.
 
         RCMMDG: For any cache before the PoPA, cache prefetching across granule-boundary is allowed only after querying the GPC for the PAS association of the next granule.
 

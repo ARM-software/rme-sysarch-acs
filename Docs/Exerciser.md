@@ -2,6 +2,14 @@
 
 This document gives details of the various PCIe capabilities that exerciser device supports and how the exerciser is supposed to behave.
 
+The register layout below is the reference exerciser interface, including its
+CXL and CHI-C2C extensions. These controls are not architectural registers
+required in a compliant endpoint or host port. A platform with a different
+exerciser interface implements the equivalent operations through the
+[Exerciser API porting guide](Exerciser_API_porting_guide.md). Command support
+must be checked for the selected device; coherent capability alone does not
+identify an ACS exerciser.
+
 ## Contents
 
 * Introduction to PCIe Exerciser Endpoint Device
@@ -12,7 +20,7 @@ This document gives details of the various PCIe capabilities that exerciser devi
     * Legacy Interrupt Generation and Service
     * ATS Transaction
     * Transaction Monitoring
-    * CXL Memory Backdoor and BISNP Commands
+    * CXL and CDA Commands
     * CHI-C2C SEC_SID Control
 
 ## Introduction to PCIe Exerciser Endpoint Device
@@ -70,12 +78,12 @@ Exerciser BAR0 space contains the following control and support registers:
  Transaction Trace Control       Control bit to start/stop transaction monitoring.       0x44
  Register
 
- CXL Command Register            CXL memory backdoor opcode, control, and status.        0x80
+ CXL Command Register            CXL/CDA command opcode, control, and status.            0x80
 
- CXL Command Address Low         Lower 32 bits of CXL physical address.                  0x84
+ CXL Command Address Low         Lower 32 bits of command address (HPA or DPA).          0x84
  Register
 
- CXL Command Address High        Upper 32 bits of CXL physical address.                  0x88
+ CXL Command Address High        Upper 32 bits of command address (HPA or DPA).          0x88
  Register
 
  CXL Command Data0 Low           Lower 32 bits of command data/result.                   0x8c
@@ -128,7 +136,9 @@ Exerciser BAR0 space contains the following control and support registers:
                                1: If true then, if DMA input address is
                                in ATC input address range, then DMA address
                                will be mapped to output translated address
-                               as per translation response of last ATSRequest
+                               as per translation response of last ATSRequest.
+                               Missing entries, uncovered ranges, or insufficient
+                               permissions cause DMA failure.
 
  dmaAddressType      11:10     DMA bus address type                          RW           0h
                                0: Default (treated as Untranslated)
@@ -211,23 +221,29 @@ Exerciser BAR0 space contains the following control and support registers:
   * User can set custom requestor ID for an DMA transaction by using Illegal Requestor ID Control Register.
     Note: This is illegal as per PCIe specification as requestor ID should be assigned during PCIe enumeration.
 
-  * If passed address for DMA transaction is already translated one, then dmaAddressType must be set to translated.
-    Note: This bypasses the ATC and so is also illegal as per PCIe specification as only a transaction translated
-    by the ATC is allowed to go out on the bus as a Translated Transaction. Also, if dmaAddressType is set to translated
-    and dmaUseATCforTranslation bit is set, then exerciser will fault by logging an error message while initiating DMA,
-    as translation mapping of an already translated address might go wrong.
+  * To issue DMA with an explicitly supplied physical address, set dmaAddressType
+    to Translated and disable dmaUseATCforTranslation. This stimulus bypasses
+    the ATC and does not demonstrate that the address came from ATS. For
+    ATC-backed DMA, supply the original IOVA, enable dmaUseATCforTranslation,
+    and leave dmaAddressType at Untranslated. The ATC supplies the translated
+    address and permissions. Do not combine forced Translated input with ATC use.
 
   * DMAPasidEn bit must be set to 1 when a valid PASID is passed for DMA transaction. If dmaIsPrivileged
     or dmaIsInstruction is 1, then DMAPasidEn bit must be set to 1 for correct DMA response.
 
   * Status of the last DMA request can be known from DMA Status Register.
 
-  * If the user wants to read from or write to memory, the data will be stored at a location in the BAR1 region.
-    The location within BAR1 is configured using the DMA Offset Register.
+  * The reference exerciser exposes its DMA data area through BAR1, with an
+    offset selected by the DMA Offset Register. Portable ACS tests must not
+    depend on that placement: transfer an initialized host source buffer to the
+    device, transfer the captured data to a separate host destination buffer,
+    and compare the two host buffers.
 
   * For CHI-C2C devices, write the required SEC_SID value to the CHIC2C_SEC_SID Value Register before
     triggering DMA. Bit [31] marks SEC_SID as valid for DMA. Bit [1] supplies SEC_SID_BIT_1 and is
     propagated on subsequent DMA requests only while bit [31] is set.
+    Clear bit [31] to release the override. Programming a zero SEC_SID with
+    bit [31] set explicitly requests Non-secure; it does not release the override.
 
 **MSI Generation and Service**
 
@@ -326,7 +342,11 @@ Exerciser BAR0 space contains the following control and support registers:
                                           0: ATC not invalidated
                                           1: ATC was invalidated
 
- ATSReserved              31:10           Reserved                         RO        0h
+ ATSRequestT                10           T attribute for the next request  RW       0b
+
+ ATSRequestXT               11           XT attribute for the next request RW       0b
+
+ ATSReserved              31:12           Reserved                         RO        0h
 
 
 
@@ -374,8 +394,8 @@ Exerciser BAR0 space contains the following control and support registers:
                                          translation must be snooped.
 
  TE                        9             Output PAS for a cacheable Realm  RO         0b
-                                         stream ATS response. This copies
-                                         response bit 3 into bit 9.
+                                         stream ATS response, represented
+                                         independently of PASIDGlobal.
                                          0: Non-secure PAS output
                                          1: Realm PAS output
 
@@ -383,13 +403,18 @@ Exerciser BAR0 space contains the following control and support registers:
 
 ```
 
+The reply register exposes the normalized attributes consumed by ACS. TE at
+bit 9 and Global at bit 6 are independent fields, not ATS wire-field positions.
+Request T/XT select the input request attributes; the returned TE comes from
+the translation result. The PAL maps logical T/XT bits `[0]/[1]` to ATS control
+bits `[10]/[11]` and preserves them across request and ATC-invalidation commands.
+
  **HOW TO USE ATS:**
 
   * Before starting an ATS request, untranslated input address for ATSRequest must be written onto
     Bus Address Register, with all related bit (is_read, etc.) set in ATS_CTL_REG.
-    SW should enable ATS and PASID capability for exerciser (which will set exerciser_ats_enabled and
-    exerciser_ats_pasid_enabled, where exerciser_ats_enabled will enable client side ATS Transaction
-    capability for exerciser and exerciser_ats_pasid_enabled will enable PASID based ATSRequest for exerciser).
+    Enable the endpoint ATS capability and configure its upstream translation
+    path. Enable PASID only when issuing a PASID-bearing request.
     Then ATS request can be triggered. Registers to be used for ATS:
      * ATS Control Register
      * PASID Value Register
@@ -397,11 +422,9 @@ Exerciser BAR0 space contains the following control and support registers:
      * ATS Reply Permission Register
      * ATS Translated Range Size Register
 
-  * If there is any fault occurred during the translation, then error log will get reflected in
-    command line as MSG_INFO and status of ATSRequest remains as 0 (failed - by default). User can
-    detect whether error has occurred during the translation when following condition is true:
-
-    * ATSRequest is not in flight (ATS_CTL_REG[6] == 0) and ATS transaction status bit (ATS_CTL_REG[7]) is 0.
+  * Wait for ATSIsInFlight to clear before inspecting the result. Translation
+    status zero indicates failure. A completion without usable permissions
+    must not be treated as authorization to perform DMA.
 
   * If ATSRequest response result is cacheable (RW!= 2'b00 : Read/Write permission returned as ATSRequest result),
     then ATS response cacheable bit (ATS_CTL_REG[8]) is set to true.
@@ -415,7 +438,9 @@ Exerciser BAR0 space contains the following control and support registers:
   * Translation result will also get reflected in ATS Reply Translated Address Register,
     ATS Reply Permission Register, ATS Translated Range Size Register
 
-  * DMA transaction's range must be fully covered by the ATC entry or it will fail.
+  * ATC-backed DMA requires its entire range to be covered by a permitted ATC
+    entry. A missing entry must fail without silently issuing a new ATS request
+    or falling back to an untranslated memory access.
 
   * Whenever any DMA transaction want to use ATC based translated address, it must set
     dmaUseATCforTranslation flag (DMA_CTL_REG[9]) to true, so that translated address will go into the bus
@@ -449,17 +474,18 @@ Exerciser BAR0 space contains the following control and support registers:
   * ATC can be invalidated by writing 1 to clear ATC bit (ATS_CTL_REG[5]), which will eventually invalidate ATC and discard
     all the mappings for last ATSRequest.
 
-  * Note: the following ATS behaviours are illegal under the PCIe specification, but implemented in the model for validation purposes only:
-    * reading the ATC entry
-    * issuing a translated transaction without using the ATC
+  * Reading the captured ATS response and forcing Translated DMA without an ATC
+    entry are exerciser stimulus/observation facilities. Their availability does
+    not establish that an arbitrary device obtained an address through ATS.
 
-**CXL Memory Backdoor and BISNP Commands**
+**CXL and CDA Commands**
 
-The Type-1 CXL exerciser exposes a command block that can issue debug CXL.mem
-read and write transactions directly to the CXL component memory path. The
-command address is programmed as two 32-bit registers and interpreted as a CXL
-physical address. The data registers hold the write payload for `WRITE64` and
-the returned value for `READ64`.
+The command block supports direct-media access and coherent-device stimuli
+when implemented by the selected exerciser. Backdoor reads and writes take a
+device physical address (DPA); assignment, cache, writeback, and snoop commands
+take a host physical address (HPA). The two address registers hold a single
+64-bit address in the domain required by the opcode. The data registers hold
+the command payload or result.
 
 ```
  CXL Command Register     Bit      Description                                     r/w    Value at reset
@@ -469,6 +495,10 @@ the returned value for `READ64`.
                                     0x01: CXL backdoor READ64
                                     0x02: CXL backdoor WRITE64
                                     0x03: CXL BISNP
+                                    0x04: DCM CACHE_DIRTY
+                                    0x06: DCM SET_REALM_ASSIGNMENT
+                                    0x08: DCM CACHE_WRITEBACK
+                                    0x09: SNOOP_RESPONSE_MECID
 
  reserved                 7:4      RES0                                            RO         0h
 
@@ -489,8 +519,8 @@ the returned value for `READ64`.
  CXL Command Address      Bit      Description                                     r/w    Value at reset
  -------------------      ---      -----------                                     ---    --------------
 
- cxl_cmd_addr_lo         31:0      CXL physical address bits [31:0]                RW         0h
- cxl_cmd_addr_hi         31:0      CXL physical address bits [63:32]               RW         0h
+ cxl_cmd_addr_lo         31:0      Command address bits [31:0]                     RW         0h
+ cxl_cmd_addr_hi         31:0      Command address bits [63:32]                    RW         0h
 
  CXL Command Data0        Bit      Description                                     r/w    Value at reset
  -----------------        ---      -----------                                     ---    --------------
@@ -501,14 +531,14 @@ the returned value for `READ64`.
 
 **HOW TO USE CXL BACKDOOR READ64:**
 
-  * Program CXL Command Address Low/High with the target CXL physical address.
+  * Program CXL Command Address Low/High with the target DPA.
   * Write `cxl_cmd_op=0x01` and `cxl_cmd_trigger=1` in the same CXL Command Register write.
   * Poll CXL Command Register until `cxl_cmd_status` is `0x1` or `0x2`.
   * If `cxl_cmd_status` is `0x1`, read CXL Command Data0 Low/High for the 64-bit result.
 
 **HOW TO USE CXL BACKDOOR WRITE64:**
 
-  * Program CXL Command Address Low/High with the target CXL physical address.
+  * Program CXL Command Address Low/High with the target DPA.
   * Program CXL Command Data0 Low/High with the 64-bit write payload.
   * Write `cxl_cmd_op=0x02` and `cxl_cmd_trigger=1` in the same CXL Command Register write.
   * Poll CXL Command Register until `cxl_cmd_status` is `0x1` or `0x2`.
@@ -516,15 +546,24 @@ the returned value for `READ64`.
 
 **HOW TO USE CXL BISNP**
 
-  * Program `CXL_CMD_ADDR_LO/HI` with the target physical address to invalidate in host caches.
+  * Program `CXL_CMD_ADDR_LO/HI` with the target HPA.
   * Write `cxl_cmd_op=0x03` and `cxl_cmd_trigger=1` in the same CXL Command Register write.
   * Poll CXL Command Register until `cxl_cmd_status` is `0x1` or `0x2`.
   * `cxl_cmd_status` value `0x1` indicates success; `0x2` indicates failure.
 
-The CXL memory backdoor path is intended for Type-1 CXL exerciser use. The
-target address must be valid for the platform CXL memory path configuration.
-Backdoor reads and writes use the debug CXL memory path; BISNP generates the
-upstream Back-Invalidate stimulus used to observe host cache and PAS behavior.
+Backdoor reads and writes use the debug device-media path independently of the
+normal HPA access under test. `val_cxl_hpa_to_dpa()` derives a DPA from supported
+committed endpoint HDM decoders; HPA and DPA must not be assumed identical.
+The backdoor API does not perform this conversion for the caller.
+
+BISNP requests the upstream snoop stimulus. Attributed CDA snoop checks use
+`pal_cda_tdi_snoop_attempt()` to select the PAS and obtain emission, local-blocking,
+and host-response evidence. These normalized results are not host-port register
+bits. Command failure alone does not identify where an access was blocked.
+
+For each command, clear a stale error before triggering if required and use a
+bounded completion wait. The reference PAL uses the combined opcode/status
+register at `0x80`; there is no separate command-control register in this API.
 
 For the additional CDA cache, Realm-assignment, writeback, and response-MECID
 commands, see [CDA stimulus contracts](Exerciser_API_porting_guide.md#cda-stimulus-contracts)
@@ -533,14 +572,18 @@ commands, their HPA/DPA address domains, and the required completion evidence.
 
 **Transaction Monitoring**
 
-Transaction monitoring capabilities in the exerciser provides the ability to record the incoming transactions, for both config
-and memory transactions. This includes,
+Transaction monitoring records incoming traffic observed at the exerciser.
+Baseline capture includes:
 
 * config read and write transactions serviced in PCIe endpoints.
 
 * memory transactions serviced in PCIe endpoint BARs.
 
 * memory transactions which are forwarded from PCIe endpoint to device(like exerciser).
+
+Coherent exercisers can additionally report incoming cache-maintenance and
+snoop traffic when supported. Snoop-specific tests require that distinction;
+an ordinary memory read is not evidence that a snoop arrived.
 
 ```
                                             +--------------------------+
@@ -598,10 +641,10 @@ Note: Each beat in a burst transaction is recorded as a single separate transact
   Upper 16 bits of transaction attributes indicates transaction byte size. The bit indicating the
   transaction byte size is calculated as log2(bytes). For example, if size is 8, bit3 of the upper 16 bits
   will be set.
-  ------------------------------------------------------------------------------------------------
-           31:16            15   14   13   12   11   10   9   8   7   6   5   4   3   2   1   0
-  ------------------------------------------------------------------------------------------------
-  | Transaction byte size  |             Reserved             C/M  R/W  Type
+  -------------------------------------------------------------------------
+    31:16                   15:5       4     3     2     1     0
+  -------------------------------------------------------------------------
+    Transaction byte size   Reserved   SNP   CMO   C/M   R/W   Type
 
 
 
@@ -611,6 +654,18 @@ Note: Each beat in a burst transaction is recorded as a single separate transact
                                           transaction monitoring.          RW          0x0
 ```
 
+The PAL returns normalized record flags to ACS:
+
+| Flag | Bit | Observation |
+| --- | ---: | --- |
+| `EXERCISER_TXN_ATTR_READ` | 1 | Incoming read |
+| `EXERCISER_TXN_ATTR_CONFIG` | 2 | Configuration transaction |
+| `EXERCISER_TXN_ATTR_CACHE_MAINTENANCE` | 3 | Incoming cache-maintenance operation |
+| `EXERCISER_TXN_ATTR_SNOOP` | 4 | Actual incoming snoop |
+
+The reference PAL passes through the trace attribute word. An exerciser with a
+different format must translate its observations to these flags. The SNOOP bit
+must not be synthesized solely from READ or CACHE_MAINTENANCE.
 
  **HOW TO USE TRANSACTION MONITORING:**
   * Number of transactions recorded depends on the exerciser parameter 'max_transaction_trace_entries'. The maximum
@@ -619,6 +674,11 @@ Note: Each beat in a burst transaction is recorded as a single separate transact
   * To stop transaction monitoring, write 0x0 to transaction trace control register(offset 0x44).
   * Read the transaction trace database register(offset 0x40). Each read returns one 32 bit entry mentioned above, starting
     from first transaction. A value of 0xFFFFffff indicates invalid entry.
+  * Through PAL, use `TRANSACTION_RECORD` to consume one complete record and
+    return its attributes in `value1` and address in `value2`. Separate field
+    queries each consume another record; they cannot reconstruct a single
+    transaction. Start a fresh capture for each observation and match both the
+    address and required operation attributes.
 
 ## RME System ACS test coverage
 

@@ -609,6 +609,11 @@ check ``completion_success``, ``translated_pa``, ``te``, and permission bits
 in ``VAL_ATS_TRANSLATION_RESULT``. A denied translation can therefore be an
 expected response rather than a helper failure.
 
+The normalized response keeps TE (``VAL_ATS_TE_MASK``, bit 9) separate from
+Global (``VAL_ATS_GLOBAL_MASK``, bit 6). These are PAL response fields, not
+ATS wire-field positions. Native exerciser formats must be translated to this
+representation before VAL interprets the result.
+
 ``val_exerciser_dma_with_atc_by_bdf`` enables ``TXN_ATC_ENTRY`` and submits the
 original IOVA. This differs from simply marking a physical-address DMA as
 ``AT_TRANSLATED``. Request T/XT attributes are inputs to the ATS request;
@@ -1122,6 +1127,21 @@ exerciser.
        ``EXERCISER_DATA_CFG_SPACE`` or ``EXERCISER_DATA_BAR0_SPACE``.
    * - ``pal_is_bdf_exerciser``
      - Return one when the BDF identifies an exerciser, otherwise zero.
+   * - ``pal_cda_tdi_snoop_attempt``
+     - Request a TDI-attributed device-to-host snoop with the selected HPA and
+       PAS. Return observed emission or local blocking, plus host acceptance
+       or rejection when available. Result flags are normalized PAL evidence.
+   * - ``pal_cda_host_snoop_prepare``
+     - Save platform state and verify permitted and unknown Realm targets,
+       host-snoop stimulus, and snoop-specific endpoint monitoring. Return
+       unsupported when these prerequisites cannot be established.
+   * - ``pal_cda_host_snoop_trigger``
+     - Initiate a host snoop candidate without changing its eligibility and
+       wait for the forwarding decision and observation interval to complete.
+   * - ``pal_cda_host_snoop_restore``
+     - Restore state after every preparation attempt, including unsuccessful
+       setup. The reference setup/trigger implementations report unsupported;
+       restore succeeds without changes.
    * - ``pal_exerciser_get_ecsr_base``
      - Return the exerciser control/status register base for a BAR index.
    * - ``pal_exerciser_get_pcie_config_offset``
