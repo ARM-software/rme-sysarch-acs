@@ -493,11 +493,25 @@ pal_exerciser_ops (
   UINT32 Bdf
   )
 {
+  static UINT64 TransactionMonitorBase;
+  static UINT32 TransactionMonitorBdf;
+  static BOOLEAN TransactionMonitorBaseValid = FALSE;
   UINT64 Base;
   UINT64 Ecam;
   UINT32 CapabilityOffset = 0;
   UINT32 data;
-  Base = pal_exerciser_get_ecsr_base(Bdf,0);
+
+  /*
+   * Resolving BAR0 reads endpoint configuration space. During STOP those
+   * reads would be captured by the still-enabled monitor and could consume
+   * the complete transaction trace. Reuse the base resolved before START.
+   */
+  if ((Ops == STOP_TXN_MONITOR) && TransactionMonitorBaseValid &&
+      (TransactionMonitorBdf == Bdf))
+    Base = TransactionMonitorBase;
+  else
+    Base = pal_exerciser_get_ecsr_base(Bdf,0);
+
   Ecam = pal_pcie_get_mcfg_ecam_for_bdf(Bdf); // Getting the ECAM address
   switch(Ops){
 
@@ -624,10 +638,14 @@ pal_exerciser_ops (
         }
 
     case START_TXN_MONITOR:
+        TransactionMonitorBase = Base;
+        TransactionMonitorBdf = Bdf;
+        TransactionMonitorBaseValid = TRUE;
         pal_mmio_write(Base + TXN_CTRL_BASE, TXN_START);
         return 0;
     case STOP_TXN_MONITOR:
         pal_mmio_write(Base + TXN_CTRL_BASE, TXN_STOP);
+        TransactionMonitorBaseValid = FALSE;
         return 0;
 
     case INJECT_ERROR:

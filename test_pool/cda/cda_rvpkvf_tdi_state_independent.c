@@ -349,19 +349,17 @@ check_device_to_host_snoop(uint32_t endpoint_bdf,
   return ACS_STATUS_PASS;
 }
 
-/*
- * Force a host-to-device REQ by cleaning a dirty host cache line, then confirm
- * that the resulting coherent transaction reaches the device interface. A
- * cache writeback can be represented downstream as an ordinary write request,
- * so the architectural observation is the target HPA rather than an
- * implementation-specific transaction-attribute bit.
- */
+/* Issue a host read and confirm that it reaches the coherent device interface. */
 static uint32_t
 check_host_to_device_request(uint32_t endpoint_bdf,
                              uint64_t target_hpa,
                              volatile uint64_t *target_alias,
+                             uint64_t expected_value,
                              uint32_t baseline)
 {
+  uint64_t esr;
+  uint64_t value;
+  uint32_t fault_seen;
   uint32_t observed;
   uint32_t status;
 
@@ -372,18 +370,39 @@ check_host_to_device_request(uint32_t endpoint_bdf,
   if (status != ACS_STATUS_PASS)
     return (status == ACS_STATUS_SKIP) ? unavailable_result(baseline) : status;
 
-  status = val_memory_cache_clean_invalidate_range_el3((uint64_t)target_alias,
-                                                        sizeof(uint64_t));
+  esr = 0u;
+  value = 0u;
+  fault_seen = 0u;
+  status = val_memory_read64_el3_protected_with_esr(target_alias,
+                                                     &value,
+                                                     &fault_seen,
+                                                     &esr);
   if (val_exerciser_stop_transaction_monitor_by_bdf(endpoint_bdf)
       != ACS_STATUS_PASS)
     return ACS_STATUS_ERR;
   if (status != ACS_STATUS_PASS)
+    return ACS_STATUS_ERR;
+
+  if (fault_seen != 0u)
+  {
+    val_print(ACS_PRINT_ERR,
+              " RVPKVF: host request faulted for HPA 0x%llx",
+              target_hpa);
+    val_print(ACS_PRINT_DEBUG, " RVPKVF: host request ESR 0x%llx", esr);
     return ACS_STATUS_FAIL;
+  }
+  if (value != expected_value)
+  {
+    val_print(ACS_PRINT_ERR,
+              " RVPKVF: host request returned 0x%llx",
+              value);
+    return ACS_STATUS_FAIL;
+  }
 
   status = val_exerciser_find_transaction_by_bdf(
                                   endpoint_bdf,
                                   target_hpa,
-                                  0u,
+                                  EXERCISER_TXN_ATTR_READ,
                                   &observed);
   if (status != ACS_STATUS_PASS)
     return status;
@@ -402,12 +421,7 @@ check_host_to_device_request(uint32_t endpoint_bdf,
   return ACS_STATUS_PASS;
 }
 
-/*
- * Dirty a Realm copy in the PE cache while the TDI is in RUN. Cache residency
- * is not guaranteed across the state transition, so minimize work before the
- * monitored clean and invalidate. Only traffic observed in that capture can
- * satisfy the host-request check.
- */
+/* Seed the separate non-cacheable Realm line used for host requests. */
 static uint32_t
 prepare_host_request_line(volatile uint64_t *target_alias, uint64_t value)
 {
@@ -438,6 +452,7 @@ run_state_checks(uint32_t endpoint_bdf,
   status = check_host_to_device_request(endpoint_bdf,
                                         request_hpa,
                                         request_alias,
+                                        REQUEST_VALUE,
                                         baseline);
   if (status != ACS_STATUS_PASS)
     return status;
@@ -549,7 +564,9 @@ exercise_rule(VAL_CDA_DCM_WINDOW_CONTEXT *context)
     }
     gpt_mask |= (1u << index);
 
-    if (val_memory_map_realm_cacheable_alias(page[index], &alias[index])
+    if (((index == REQUEST_PAGE) ?
+          val_memory_map_realm_noncacheable_alias(page[index], &alias[index]) :
+          val_memory_map_realm_cacheable_alias(page[index], &alias[index]))
         != ACS_STATUS_PASS)
     {
       result = ACS_STATUS_ERR;
