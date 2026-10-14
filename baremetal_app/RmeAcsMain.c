@@ -157,8 +157,8 @@ createIovirtInfoTable(
   uint32_t iovirt_block_count = NUM_ITS_COUNT + IOVIRT_SMMUV3_COUNT + IOVIRT_RC_COUNT
                                + IOVIRT_SMMUV2_COUNT + IOVIRT_NAMED_COMPONENT_COUNT
                                + IOVIRT_PMCG_COUNT;
-  /* ITS groups store identifiers in NODE_DATA_MAP slots as well. */
-  uint32_t iovirt_map_count = IOVIRT_MAX_NUM_MAP
+  /* Reserve mapping capacity for every node. ITS identifiers use map slots too. */
+  uint32_t iovirt_map_count = (IORT_NODE_COUNT * IOVIRT_MAX_NUM_MAP)
                              + (NUM_ITS_COUNT * ((IOVIRT_ITS_COUNT + 3U) / 4U));
 
   IoVirtInfoTable = val_aligned_alloc(SIZE_4K, sizeof(IOVIRT_INFO_TABLE)
