@@ -960,12 +960,11 @@ static uint32_t smmu_probe(smmu_dev_t *smmu)
 
 #if defined(TARGET_SIMULATION) && defined(TARGET_BM_BOOT)
     /*
-     * system uses PCIe requester IDs as Stream IDs, so 16 SID bits are
-     * sufficient. Some simulation models report a wider value here, which
-     * causes ACS to size stream-table allocations far beyond what system needs.
+     * Limit simulation allocations to the platform's configured span.
+     * The span above is already bounded by the hardware IDR1.SIDSIZE.
      */
-    if (smmu->sid_bits > 16)
-        smmu->sid_bits = 16;
+    if (smmu->sid_bits > smmu->strtab_sid_bits)
+        smmu->sid_bits = smmu->strtab_sid_bits;
 #endif
 
     INFO("ssid_bits = %d", smmu->ssid_bits);

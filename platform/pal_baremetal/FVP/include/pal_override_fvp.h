@@ -327,7 +327,7 @@
 #define RC_MAP0_INPUT_BASE            0x0
 #define RC_MAP0_ID_COUNT              0xFFFF
 #define RC_MAP0_OUTPUT_BASE           0x0
-#define RC_MAP0_OUTPUT_REF            0x250
+#define RC_MAP0_OUTPUT_REF            0x138
 
 #define SMMUV3_0_ID_MAP0_INPUT_BASE   0x0
 #define SMMUV3_0_ID_MAP0_ID_COUNT     0xFFFF
