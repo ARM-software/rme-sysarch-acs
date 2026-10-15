@@ -110,9 +110,13 @@ uint32_t test_sequence1(void *dram_buf1_virt, void *dram_buf1_phys, uint32_t ins
     /* Perform DMA OUT to copy contents of PA to exerciser memory and
      * observe that DMA transaction is not successful
      * */
-    val_exerciser_set_param(DMA_ATTRIBUTES, PA, dma_len/2, instance);
-    if (!(val_exerciser_ops(START_DMA, EDMA_TO_DEVICE, instance))) {
-      val_print(ACS_PRINT_ERR, " PAS protection is not observed for GPI 0x%x", res_pas[mem_cnt]);
+    if (val_exerciser_set_param(DMA_ATTRIBUTES, PA, dma_len/2, instance)) {
+      val_add_gpt_entry_el3(PA, GPT_ANY);
+      return 1;
+    }
+    if (val_exerciser_ops(START_DMA, EDMA_TO_DEVICE, instance) !=
+        EXERCISER_DMA_INTERNAL_ERROR) {
+      val_print(ACS_PRINT_ERR, " Expected completed DMA rejection for GPI 0x%x", res_pas[mem_cnt]);
       //Clear the memory and it's protection by making it NS
       val_add_gpt_entry_el3(PA, GPT_ANY);
       val_add_mmu_entry_el3((uint64_t)dram_buf1_virt, PA,

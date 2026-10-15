@@ -43,6 +43,52 @@ val_smmu_read_cfg(uint32_t offset, uint32_t index)
 }
 
 /**
+  @brief  Read SMMU_GBPA after any pending attribute update completes.
+  @param  smmu_base  Base address of the SMMU controller.
+  @param  value      Receives the register value on success.
+  @return 0 on success, 1 on invalid arguments or update timeout.
+**/
+uint32_t
+val_smmu_read_gbpa(uint64_t smmu_base, uint32_t *value)
+{
+    uint32_t poll;
+
+    if (smmu_base == 0 || value == NULL)
+        return 1;
+    for (poll = 0; poll < TIMEOUT_SMALL; ++poll) {
+        *value = val_mmio_read(smmu_base + SMMUv3_GBPA);
+        if (!(*value & SMMUv3_GBPA_UPDATE))
+            return 0;
+    }
+    val_print(ACS_PRINT_ERR, " SMMU GBPA update timed out at 0x%lx", smmu_base);
+    return 1;
+}
+
+/**
+  @brief  Write SMMU_GBPA using the architectural UPDATE handshake.
+          The caller must quiesce DMA before changing bypass attributes.
+  @param  smmu_base  Base address of the SMMU controller.
+  @param  value      Desired attributes; UPDATE is managed by this API.
+  @return 0 on success, 1 on invalid base, timeout or ABORT readback mismatch.
+**/
+uint32_t
+val_smmu_write_gbpa(uint64_t smmu_base, uint32_t value)
+{
+    uint32_t current;
+
+    if (val_smmu_read_gbpa(smmu_base, &current))
+        return 1;
+    value &= ~SMMUv3_GBPA_UPDATE;
+    if (current == value)
+        return 0;
+    val_mmio_write(smmu_base + SMMUv3_GBPA, value | SMMUv3_GBPA_UPDATE);
+    if (val_smmu_read_gbpa(smmu_base, &current))
+        return 1;
+    /* Unsupported attribute fields need not read back the value written. */
+    return (current & SMMUv3_GBPA_ABORT) != (value & SMMUv3_GBPA_ABORT);
+}
+
+/**
   @brief   This API executes all the SMMU tests sequentially
            1. Caller       -  Application layer.
            2. Prerequisite -  val_smmu_create_info_table()

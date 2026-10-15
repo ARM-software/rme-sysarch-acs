@@ -128,9 +128,15 @@ uint32_t pal_exerciser_set_param(EXERCISER_PARAM_TYPE Type, uint64_t Value1, uin
           return 0;
 
       case DMA_ATTRIBUTES:
-          pal_mmio_write64(Base + DMA_BUS_ADDR,Value1);// wrting into the DMA Control Register 2
-          pal_mmio_write64(Base + DMA_LEN,Value2);// writing into the DMA Control Register 3
-          return 0;
+          /* Do not change the address/length of an outstanding command. */
+          if (pal_mmio_read(Base + DMACTL1) & EXERCISER_DMA_TRIGGER_MASK)
+              return EXERCISER_DMA_BUSY;
+          if (Value2 > 0xFFFFFFFFULL)
+              return EXERCISER_DMA_INVALID;
+          pal_mmio_write64(Base + DMA_BUS_ADDR, Value1);
+          /* DMASTATUS immediately follows this 32-bit register. */
+          pal_mmio_write(Base + DMA_LEN, (uint32_t)Value2);
+          return EXERCISER_DMA_SUCCESS;
 
       case P2P_ATTRIBUTES:
           return 0;
@@ -255,32 +261,49 @@ uint32_t pal_exerciser_set_param(EXERCISER_PARAM_TYPE Type, uint64_t Value1, uin
 }
 
 /**
-  @brief This function triggers the DMA operation
+  @brief Wait for the command to finish before consuming its status.
+  A timeout leaves the command outstanding; it must not be reprogrammed.
 **/
-uint32_t pal_exerciser_start_dma_direction (uint64_t Base, EXERCISER_DMA_ATTR Direction)
+static uint32_t
+pal_exerciser_wait_dma(uint64_t Base)
 {
+    uint32_t poll;
+    uint32_t status;
 
-    uint32_t Mask;
-    uint32_t Status;
+    for (poll = 0; poll < EXERCISER_DMA_POLL_LIMIT; ++poll) {
+        if ((pal_mmio_read(Base + DMACTL1) & EXERCISER_DMA_TRIGGER_MASK) == 0) {
+            status = pal_mmio_read(Base + DMASTATUS) & EXERCISER_DMA_STATUS_MASK;
+            pal_mmio_write(Base + DMASTATUS, EXERCISER_DMA_STATUS_CLEAR);
+            return status;
+        }
+    }
 
-  if (Direction == EDMA_TO_DEVICE) {
-      Mask = DMA_TO_DEVICE_MASK;//  DMA direction:to Device
-      // Setting DMA direction in DMA control register 1
-      pal_mmio_write(Base + DMACTL1, (pal_mmio_read(Base + DMACTL1) & Mask));
-  }
-  if (Direction == EDMA_FROM_DEVICE) {
-      Mask = (MASK_BIT << SHIFT_4BIT);// DMA direction:from device
-      // Setting DMA direction in DMA control register 1
-      pal_mmio_write(Base + DMACTL1, (pal_mmio_read(Base + DMACTL1) | Mask));
-  }
-   // Triggering the DMA
-   pal_mmio_write(Base + DMACTL1, (pal_mmio_read(Base + DMACTL1) | MASK_BIT));
-
-   // Reading the Status of the DMA
-   Status = (pal_mmio_read(Base + DMASTATUS) & ((MASK_BIT << 1) | MASK_BIT));
-   return Status;
+    return EXERCISER_DMA_TIMEOUT;
 }
 
+/**
+  @brief Trigger DMA and return the completed result, or a software failure.
+**/
+uint32_t
+pal_exerciser_start_dma_direction(uint64_t Base, EXERCISER_DMA_ATTR Direction)
+{
+    uint32_t control;
+
+    if (Direction != EDMA_TO_DEVICE && Direction != EDMA_FROM_DEVICE)
+        return EXERCISER_DMA_INVALID;
+
+    control = pal_mmio_read(Base + DMACTL1);
+    if (control & EXERCISER_DMA_TRIGGER_MASK)
+        return EXERCISER_DMA_BUSY;
+
+    control &= ~EXERCISER_DMA_DIRECTION_MASK;
+    if (Direction == EDMA_FROM_DEVICE)
+        control |= EXERCISER_DMA_DIRECTION_MASK;
+
+    pal_mmio_write(Base + DMASTATUS, EXERCISER_DMA_STATUS_CLEAR);
+    pal_mmio_write(Base + DMACTL1, control | EXERCISER_DMA_TRIGGER_START);
+    return pal_exerciser_wait_dma(Base);
+}
 
 /**
   @brief This function finds the PCI capability and return 0 if it finds.
@@ -407,21 +430,24 @@ uint32_t pal_exerciser_ops(EXERCISER_OPS Ops, uint64_t Param, uint32_t Bdf)
   Ecam = pal_exerciser_get_ecam(Bdf);
   switch(Ops){
 
+    case DMA_WAIT:
+        return pal_exerciser_wait_dma(Base);
+
     case START_DMA:
         switch (Param) {
 
             case EDMA_NO_SUPPORT:
-                return 0;
+                return EXERCISER_DMA_INVALID;
             case EDMA_COHERENT:
-                return 0;
+                return EXERCISER_DMA_INVALID;
             case EDMA_NOT_COHERENT:
-                return 0;
+                return EXERCISER_DMA_INVALID;
             case EDMA_FROM_DEVICE:
                 return pal_exerciser_start_dma_direction(Base, EDMA_FROM_DEVICE);// DMA from Device
             case EDMA_TO_DEVICE:
                 return pal_exerciser_start_dma_direction(Base, EDMA_TO_DEVICE);// DMA to Device
             default:
-                return 1;
+                return EXERCISER_DMA_INVALID;
         }
 
     case GENERATE_MSI:

@@ -76,6 +76,49 @@ failed. Its status must distinguish a successful DMA from a range or internal
 error. DMA attributes configured by the following APIs remain in effect until
 changed or reset.
 
+The reference PAL checks that `DMACTL1.dmatxntrig[3:0]` is idle before changing
+the address or length. It writes the length with a 32-bit access: an eight-byte
+write would also address the adjacent DMA status register. Lengths larger than
+32 bits are rejected rather than truncated.
+
+Before starting DMA, clear the previous status by writing bit 2 of `DMASTATUS`.
+Preserve the other control attributes when changing direction, set the trigger
+field to 1, then poll the whole trigger field until it is zero. Only then read
+`DMASTATUS[1:0]`, save the result, and clear status again. The polling budget is
+`EXERCISER_DMA_POLL_LIMIT`, defaulting to `PLATFORM_OVERRIDE_TIMEOUT_LARGE`.
+It counts MMIO reads, not elapsed time; platforms can override it for their
+simulation or hardware latency.
+
+The result codes below form the DMA API contract in `val/include/val_exerciser.h`.
+As with the existing exerciser operation and direction values, each PAL declares
+matching result codes in its own interface header: `pal_common_support.h` for
+bare-metal and `pal_exerciser.h` for UEFI. PAL sources do not include VAL headers.
+Register fields and the polling budget belong to the platform: the reference
+definitions are in FVP's `pal_override_fvp.h` and UEFI's `pal_exerciser.h`.
+
+| Result | Meaning |
+| --- | --- |
+| `EXERCISER_DMA_SUCCESS` (0) | Endpoint command completed without error |
+| `EXERCISER_DMA_RANGE_ERROR` (1) | Invalid DMA range |
+| `EXERCISER_DMA_INTERNAL_ERROR` (2) | Endpoint reports a completed hardware error |
+| `EXERCISER_DMA_RESERVED` (3) | Reserved hardware result; reject it |
+| `EXERCISER_DMA_INVALID` | Invalid software argument |
+| `EXERCISER_DMA_BUSY` | An earlier command is still active; nothing was programmed |
+| `EXERCISER_DMA_TIMEOUT` | The trigger did not clear within the polling budget |
+
+Check the result of both parameter setup and `START_DMA`. Range, reserved and
+software errors must not count as evidence of protection. Internal error alone
+does not identify the rejecting component. Tests must independently validate the
+intended access and its data effects. `val_exerciser_dma_status_valid()` is only
+a preliminary check for tests that perform that independent validation.
+
+`pal_exerciser_ops(DMA_WAIT, 0, bdf)` polls an outstanding command without
+retriggering it and consumes its result using the same rules. It does not abort
+DMA. After a timeout, do not overwrite its configuration, free its buffers or
+reopen blocked access until the command is quiescent. There is no generic abort
+in the reference register interface. Also, posted writes can require additional
+destination visibility checks after the endpoint has completed its command.
+
 ### Address type
 
 ```c
