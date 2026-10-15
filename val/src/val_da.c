@@ -1135,22 +1135,29 @@ uint32_t
 val_ide_set_sel_stream_lock(uint32_t rp_bdf, uint32_t count, uint32_t lock)
 {
   uint32_t capability, value;
-  uint64_t va, cfg, attributes;
+  uint64_t va, cfg, attributes, tg, reg_pa, reg_pa_page;
 
   if (!count || count > 32u || val_pcie_find_da_capability(rp_bdf, &capability) ||
       val_pcie_read_cfg(rp_bdf, capability + RMEDA_CTL2, &value))
     return ACS_STATUS_ERR;
   value = lock ? value | (1u << (count - 1u)) : value & ~(1u << (count - 1u));
+  tg = val_get_min_tg();
+  if (!tg || (tg & (tg - 1u)))
+    return ACS_STATUS_ERR;
+
   cfg = val_pcie_get_bdf_config_addr(rp_bdf);
-  va = val_get_free_va(val_get_min_tg());
+  va = val_get_free_va(tg);
+  reg_pa = cfg + capability + RMEDA_CTL2;
+  reg_pa_page = reg_pa & ~(tg - 1u);
   attributes = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(OUTER_SHAREABLE) |
                           GET_ATTR_INDEX(DEV_MEM_nGnRnE) | PGT_ENTRY_AP_RW |
                           PAS_ATTR(ROOT_PAS));
-  if (!cfg || val_add_gpt_entry_el3(cfg, GPT_ANY) ||
-      val_add_mmu_entry_el3(va, cfg, attributes))
+  if (!cfg || !va || (va & (tg - 1u)) ||
+      val_add_gpt_entry_el3(reg_pa_page, GPT_ANY) ||
+      val_add_mmu_entry_el3(va, reg_pa_page, attributes))
     return ACS_STATUS_ERR;
   shared_data->num_access = 1;
-  shared_data->shared_data_access[0].addr = va + capability + RMEDA_CTL2;
+  shared_data->shared_data_access[0].addr = va + (reg_pa & (tg - 1u));
   shared_data->shared_data_access[0].data = value;
   shared_data->shared_data_access[0].access_type = WRITE_DATA;
   if (val_pe_access_mut_el3() ||
