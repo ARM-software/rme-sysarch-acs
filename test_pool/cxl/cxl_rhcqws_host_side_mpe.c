@@ -36,9 +36,6 @@
 
 #define DECODER_SLOT          0u
 #define MAX_CACHE_LINE        1024u
-#define PCIE_LNKCAP_OFFSET    0x0Cu
-#define PCIE_LNKCAP_PN_SHIFT  24u
-#define PCIE_LNKCAP_PN_MASK   0xFFu
 #define RMECDA_CTL1_TDISP_EN_MASK 0x1u
 #define RMECDA_CTL1_LINK_STR_LOCK_MASK (1u << 1)
 #define CXL_MEM_LINE_SIZE   64u
@@ -49,13 +46,8 @@ typedef struct {
   uint64_t window_size;
   uint32_t root_index;
   uint32_t endpoint_index;
-  uint64_t host_decoder_base_orig;
-  uint64_t host_decoder_size_orig;
-  uint64_t endpoint_decoder_base_orig;
-  uint64_t endpoint_decoder_size_orig;
-  uint32_t host_target_low_orig;
-  uint32_t host_target_high_orig;
-  uint32_t host_target_valid;
+  CXL_DECODER_STATE host_decoder;
+  CXL_DECODER_STATE endpoint_decoder;
 } CONTEXT;
 
 #if ENABLE_SPDM
@@ -187,103 +179,22 @@ write_from_root(uint64_t address, uint32_t value)
   return ACS_STATUS_PASS;
 }
 
-static void
-restore_decoders(const CONTEXT *context)
+static uint32_t
+restore_decoders(CONTEXT *context)
 {
-  if (context == NULL)
-    return;
-
-  if ((context->host_index != CXL_COMPONENT_INVALID_INDEX) &&
-      (context->host_decoder_size_orig != 0u))
-  {
-    (void)val_cxl_program_host_decoder(context->host_index,
-                                       DECODER_SLOT,
-                                       context->host_decoder_base_orig,
-                                       context->host_decoder_size_orig);
-    if (context->host_target_valid != 0u)
-    {
-      uint64_t comp_base;
-      uint64_t cap_base;
-
-      comp_base = val_cxl_get_info(CXL_INFO_COMPONENT_BASE, context->host_index);
-      if ((comp_base != 0u) &&
-          (val_cxl_find_capability(comp_base,
-                                   CXL_CAPID_HDM_DECODER,
-                                   &cap_base) == ACS_STATUS_PASS))
-      {
-        val_mmio_write(cap_base + CXL_HDM_DECODER_TARGET_LOW(DECODER_SLOT),
-                       context->host_target_low_orig);
-        val_mmio_write(cap_base + CXL_HDM_DECODER_TARGET_HIGH(DECODER_SLOT),
-                       context->host_target_high_orig);
-      }
-    }
-  }
-
-  if ((context->endpoint_index != CXL_COMPONENT_INVALID_INDEX) &&
-      (context->endpoint_decoder_size_orig != 0u))
-    (void)val_cxl_program_component_decoder(context->endpoint_index,
-                                            DECODER_SLOT,
-                                            context->endpoint_decoder_base_orig,
-                                            context->endpoint_decoder_size_orig);
+  /* Restore both complete snapshots, including initially inactive decoders. */
+  return val_cxl_restore_decoders(&context->host_decoder, &context->endpoint_decoder);
 }
 
 static uint32_t
-program_host_target_list(uint32_t bdf,
-                          uint64_t comp_base,
-                          uint32_t decoder_index,
-                          CONTEXT *context)
+prepare_decoders(uint32_t bdf, CONTEXT *context)
 {
-  uint32_t pcie_cap_offset;
-  uint32_t lnkcap;
-  uint32_t port_id;
-  uint64_t hdm_cap_base;
-  uint32_t target_low;
-  uint32_t target_high;
-
   if (context == NULL)
     return ACS_STATUS_ERR;
 
-  if (val_pcie_find_capability(bdf,
-                               PCIE_CAP,
-                               CID_PCIECS,
-                               &pcie_cap_offset) != 0u)
-  {
-    val_print(ACS_PRINT_ERR, " RHCQWS: PCIe cap not found", 0);
-    return ACS_STATUS_ERR;
-  }
-
-  if (val_pcie_read_cfg(bdf,
-                        pcie_cap_offset + PCIE_LNKCAP_OFFSET,
-                        &lnkcap) != 0u)
-  {
-    val_print(ACS_PRINT_ERR, " RHCQWS: LNKCAP read failed", 0);
-    return ACS_STATUS_ERR;
-  }
-
-  port_id = (lnkcap >> PCIE_LNKCAP_PN_SHIFT) & PCIE_LNKCAP_PN_MASK;
-
-  if (val_cxl_find_capability(comp_base,
-                              CXL_CAPID_HDM_DECODER,
-                              &hdm_cap_base) != ACS_STATUS_PASS)
-  {
-    val_print(ACS_PRINT_ERR, " RHCQWS: Host HDM cap missing", 0);
-    return ACS_STATUS_ERR;
-  }
-
-  target_low = val_mmio_read(hdm_cap_base +
-                             CXL_HDM_DECODER_TARGET_LOW(decoder_index));
-  target_high = val_mmio_read(hdm_cap_base +
-                              CXL_HDM_DECODER_TARGET_HIGH(decoder_index));
-  context->host_target_low_orig = target_low;
-  context->host_target_high_orig = target_high;
-  context->host_target_valid = 1u;
-
-  val_mmio_write(hdm_cap_base + CXL_HDM_DECODER_TARGET_LOW(decoder_index),
-                 port_id);
-  val_mmio_write(hdm_cap_base + CXL_HDM_DECODER_TARGET_HIGH(decoder_index),
-                 0u);
-
-  return ACS_STATUS_PASS;
+  return val_cxl_prepare_decoders(context->host_index, context->endpoint_index,
+                                  DECODER_SLOT, bdf, &context->host_decoder,
+                                  &context->endpoint_decoder);
 }
 
 static uint32_t
@@ -507,7 +418,6 @@ exercise_root_port(const CXL_COMPONENT_TABLE *table,
   context.host_index = host_index;
   context.root_index = root_index;
   context.endpoint_index = endpoint_index;
-  context.host_target_valid = 0u;
 
   status = val_cxl_select_cfmws_window(context.host_index,
                                        &context.window_base,
@@ -515,52 +425,32 @@ exercise_root_port(const CXL_COMPONENT_TABLE *table,
   if (status != ACS_STATUS_PASS)
     return ACS_STATUS_SKIP;
 
-  status = program_host_target_list(root_port->bdf,
-                                    host_comp_base,
-                                    DECODER_SLOT,
-                                    &context);
+  status = prepare_decoders(root_port->bdf, &context);
   if (status != ACS_STATUS_PASS)
   {
-    restore_decoders(&context);
+    if (restore_decoders(&context) != ACS_STATUS_PASS)
+      return ACS_STATUS_FAIL;
     return (status == ACS_STATUS_SKIP) ? ACS_STATUS_SKIP : ACS_STATUS_FAIL;
   }
 
-  /* Save and reprogram HDM decoders for the selected window. */
-  if (val_cxl_get_decoder(context.host_index,
-                          DECODER_SLOT,
-                          &context.host_decoder_base_orig,
-                          &context.host_decoder_size_orig) != 0u)
-  {
-    context.host_decoder_base_orig = 0u;
-    context.host_decoder_size_orig = 0u;
-  }
-
-  if (val_cxl_get_component_decoder(context.endpoint_index,
-                                    DECODER_SLOT,
-                                    &context.endpoint_decoder_base_orig,
-                                    &context.endpoint_decoder_size_orig) != 0u)
-  {
-    context.endpoint_decoder_base_orig = 0u;
-    context.endpoint_decoder_size_orig = 0u;
-  }
-
-  status = val_cxl_program_host_decoder(context.host_index,
-                                        DECODER_SLOT,
-                                        context.window_base,
-                                        context.window_size);
+  /* Program the saved HDM decoders for the selected window. */
+  status = val_cxl_program_saved_decoder(&context.host_decoder,
+                                         context.window_base,
+                                         context.window_size);
   if (status != ACS_STATUS_PASS)
   {
-    restore_decoders(&context);
+    if (restore_decoders(&context) != ACS_STATUS_PASS)
+      return ACS_STATUS_FAIL;
     return (status == ACS_STATUS_SKIP) ? ACS_STATUS_SKIP : ACS_STATUS_FAIL;
   }
 
-  status = val_cxl_program_component_decoder(context.endpoint_index,
-                                             DECODER_SLOT,
-                                             context.window_base,
-                                             context.window_size);
+  status = val_cxl_program_saved_decoder(&context.endpoint_decoder,
+                                         context.window_base,
+                                         context.window_size);
   if (status != ACS_STATUS_PASS)
   {
-    restore_decoders(&context);
+    if (restore_decoders(&context) != ACS_STATUS_PASS)
+      return ACS_STATUS_FAIL;
     return (status == ACS_STATUS_SKIP) ? ACS_STATUS_SKIP : ACS_STATUS_FAIL;
   }
 
@@ -568,13 +458,14 @@ exercise_root_port(const CXL_COMPONENT_TABLE *table,
   status = val_spdm_session_open(endpoint->bdf, &ctx, &session_id);
   if (status == ACS_STATUS_SKIP)
   {
-    restore_decoders(&context);
+    if (restore_decoders(&context) != ACS_STATUS_PASS)
+      return ACS_STATUS_FAIL;
     return ACS_STATUS_SKIP;
   }
 
   if (status != ACS_STATUS_PASS)
   {
-    restore_decoders(&context);
+    (void)restore_decoders(&context);
     return ACS_STATUS_FAIL;
   }
 
@@ -584,7 +475,7 @@ exercise_root_port(const CXL_COMPONENT_TABLE *table,
   status = val_spdm_send_cxl_tsp_get_version(&ctx, session_id);
   if (status != ACS_STATUS_PASS)
   {
-    restore_decoders(&context);
+    (void)restore_decoders(&context);
     (void)val_spdm_session_close(&ctx, session_id);
     return ACS_STATUS_FAIL;
   }
@@ -593,13 +484,13 @@ exercise_root_port(const CXL_COMPONENT_TABLE *table,
   status = val_spdm_send_cxl_tsp_get_capabilities(&ctx, session_id, &capabilities);
   if (status == ACS_STATUS_SKIP)
   {
-    restore_decoders(&context);
+    status = restore_decoders(&context);
     (void)val_spdm_session_close(&ctx, session_id);
-    return ACS_STATUS_SKIP;
+    return (status == ACS_STATUS_PASS) ? ACS_STATUS_SKIP : ACS_STATUS_FAIL;
   }
   if (status != ACS_STATUS_PASS)
   {
-    restore_decoders(&context);
+    (void)restore_decoders(&context);
     (void)val_spdm_session_close(&ctx, session_id);
     return ACS_STATUS_FAIL;
   }
@@ -607,9 +498,9 @@ exercise_root_port(const CXL_COMPONENT_TABLE *table,
   if ((capabilities.memory_encryption_features_supported &
        CXL_TSP_MEMORY_ENCRYPTION_FEATURES_SUPPORT_ENCRYPTION) != 0u)
   {
-    restore_decoders(&context);
+    status = restore_decoders(&context);
     (void)val_spdm_session_close(&ctx, session_id);
-    return ACS_STATUS_SKIP;
+    return (status == ACS_STATUS_PASS) ? ACS_STATUS_SKIP : ACS_STATUS_FAIL;
   }
 
   *candidate_found = 1u;
@@ -758,7 +649,8 @@ cleanup:
   }
 
   /* Restore decoder programming and close the session. */
-  restore_decoders(&context);
+  if (restore_decoders(&context) != ACS_STATUS_PASS)
+    status = ACS_STATUS_FAIL;
   if (session_active != 0u)
     (void)val_spdm_session_close(&ctx, session_id);
 

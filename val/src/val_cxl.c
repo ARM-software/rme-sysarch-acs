@@ -30,6 +30,8 @@
 #define CXL_HDM_ALIGNMENT_SHIFT     28u
 #define CXL_HDM_ALIGNMENT_MASK      ((1ULL << CXL_HDM_ALIGNMENT_SHIFT) - 1ULL)
 #define CXL_HDM_ERROR_BIT           (1u << 11)
+#define CXL_HDM_LOCK_ON_COMMIT_BIT  (1u << 8)
+#define CXL_HDM_CONTROL_WORD        4u
 
 static CXL_INFO_TABLE *g_cxl_info_table;
 static CXL_COMPONENT_TABLE *g_cxl_component_table;
@@ -3330,6 +3332,191 @@ val_cxl_get_cfmws(uint32_t index,
   *base   = entry->cfmws_base[window_index];
   *length = entry->cfmws_length[window_index];
   return 0;
+}
+
+/* Snapshot before changing any decoder state, including an unused zero-size slot. */
+uint32_t
+val_cxl_save_decoder(uint64_t component_base, uint32_t decoder_index,
+                     CXL_DECODER_STATE *saved)
+{
+  uint32_t control;
+  uint32_t cap_reg;
+  uint32_t decoder_count;
+
+  if ((saved == NULL) || (decoder_index >= CXL_MAX_DECODER_SLOTS))
+    return ACS_STATUS_ERR;
+
+  val_memory_set(saved, sizeof(*saved), 0);
+  saved->decoder_index = decoder_index;
+  if (val_cxl_find_capability(component_base, CXL_CAPID_HDM_DECODER,
+                               &saved->cap_base) != ACS_STATUS_PASS)
+    return ACS_STATUS_ERR;
+
+  cap_reg = val_mmio_read(saved->cap_base + CXL_HDM_CAP_REG_OFFSET);
+  decoder_count = val_cxl_decode_hdm_count(
+      (cap_reg >> CXL_HDM_DECODER_COUNT_SHIFT) & CXL_HDM_DECODER_COUNT_MASK);
+  if (decoder_index >= decoder_count)
+    return ACS_STATUS_ERR;
+
+  for (uint32_t index = 0; index < CXL_HDM_DECODER_STATE_WORDS; ++index)
+    saved->reg[index] = val_mmio_read(saved->cap_base +
+                                     CXL_HDM_DECODER_BASE_LOW(saved->decoder_index) + index * 4u);
+
+  control = saved->reg[CXL_HDM_CONTROL_WORD];
+  /* A locked or unsettled decoder cannot be borrowed and restored by this test. */
+  if ((control & (CXL_HDM_LOCK_ON_COMMIT_BIT | CXL_HDM_ERROR_BIT)) != 0u ||
+      (((control & CXL_HDM_COMMIT_BIT) != 0u) !=
+       ((control & CXL_HDM_COMMITTED_BIT) != 0u)))
+    return ACS_STATUS_SKIP;
+
+  saved->valid = 1u;
+  return ACS_STATUS_PASS;
+}
+
+uint32_t
+val_cxl_disable_decoder(CXL_DECODER_STATE *saved)
+{
+  uint64_t address;
+  uint32_t control;
+
+  if ((saved == NULL) || (saved->valid == 0u))
+    return ACS_STATUS_ERR;
+
+  address = saved->cap_base + CXL_HDM_DECODER_CTRL(saved->decoder_index);
+  control = val_mmio_read(address);
+
+  /* ACS owns this window; drain its synchronous accesses before reprogramming. */
+  __asm__ volatile("dsb sy" ::: "memory");
+  if ((control & CXL_HDM_LOCK_ON_COMMIT_BIT) != 0u)
+    return ACS_STATUS_ERR;
+  saved->changed = 1u;
+  val_mmio_write(address, control & ~(CXL_HDM_COMMIT_BIT |
+                                      CXL_HDM_COMMITTED_BIT | CXL_HDM_ERROR_BIT));
+  for (uint32_t attempt = 0; attempt < CXL_HDM_COMMIT_TIMEOUT_US; ++attempt)
+  {
+    control = val_mmio_read(address);
+    if ((control & (CXL_HDM_COMMIT_BIT | CXL_HDM_COMMITTED_BIT)) == 0u)
+      return ACS_STATUS_PASS;
+    (void)val_time_delay_ms(1);
+  }
+
+  val_print(ACS_PRINT_ERR, " CXL_HDM: decoder did not become inactive at 0x%llx", address);
+  return ACS_STATUS_ERR;
+}
+
+/* Restore all configuration DWORDs, then restore the original commit state. */
+uint32_t
+val_cxl_restore_decoder(CXL_DECODER_STATE *saved)
+{
+  uint64_t base;
+  uint64_t control_addr;
+  uint32_t control;
+  uint32_t readback;
+  uint32_t active;
+
+  if (saved == NULL)
+    return ACS_STATUS_ERR;
+  if (saved->changed == 0u)
+    return ACS_STATUS_PASS;
+  if (val_cxl_disable_decoder(saved) != ACS_STATUS_PASS)
+    return ACS_STATUS_ERR;
+
+  base = saved->cap_base + CXL_HDM_DECODER_BASE_LOW(saved->decoder_index);
+  control_addr = saved->cap_base + CXL_HDM_DECODER_CTRL(saved->decoder_index);
+  control = saved->reg[CXL_HDM_CONTROL_WORD] &
+            ~(CXL_HDM_COMMIT_BIT | CXL_HDM_COMMITTED_BIT | CXL_HDM_ERROR_BIT);
+  val_mmio_write(control_addr, control);
+  for (uint32_t index = 0; index < CXL_HDM_DECODER_STATE_WORDS; ++index)
+  {
+    if (index == CXL_HDM_CONTROL_WORD)
+      continue;
+    val_mmio_write(base + index * 4u, saved->reg[index]);
+    if (val_mmio_read(base + index * 4u) != saved->reg[index])
+      return ACS_STATUS_ERR;
+  }
+
+  active = saved->reg[CXL_HDM_CONTROL_WORD] & CXL_HDM_COMMIT_BIT;
+  val_mmio_write(control_addr, control | active);
+  for (uint32_t attempt = 0; attempt < CXL_HDM_COMMIT_TIMEOUT_US; ++attempt)
+  {
+    readback = val_mmio_read(control_addr);
+    if ((readback & CXL_HDM_ERROR_BIT) != 0u)
+      return ACS_STATUS_ERR;
+    if (((readback & CXL_HDM_COMMITTED_BIT) != 0u) == (active != 0u))
+    {
+      if ((readback & ~(CXL_HDM_COMMITTED_BIT | CXL_HDM_ERROR_BIT)) != (control | active))
+        return ACS_STATUS_ERR;
+      saved->changed = 0u;
+      return ACS_STATUS_PASS;
+    }
+    (void)val_time_delay_ms(1);
+  }
+
+  return ACS_STATUS_ERR;
+}
+
+/* Borrow both decoders before changing routing; callers own and quiesce the window. */
+uint32_t
+val_cxl_prepare_decoders(uint32_t host_index, uint32_t endpoint_index,
+                         uint32_t decoder_index, uint32_t root_bdf,
+                         CXL_DECODER_STATE *host, CXL_DECODER_STATE *endpoint)
+{
+  uint32_t port_id;
+  uint32_t status;
+  uint64_t target;
+
+  status = val_cxl_save_decoder(val_cxl_get_info(CXL_INFO_COMPONENT_BASE, host_index),
+                                 decoder_index, host);
+  if (status != ACS_STATUS_PASS)
+    return status;
+  status = val_cxl_save_decoder(
+      val_cxl_get_component_info(CXL_COMPONENT_INFO_COMPONENT_BASE, endpoint_index),
+      decoder_index, endpoint);
+  if (status != ACS_STATUS_PASS)
+    return status;
+  if (val_pcie_get_root_port_id(root_bdf, &port_id) != PCIE_SUCCESS)
+    return ACS_STATUS_ERR;
+
+  status = val_cxl_disable_decoder(host);
+  if (status == ACS_STATUS_PASS)
+  {
+    target = host->cap_base + CXL_HDM_DECODER_TARGET_LOW(decoder_index);
+    val_mmio_write(target, port_id);
+    val_mmio_write(target + 4u, 0u);
+    if ((val_mmio_read(target) == port_id) && (val_mmio_read(target + 4u) == 0u))
+      return ACS_STATUS_PASS;
+  }
+
+  /* A failed setup must not strand a decoder on a caller's early return. */
+  if (val_cxl_restore_decoder(host) != ACS_STATUS_PASS)
+    val_print(ACS_PRINT_ERR, " CXL_HDM: failed to restore host after setup error", 0);
+  return ACS_STATUS_ERR;
+}
+
+/* Program a previously saved decoder; retain its snapshot for every failure path. */
+uint32_t
+val_cxl_program_saved_decoder(CXL_DECODER_STATE *saved, uint64_t base, uint64_t size)
+{
+  if ((saved == NULL) || (saved->valid == 0u))
+    return ACS_STATUS_ERR;
+  if (val_cxl_disable_decoder(saved) != ACS_STATUS_PASS)
+    return ACS_STATUS_ERR;
+  return val_cxl_program_decoder_common(saved->cap_base, saved->decoder_index, base, size);
+}
+
+/* Attempt both restores even when one fails. */
+uint32_t
+val_cxl_restore_decoders(CXL_DECODER_STATE *host, CXL_DECODER_STATE *endpoint)
+{
+  uint32_t host_status = val_cxl_restore_decoder(host);
+  uint32_t endpoint_status = val_cxl_restore_decoder(endpoint);
+
+  if ((host_status != ACS_STATUS_PASS) || (endpoint_status != ACS_STATUS_PASS))
+  {
+    val_print(ACS_PRINT_ERR, " CXL_HDM: decoder restoration failed", 0);
+    return ACS_STATUS_ERR;
+  }
+  return ACS_STATUS_PASS;
 }
 
 /**
