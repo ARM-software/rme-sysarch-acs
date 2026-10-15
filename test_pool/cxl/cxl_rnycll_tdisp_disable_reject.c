@@ -38,9 +38,6 @@
 
 #define RMECDA_CTL1_TDISP_EN_MASK 0x1u
 
-#define PCIE_LNKCAP_OFFSET 0x0Cu
-#define PCIE_LNKCAP_PN_SHIFT 24u
-#define PCIE_LNKCAP_PN_MASK 0xFFu
 #define SEC_SID_NONSECURE 0x0u
 #define SEC_SID_REALM 0x2u
 
@@ -50,13 +47,8 @@ typedef struct {
   uint32_t endpoint_index;
   uint64_t window_base;
   uint64_t window_size;
-  uint64_t host_decoder_base_orig;
-  uint64_t host_decoder_size_orig;
-  uint64_t endpoint_decoder_base_orig;
-  uint64_t endpoint_decoder_size_orig;
-  uint32_t host_target_low_orig;
-  uint32_t host_target_high_orig;
-  uint32_t host_target_valid;
+  CXL_DECODER_STATE host_decoder;
+  CXL_DECODER_STATE endpoint_decoder;
   uint32_t rmecda_ctl1_orig;
   uint32_t rmecda_ctl1_valid;
   uint32_t rmecda_cap_base;
@@ -139,6 +131,46 @@ find_downstream_chi_c2c_exerciser_endpoint(uint32_t root_bdf,
   }
 
   return ACS_STATUS_SKIP;
+}
+
+static uint32_t
+map_el3_data_structure(uint64_t va, uint32_t size, uint32_t pas)
+{
+  uint32_t attr;
+  uint64_t pa;
+  uint64_t page_size;
+  uint64_t page_mask;
+  uint64_t map_va;
+  uint64_t end_va;
+
+  if ((va == 0u) || (size == 0u))
+    return ACS_STATUS_ERR;
+
+  page_size = val_memory_page_size();
+  if ((page_size == 0u) || ((page_size & (page_size - 1u)) != 0u))
+    return ACS_STATUS_ERR;
+  page_mask = ~(page_size - 1u);
+
+  attr = LOWER_ATTRS(PGT_ENTRY_ACCESS |
+                     SHAREABLE_ATTR(OUTER_SHAREABLE) |
+                     PGT_ENTRY_AP_RW |
+                     PAS_ATTR(pas));
+
+  map_va = va & page_mask;
+  end_va = (va + size - 1u) & page_mask;
+  while (map_va <= end_va)
+  {
+    pa = (uint64_t)val_memory_virt_to_phys((void *)map_va);
+    if (pa == 0u)
+      return ACS_STATUS_ERR;
+
+    if (val_add_mmu_entry_el3(map_va, pa & page_mask, attr))
+      return ACS_STATUS_ERR;
+
+    map_va += page_size;
+  }
+
+  return ACS_STATUS_PASS;
 }
 
 static uint32_t
@@ -257,99 +289,21 @@ compare_buffers_el3(uint64_t src_va, uint64_t dst_va, uint32_t size)
 }
 
 static uint32_t
-program_host_target_list(uint32_t bdf,
-                         uint64_t comp_base,
-                         uint32_t decoder_index,
-                         RNYCLL_CONTEXT *context)
-{
-  uint32_t pcie_cap_offset;
-  uint32_t lnkcap;
-  uint32_t port_id;
-  uint64_t hdm_cap_base;
-  uint32_t target_low;
-  uint32_t target_high;
-
-  if (context == NULL)
-    return ACS_STATUS_ERR;
-
-  if (val_pcie_find_capability(bdf,
-                               PCIE_CAP,
-                               CID_PCIECS,
-                               &pcie_cap_offset) != 0u)
-    return ACS_STATUS_ERR;
-
-  if (val_pcie_read_cfg(bdf, pcie_cap_offset + PCIE_LNKCAP_OFFSET, &lnkcap) != 0u)
-    return ACS_STATUS_ERR;
-
-  port_id = (lnkcap >> PCIE_LNKCAP_PN_SHIFT) & PCIE_LNKCAP_PN_MASK;
-
-  if (val_cxl_find_capability(comp_base, CXL_CAPID_HDM_DECODER, &hdm_cap_base)
-      != ACS_STATUS_PASS)
-    return ACS_STATUS_ERR;
-
-  target_low = val_mmio_read(hdm_cap_base +
-                             CXL_HDM_DECODER_TARGET_LOW(decoder_index));
-  target_high = val_mmio_read(hdm_cap_base +
-                              CXL_HDM_DECODER_TARGET_HIGH(decoder_index));
-  context->host_target_low_orig = target_low;
-  context->host_target_high_orig = target_high;
-  context->host_target_valid = 1u;
-
-  val_mmio_write(hdm_cap_base + CXL_HDM_DECODER_TARGET_LOW(decoder_index),
-                 port_id);
-  val_mmio_write(hdm_cap_base + CXL_HDM_DECODER_TARGET_HIGH(decoder_index),
-                 0u);
-
-  return ACS_STATUS_PASS;
-}
-
-static void
-restore_host_target_list(const RNYCLL_CONTEXT *context)
-{
-  uint64_t comp_base;
-  uint64_t cap_base;
-
-  if ((context == NULL) || (context->host_target_valid == 0u))
-    return;
-
-  comp_base = val_cxl_get_info(CXL_INFO_COMPONENT_BASE, context->host_index);
-  if (comp_base == 0u)
-    return;
-
-  if (val_cxl_find_capability(comp_base, CXL_CAPID_HDM_DECODER, &cap_base)
-      != ACS_STATUS_PASS)
-    return;
-
-  val_mmio_write(cap_base + CXL_HDM_DECODER_TARGET_LOW(DECODER_SLOT),
-                 context->host_target_low_orig);
-  val_mmio_write(cap_base + CXL_HDM_DECODER_TARGET_HIGH(DECODER_SLOT),
-                 context->host_target_high_orig);
-}
-
-static void
-restore_decoders(const RNYCLL_CONTEXT *context)
+prepare_decoders(uint32_t bdf, RNYCLL_CONTEXT *context)
 {
   if (context == NULL)
-    return;
+    return ACS_STATUS_ERR;
 
-  if (context->host_index != CXL_COMPONENT_INVALID_INDEX)
-  {
-    if (context->host_decoder_size_orig != 0u)
-    {
-      (void)val_cxl_program_host_decoder(context->host_index,
-                                         DECODER_SLOT,
-                                         context->host_decoder_base_orig,
-                                         context->host_decoder_size_orig);
-    }
-    restore_host_target_list(context);
-  }
+  return val_cxl_prepare_decoders(context->host_index, context->endpoint_index,
+                                  DECODER_SLOT, bdf, &context->host_decoder,
+                                  &context->endpoint_decoder);
+}
 
-  if ((context->endpoint_index != CXL_COMPONENT_INVALID_INDEX) &&
-      (context->endpoint_decoder_size_orig != 0u))
-    (void)val_cxl_program_component_decoder(context->endpoint_index,
-                                            DECODER_SLOT,
-                                            context->endpoint_decoder_base_orig,
-                                            context->endpoint_decoder_size_orig);
+static uint32_t
+restore_decoders(RNYCLL_CONTEXT *context)
+{
+  /* Restore both complete snapshots, including initially inactive decoders. */
+  return val_cxl_restore_decoders(&context->host_decoder, &context->endpoint_decoder);
 }
 
 static uint32_t
@@ -418,9 +372,13 @@ access_cxl_mem(uint32_t root_bdf,
   if (aer_offset != 0u)
     val_cxl_aer_clear(root_bdf, aer_offset);
 
-  /* Trigger a CXL.mem write/read to observe RP behavior. */
+  /* Recover a rejected read if the platform reports it as an external abort.
+   * SEA is optional; media and error observations below establish rejection.
+   */
+  shared_data->access_mut = CLEAR;
   shared_data->exception_generated = CLEAR;
-  shared_data->exception_expected = CLEAR;
+  shared_data->exception_expected = expect_reject ? SET : CLEAR;
+  shared_data->esr_value = expect_reject ? SEA_ESR_READ : 0u;
   shared_data->num_access = 2;
   shared_data->shared_data_access[0].addr = (uint64_t)mapped;
   shared_data->shared_data_access[0].data = (uint64_t)pattern;
@@ -428,7 +386,11 @@ access_cxl_mem(uint32_t root_bdf,
   shared_data->shared_data_access[1].addr = (uint64_t)mapped;
   shared_data->shared_data_access[1].access_type = READ_DATA;
 
-  if (val_pe_access_mut_el3())
+  uint32_t access_status = val_pe_access_mut_el3();
+  shared_data->exception_expected = CLEAR;
+  shared_data->exception_generated = CLEAR;
+  shared_data->esr_value = 0u;
+  if (access_status)
     return ACS_STATUS_ERR;
 
   if (read_device_media(endpoint_bdf, phys, &observed) != ACS_STATUS_PASS)
@@ -465,6 +427,7 @@ check_device_to_host_dma(uint32_t endpoint_bdf,
   memory_region_descriptor_t mem_desc[2];
   pgt_descriptor_t pgt_desc_ns;
   pgt_descriptor_t pgt_desc_rlm;
+  uint8_t *buffer_allocation;
   uint8_t *buffer_va;
   uint8_t *buffer_src;
   uint8_t *buffer_dst;
@@ -487,27 +450,34 @@ check_device_to_host_dma(uint32_t endpoint_bdf,
   uint32_t result = ACS_STATUS_PASS;
 
   val_memory_set(&master, sizeof(master), 0);
+  master.smmu_index = ACS_INVALID_INDEX;
   val_memory_set(mem_desc, sizeof(mem_desc), 0);
   val_memory_set(&pgt_desc_ns, sizeof(pgt_desc_ns), 0);
   val_memory_set(&pgt_desc_rlm, sizeof(pgt_desc_rlm), 0);
 
   total_len = (uint64_t)length * 2u;
-  buffer_va = (uint8_t *)val_get_free_va(total_len);
-  if (buffer_va == NULL)
+  /* Reserve backing and alias addresses outside the EL3 SMMU identity range.
+   * The first two pages back the DMA; the other two reserve the NS alias VAs.
+   */
+  buffer_allocation = (uint8_t *)val_memory_alloc_pages(4);
+  if (buffer_allocation == NULL)
     return ACS_STATUS_SKIP;
 
-  buffer_pa = (uint64_t)val_memory_virt_to_phys(buffer_va);
+  buffer_pa = (uint64_t)val_memory_virt_to_phys(buffer_allocation);
   if (buffer_pa == 0u)
-    return ACS_STATUS_SKIP;
+  {
+    result = ACS_STATUS_SKIP;
+    goto cleanup;
+  }
+
+  buffer_va = buffer_allocation;
 
   buffer_src = buffer_va;
   buffer_dst = buffer_va + length;
   buffer_src_pa = buffer_pa;
   buffer_dst_pa = buffer_pa + length;
   buffer_valid = 1u;
-  buffer_ns_alias = (uint8_t *)val_get_free_va(total_len);
-  if (buffer_ns_alias == NULL)
-    return ACS_STATUS_SKIP;
+  buffer_ns_alias = buffer_allocation + total_len;
 
   buffer_src_ns_alias = buffer_ns_alias;
   buffer_dst_ns_alias = buffer_ns_alias + length;
@@ -603,6 +573,31 @@ check_device_to_host_dma(uint32_t endpoint_bdf,
   pgt_desc_rlm.pgt_base = (uint64_t)NULL;
   mem_desc[0].attributes = PGT_STAGE2_AP_RW;
 
+  if (map_el3_data_structure((uint64_t)mem_desc,
+                             sizeof(mem_desc),
+                             NONSECURE_PAS) != ACS_STATUS_PASS)
+  {
+    val_print(ACS_PRINT_ERR, " RNYCLL: EL3 map failed for mem_desc", 0);
+    result = ACS_STATUS_ERR;
+    goto cleanup;
+  }
+  if (map_el3_data_structure((uint64_t)&pgt_desc_rlm,
+                             sizeof(pgt_desc_rlm),
+                             NONSECURE_PAS) != ACS_STATUS_PASS)
+  {
+    val_print(ACS_PRINT_ERR, " RNYCLL: EL3 map failed for pgt_desc_rlm", 0);
+    result = ACS_STATUS_ERR;
+    goto cleanup;
+  }
+  if (map_el3_data_structure((uint64_t)&master,
+                             sizeof(master),
+                             NONSECURE_PAS) != ACS_STATUS_PASS)
+  {
+    val_print(ACS_PRINT_ERR, " RNYCLL: EL3 map failed for smmu master", 0);
+    result = ACS_STATUS_ERR;
+    goto cleanup;
+  }
+
   if (val_rlm_pgt_create(mem_desc, &pgt_desc_rlm))
   {
     val_print(ACS_PRINT_ERR, " RNYCLL: Realm PGT create failed", 0);
@@ -621,16 +616,6 @@ check_device_to_host_dma(uint32_t endpoint_bdf,
     goto cleanup;
   }
   smmu_rlm_mapped = 1u;
-
-  /* Configure translated addressing for DMA transactions. */
-  if (val_exerciser_set_param_by_bdf(CFG_TXN_ATTRIBUTES,
-                                     TXN_ADDR_TYPE,
-                                     AT_TRANSLATED,
-                                     endpoint_bdf))
-  {
-    result = ACS_STATUS_SKIP;
-    goto cleanup;
-  }
 
   /* Program a DMA to non-secure memory as a positive control. */
   if (val_exerciser_set_param_by_bdf(EXERCISER_SEC_SID,
@@ -876,15 +861,35 @@ cleanup:
   }
 
   if (smmu_rlm_mapped != 0u)
-    smmu_rlm_mapped = 0u;
-  if (pgt_rlm_created != 0u)
+  {
+    if (val_smmu_rlm_unmap_el3(&master))
+      result = ACS_STATUS_ERR;
+    else
+      smmu_rlm_mapped = 0u;
+  }
+  if (pgt_rlm_created != 0u && smmu_rlm_mapped == 0u)
     val_rlm_pgt_destroy(&pgt_desc_rlm);
   if (smmu_ns_mapped != 0u)
+  {
+    val_smmu_unmap(master);
     smmu_ns_mapped = 0u;
+  }
   if (pgt_ns_created != 0u)
     val_pgt_destroy(pgt_desc_ns);
   if (master.smmu_index != ACS_INVALID_INDEX)
     val_smmu_disable(master.smmu_index);
+  /* Restore the allocation's EL3 mappings before returning it to the PAL. */
+  if (buffer_valid != 0u)
+  {
+    if (map_dma_buffers_el3(buffer_va, buffer_pa, length, NONSECURE_PAS) !=
+        ACS_STATUS_PASS ||
+        map_dma_buffers_el3(buffer_ns_alias,
+                             (uint64_t)val_memory_virt_to_phys(buffer_ns_alias),
+                             length, NONSECURE_PAS) != ACS_STATUS_PASS)
+      result = ACS_STATUS_ERR;
+  }
+  if (smmu_rlm_mapped == 0u)
+    val_memory_free_pages(buffer_allocation, 4);
 
   return result;
 }
@@ -1051,14 +1056,11 @@ verify_root_port(const CXL_COMPONENT_TABLE *table,
   context.root_index = root_index;
   context.endpoint_index = endpoint_index;
 
-  status = program_host_target_list(root_port->bdf,
-                                    host_comp_base,
-                                    DECODER_SLOT,
-                                    &context);
+  status = prepare_decoders(root_port->bdf, &context);
   if (status != ACS_STATUS_PASS)
   {
     val_print(ACS_PRINT_ERR, " RNYCLL: Target list program failed", 0);
-    return ACS_STATUS_FAIL;
+    return (status == ACS_STATUS_SKIP) ? ACS_STATUS_SKIP : ACS_STATUS_FAIL;
   }
 
   /* Select and program a CFMWS window for CXL.mem access. */
@@ -1066,30 +1068,14 @@ verify_root_port(const CXL_COMPONENT_TABLE *table,
                                        &context.window_base,
                                        &context.window_size);
   if (status != ACS_STATUS_PASS)
-    return ACS_STATUS_SKIP;
-
-  if (val_cxl_get_decoder(context.host_index,
-                          DECODER_SLOT,
-                          &context.host_decoder_base_orig,
-                          &context.host_decoder_size_orig) != 0u)
   {
-    context.host_decoder_base_orig = 0u;
-    context.host_decoder_size_orig = 0u;
+    result = ACS_STATUS_SKIP;
+    goto cleanup;
   }
 
-  if (val_cxl_get_component_decoder(context.endpoint_index,
-                                    DECODER_SLOT,
-                                    &context.endpoint_decoder_base_orig,
-                                    &context.endpoint_decoder_size_orig) != 0u)
-  {
-    context.endpoint_decoder_base_orig = 0u;
-    context.endpoint_decoder_size_orig = 0u;
-  }
-
-  status = val_cxl_program_host_decoder(context.host_index,
-                                        DECODER_SLOT,
-                                        context.window_base,
-                                        context.window_size);
+  status = val_cxl_program_saved_decoder(&context.host_decoder,
+                                         context.window_base,
+                                         context.window_size);
   if (status != ACS_STATUS_PASS)
   {
     val_print(ACS_PRINT_ERR, " RNYCLL: Host decoder program failed", 0);
@@ -1097,10 +1083,9 @@ verify_root_port(const CXL_COMPONENT_TABLE *table,
     goto cleanup;
   }
 
-  status = val_cxl_program_component_decoder(context.endpoint_index,
-                                             DECODER_SLOT,
-                                             context.window_base,
-                                             context.window_size);
+  status = val_cxl_program_saved_decoder(&context.endpoint_decoder,
+                                         context.window_base,
+                                         context.window_size);
   if (status != ACS_STATUS_PASS)
   {
     val_print(ACS_PRINT_ERR, " RNYCLL: Endpoint decoder program failed", 0);
@@ -1168,7 +1153,8 @@ verify_root_port(const CXL_COMPONENT_TABLE *table,
   result = ACS_STATUS_PASS;
 
 cleanup:
-  restore_decoders(&context);
+  if (restore_decoders(&context) != ACS_STATUS_PASS)
+    result = ACS_STATUS_FAIL;
   if ((context.rmecda_ctl1_valid != 0u) && (context.rmecda_cfg_va != 0u))
   {
     status = (context.rmecda_ctl1_orig & RMECDA_CTL1_TDISP_EN_MASK) ?

@@ -165,6 +165,33 @@ uint32_t val_cxl_get_cfmws(uint32_t index,
                            uint32_t window_index,
                            uint64_t *base,
                            uint64_t *length);
+
+/* Complete decoder configuration, including target list or endpoint DPA skip. */
+#define CXL_HDM_DECODER_STATE_WORDS 7u
+typedef struct {
+  uint64_t cap_base;
+  uint32_t decoder_index;
+  uint32_t reg[CXL_HDM_DECODER_STATE_WORDS];
+  uint32_t valid;
+  uint32_t changed;
+} CXL_DECODER_STATE;
+
+/*
+ * Use zero-initialized snapshots and restore them before reusing them.
+ * The caller owns the window and must stop DMA before borrowing its decoders.
+ * Locked, unsettled or errored decoders are skipped without modifying hardware.
+ */
+uint32_t val_cxl_save_decoder(uint64_t component_base, uint32_t decoder_index,
+                               CXL_DECODER_STATE *saved);
+uint32_t val_cxl_disable_decoder(CXL_DECODER_STATE *saved);
+uint32_t val_cxl_restore_decoder(CXL_DECODER_STATE *saved);
+uint32_t val_cxl_prepare_decoders(uint32_t host_index, uint32_t endpoint_index,
+                                   uint32_t decoder_index, uint32_t root_bdf,
+                                   CXL_DECODER_STATE *host, CXL_DECODER_STATE *endpoint);
+uint32_t val_cxl_program_saved_decoder(CXL_DECODER_STATE *saved, uint64_t base,
+                                       uint64_t size);
+uint32_t val_cxl_restore_decoders(CXL_DECODER_STATE *host, CXL_DECODER_STATE *endpoint);
+
 uint32_t val_cxl_program_host_decoder(uint32_t host_index,
                                       uint32_t decoder_index,
                                       uint64_t base,

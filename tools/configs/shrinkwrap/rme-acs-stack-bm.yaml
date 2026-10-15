@@ -24,6 +24,7 @@ description: >-
 layers:
   - rme-acs-stack-base.yaml
   - rme-mec.yaml
+  - rme-cxl.yaml
 
 build:
   tfa:

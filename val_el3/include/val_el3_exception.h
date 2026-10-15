@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2025, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2025-2026, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -27,6 +27,7 @@
 #define GPF_ESR_WRITE   0x96000068ULL
 
 #ifndef __ASSEMBLER__
+void val_el3_mmio_read_load(void);
 void val_el3_asm_eret_smc(void);
 void val_el3_update_elr_el3(uint64_t reg_value);
 void val_el3_update_spsr_el3(uint64_t reg_value);

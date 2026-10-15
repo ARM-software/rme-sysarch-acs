@@ -78,6 +78,22 @@ void val_el3_ack_handler(void)
         return;
     }
 
+    /* A caller may arm a specific external read abort. Do not consume other faults. */
+    if (shared_data->esr_value == SEA_ESR_READ) {
+        uint64_t esr = val_el3_read_esr_el3();
+        if (((esr >> 26) == 0x25u) && ((esr & 0x3fu) == 0x10u) &&
+            ((esr & ((1u << 6) | (1u << 10))) == 0u) &&
+            (val_el3_read_elr_el3() == (uint64_t)&val_el3_mmio_read_load) &&
+            (val_el3_read_far() == shared_data->shared_data_access[0].addr)) {
+            shared_data->exception_generated = SET;
+            shared_data->exception_expected = CLEAR;
+            INFO("Expected external read abort observed\n");
+            val_el3_asm_eret();
+        } else {
+            val_el3_branch_asm(*(armtf_handler + 1));
+        }
+        return;
+    }
     INFO("The Fault is encountered\n");
 
     /* Other probes retain the existing GPF checks. Record a matching read/write
