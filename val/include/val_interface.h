@@ -129,6 +129,8 @@ uint32_t val_wd_set_ws0_el3(uint64_t VA_RT_WDOG, uint32_t timeout, uint64_t coun
 uint32_t val_pas_filter_active_mode_el3(int enable);
 uint32_t val_smmu_access_disable(uint64_t smmu_base);
 uint32_t val_smmu_access_enable(uint64_t smmu_base);
+uint32_t val_smmu_root_cr0_read(uint64_t smmu_base, uint32_t *value);
+uint32_t val_smmu_root_cr0_write(uint64_t smmu_base, uint32_t value);
 uint32_t val_change_security_state_el3(int sec_state);
 void write_gpr_and_reset(void);
 uint32_t check_gpr_after_reset(void);

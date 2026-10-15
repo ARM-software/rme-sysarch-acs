@@ -405,6 +405,32 @@ uint32_t val_pas_filter_active_mode_el3(int enable)
   }
 }
 
+/** Read the acknowledged Root control value for later restoration. */
+uint32_t val_smmu_root_cr0_read(uint64_t smmu_base, uint32_t *value)
+{
+    if (value == NULL)
+        return 1;
+    /* Older EL3 handlers do not implement this operation. */
+    shared_data->shared_data_access[0].data = 0xFFFFFFFFU;
+    UserCallSMC(ARM_ACS_SMC_FID, SMMU_ROOT_CONTROL, smmu_base, SMMU_ROOT_CR0_READ, 0);
+    if (shared_data->status_code ||
+        (shared_data->shared_data_access[0].data &
+         ~(uint64_t)(SMMU_ROOT_ACCESSEN | SMMU_ROOT_GPCEN)))
+        return 1;
+    *value = (uint32_t)shared_data->shared_data_access[0].data;
+    return 0;
+}
+
+/** Write Root control, waiting for the architectural update acknowledgements. */
+uint32_t val_smmu_root_cr0_write(uint64_t smmu_base, uint32_t value)
+{
+    if (value & ~(SMMU_ROOT_ACCESSEN | SMMU_ROOT_GPCEN))
+        return 1;
+    shared_data->shared_data_access[0].data = 0xFFFFFFFFU;
+    UserCallSMC(ARM_ACS_SMC_FID, SMMU_ROOT_CONTROL, smmu_base, SMMU_ROOT_CR0_WRITE, value);
+    return shared_data->status_code || shared_data->shared_data_access[0].data != value;
+}
+
 /**
  *  @brief  This API is called to disable the SMMU in EL3 writing to SMMU_ROOT_CR0 offset of
  *          SMMU_ROOT register.
