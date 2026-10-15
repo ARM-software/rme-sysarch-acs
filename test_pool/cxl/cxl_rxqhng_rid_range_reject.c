@@ -206,8 +206,8 @@ run_dma_compare(uint32_t endpoint_bdf,
                 uint32_t len,
                 uint32_t expect_match)
 {
-  uint32_t dma_status;
   uint32_t compare_match;
+  uint32_t dma_status;
 
   if ((src_va == NULL) || (dst_va == NULL))
     return ACS_STATUS_ERR;
@@ -466,13 +466,6 @@ verify_root_port(uint32_t root_bdf, uint32_t rmecda_cap_base)
   /* Ensure the exerciser uses its own Requester ID for requests. */
   (void)val_exerciser_set_param_by_bdf(CFG_TXN_ATTRIBUTES, TXN_REQ_ID_VALID, RID_NOT_VALID,
                                        endpoint_bdf);
-
-  if (val_exerciser_set_param_by_bdf(CFG_TXN_ATTRIBUTES,
-                                     TXN_ADDR_TYPE, AT_TRANSLATED, endpoint_bdf))
-  {
-    status = ACS_STATUS_SKIP;
-    goto cleanup_restore;
-  }
 
   /* Create a buffer of size TEST_DMA_SIZE in DRAM */
   dram_buf_in_virt = (uint8_t *)val_memory_alloc_pages(TEST_DATA_NUM_PAGES);
@@ -754,6 +747,21 @@ payload(void)
 
     if (chi_c2c_supported == 0u)
       continue;
+
+    /* RMESA B3.2.9.2.6-7: the RID association fields are RES0 on CXL
+     * ports, even if platform metadata also advertises CHI-C2C support.
+     */
+    {
+      uint32_t flexbus_offset;
+      if (val_pcie_find_vendor_dvsec(root_bdf, CXL_DVSEC_VENDOR_ID,
+                                    CXL_DVSEC_ID_PCIE_FLEXBUS_PORT,
+                                    &flexbus_offset) == PCIE_SUCCESS)
+      {
+        val_print(ACS_PRINT_INFO, " RXQHNG: CXL port has reserved RID fields 0x%x",
+                  root_bdf);
+        continue;
+      }
+    }
 
     if (val_pcie_find_cda_capability(root_bdf, &rmecda_cap_base) != PCIE_SUCCESS)
       continue;

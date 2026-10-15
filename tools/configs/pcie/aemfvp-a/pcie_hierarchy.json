@@ -116,5 +116,110 @@
                 "aer_supported": true
             }
         }
-    }
+    },
+    "rootport/rootport2": {
+        "device_number": 3,
+        "link_port_number": 2,
+        "cxl_type3_supported": true,
+        "cxl_ext_sec_cap_entry_enable": true,
+        "ras_node_supported": true,
+        "bar0_log2_size": 18,
+        "bar0_64bit": true,
+        "rmecda_dvsec_enable": 1,
+        "ide_supported": 1,
+        "aer_supported": true,
+        "tee_io_supported": 1,
+        "impdef_ide_km_supported": true,
+        "impdef_ide_km_bar0_value": 131072,
+        "cxl_mem_host_mpe_protected": true,
+        "__downstream__": {
+            "cxl/cxl0": {
+                "function": 0,
+                "multi_function": true,
+                "express_capability_device_type": 0,
+                "enable_ckid_encryption": 0,
+                "number_of_ckid": 4097,
+                "doe_supported": 1,
+                "allow_tdisp_on_spdm_vdm_without_sspdm": false,
+                "bit_mask_of_base_asym_alg": 128,
+                "certificate_der_filename": "tools/configs/pcie/aemfvp-a/bundle_responder.certchain.der",
+                "private_key_filename": "tools/configs/pcie/aemfvp-a/end_responder.key",
+                "enable_pcie_cxl_dvsec": 1,
+                "cxl_dvsec_rev": 2
+            },
+            "cxl/cxl1": {
+                "function": 1,
+                "express_capability_device_type": 0,
+                "enable_ckid_encryption" : 0,
+                "doe_supported": 1,
+                "allow_tdisp_on_spdm_vdm_without_sspdm": false,
+                "bit_mask_of_base_asym_alg": 128,
+                "certificate_der_filename": "tools/configs/pcie/aemfvp-a/bundle_responder.certchain.der",
+                "private_key_filename": "tools/configs/pcie/aemfvp-a/end_responder.key",
+                "enable_pcie_cxl_dvsec": 1
+            }
+        }
+    },
+    "rootport/rootport3": {
+        "device_number": 4,
+        "link_port_number": 3,
+        "cxl_type3_supported": true,
+        "cxl_ext_sec_cap_entry_enable": true,
+        "ras_node_supported": true,
+        "bar0_log2_size": 18,
+        "bar0_64bit": true,
+        "ide_supported": 1,
+        "aer_supported": true,
+        "ide_supported": 1,
+        "rmecda_dvsec_enable": 1,
+	    "tee_io_supported": 1,
+        "impdef_ide_km_supported": true,
+        "impdef_ide_km_bar0_value": 131072,
+        "__downstream__": {
+            "cxl_type1_exerciser/cxl_type1_exerciser0": {
+                "function": 0,
+                "express_capability_device_type": 0,
+                "enable_ckid_encryption" : 0,
+                "doe_supported": 1,
+                "allow_tdisp_on_spdm_vdm_without_sspdm": false,
+                "bit_mask_of_base_asym_alg": 128,
+                "certificate_der_filename": "tools/configs/pcie/aemfvp-a/bundle_responder.certchain.der",
+                "private_key_filename": "tools/configs/pcie/aemfvp-a/end_responder.key",
+                "enable_pcie_cxl_dvsec": 1,
+                "cxl_dvsec_rev": 2
+           }
+        }
+    },
+    "rootport/rootport4": {
+        "device_number": 5,
+        "link_port_number": 4,
+        "cxl_type3_supported": true,
+        "cxl_ext_sec_cap_entry_enable": true,
+	    "ras_node_supported": true,
+	    "bar0_log2_size": 18,
+	    "bar0_64bit": true,
+	    "rmecda_dvsec_enable": 1,
+	    "cxl_mem_host_mpe_protected": true,
+	    "ide_supported": 1,
+	    "aer_supported": true,
+        "tee_io_supported": 1,
+        "impdef_ide_km_supported": true,
+        "impdef_ide_km_bar0_value": 131072,
+        "__downstream__": {
+	        "cxl_type1_exerciser/chic2c_exerciser0": {
+	            "function": 0,
+	            "express_capability_device_type": 0,
+	            "enable_ckid_encryption" : 0,
+	            "type1_exerciser.is_chic2c_device": 1,
+	            "doe_supported": 1,
+	            "ide_supported": 1,
+	            "allow_tdisp_on_spdm_vdm_without_sspdm": false,
+	            "bit_mask_of_base_asym_alg": 128,
+                "certificate_der_filename": "tools/configs/pcie/aemfvp-a/bundle_responder.certchain.der",
+                "private_key_filename": "tools/configs/pcie/aemfvp-a/end_responder.key",
+	            "enable_pcie_cxl_dvsec": 1,
+	            "cxl_dvsec_rev": 2
+	        }
+	    }
+	}
 }

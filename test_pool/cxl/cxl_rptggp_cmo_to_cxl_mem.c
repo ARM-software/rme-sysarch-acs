@@ -32,9 +32,6 @@
 #define DECODER_SLOT 0u
 #define RMECDA_CTL1_TDISP_EN_MASK 0x1u
 #define RMECDA_CTL1_LINK_STR_LOCK_MASK (1u << 1)
-#define PCIE_LNKCAP_OFFSET 0x0Cu
-#define PCIE_LNKCAP_PN_SHIFT 24u
-#define PCIE_LNKCAP_PN_MASK 0xFFu
 
 typedef struct {
   uint32_t host_index;
@@ -43,13 +40,8 @@ typedef struct {
   uint32_t exerciser_bdf;
   uint64_t window_base;
   uint64_t window_size;
-  uint64_t host_decoder_base_orig;
-  uint64_t host_decoder_size_orig;
-  uint64_t endpoint_decoder_base_orig;
-  uint64_t endpoint_decoder_size_orig;
-  uint32_t host_target_low_orig;
-  uint32_t host_target_high_orig;
-  uint32_t host_target_valid;
+  CXL_DECODER_STATE host_decoder;
+  CXL_DECODER_STATE endpoint_decoder;
   uint32_t rmecda_ctl1_orig;
   uint32_t rmecda_ctl1_valid;
   uint32_t rmecda_cap_base;
@@ -93,100 +85,22 @@ write_from_root(uint64_t address, uint32_t value)
   return ACS_STATUS_PASS;
 }
 
-static void
-restore_decoders(const RPTGGP_CONTEXT *context)
+static uint32_t
+restore_decoders(RPTGGP_CONTEXT *context)
 {
-  uint64_t comp_base;
-  uint64_t hdm_cap_base;
-  if (context == NULL)
-    return;
-
-  if ((context->host_index != CXL_COMPONENT_INVALID_INDEX) &&
-      (context->host_decoder_size_orig != 0u))
-  {
-    (void)val_cxl_program_host_decoder(context->host_index,
-                                       DECODER_SLOT,
-                                       context->host_decoder_base_orig,
-                                       context->host_decoder_size_orig);
-    if (context->host_target_valid != 0u)
-    {
-      comp_base = val_cxl_get_info(CXL_INFO_COMPONENT_BASE,
-                                   context->host_index);
-      if ((comp_base != 0u) &&
-          (val_cxl_find_capability(comp_base,
-                                   CXL_CAPID_HDM_DECODER,
-                                   &hdm_cap_base) == ACS_STATUS_PASS))
-      {
-        val_mmio_write(hdm_cap_base +
-                       CXL_HDM_DECODER_TARGET_LOW(DECODER_SLOT),
-                       context->host_target_low_orig);
-        val_mmio_write(hdm_cap_base +
-                       CXL_HDM_DECODER_TARGET_HIGH(DECODER_SLOT),
-                       context->host_target_high_orig);
-      }
-    }
-  }
-
-  if ((context->endpoint_index != CXL_COMPONENT_INVALID_INDEX) &&
-      (context->endpoint_decoder_size_orig != 0u))
-    (void)val_cxl_program_component_decoder(context->endpoint_index,
-                                            DECODER_SLOT,
-                                            context->endpoint_decoder_base_orig,
-                                            context->endpoint_decoder_size_orig);
+  /* Restore both complete snapshots, including initially inactive decoders. */
+  return val_cxl_restore_decoders(&context->host_decoder, &context->endpoint_decoder);
 }
 
 static uint32_t
-program_host_target_list(uint32_t bdf,
-                         uint64_t comp_base,
-                         RPTGGP_CONTEXT *context)
+prepare_decoders(uint32_t bdf, RPTGGP_CONTEXT *context)
 {
-  uint32_t pcie_cap_offset;
-  uint32_t lnkcap;
-  uint32_t port_id;
-  uint64_t hdm_cap_base;
-  uint32_t target_low;
-  uint32_t target_high;
-
   if (context == NULL)
     return ACS_STATUS_ERR;
 
-  if (val_pcie_find_capability(bdf, PCIE_CAP, CID_PCIECS, &pcie_cap_offset) != 0u)
-  {
-    val_print(ACS_PRINT_ERR, " RPTGGP: PCIe cap not found", 0);
-    return ACS_STATUS_ERR;
-  }
-
-  if (val_pcie_read_cfg(bdf, pcie_cap_offset + PCIE_LNKCAP_OFFSET, &lnkcap) != 0u)
-  {
-    val_print(ACS_PRINT_ERR, " RPTGGP: LNKCAP read failed", 0);
-    return ACS_STATUS_ERR;
-  }
-
-  port_id = (lnkcap >> PCIE_LNKCAP_PN_SHIFT) & PCIE_LNKCAP_PN_MASK;
-
-  if (val_cxl_find_capability(comp_base, CXL_CAPID_HDM_DECODER, &hdm_cap_base)
-      != ACS_STATUS_PASS)
-  {
-    val_print(ACS_PRINT_ERR, " RPTGGP: Host HDM cap missing", 0);
-    return ACS_STATUS_ERR;
-  }
-
-  target_low = val_mmio_read(hdm_cap_base +
-                             CXL_HDM_DECODER_TARGET_LOW(DECODER_SLOT));
-  target_high = val_mmio_read(hdm_cap_base +
-                              CXL_HDM_DECODER_TARGET_HIGH(DECODER_SLOT));
-  context->host_target_low_orig = target_low;
-  context->host_target_high_orig = target_high;
-  context->host_target_valid = 1u;
-
-  val_mmio_write(hdm_cap_base +
-                 CXL_HDM_DECODER_TARGET_LOW(DECODER_SLOT),
-                 port_id);
-  val_mmio_write(hdm_cap_base +
-                 CXL_HDM_DECODER_TARGET_HIGH(DECODER_SLOT),
-                 0u);
-
-  return ACS_STATUS_PASS;
+  return val_cxl_prepare_decoders(context->host_index, context->endpoint_index,
+                                  DECODER_SLOT, bdf, &context->host_decoder,
+                                  &context->endpoint_decoder);
 }
 
 static uint32_t
@@ -407,47 +321,34 @@ payload(void)
       continue;
     }
 
-    status = program_host_target_list(root_port->bdf,
-                                      host_comp_base,
-                                      &context);
+    status = prepare_decoders(root_port->bdf, &context);
     if (status != ACS_STATUS_PASS)
     {
-      val_print(ACS_PRINT_INFO, " RPTGGP: host target list programming failed", 0);
-      continue;
-    }
-
-    /* Capture original HDM decoder programming for later restore. */
-    if (val_cxl_get_decoder(context.host_index,
-                            DECODER_SLOT,
-                            &context.host_decoder_base_orig,
-                            &context.host_decoder_size_orig) != 0u)
-    {
-      context.host_decoder_base_orig = 0u;
-      context.host_decoder_size_orig = 0u;
-    }
-
-    if (val_cxl_get_component_decoder(context.endpoint_index,
-                                      DECODER_SLOT,
-                                      &context.endpoint_decoder_base_orig,
-                                      &context.endpoint_decoder_size_orig) != 0u)
-    {
-      context.endpoint_decoder_base_orig = 0u;
-      context.endpoint_decoder_size_orig = 0u;
+      if (status == ACS_STATUS_SKIP)
+        continue;
+      result = ACS_STATUS_FAIL;
+      goto cleanup;
     }
 
     /* Enable CXL.mem for the endpoint before programming decoders. */
     status = val_cxl_enable_mem(endpoint->bdf);
     if (status != ACS_STATUS_PASS)
+    {
+      if (restore_decoders(&context) != ACS_STATUS_PASS)
+      {
+        result = ACS_STATUS_FAIL;
+        goto cleanup;
+      }
       continue;
+    }
 
     /*
      * Program HDM decoders to cover the selected CXL.mem window so that
      * CPU accesses use the expected host/endpoint decoder pair.
      */
-    status = val_cxl_program_host_decoder(context.host_index,
-                                          DECODER_SLOT,
-                                          context.window_base,
-                                          context.window_size);
+    status = val_cxl_program_saved_decoder(&context.host_decoder,
+                                           context.window_base,
+                                           context.window_size);
     if (status != ACS_STATUS_PASS)
     {
       val_print(ACS_PRINT_INFO, " RPTGGP: host decoder program skipped", 0);
@@ -469,10 +370,9 @@ payload(void)
                 host_comp_base);
     }
 
-    status = val_cxl_program_component_decoder(context.endpoint_index,
-                                               DECODER_SLOT,
-                                               context.window_base,
-                                               context.window_size);
+    status = val_cxl_program_saved_decoder(&context.endpoint_decoder,
+                                           context.window_base,
+                                           context.window_size);
     if (status != ACS_STATUS_PASS)
     {
       val_print(ACS_PRINT_INFO, " RPTGGP: endpoint decoder program skipped", 0);
@@ -694,7 +594,8 @@ cleanup:
   }
 
   /* Restore HDM decoder programming before reporting status. */
-  restore_decoders(&context);
+  if (restore_decoders(&context) != ACS_STATUS_PASS)
+    result = ACS_STATUS_FAIL;
 
   if ((context.rmecda_ctl1_valid != 0u) && (context.rmecda_cfg_va != 0u))
   {

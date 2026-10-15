@@ -1458,8 +1458,9 @@ Testcase checklist
     -
 
       1. Program HDM decoders and enable CXL.mem for a selected Type-3 endpoint and upstream root port.
-      2. Clear RMECDA_CTL1.LINK_STR_LOCK and attempt Realm PAS CXL.mem accesses.
-      3. Verify Realm accesses do not modify memory and that AER logs a Poisoned TLP; verify Non-secure accesses succeed.
+      2. Set RMECDA_CTL1.TDISP_EN, clear LINK_STR_LOCK, and verify both bits before attempting Realm PAS CXL.mem accesses.
+      3. Verify the Realm write does not modify memory through a Non-secure alias. Require the platform synchronous External Data Abort for the Realm read and recover through the expected-fault handler; verify Non-secure accesses succeed.
+      4. This scenario uses the platform abort as the observation of read rejection; it does not inspect the protocol Poison field and does not require AER reporting.
 
   * -
 

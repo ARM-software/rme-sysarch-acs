@@ -21,13 +21,10 @@ description: >-
   CXL CHBCR and MPE configuration overlay.
 
 run:
-  name: /path/to/the/cxl/enabled/local/model
-  prerun:
-    - export ARMLMD_LICENSE_FILE=7010@euhpc-lic-armlmd.euhpc.arm.com
-    - export LM_LICENSE_FILE=$$ARMLMD_LICENSE_FILE
   params:
-    -C pci.cxl.chbcr.decoders: 1                              # (int   , init-time) default = '0x0'    : CXL decoder count : [0x0:0x20]
-    -C pci.cxl.chbcr.ports: 1
-    -C pci.chbcr.enable_commit_hack: 1
+    -C pci.chbcr.num_decoders: 1                              # (int   , init-time) default = '0x0'    : CXL decoder count : [0x0:0x20]
+    -C pci.chbcr.num_ports: 1
+    -C pci.chbcr.auto_complete_decoder_commit: 1
+    -C pci.chbcr_cxl_mem_base: 0x1000000000
     -C pci.cxl_mem_mpe.enable: 1
     -C pci.cxl_mem_mpe.output_attributes_parameter_of_core: "ExtendedID[62:55]=MPAM_PMG,ExtendedID[38]=MPAM_SP[0],ExtendedID[37]=MPAM_SP[1],UserFlags[31:16]=MECID"

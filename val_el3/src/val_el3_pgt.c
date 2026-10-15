@@ -150,6 +150,28 @@ static uint64_t val_el3_create_gpt_l1_entry(uint64_t gpi)
     return desc;
 }
 
+/* Preserve every GPI while removing contiguity before changing one granule. */
+static void val_el3_split_gpt_contiguous(uint64_t *l1_table, uint64_t index,
+                                         uint8_t p)
+{
+    const uint8_t contig_size_log2[] = {0, 21, 25, 29};
+    uint64_t descriptor = l1_table[index];
+    uint32_t size_log2 = contig_size_log2[(descriptor >> 8) & 0x3];
+    uint32_t entry_count = 1u << (size_log2 - p - 4);
+    uint64_t first = index & ~((uint64_t)entry_count - 1);
+    uint64_t granules = val_el3_create_gpt_l1_entry((descriptor >> 4) & GPT_GPI_MASK);
+    uint32_t i;
+
+    /* A level 1 Granules descriptor holds sixteen individual GPIs. */
+    for (i = 0; i < entry_count; i++)
+        l1_table[first + i] = granules;
+
+    val_el3_clean_pgt_table(&l1_table[first], entry_count);
+    val_el3_mem_barrier();
+    /* Cached contiguous information can cover the entire original range. */
+    val_el3_tlbi_paallos();
+}
+
 static uint64_t *val_el3_split_gpt_l0_block(uint64_t *l0_entry, uint8_t l0gptsz,
                                             uint8_t p)
 {
@@ -379,30 +401,19 @@ uint32_t val_el3_add_gpt_entry(uint64_t arg0, uint64_t arg1)
     VERBOSE("val_pe_gpt_map_add: l1_entry address = %lx     \n", (uint64_t)l1_entry);
     if (IS_GPT_ENTRY_CONTIG(*l1_entry))
     {
-        /* Contiguous_descriptor[63:10] = RES0 */
-        VERBOSE("The Contiguous Descriptor\n");
-        *l1_entry = val_el3_modify_gpt_gpi(*l1_entry, PA, 1, p, gpi);
-        val_el3_cln_and_invldt_cache(l1_entry);
-        gpt_desc.size = p;
-        gpt_desc.level = 1;
-        //Contiguous_descriptor_entry[9:8] = Contiguous Region Size
-        if (((*l1_entry >> 8) & 0x3) == 0x1)
-            /* [9:8] = 0b01, then the GPT range is 2MB(21 bits) */
-            gpt_desc.contig_size = 21;
-        else if (((*l1_entry >> 8) & ((0x1u << 2) - 1)) == 0x2)
-            /* [9:8] = 0b10, then the GPT range is 32MB(25 bits) */
-            gpt_desc.contig_size = 25;
-        else
-            /* [9:8] = 0b11, then the GPT range is 512MB(29 bits) */
-            gpt_desc.contig_size = 29;
-    } else {
-        VERBOSE("The Granule Descriptor\n");
-        *l1_entry = val_el3_modify_gpt_gpi(*l1_entry, PA, 1, p, gpi);
-        val_el3_cln_and_invldt_cache(l1_entry);
-        gpt_desc.size = p;
-        gpt_desc.contig_size = gpt_desc.size;                       //No Contiguity
-        gpt_desc.level = 1;
+        if (((*l1_entry >> 8) & 0x3) == 0)
+        {
+            ERROR("Invalid GPT contiguous region size\n");
+            return 1u;
+        }
+        val_el3_split_gpt_contiguous(gpt_entry_base_1, index_1, p);
     }
+
+    *l1_entry = val_el3_modify_gpt_gpi(*l1_entry, PA, 1, p, gpi);
+    val_el3_cln_and_invldt_cache(l1_entry);
+    gpt_desc.size = p;
+    gpt_desc.contig_size = p;
+    gpt_desc.level = 1;
     gpt_desc.pa = PA;
     VERBOSE("val_pe_gpt_map_add: l1 entry after gpi modification = %lx     \n", *l1_entry);
     VERBOSE("val_pe_gpt_map_add: level  = %u     \n", gpt_desc.level);
