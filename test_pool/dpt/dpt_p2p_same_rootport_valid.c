@@ -553,7 +553,11 @@ payload(void)
       }
 
       /* Trigger DMA from input buffer to exerciser memory */
-      val_exerciser_ops(START_DMA, EDMA_TO_DEVICE, instance);
+      if (val_exerciser_ops(START_DMA, EDMA_TO_DEVICE, instance) != EXERCISER_DMA_SUCCESS) {
+          val_print(ACS_PRINT_ERR, " DMA did not complete with a usable result", 0);
+          test_fail++;
+          goto free_mem;
+      }
 
       /* Configure Exerciser to issue subsequent DMA transactions with Address Translated bit Set */
       val_exerciser_set_param(CFG_TXN_ATTRIBUTES, TXN_ADDR_TYPE, AT_TRANSLATED, instance);
@@ -565,7 +569,11 @@ payload(void)
       }
 
       /* Trigger DMA from exerciser memory to output buffer*/
-      val_exerciser_ops(START_DMA, EDMA_FROM_DEVICE, instance);
+      if (val_exerciser_ops(START_DMA, EDMA_FROM_DEVICE, instance) != EXERCISER_DMA_SUCCESS) {
+          val_print(ACS_PRINT_ERR, " DMA did not complete with a usable result", 0);
+          test_fail++;
+          goto free_mem;
+      }
 
       /* Compare memory regions, here source is read from EL3 and the destination buffer fom NS */
       if (val_memory_compare_src_el3((uint32_t *)dram_buf_in_virt, (uint32_t *)tgt_bar_base,

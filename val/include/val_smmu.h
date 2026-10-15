@@ -31,9 +31,21 @@
 #define SMMUv3_IDR5   0x14
 #define SMMUv3_IIDR   0x18
 #define SMMUv3_AIDR   0x1C
+#define SMMUv3_CR0    0x20
+#define SMMUv3_CR0_SMMUEN (1U << 0)
+#define SMMUv3_GBPA   0x44
+#define SMMUv3_GBPA_ABORT (1U << 20)
+#define SMMUv3_GBPA_UPDATE (1U << 31)
 
 uint32_t
 val_smmu_read_cfg(uint32_t offset, uint32_t index);
+
+/* GBPA accesses wait for UPDATE to clear. Quiesce DMA before writing. */
+uint32_t
+val_smmu_read_gbpa(uint64_t smmu_base, uint32_t *value);
+
+uint32_t
+val_smmu_write_gbpa(uint64_t smmu_base, uint32_t value);
 
 uint32_t
 val_smmu_enable(uint32_t smmu_index);

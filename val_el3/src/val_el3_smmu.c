@@ -1949,14 +1949,61 @@ uint32_t val_el3_smmu_set_rlm_ste_mecid(smmu_master_attributes_t master_attr, ui
 
 /* ==== Moved from ack_common.c ==== */
 
-void val_el3_smmu_access_disable(uint64_t smmu_base)
+/* Root control fields are read-only while an earlier update is pending. */
+uint32_t val_el3_smmu_root_cr0_read(uint64_t smmu_base, uint32_t *value)
 {
-  *(uint32_t *)(smmu_base + SMMU_ROOT_CR0) = CLEAR;
+    uint32_t timeout = SMMU_REG_POLL_TIMEOUT;
+    uint32_t control;
+
+    while (timeout--) {
+        control = val_el3_mmio_read(smmu_base + SMMU_ROOT_CR0);
+        if (val_el3_mmio_read(smmu_base + SMMU_ROOT_CR0_ACK) == control) {
+            *value = control;
+            return 0;
+        }
+    }
+    return 1;
 }
 
-void val_el3_smmu_access_enable(uint64_t smmu_base)
+uint32_t val_el3_smmu_root_cr0_write(uint64_t smmu_base, uint32_t value)
 {
-  *(uint32_t *)(smmu_base + SMMU_ROOT_CR0) = SET;
+    smmu_dev_t smmu = {0};
+    uint32_t control;
+
+    if (value & ~(SMMU_ROOT_ACCESSEN | SMMU_ROOT_GPCEN))
+        return 1;
+    if (val_el3_smmu_root_cr0_read(smmu_base, &control))
+        return 1;
+    smmu.base = smmu_base;
+
+    /* Change GPCEN with access blocked, acknowledging it before ACCESSEN. */
+    if ((control ^ value) & SMMU_ROOT_GPCEN) {
+        control &= ~SMMU_ROOT_ACCESSEN;
+        if (smmu_reg_write_sync(&smmu, control, SMMU_ROOT_CR0, SMMU_ROOT_CR0_ACK))
+            return 1;
+        control = value & ~SMMU_ROOT_ACCESSEN;
+        if (smmu_reg_write_sync(&smmu, control, SMMU_ROOT_CR0, SMMU_ROOT_CR0_ACK))
+            return 1;
+    }
+    return smmu_reg_write_sync(&smmu, value, SMMU_ROOT_CR0, SMMU_ROOT_CR0_ACK);
+}
+
+uint32_t val_el3_smmu_access_disable(uint64_t smmu_base)
+{
+    uint32_t control;
+
+    if (val_el3_smmu_root_cr0_read(smmu_base, &control))
+        return 1;
+    return val_el3_smmu_root_cr0_write(smmu_base, control & ~SMMU_ROOT_ACCESSEN);
+}
+
+uint32_t val_el3_smmu_access_enable(uint64_t smmu_base)
+{
+    uint32_t control;
+
+    if (val_el3_smmu_root_cr0_read(smmu_base, &control))
+        return 1;
+    return val_el3_smmu_root_cr0_write(smmu_base, control | SMMU_ROOT_ACCESSEN);
 }
 
 void val_el3_smmu_root_config_service(uint64_t arg0, uint64_t arg1, uint64_t arg2)

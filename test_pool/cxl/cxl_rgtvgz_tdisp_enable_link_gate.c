@@ -205,7 +205,11 @@ run_realm_dma_roundtrip(uint32_t endpoint_bdf,
   if (status != 0u)
     return ACS_STATUS_ERR;
 
-  val_exerciser_ops_by_bdf(START_DMA, EDMA_TO_DEVICE, endpoint_bdf);
+  status = val_exerciser_ops_by_bdf(START_DMA, EDMA_TO_DEVICE, endpoint_bdf);
+  if (!val_exerciser_dma_status_valid(status) ||
+      (!expect_reject && status != EXERCISER_DMA_SUCCESS)) {
+      return ACS_STATUS_ERR;
+  }
 
   status = val_exerciser_set_param_by_bdf(DMA_ATTRIBUTES,
                                           (uint64_t)buffer_dst,
@@ -214,7 +218,11 @@ run_realm_dma_roundtrip(uint32_t endpoint_bdf,
   if (status != 0u)
     return ACS_STATUS_ERR;
 
-  val_exerciser_ops_by_bdf(START_DMA, EDMA_FROM_DEVICE, endpoint_bdf);
+  status = val_exerciser_ops_by_bdf(START_DMA, EDMA_FROM_DEVICE, endpoint_bdf);
+  if (!val_exerciser_dma_status_valid(status) ||
+      (!expect_reject && status != EXERCISER_DMA_SUCCESS)) {
+      return ACS_STATUS_ERR;
+  }
 
   val_pe_cache_invalidate_range((uint64_t)buffer_src, length);
   val_pe_cache_invalidate_range((uint64_t)buffer_dst, length);

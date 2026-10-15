@@ -659,6 +659,15 @@ typedef struct {
   DMA_INFO_BLOCK   info[];    ///< Array of information blocks - per DMA controller
 }DMA_INFO_TABLE;
 
+/* DMA operation results; keep values consistent with the VAL exerciser API. */
+#define EXERCISER_DMA_SUCCESS         0U
+#define EXERCISER_DMA_RANGE_ERROR     1U
+#define EXERCISER_DMA_INTERNAL_ERROR  2U
+#define EXERCISER_DMA_RESERVED        3U
+#define EXERCISER_DMA_INVALID         0xFFFFFFFDU
+#define EXERCISER_DMA_BUSY            0xFFFFFFFEU
+#define EXERCISER_DMA_TIMEOUT         0xFFFFFFFFU
+
 typedef enum {
     EDMA_NO_SUPPORT   = 0x0,
     EDMA_COHERENT     = 0x1,
@@ -713,7 +722,8 @@ typedef enum {
     ATS_TXN_REQ          = 0xd,
     INJECT_ERROR         = 0xe,
     ATS_INV_CACHE        = 0xf,
-    CXL_CMD_START        = 0x10
+    CXL_CMD_START        = 0x10,
+    DMA_WAIT            = 0x11
 } EXERCISER_OPS;
 
 #define CXL_CMD_OP_BACKDOOR_READ64  0x1u

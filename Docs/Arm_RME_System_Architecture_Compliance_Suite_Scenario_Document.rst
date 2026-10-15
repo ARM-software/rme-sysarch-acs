@@ -443,9 +443,24 @@ Testcase checklist
 
     -
 
-      If SMMU is in reset state it blocks all memory access requests from the devices attached to it.
+      Check that an exerciser cannot read host memory when its associated SMMU
+      Root controls are at reset values.
 
-      DMA accesses from Exerciser is blocked.
+      1. Select an exerciser associated with an SMMU and wait for any previous DMA to complete.
+      2. Save the SMMU Root control, Non-secure translation state and global bypass attributes.
+      3. Disable translation, clear GBPA.ABORT and enable Root access, waiting for register updates to complete.
+      4. Seed the exerciser using a DMA read, then write its data to a separate host buffer and compare with the source.
+      5. Change the source data, write the Root control reset value and wait for acknowledgement.
+      6. Issue the prohibited DMA read and wait for completion. Reject setup errors, invalid status and timeouts.
+      7. Enable Root access and read back the exerciser data. Wait for all readback writes to become visible in host memory.
+      8. Check every byte contains the original seed or zero. Fail on the new source data or any unexpected data.
+      9. Repeat the permitted DMA round trip and restore the saved SMMU state before testing the next exerciser.
+
+      Note:
+
+      - Root control accesses require the matching ACS EL3 implementation for acknowledgement handling.
+      - If DMA remains active or readback visibility is uncertain, fail, disable bus mastering,
+        attempt to block Root access and retain the DMA buffer. Platform recovery/reset is required.
 
   * -
 
