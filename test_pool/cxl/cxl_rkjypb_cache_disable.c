@@ -58,12 +58,10 @@ msd_write_protect_check(uint64_t pa,
 
   /*
    * Reads via non-ROOT PAS can be rejected by the model (for example, Realm
-   * requests when TDISP is disabled). Use a ROOT alias to validate the backing
-   * register contents after each write attempt.
+   * requests when TDISP is disabled). Remap the identity address to ROOT to
+   * validate the register contents after each write attempt.
    */
-  root_va = val_get_free_va(tg);
-  if (root_va == 0u)
-    return 1u;
+  root_va = pa_page;
 
   if (val_add_mmu_entry_el3(root_va, pa_page, attr | LOWER_ATTRS(PAS_ATTR(ROOT_PAS))))
     return 1u;
@@ -75,13 +73,6 @@ msd_write_protect_check(uint64_t pa,
 
     if (pas != ROOT_PAS)
     {
-      va = val_get_free_va(tg);
-      if (va == 0u)
-      {
-        failures++;
-        continue;
-      }
-
       if (val_add_mmu_entry_el3(va, pa_page, attr | LOWER_ATTRS(PAS_ATTR(pas))))
       {
         failures++;
@@ -100,6 +91,12 @@ msd_write_protect_check(uint64_t pa,
         failures++;
         continue;
       }
+    }
+
+    if (val_add_mmu_entry_el3(root_va, pa_page, attr | LOWER_ATTRS(PAS_ATTR(ROOT_PAS))))
+    {
+      failures++;
+      continue;
     }
 
     shared_data->num_access = 1;
@@ -131,6 +128,9 @@ msd_write_protect_check(uint64_t pa,
     if (val_pe_access_mut_el3())
       failures++;
   }
+
+  if (val_add_mmu_entry_el3(root_va, pa_page, attr | LOWER_ATTRS(PAS_ATTR(ROOT_PAS))))
+    failures++;
 
   return failures;
 }

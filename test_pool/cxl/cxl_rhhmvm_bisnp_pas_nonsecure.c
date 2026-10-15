@@ -34,9 +34,6 @@
 #define DECODER_SLOT 0u
 #define RMECDA_CTL1_TDISP_EN_MASK 0x1u
 #define RMECDA_CTL1_LINK_STR_LOCK_MASK (1u << 1)
-#define PCIE_LNKCAP_OFFSET 0x0Cu
-#define PCIE_LNKCAP_PN_SHIFT 24u
-#define PCIE_LNKCAP_PN_MASK 0xFFu
 
 #define TEST_DEVICE_VALUE_V0 0x11112222u
 #define TEST_HOST_VALUE_V1   0xA5A55A5Au
@@ -49,13 +46,8 @@ typedef struct {
   uint32_t exerciser_bdf;
   uint64_t window_base;
   uint64_t window_size;
-  uint64_t host_decoder_base_orig;
-  uint64_t host_decoder_size_orig;
-  uint64_t endpoint_decoder_base_orig;
-  uint64_t endpoint_decoder_size_orig;
-  uint32_t host_target_low_orig;
-  uint32_t host_target_high_orig;
-  uint32_t host_target_valid;
+  CXL_DECODER_STATE host_decoder;
+  CXL_DECODER_STATE endpoint_decoder;
   uint32_t rmecda_ctl1_orig;
   uint32_t rmecda_ctl1_valid;
   uint32_t rmecda_cap_base;
@@ -100,80 +92,43 @@ write_from_root(uint64_t address, uint32_t value)
 }
 
 static uint32_t
-program_host_target_list(uint32_t bdf,
-                         uint64_t comp_base,
-                         RHHMVM_CONTEXT *context)
+prepare_decoders(uint32_t bdf, RHHMVM_CONTEXT *context)
 {
-  uint32_t pcie_cap_offset;
-  uint32_t lnkcap;
-  uint32_t port_id;
-  uint64_t hdm_cap_base;
-
   if (context == NULL)
     return ACS_STATUS_ERR;
 
-  if (val_pcie_find_capability(bdf, PCIE_CAP, CID_PCIECS, &pcie_cap_offset) != 0u)
-    return ACS_STATUS_ERR;
-
-  if (val_pcie_read_cfg(bdf, pcie_cap_offset + PCIE_LNKCAP_OFFSET, &lnkcap) != 0u)
-    return ACS_STATUS_ERR;
-
-  port_id = (lnkcap >> PCIE_LNKCAP_PN_SHIFT) & PCIE_LNKCAP_PN_MASK;
-
-  if (val_cxl_find_capability(comp_base, CXL_CAPID_HDM_DECODER, &hdm_cap_base)
-      != ACS_STATUS_PASS)
-    return ACS_STATUS_ERR;
-
-  context->host_target_low_orig = val_mmio_read(hdm_cap_base +
-                                                CXL_HDM_DECODER_TARGET_LOW(DECODER_SLOT));
-  context->host_target_high_orig = val_mmio_read(hdm_cap_base +
-                                                 CXL_HDM_DECODER_TARGET_HIGH(DECODER_SLOT));
-  context->host_target_valid = 1u;
-
-  val_mmio_write(hdm_cap_base + CXL_HDM_DECODER_TARGET_LOW(DECODER_SLOT), port_id);
-  val_mmio_write(hdm_cap_base + CXL_HDM_DECODER_TARGET_HIGH(DECODER_SLOT), 0u);
-
-  return ACS_STATUS_PASS;
+  return val_cxl_prepare_decoders(context->host_index, context->endpoint_index,
+                                  DECODER_SLOT, bdf, &context->host_decoder,
+                                  &context->endpoint_decoder);
 }
 
-static void
-restore_decoders(const RHHMVM_CONTEXT *context)
+static uint32_t
+restore_decoders(RHHMVM_CONTEXT *context)
 {
-  uint64_t comp_base;
-  uint64_t hdm_cap_base;
+  uint32_t status = ACS_STATUS_PASS;
 
-  if (context == NULL)
-    return;
-
-  if ((context->host_index != CXL_COMPONENT_INVALID_INDEX) &&
-      (context->host_decoder_size_orig != 0u))
+  /* Release the link lock before restoring protected decoder registers. */
+  if ((context->rmecda_ctl1_valid != 0u) && (context->rmecda_cfg_va != 0u))
   {
-    (void)val_cxl_program_host_decoder(context->host_index,
-                                       DECODER_SLOT,
-                                       context->host_decoder_base_orig,
-                                       context->host_decoder_size_orig);
-    if (context->host_target_valid != 0u)
-    {
-      comp_base = val_cxl_get_info(CXL_INFO_COMPONENT_BASE, context->host_index);
-      if ((comp_base != 0u) &&
-          (val_cxl_find_capability(comp_base,
-                                   CXL_CAPID_HDM_DECODER,
-                                   &hdm_cap_base) == ACS_STATUS_PASS))
-      {
-        val_mmio_write(hdm_cap_base + CXL_HDM_DECODER_TARGET_LOW(DECODER_SLOT),
-                       context->host_target_low_orig);
-        val_mmio_write(hdm_cap_base + CXL_HDM_DECODER_TARGET_HIGH(DECODER_SLOT),
-                       context->host_target_high_orig);
-      }
-    }
+    uint32_t ctl1;
+    uint32_t root_bdf = (uint32_t)val_cxl_get_component_info(
+        CXL_COMPONENT_INFO_BDF_INDEX, context->root_index);
+
+    if (read_from_root(context->rmecda_cfg_va + context->rmecda_cap_base +
+                       RMECDA_CTL1_OFFSET, &ctl1) != ACS_STATUS_PASS ||
+        write_from_root(context->rmecda_cfg_va + context->rmecda_cap_base +
+                         RMECDA_CTL1_OFFSET,
+                         ctl1 & ~RMECDA_CTL1_LINK_STR_LOCK_MASK) != ACS_STATUS_PASS)
+      status = ACS_STATUS_ERR;
+    if (val_pcie_disable_tdisp(root_bdf))
+      status = ACS_STATUS_ERR;
   }
 
-  if ((context->endpoint_index != CXL_COMPONENT_INVALID_INDEX) &&
-      (context->endpoint_decoder_size_orig != 0u))
-    (void)val_cxl_program_component_decoder(context->endpoint_index,
-                                            DECODER_SLOT,
-                                            context->endpoint_decoder_base_orig,
-                                            context->endpoint_decoder_size_orig);
+  if (val_cxl_restore_decoders(&context->host_decoder, &context->endpoint_decoder)
+      != ACS_STATUS_PASS)
+    status = ACS_STATUS_ERR;
+
+  return status;
 }
 
 static uint32_t
@@ -286,6 +241,29 @@ issue_bisnp(uint32_t endpoint_bdf, uint64_t pa, uint32_t allow_reject)
   return ACS_STATUS_PASS;
 }
 
+/* Permit host accesses during setup and observation, but not during BISnp. */
+static uint32_t
+permit_host_access(uint32_t root_bdf, const RHHMVM_CONTEXT *context)
+{
+  uint32_t value;
+  uint64_t address;
+
+  if (context->rmecda_ctl1_valid == 0u)
+    return ACS_STATUS_SKIP;
+  address = context->rmecda_cfg_va + context->rmecda_cap_base + RMECDA_CTL1_OFFSET;
+  if (val_pcie_enable_tdisp(root_bdf) ||
+      read_from_root(address, &value) != ACS_STATUS_PASS)
+    return ACS_STATUS_FAIL;
+  value |= RMECDA_CTL1_LINK_STR_LOCK_MASK;
+  if (write_from_root(address, value) != ACS_STATUS_PASS ||
+      read_from_root(address, &value) != ACS_STATUS_PASS)
+    return ACS_STATUS_FAIL;
+  if ((value & (RMECDA_CTL1_TDISP_EN_MASK | RMECDA_CTL1_LINK_STR_LOCK_MASK)) !=
+      (RMECDA_CTL1_TDISP_EN_MASK | RMECDA_CTL1_LINK_STR_LOCK_MASK))
+    return ACS_STATUS_FAIL;
+  return ACS_STATUS_PASS;
+}
+
 static uint32_t
 exercise_bisnp_behavior(uint32_t root_bdf, const RHHMVM_CONTEXT *context, uint32_t host_pas)
 {
@@ -309,6 +287,13 @@ exercise_bisnp_behavior(uint32_t root_bdf, const RHHMVM_CONTEXT *context, uint32
 
   pa_in = (host_pas == REALM_PAS) ? context->window_base : (context->window_base + page_size);
   expected_host_value = (host_pas == REALM_PAS) ? TEST_HOST_VALUE_V1 : TEST_DEVICE_VALUE_V2;
+
+  if (host_pas == REALM_PAS)
+  {
+    status = permit_host_access(root_bdf, context);
+    if (status != ACS_STATUS_PASS)
+      return status;
+  }
 
   /* Step 1: Write V1 through a cacheable alias in selected PAS so it remains host-cached. */
   if (map_alias(pa_in, host_pas, WRITE_BACK_NT, &cached_va) != ACS_STATUS_PASS)
@@ -381,6 +366,17 @@ exercise_bisnp_behavior(uint32_t root_bdf, const RHHMVM_CONTEXT *context, uint32
   {
     val_print(ACS_PRINT_INFO, " RHHMVM: BISnp command unsupported", 0);
     return ACS_STATUS_SKIP;
+  }
+
+  /* BISnp has completed with TDISP disabled. Reopen the Realm path before
+   * observing the cache: a possible refill must not trigger RNYCLL/RWYVCQ.
+   * A refill loses the observation and is still classified as SKIP below.
+   */
+  if (host_pas == REALM_PAS)
+  {
+    status = permit_host_access(root_bdf, context);
+    if (status != ACS_STATUS_PASS)
+      return status;
   }
 
   /* Step 5: Read PA back through MUT. */
@@ -518,47 +514,39 @@ payload(void)
     if (host_comp_base == 0u)
       continue;
 
-    if (program_host_target_list(root_port->bdf, host_comp_base, &context) != ACS_STATUS_PASS)
-      continue;
-
-    if (val_cxl_get_decoder(context.host_index,
-                            DECODER_SLOT,
-                            &context.host_decoder_base_orig,
-                            &context.host_decoder_size_orig) != 0u)
+    status = prepare_decoders(root_port->bdf, &context);
+    if (status != ACS_STATUS_PASS)
     {
-      context.host_decoder_base_orig = 0u;
-      context.host_decoder_size_orig = 0u;
-    }
-
-    if (val_cxl_get_component_decoder(context.endpoint_index,
-                                      DECODER_SLOT,
-                                      &context.endpoint_decoder_base_orig,
-                                      &context.endpoint_decoder_size_orig) != 0u)
-    {
-      context.endpoint_decoder_base_orig = 0u;
-      context.endpoint_decoder_size_orig = 0u;
+      if (status == ACS_STATUS_SKIP)
+        continue;
+      val_set_status(pe_index, "FAIL", 07);
+      goto cleanup;
     }
 
     status = val_cxl_enable_mem(endpoint->bdf);
     if (status != ACS_STATUS_PASS)
-      continue;
+      goto candidate_cleanup;
 
-    status = val_cxl_program_host_decoder(context.host_index,
-                                          DECODER_SLOT,
-                                          context.window_base,
-                                          context.window_size);
+    status = val_cxl_program_saved_decoder(&context.host_decoder,
+                                           context.window_base, context.window_size);
     if (status != ACS_STATUS_PASS)
-      continue;
+      goto candidate_cleanup;
 
-    status = val_cxl_program_component_decoder(context.endpoint_index,
-                                               DECODER_SLOT,
-                                               context.window_base,
-                                               context.window_size);
+    status = val_cxl_program_saved_decoder(&context.endpoint_decoder,
+                                           context.window_base, context.window_size);
     if (status != ACS_STATUS_PASS)
-      continue;
+      goto candidate_cleanup;
 
     ep_found = 1u;
     break;
+
+candidate_cleanup:
+    /* Release this candidate before borrowing a different host/endpoint pair. */
+    if (restore_decoders(&context) != ACS_STATUS_PASS)
+    {
+      val_set_status(pe_index, "FAIL", 07);
+      return;
+    }
   }
 
   if (ep_found == 0u)
@@ -699,7 +687,8 @@ payload(void)
     val_set_status(pe_index, "PASS", 01);
 
 cleanup:
-  restore_decoders(&context);
+  if (restore_decoders(&context) != ACS_STATUS_PASS)
+    val_set_status(pe_index, "FAIL", 07);
   if ((context.rmecda_ctl1_valid != 0u) && (context.rmecda_cfg_va != 0u))
   {
     uint32_t root_bdf = table->component[context.root_index].bdf;

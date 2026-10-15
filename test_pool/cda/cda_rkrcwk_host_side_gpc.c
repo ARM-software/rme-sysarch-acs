@@ -37,13 +37,8 @@ typedef struct {
   uint32_t endpoint_bdf;
   uint64_t window_base;
   uint64_t window_size;
-  uint64_t host_decoder_base_orig;
-  uint64_t host_decoder_size_orig;
-  uint64_t endpoint_decoder_base_orig;
-  uint64_t endpoint_decoder_size_orig;
-  uint32_t host_target_valid;
-  uint32_t host_target_low_orig;
-  uint32_t host_target_high_orig;
+  CXL_DECODER_STATE host_decoder;
+  CXL_DECODER_STATE endpoint_decoder;
 } RKRCWK_CONTEXT;
 
 static uint32_t
@@ -127,95 +122,21 @@ find_configuration(RKRCWK_CONTEXT *context)
 }
 
 static uint32_t
-program_host_target_list(RKRCWK_CONTEXT *context)
+prepare_decoders(uint32_t bdf, RKRCWK_CONTEXT *context)
 {
-  uint32_t pcie_cap_offset;
-  uint32_t lnkcap;
-  uint32_t port_id;
-  uint64_t comp_base;
-  uint64_t hdm_cap_base;
-  uint32_t target_low;
-  uint32_t target_high;
-
   if (context == NULL)
     return ACS_STATUS_ERR;
 
-  comp_base = val_cxl_get_info(CXL_INFO_COMPONENT_BASE, context->host_index);
-  if (comp_base == 0u)
-    return ACS_STATUS_ERR;
-
-  if (val_pcie_find_capability(context->root_bdf,
-                               PCIE_CAP,
-                               CID_PCIECS,
-                               &pcie_cap_offset) != 0u)
-    return ACS_STATUS_ERR;
-
-  if (val_pcie_read_cfg(context->root_bdf, pcie_cap_offset + LCAPR_OFFSET, &lnkcap) != 0u)
-    return ACS_STATUS_ERR;
-
-  port_id = (lnkcap >> LCAPR_PN_SHIFT) & LCAPR_PN_MASK;
-
-  if (val_cxl_find_capability(comp_base, CXL_CAPID_HDM_DECODER, &hdm_cap_base)
-      != ACS_STATUS_PASS)
-    return ACS_STATUS_ERR;
-
-  target_low = val_mmio_read(hdm_cap_base +
-                             CXL_HDM_DECODER_TARGET_LOW(CXL_HDM_DECODER_SLOT_DEFAULT));
-  target_high = val_mmio_read(hdm_cap_base +
-                              CXL_HDM_DECODER_TARGET_HIGH(CXL_HDM_DECODER_SLOT_DEFAULT));
-  context->host_target_low_orig = target_low;
-  context->host_target_high_orig = target_high;
-  context->host_target_valid = 1u;
-
-  val_mmio_write(hdm_cap_base +
-                 CXL_HDM_DECODER_TARGET_LOW(CXL_HDM_DECODER_SLOT_DEFAULT),
-                 port_id);
-  val_mmio_write(hdm_cap_base +
-                 CXL_HDM_DECODER_TARGET_HIGH(CXL_HDM_DECODER_SLOT_DEFAULT),
-                 0u);
-
-  return ACS_STATUS_PASS;
+  return val_cxl_prepare_decoders(context->host_index, context->endpoint_index,
+                                  CXL_HDM_DECODER_SLOT_DEFAULT, bdf, &context->host_decoder,
+                                  &context->endpoint_decoder);
 }
 
-static void
-restore_decoders(const RKRCWK_CONTEXT *context)
+static uint32_t
+restore_decoders(RKRCWK_CONTEXT *context)
 {
-  uint64_t comp_base;
-  uint64_t hdm_cap_base;
-
-  if (context == NULL)
-    return;
-
-  if ((context->host_index != CXL_COMPONENT_INVALID_INDEX) &&
-      (context->host_decoder_size_orig != 0u))
-    (void)val_cxl_program_host_decoder(context->host_index,
-                                      CXL_HDM_DECODER_SLOT_DEFAULT,
-                                      context->host_decoder_base_orig,
-                                      context->host_decoder_size_orig);
-
-  if ((context->endpoint_index != CXL_COMPONENT_INVALID_INDEX) &&
-      (context->endpoint_decoder_size_orig != 0u))
-    (void)val_cxl_program_component_decoder(context->endpoint_index,
-                                           CXL_HDM_DECODER_SLOT_DEFAULT,
-                                           context->endpoint_decoder_base_orig,
-                                           context->endpoint_decoder_size_orig);
-
-  if (context->host_target_valid != 0u)
-  {
-    comp_base = val_cxl_get_info(CXL_INFO_COMPONENT_BASE, context->host_index);
-    if ((comp_base != 0u) &&
-        (val_cxl_find_capability(comp_base,
-                                 CXL_CAPID_HDM_DECODER,
-                                 &hdm_cap_base) == ACS_STATUS_PASS))
-    {
-      val_mmio_write(hdm_cap_base +
-                     CXL_HDM_DECODER_TARGET_LOW(CXL_HDM_DECODER_SLOT_DEFAULT),
-                     context->host_target_low_orig);
-      val_mmio_write(hdm_cap_base +
-                     CXL_HDM_DECODER_TARGET_HIGH(CXL_HDM_DECODER_SLOT_DEFAULT),
-                     context->host_target_high_orig);
-    }
-  }
+  /* Restore both complete snapshots, including initially inactive decoders. */
+  return val_cxl_restore_decoders(&context->host_decoder, &context->endpoint_decoder);
 }
 
 static uint32_t
@@ -226,35 +147,15 @@ program_decoders(RKRCWK_CONTEXT *context)
   if (context == NULL)
     return ACS_STATUS_ERR;
 
-  if (val_cxl_get_decoder(context->host_index,
-                          CXL_HDM_DECODER_SLOT_DEFAULT,
-                          &context->host_decoder_base_orig,
-                          &context->host_decoder_size_orig) != 0u)
-  {
-    context->host_decoder_base_orig = 0u;
-    context->host_decoder_size_orig = 0u;
-  }
-
-  if (val_cxl_get_component_decoder(context->endpoint_index,
-                                    CXL_HDM_DECODER_SLOT_DEFAULT,
-                                    &context->endpoint_decoder_base_orig,
-                                    &context->endpoint_decoder_size_orig) != 0u)
-  {
-    context->endpoint_decoder_base_orig = 0u;
-    context->endpoint_decoder_size_orig = 0u;
-  }
-
-  status = val_cxl_program_host_decoder(context->host_index,
-                                        CXL_HDM_DECODER_SLOT_DEFAULT,
-                                        context->window_base,
-                                        context->window_size);
+  status = val_cxl_program_saved_decoder(&context->host_decoder,
+                                         context->window_base,
+                                         context->window_size);
   if (status != ACS_STATUS_PASS)
     return status;
 
-  status = val_cxl_program_component_decoder(context->endpoint_index,
-                                             CXL_HDM_DECODER_SLOT_DEFAULT,
-                                             context->window_base,
-                                             context->window_size);
+  status = val_cxl_program_saved_decoder(&context->endpoint_decoder,
+                                         context->window_base,
+                                         context->window_size);
   return status;
 }
 
@@ -373,12 +274,12 @@ payload(void)
     return;
   }
 
-  status = program_host_target_list(&context);
+  status = prepare_decoders(context.root_bdf, &context);
   if (status != ACS_STATUS_PASS)
   {
     val_print(ACS_PRINT_INFO, " Host target list programming failed", 0);
-    restore_decoders(&context);
-    val_set_status(pe_index, "SKIP", 04);
+    status = restore_decoders(&context);
+    val_set_status(pe_index, (status == ACS_STATUS_PASS) ? "SKIP" : "FAIL", 04);
     return;
   }
 
@@ -386,8 +287,8 @@ payload(void)
   if (status != ACS_STATUS_PASS)
   {
     val_print(ACS_PRINT_INFO, " HDM decoder programming skipped (status %d)", status);
-    restore_decoders(&context);
-    val_set_status(pe_index, "SKIP", 05);
+    status = restore_decoders(&context);
+    val_set_status(pe_index, (status == ACS_STATUS_PASS) ? "SKIP" : "FAIL", 05);
     return;
   }
 
@@ -435,7 +336,8 @@ payload(void)
   result = status;
 
 cleanup:
-  restore_decoders(&context);
+  if (restore_decoders(&context) != ACS_STATUS_PASS)
+    result = ACS_STATUS_FAIL;
   (void)val_add_gpt_entry_el3(pa_page, GPT_ANY);
 
   if (result == ACS_STATUS_PASS)

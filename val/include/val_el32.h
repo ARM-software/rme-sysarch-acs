@@ -57,6 +57,8 @@
 #define RANDOM_DATA_2        0x77
 #define RANDOM_DATA_3        0x55
 #define RANDOM_DATA_4        0x33
+/* ESR selector for an expected synchronous external read abort at EL3. */
+#define SEA_ESR_READ         0x96000010ULL
 #define READ_DATA            0
 #define WRITE_DATA           1
 #define READ_DATA_BYTE       2

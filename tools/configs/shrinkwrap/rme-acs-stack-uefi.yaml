@@ -25,6 +25,7 @@ layers:
   - edk2-base.yaml
   - rme-acs-stack-base.yaml
   - rme-mec.yaml
+  - rme-cxl.yaml
 
 build:
   tfa:
@@ -39,11 +40,16 @@ build:
     repo:
       revision: 8cc9da9dc8431d1f0dfab28d92b3941e2c19aeb8
 
+    prebuild:
+      - git fetch --tags --force
+      - git checkout -f 8cc9da9dc8431d1f0dfab28d92b3941e2c19aeb8
+      - git clean -fdx
+      - git apply --3way ${btvar:ACS_PATH}/tools/patches/aemfvp-a/edk2-platforms/*.patch
+
 buildex:
   btvars:
     EDK2_BUILD:
       value: DEBUG
-
 run:
   rtvars:
     BL1:

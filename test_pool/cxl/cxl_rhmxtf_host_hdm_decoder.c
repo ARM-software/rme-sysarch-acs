@@ -41,10 +41,8 @@ typedef struct {
   uint32_t root_index;
   uint32_t endpoint_index;
   uint32_t endpoint_bdf;
-  uint64_t host_decoder_base_orig;
-  uint64_t host_decoder_size_orig;
-  uint64_t endpoint_decoder_base_orig;
-  uint64_t endpoint_decoder_size_orig;
+  CXL_DECODER_STATE host_decoder;
+  CXL_DECODER_STATE endpoint_decoder;
 } CONTEXT;
 
 static uint32_t
@@ -251,29 +249,28 @@ payload(void)
     return;
   }
 
-  /* Program the host decoder for the HDM window. */
-  if (val_cxl_get_decoder(context.host_index,
-                          DECODER_SLOT,
-                          &context.host_decoder_base_orig,
-                          &context.host_decoder_size_orig) != 0u)
+  /* Save the full configuration before changing either decoder. */
+  status = val_cxl_save_decoder(
+      val_cxl_get_info(CXL_INFO_COMPONENT_BASE, context.host_index),
+      DECODER_SLOT, &context.host_decoder);
+  if (status == ACS_STATUS_PASS)
+    status = val_cxl_save_decoder(
+        val_cxl_get_component_info(CXL_COMPONENT_INFO_COMPONENT_BASE, context.endpoint_index),
+        DECODER_SLOT, &context.endpoint_decoder);
+  if (status != ACS_STATUS_PASS)
   {
-    context.host_decoder_base_orig = 0u;
-    context.host_decoder_size_orig = 0u;
+    val_set_status(pe_index, (status == ACS_STATUS_SKIP) ? "SKIP" : "FAIL", 03);
+    return;
   }
 
-  if (val_cxl_get_component_decoder(context.endpoint_index,
-                                    DECODER_SLOT,
-                                    &context.endpoint_decoder_base_orig,
-                                    &context.endpoint_decoder_size_orig) != 0u)
-  {
-    context.endpoint_decoder_base_orig = 0u;
-    context.endpoint_decoder_size_orig = 0u;
-  }
+  endpoint_base = ((uint64_t)context.endpoint_decoder.reg[1] << 32) |
+                  (context.endpoint_decoder.reg[0] & 0xF0000000u);
+  endpoint_size = ((uint64_t)context.endpoint_decoder.reg[3] << 32) |
+                  (context.endpoint_decoder.reg[2] & 0xF0000000u);
 
-  status = val_cxl_program_host_decoder(context.host_index,
-                                        DECODER_SLOT,
-                                        context.base,
-                                        context.size);
+  status = val_cxl_program_saved_decoder(&context.host_decoder,
+                                         context.base,
+                                         context.size);
   if (status == ACS_STATUS_SKIP)
   {
     val_print(ACS_PRINT_DEBUG, " RHMXTF skip: host decoder programming skipped",
@@ -289,8 +286,6 @@ payload(void)
     goto cleanup;
   }
 
-  endpoint_base = context.endpoint_decoder_base_orig;
-  endpoint_size = context.endpoint_decoder_size_orig;
   if (endpoint_size == 0u)
     endpoint_size = context.size;
 
@@ -300,10 +295,9 @@ payload(void)
     endpoint_size = context.size;
 
   /* Program the endpoint decoder for access checks. */
-  status = val_cxl_program_component_decoder(context.endpoint_index,
-                                             DECODER_SLOT,
-                                             endpoint_base,
-                                             endpoint_size);
+  status = val_cxl_program_saved_decoder(&context.endpoint_decoder,
+                                         endpoint_base,
+                                         endpoint_size);
 
   if (status == ACS_STATUS_SKIP)
   {
@@ -353,16 +347,11 @@ payload(void)
   result = ACS_STATUS_PASS;
 
 cleanup:
-  if (context.endpoint_decoder_size_orig != 0u)
-    (void)val_cxl_program_component_decoder(context.endpoint_index,
-                                            DECODER_SLOT,
-                                            context.endpoint_decoder_base_orig,
-                                            context.endpoint_decoder_size_orig);
-  if (context.host_decoder_size_orig != 0u)
-    (void)val_cxl_program_host_decoder(context.host_index,
-                                       DECODER_SLOT,
-                                       context.host_decoder_base_orig,
-                                       context.host_decoder_size_orig);
+  if (val_cxl_restore_decoders(&context.host_decoder, &context.endpoint_decoder) != ACS_STATUS_PASS)
+  {
+    val_set_status(pe_index, "FAIL", 8u);
+    return;
+  }
 
   if (result == ACS_STATUS_PASS)
     val_set_status(pe_index, "PASS", 01);

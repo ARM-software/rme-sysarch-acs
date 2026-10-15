@@ -224,7 +224,7 @@ void val_el3_access_mut(void)
     switch (type)
     {
         case READ_DATA:
-          data = *(volatile uint32_t *) shared_data->shared_data_access[acc_cnt].addr;
+          data = val_el3_mmio_read(shared_data->shared_data_access[acc_cnt].addr);
           VERBOSE("The data returned from the address, 0x%lx is 0x%x\n",
                shared_data->shared_data_access[acc_cnt].addr, (uint32_t)data);
           shared_data->shared_data_access[acc_cnt].data = data;
