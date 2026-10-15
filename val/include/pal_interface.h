@@ -762,7 +762,8 @@ typedef enum {
   ATS_TXN_REQ          = 0xd,
   INJECT_ERROR         = 0xe,
   ATS_INV_CACHE        = 0xf,
-  CXL_CMD_START        = 0x10
+  CXL_CMD_START        = 0x10,
+  DMA_WAIT             = 0x11
 } EXERCISER_OPS;
 
 #define CXL_CMD_OP_BACKDOOR_READ64  0x1u

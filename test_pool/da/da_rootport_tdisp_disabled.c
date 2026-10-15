@@ -124,11 +124,25 @@ payload(void)
       }
       locked = 1;
 
-      val_exerciser_set_param(DMA_ATTRIBUTES, (uint64_t)dram_buf_in_virt, dma_len, instance);
-      val_exerciser_ops(START_DMA, EDMA_TO_DEVICE, instance);
+      if (val_exerciser_set_param(DMA_ATTRIBUTES, (uint64_t)dram_buf_in_virt, dma_len, instance)) {
+          test_fail++;
+          goto cleanup_unlock;
+      }
+      if (!val_exerciser_dma_status_valid(
+              val_exerciser_ops(START_DMA, EDMA_TO_DEVICE, instance))) {
+          test_fail++;
+          goto cleanup_unlock;
+      }
 
-      val_exerciser_set_param(DMA_ATTRIBUTES, (uint64_t)dram_buf_in_virt2, dma_len, instance);
-      val_exerciser_ops(START_DMA, EDMA_FROM_DEVICE, instance);
+      if (val_exerciser_set_param(DMA_ATTRIBUTES, (uint64_t)dram_buf_in_virt2, dma_len, instance)) {
+          test_fail++;
+          goto cleanup_unlock;
+      }
+      if (!val_exerciser_dma_status_valid(
+              val_exerciser_ops(START_DMA, EDMA_FROM_DEVICE, instance))) {
+          test_fail++;
+          goto cleanup_unlock;
+      }
 
       if (!val_memory_compare(dram_buf_in_virt, dram_buf_in_virt2, dma_len))
       {

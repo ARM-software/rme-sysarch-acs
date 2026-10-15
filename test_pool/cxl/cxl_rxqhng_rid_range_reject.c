@@ -223,12 +223,18 @@ run_dma_compare(uint32_t endpoint_bdf,
     return ACS_STATUS_ERR;
 
   dma_status = val_exerciser_ops_by_bdf(START_DMA, EDMA_TO_DEVICE, endpoint_bdf);
+  if (!val_exerciser_dma_status_valid(dma_status) ||
+      (expect_match && dma_status != EXERCISER_DMA_SUCCESS))
+    return ACS_STATUS_ERR;
   val_print(ACS_PRINT_DEBUG, " RXQHNG DBG: DMA TO status 0x%x", dma_status);
 
   if (val_exerciser_set_param_by_bdf(DMA_ATTRIBUTES, dst_pa, len, endpoint_bdf))
     return ACS_STATUS_ERR;
 
   dma_status = val_exerciser_ops_by_bdf(START_DMA, EDMA_FROM_DEVICE, endpoint_bdf);
+  if (!val_exerciser_dma_status_valid(dma_status) ||
+      (expect_match && dma_status != EXERCISER_DMA_SUCCESS))
+    return ACS_STATUS_ERR;
   val_print(ACS_PRINT_DEBUG, " RXQHNG DBG: DMA FROM status 0x%x", dma_status);
 
   (void)val_data_cache_ops_by_va_el3((uint64_t)dst_va, CLEAN_AND_INVALIDATE);

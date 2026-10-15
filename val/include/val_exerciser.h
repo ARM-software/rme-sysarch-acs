@@ -18,7 +18,23 @@
 #ifndef __RME_ACS_EXERCISER_H__
 #define __RME_ACS_EXERCISER_H__
 
+/* START_DMA/DMA_WAIT results. Software failures must never count as rejection. */
+#define EXERCISER_DMA_SUCCESS         0U
+#define EXERCISER_DMA_RANGE_ERROR     1U
+#define EXERCISER_DMA_INTERNAL_ERROR  2U
+#define EXERCISER_DMA_RESERVED        3U
+#define EXERCISER_DMA_INVALID         0xFFFFFFFDU
+#define EXERCISER_DMA_BUSY            0xFFFFFFFEU
+#define EXERCISER_DMA_TIMEOUT         0xFFFFFFFFU
 
+/* For tests that independently check the transferred data or its isolation.
+ * A range/reserved/software error is a test failure, not protection evidence.
+ * An internal error is usable evidence only with those independent checks.
+ */
+static inline uint32_t val_exerciser_dma_status_valid(uint32_t status)
+{
+    return status == EXERCISER_DMA_SUCCESS || status == EXERCISER_DMA_INTERNAL_ERROR;
+}
 
 #define MAX_EXERCISER_CARDS 20
 #define BUS_MEM_EN_MASK 0x06

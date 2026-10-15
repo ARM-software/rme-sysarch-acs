@@ -419,7 +419,11 @@ payload(void)
       }
 
       /* Trigger DMA from input buffer to exerciser memory */
-      val_exerciser_ops(START_DMA, EDMA_TO_DEVICE, instance);
+      if (val_exerciser_ops(START_DMA, EDMA_TO_DEVICE, instance) != EXERCISER_DMA_SUCCESS) {
+          val_print(ACS_PRINT_ERR, " DMA did not complete with a usable result", 0);
+          test_fail++;
+          goto free_mem;
+      }
 
       if (val_exerciser_set_param(DMA_ATTRIBUTES, (uint64_t)dram_buf_in_virt2, dma_len, instance))
       {
@@ -429,7 +433,11 @@ payload(void)
       }
 
       /* Trigger DMA from exerciser memory to output buffer*/
-      val_exerciser_ops(START_DMA, EDMA_FROM_DEVICE, instance);
+      if (val_exerciser_ops(START_DMA, EDMA_FROM_DEVICE, instance) != EXERCISER_DMA_SUCCESS) {
+          val_print(ACS_PRINT_ERR, " DMA did not complete with a usable result", 0);
+          test_fail++;
+          goto free_mem;
+      }
 
       if (val_memory_compare(dram_buf_in_virt, dram_buf_in_virt2, dma_len))
       {

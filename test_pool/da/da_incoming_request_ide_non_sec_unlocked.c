@@ -123,11 +123,25 @@ payload(void)
       val_data_cache_ops_by_va((uint64_t)dram_buf_in_virt, CLEAN_AND_INVALIDATE);
 
       /* Perform DMA using exerciser from source to target buffer */
-      val_exerciser_set_param(DMA_ATTRIBUTES, (uint64_t)dram_buf_in_virt, dma_len, instance);
-      val_exerciser_ops(START_DMA, EDMA_TO_DEVICE, instance);
+      if (val_exerciser_set_param(DMA_ATTRIBUTES, (uint64_t)dram_buf_in_virt, dma_len, instance)) {
+          test_fail++;
+          goto instance_cleanup;
+      }
+      if (!val_exerciser_dma_status_valid(
+              val_exerciser_ops(START_DMA, EDMA_TO_DEVICE, instance))) {
+          test_fail++;
+          goto instance_cleanup;
+      }
 
-      val_exerciser_set_param(DMA_ATTRIBUTES, (uint64_t)dram_buf_in_virt2, dma_len, instance);
-      val_exerciser_ops(START_DMA, EDMA_FROM_DEVICE, instance);
+      if (val_exerciser_set_param(DMA_ATTRIBUTES, (uint64_t)dram_buf_in_virt2, dma_len, instance)) {
+          test_fail++;
+          goto instance_cleanup;
+      }
+      if (!val_exerciser_dma_status_valid(
+              val_exerciser_ops(START_DMA, EDMA_FROM_DEVICE, instance))) {
+          test_fail++;
+          goto instance_cleanup;
+      }
 
       /* Check the src and dst buff values are not same indicating the request is rejected by RP */
       if (!(val_memory_compare(dram_buf_in_virt, dram_buf_in_virt2, dma_len)))
