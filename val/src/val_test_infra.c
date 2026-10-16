@@ -954,7 +954,7 @@ void val_set_test_data(uint32_t index, uint64_t addr, uint64_t test_data)
 {
   volatile VAL_SHARED_MEM_t *mem;
 
-  if (index > val_pe_get_num())
+  if (index >= val_pe_get_num())
   {
     val_print(ACS_PRINT_ERR, " Incorrect PE index = %d", index);
     return;
@@ -986,7 +986,7 @@ void val_get_test_data(uint32_t index, uint64_t *data0, uint64_t *data1)
 
   volatile VAL_SHARED_MEM_t *mem;
 
-  if (index > val_pe_get_num())
+  if (index >= val_pe_get_num())
   {
     val_print(ACS_PRINT_ERR, " Incorrect PE index = %d", index);
     return;
