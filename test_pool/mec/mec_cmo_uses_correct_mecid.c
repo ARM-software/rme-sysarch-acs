@@ -401,9 +401,16 @@ static
 void
 payload3(void)
 {
+  uint32_t pe_index = val_pe_get_index_mpid(val_pe_get_mpid());
+
+  /* Preserve a failed CMO check before another subcase can overwrite it. */
   payload4(PoPA);
+  if (IS_TEST_FAIL(val_get_status(pe_index)))
+      return;
 
   payload4(PoE);
+  if (IS_TEST_FAIL(val_get_status(pe_index)))
+      return;
 
   payload4(PoC);
 
