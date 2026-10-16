@@ -341,7 +341,8 @@ val_rmsd_write_protect_check_byte(uint64_t pa,
     return 1u;
 
   root_va = val_get_free_va(tg);
-  if (val_add_mmu_entry_el3(root_va, page, attr | LOWER_ATTRS(PAS_ATTR(ROOT_PAS))))
+  if (!root_va || (root_va & (tg - 1u)) ||
+      val_add_mmu_entry_el3(root_va, page, attr | LOWER_ATTRS(PAS_ATTR(ROOT_PAS))))
     return 1u;
 
   for (uint32_t index = 0u; index < 4u; ++index)
@@ -350,7 +351,8 @@ val_rmsd_write_protect_check_byte(uint64_t pa,
     uint64_t va = val_get_free_va(tg);
     uint32_t readback;
 
-    if (val_add_mmu_entry_el3(va, page, attr | LOWER_ATTRS(PAS_ATTR(pas))))
+    if (!va || (va & (tg - 1u)) ||
+        val_add_mmu_entry_el3(va, page, attr | LOWER_ATTRS(PAS_ATTR(pas))))
     {
       failures++;
       continue;

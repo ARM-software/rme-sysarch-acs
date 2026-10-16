@@ -543,14 +543,16 @@ payload(void)
             failure_count++;
             continue;
           }
+          uint64_t ctl1_pa = val_pcie_get_bdf_config_addr(bdf) +
+                             rmecda_offset + RMECDA_CTL1_OFFSET;
           ctl1_va = val_get_free_va(tg);
-          if (!ctl1_va || val_add_mmu_entry_el3(ctl1_va,
-                              val_pcie_get_bdf_config_addr(bdf), attr))
+          if (!ctl1_va || (ctl1_va & (tg - 1u)) ||
+              val_add_mmu_entry_el3(ctl1_va, ctl1_pa & ~(tg - 1u), attr))
           {
             failure_count++;
             continue;
           }
-          ctl1_va += rmecda_offset + RMECDA_CTL1_OFFSET;
+          ctl1_va += ctl1_pa & (tg - 1u);
           /* RDHNWR protects IDE registers only while the link is locked. */
           lock_changed = (ctl1_before & 0x2u) == 0u;
           if (lock_changed && write_ctl1(bdf, ctl1_va, ctl1_before | 0x2u))
@@ -568,10 +570,11 @@ payload(void)
                              (uint8_t)registers[reg_idx].new_value,
                              (uint8_t)registers[reg_idx].original);
         else
-          check_failures = val_rmsd_write_protect_check(
+          check_failures = val_rmsd_write_protect_check_masked(
                              registers[reg_idx].pa,
                              registers[reg_idx].new_value,
-                             registers[reg_idx].original);
+                             registers[reg_idx].original,
+                             registers[reg_idx].original ^ registers[reg_idx].new_value);
         if (lock_changed && write_ctl1(bdf, ctl1_va, ctl1_before))
         {
           val_print(ACS_PRINT_ERR, " Failed to restore LINK_STR_LOCK for BDF 0x%x", bdf);
