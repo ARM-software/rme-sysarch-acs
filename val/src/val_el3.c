@@ -353,25 +353,14 @@ val_cmpr_pe_regs_aftr_low_pwr_el3(void)
 }
 
 /**
- *  @brief  This API is called to enable/disable the legacy tie-off input in EL3.
- *          Returns 1 on error, 0 on success.
- *  @return 1 on error, 0 on success
+ *  @brief  Enable/disable the legacy tie-off input in EL3.
+ *  @return 0 on success, NOT_IMPLEMENTED if unimplemented, or another nonzero error.
 **/
 uint32_t
 val_prog_legacy_tz(int enable)
 {
-  (void) enable;
-  UserCallSMC(ARM_ACS_SMC_FID, LEGACY_TZ_ENABLE, SET, 0, 0);
-  if (val_pe_get_index_mpid(val_pe_get_mpid()) != 0)
-      return shared_data->status_code ? 1 : 0;
-  if (shared_data->status_code != 0) {
-    val_print(ACS_PRINT_ERR, shared_data->error_msg, 0);
-    return 1;
-  }
-  else {
-    val_print(ACS_PRINT_INFO, " EL3: Legacy TZ service completed", 0);
-    return 0;
-  }
+  UserCallSMC(ARM_ACS_SMC_FID, LEGACY_TZ_ENABLE, enable, 0, 0);
+  return shared_data->status_code;
 }
 
 /**
@@ -396,23 +385,13 @@ val_wd_set_ws0_el3(uint64_t VA_RT_WDOG, uint32_t timeout, uint64_t counter_freq)
 }
 
 /**
- *  @brief  This API is called to enable/disable the Active mode of PAS filter in EL3.
- *          Returns 1 on error, 0 on success.
- *  @return 1 on error, 0 on success
+ *  @brief  Enable/disable the Active mode of PAS filter in EL3.
+ *  @return 0 on success, NOT_IMPLEMENTED if unimplemented, or another nonzero error.
 **/
 uint32_t val_pas_filter_active_mode_el3(int enable)
 {
   UserCallSMC(ARM_ACS_SMC_FID, PAS_FILTER_SERVICE, enable, 0, 0);
-  if (val_pe_get_index_mpid(val_pe_get_mpid()) != 0)
-      return shared_data->status_code ? 1 : 0;
-  if (shared_data->status_code != 0) {
-    val_print(ACS_PRINT_ERR, shared_data->error_msg, 0);
-    return 1;
-  }
-  else {
-    val_print(ACS_PRINT_INFO, " EL3: PAS Filter service completed", 0);
-    return 0;
-  }
+  return shared_data->status_code;
 }
 
 /** Read the acknowledged Root control value for later restoration. */

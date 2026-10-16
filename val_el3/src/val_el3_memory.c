@@ -217,6 +217,15 @@ void val_el3_access_mut(void)
   uint8_t type, num = shared_data->num_access;
   uint64_t data;
 
+  if (shared_data->pas_filter_flag == SET && shared_data->generic_flag == PAS_FILTER_INACTIVE_PROBE)
+  {
+    /* The inactive-mode test issues one load and observes only its exception. */
+    shared_data->access_mut = CLEAR;
+    val_el3_acs_ldr_pas_filter((uint64_t *)shared_data->arg1, 0);
+    shared_data->exception_expected = CLEAR;
+    return;
+  }
+
   for (int acc_cnt = 0; acc_cnt < num; ++acc_cnt)
   {
 
