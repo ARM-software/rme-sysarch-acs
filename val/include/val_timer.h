@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022-2023, 2025, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2023, 2025-2026, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,6 +21,8 @@
 #define ARM_ARCH_TIMER_ENABLE           (1 << 0)
 #define ARM_ARCH_TIMER_IMASK            (1 << 1)
 #define ARM_ARCH_TIMER_ISTATUS          (1 << 2)
+
+#define VAL_INVALID_TIMER_BLOCK         0xFFFFU
 
 typedef enum {
   TIMER_INFO_CNTFREQ = 1,
