@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022-2025, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2026, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -131,17 +131,17 @@ val_dma_get_info(DMA_INFO_e type, uint32_t index)
       val_print(ACS_PRINT_ERR, "GET_DMA_INFO: DMA info table is not created \n", 0);
       return 0;
   }
-  if (index > g_dma_info_table->num_dma_ctrls)
+  if (type == DMA_NUM_CTRL)
+      return g_dma_info_table->num_dma_ctrls;
+
+  if (index >= g_dma_info_table->num_dma_ctrls)
   {
-      val_print(ACS_PRINT_ERR, "GET_DMA_INFO: Index (%d) is greater than num of DMA \n", index);
+      val_print(ACS_PRINT_ERR, "GET_DMA_INFO: Invalid DMA index (%d)\n", index);
       return 0;
   }
 
   switch (type)
   {
-      case DMA_NUM_CTRL:
-          return g_dma_info_table->num_dma_ctrls;
-
       case DMA_HOST_INFO:
           return (uint64_t)g_dma_info_table->info[index].host;
 
