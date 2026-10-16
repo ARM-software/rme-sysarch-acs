@@ -1681,6 +1681,8 @@ uint32_t val_intercnt_sec_prpty_check(uint64_t *register_entry_info)
   REGISTER_INFO_TABLE *register_entry;
   uint32_t rd_data = 0;
   uint32_t data_rt, data_ns, org_data;
+  uint32_t ret = 0;
+  uint32_t restore_required = 0;
 
   register_entry = (REGISTER_INFO_TABLE *)register_entry_info;
 
@@ -1703,7 +1705,8 @@ uint32_t val_intercnt_sec_prpty_check(uint64_t *register_entry_info)
           if (val_pe_access_mut_el3())
           {
             val_print(ACS_PRINT_ERR, " MUT access failed for 0x%llx", register_entry->address);
-            return 1;
+            ret = 1;
+            goto cleanup;
           }
           org_data = shared_data->shared_data_access[0].data;
 
@@ -1712,6 +1715,13 @@ uint32_t val_intercnt_sec_prpty_check(uint64_t *register_entry_info)
           shared_data->shared_data_access[0].addr = register_entry->address;
           shared_data->shared_data_access[0].access_type = WRITE_DATA;
           shared_data->shared_data_access[0].data = data_rt;
+          restore_required = 1;
+          if (val_pe_access_mut_el3())
+          {
+            val_print(ACS_PRINT_ERR, " MUT access failed for 0x%llx", register_entry->address);
+            ret = 1;
+            goto cleanup;
+          }
 
           /* Read the data from NS */
           rd_data = val_mmio_read(register_entry->address);
@@ -1721,30 +1731,32 @@ uint32_t val_intercnt_sec_prpty_check(uint64_t *register_entry_info)
           {
               val_print(ACS_PRINT_ERR, " Read success from NS for addr: 0x%lx",
                         register_entry->address);
-              return 1;
+              ret = 1;
+              goto cleanup;
           }
 
           /* Write the data_ns from NS */
           val_mmio_write(register_entry->address, data_ns);
-          rd_data = val_mmio_read(register_entry->address);
 
-          /* Fail if the NS write is successfull */
-          if (rd_data == data_ns)
-          {
-              val_print(ACS_PRINT_ERR, " Write from NS is successfull for address: 0x%x",
-                        register_entry->address);
-              return 1;
-          }
-
-          /* Restore the original data */
+          /* Read back through Root PAS to verify the NS write was blocked. */
           shared_data->num_access = 1;
           shared_data->shared_data_access[0].addr = register_entry->address;
-          shared_data->shared_data_access[0].access_type = WRITE_DATA;
-          shared_data->shared_data_access[0].data = org_data;
+          shared_data->shared_data_access[0].access_type = READ_DATA;
           if (val_pe_access_mut_el3())
           {
             val_print(ACS_PRINT_ERR, " MUT access failed for 0x%llx", register_entry->address);
-            return 1;
+            ret = 1;
+            goto cleanup;
+          }
+          rd_data = shared_data->shared_data_access[0].data;
+
+          /* Fail if the NS write changed the Root-visible value. */
+          if (rd_data != data_rt)
+          {
+              val_print(ACS_PRINT_ERR, " Write from NS is successful for address: 0x%llx",
+                        register_entry->address);
+              ret = 1;
+              goto cleanup;
           }
 
           rd_data = 0;
@@ -1752,8 +1764,23 @@ uint32_t val_intercnt_sec_prpty_check(uint64_t *register_entry_info)
 
     default:
       val_print(ACS_PRINT_ERR, " Invalid Security Property: %d", register_entry->property);
-      return 1;
+      ret = 1;
+      goto cleanup;
   }
 
-  return 0;
+cleanup:
+  if (restore_required)
+  {
+      shared_data->num_access = 1;
+      shared_data->shared_data_access[0].addr = register_entry->address;
+      shared_data->shared_data_access[0].access_type = WRITE_DATA;
+      shared_data->shared_data_access[0].data = org_data;
+      if (val_pe_access_mut_el3())
+      {
+          val_print(ACS_PRINT_ERR, " Failed to restore register 0x%llx", register_entry->address);
+          ret = 1;
+      }
+  }
+
+  return ret;
 }
