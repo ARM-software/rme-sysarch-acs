@@ -65,27 +65,27 @@ val_timer_get_info(TIMER_INFO_e info_type, uint64_t instance)
           return g_timer_info_table->header.num_platform_timer;
       case TIMER_INFO_IS_PLATFORM_TIMER_SECURE:
           val_platform_timer_get_entry_index(instance, &block_num, &block_index);
-          if (block_num != 0xFFFF)
+          if (block_num != VAL_INVALID_TIMER_BLOCK)
               return ((g_timer_info_table->gt_info[block_num].flags[block_index] >> 16) & 1);
           break;
       case TIMER_INFO_SYS_CNTL_BASE:
           val_platform_timer_get_entry_index(instance, &block_num, &block_index);
-          if (block_num != 0xFFFF)
+          if (block_num != VAL_INVALID_TIMER_BLOCK)
               return g_timer_info_table->gt_info[block_num].block_cntl_base;
           break;
       case TIMER_INFO_SYS_CNT_BASE_N:
           val_platform_timer_get_entry_index(instance, &block_num, &block_index);
-          if (block_num != 0xFFFF)
+          if (block_num != VAL_INVALID_TIMER_BLOCK)
               return g_timer_info_table->gt_info[block_num].GtCntBase[block_index];
           break;
       case TIMER_INFO_FRAME_NUM:
           val_platform_timer_get_entry_index(instance, &block_num, &block_index);
-          if (block_num != 0xFFFF)
+          if (block_num != VAL_INVALID_TIMER_BLOCK)
               return g_timer_info_table->gt_info[block_num].frame_num[block_index];
           break;
       case TIMER_INFO_SYS_INTID:
           val_platform_timer_get_entry_index(instance, &block_num, &block_index);
-          if (block_num != 0xFFFF)
+          if (block_num != VAL_INVALID_TIMER_BLOCK)
             return g_timer_info_table->gt_info[block_num].gsiv[block_index];
           break;
       case TIMER_INFO_PHY_EL1_FLAGS:
@@ -105,14 +105,19 @@ val_timer_get_info(TIMER_INFO_e info_type, uint64_t instance)
 void
 val_platform_timer_get_entry_index(uint64_t instance, uint32_t *block, uint32_t *index)
 {
-  if (instance > g_timer_info_table->header.num_platform_timer) {
-      *block = 0xFFFF;
+  if (block == NULL || index == NULL)
       return;
-  }
+
+  *block = VAL_INVALID_TIMER_BLOCK;
+  *index = 0;
+
+  if (g_timer_info_table == NULL ||
+      instance >= g_timer_info_table->header.num_platform_timer)
+      return;
 
   *block = 0;
   *index = instance;
-  while (instance > g_timer_info_table->gt_info[*block].timer_count) {
+  while (instance >= g_timer_info_table->gt_info[*block].timer_count) {
       instance = instance - g_timer_info_table->gt_info[*block].timer_count;
       *index   = instance;
       *block   = *block + 1;
