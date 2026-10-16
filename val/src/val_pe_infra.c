@@ -150,8 +150,8 @@ val_pe_get_mpid_index(uint32_t index)
 
   PE_INFO_ENTRY *entry;
 
-  if (index > g_pe_info_table->header.num_of_pe) {
-        val_report_status(index, "FAIL");
+  if (index >= g_pe_info_table->header.num_of_pe) {
+        val_print(ACS_PRINT_ERR, " Incorrect PE index = %d", index);
         return 0xFFFFFF;
   }
 
@@ -238,9 +238,8 @@ val_execute_on_pe(uint32_t index, void (*payload)(void), uint64_t test_input)
 
   int timeout = TIMEOUT_LARGE;
 
-  if (index > g_pe_info_table->header.num_of_pe) {
-      val_print(ACS_PRINT_ERR, "Input Index exceeds Num of PE %x ", index);
-      val_report_status(index, "FAIL");
+  if (index >= g_pe_info_table->header.num_of_pe) {
+      val_print(ACS_PRINT_ERR, " Incorrect PE index = %d", index);
       return;
   }
 
