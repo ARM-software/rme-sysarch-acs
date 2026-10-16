@@ -187,7 +187,7 @@ uintptr_t plat_arm_acs_smc_handler(unsigned int smc_fid, uint64_t services,
       break;
     case LEGACY_TZ_ENABLE:
       INFO("Legacy System Service\n");
-      val_el3_prog_legacy_tz(arg0);
+      shared_data->status_code = val_el3_prog_legacy_tz(arg0);
       break;
     case ROOT_WATCHDOG:
       INFO("Root watchdog service \n");
@@ -201,7 +201,7 @@ uintptr_t plat_arm_acs_smc_handler(unsigned int smc_fid, uint64_t services,
       break;
     case PAS_FILTER_SERVICE:
       INFO("PAS filter mode service \n");
-      val_el3_pas_filter_active_mode(arg0);
+      shared_data->status_code = val_el3_pas_filter_active_mode(arg0);
       break;
     case SMMU_ROOT_SERVICE:
     case SMMU_ROOT_CONTROL:

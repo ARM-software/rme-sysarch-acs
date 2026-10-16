@@ -15,6 +15,9 @@
  * limitations under the License.
  **/
 
+#ifndef VAL_EL32_H
+#define VAL_EL32_H
+
 /* Defines related to User SMC Call services */
 #define RME_INSTALL_HANDLER       0x1
 #define RME_ADD_GPT_ENTRY         0x2
@@ -62,6 +65,8 @@
 #define INVALIDATE           0x3
 #define SET                  1
 #define CLEAR                0
+/* Operation-specific value in generic_flag for the inactive PAS-filter probe. */
+#define PAS_FILTER_INACTIVE_PROBE 2
 #define IDE_CXL_KEY_PROG     8
 #define IDE_CXL_KEY_GO       9
 #define IDE_CXL_KEY_STOP     10
@@ -210,3 +215,5 @@ typedef enum {
 } RME_ACS_REGS_MSD;
 
 #endif
+
+#endif /* VAL_EL32_H */
