@@ -57,7 +57,8 @@ typedef struct {
 #define CXL_FLEX_CONTROL_HIGH_256B     (1u << 5)
 #define CXL_FLEX_CONTROL_HIGH_PBR      (1u << 6)
 
-static uint32_t collect_rvsfpj_registers(uint32_t bdf,
+static uint32_t collect_rvsfpj_registers(uint32_t component_index,
+                                         uint32_t bdf,
                                          RVSFPJ_REGISTER_DESC *registers,
                                          uint32_t *count);
 
@@ -120,6 +121,80 @@ append_register(RVSFPJ_REGISTER_DESC *registers,
   registers[index].access_width = 4u;
   *count = index + 1u;
   return ACS_STATUS_PASS;
+}
+
+/* Host Bridge controls are in CHBCR, not the RP Component Register BAR. */
+static uint32_t
+collect_host_bridge_registers(uint32_t component_index, uint32_t bdf,
+                              RVSFPJ_REGISTER_DESC *registers, uint32_t *count)
+{
+  uint32_t host_index, status, capability, port_id, policy, trust;
+  uint64_t component_base, cap_base, policy_pa;
+
+  host_index = (uint32_t)val_cxl_get_component_info(
+                 CXL_COMPONENT_INFO_HOST_BRIDGE_INDEX, component_index);
+  if (host_index == CXL_COMPONENT_INVALID_INDEX)
+  {
+    val_print(ACS_PRINT_ERR, " Host Bridge not found for BDF 0x%x", bdf);
+    return ACS_STATUS_ERR;
+  }
+  component_base = val_cxl_get_info(CXL_INFO_COMPONENT_BASE, host_index);
+  if (component_base == 0u)
+  {
+    val_print(ACS_PRINT_ERR, " CHBCR not found for BDF 0x%x", bdf);
+    return ACS_STATUS_ERR;
+  }
+
+  status = val_cxl_find_capability(component_base, CXL_CAPID_HDM_DECODER, &cap_base);
+  if (status == ACS_STATUS_PASS)
+  {
+    capability = val_mmio_read(cap_base + CXL_HDM_CAP_REG_OFFSET);
+    if (capability == PCIE_UNKNOWN_RESPONSE)
+      return ACS_STATUS_ERR;
+    /* CXL 3.1 8.2.4.20.1/.2: bit 0 is RO unless capability bit 10 is set.
+     * HDM Decoder Enable (bit 1) does not apply to Host Bridges. */
+    if (capability & (1u << 10))
+    {
+      if (append_register(registers, count, cap_base + CXL_HDM_GLOBAL_CTRL_OFFSET, 0x1u))
+        return ACS_STATUS_ERR;
+    }
+    else
+      val_print(ACS_PRINT_WARN,
+                " Host Bridge Poison On Decode Error unsupported; check omitted BDF 0x%x", bdf);
+  }
+  else if (status == ACS_STATUS_SKIP)
+    val_print(ACS_PRINT_WARN, " Host Bridge HDM Decoder capability absent BDF 0x%x", bdf);
+  else
+    return ACS_STATUS_ERR;
+
+  status = val_cxl_find_capability(component_base, CXL_CAPID_EXT_SECURITY, &cap_base);
+  if (status == ACS_STATUS_SKIP)
+  {
+    val_print(ACS_PRINT_WARN, " Host Bridge Extended Security capability absent BDF 0x%x", bdf);
+    return ACS_STATUS_PASS;
+  }
+  if (status != ACS_STATUS_PASS || val_pcie_get_root_port_id(bdf, &port_id))
+    return ACS_STATUS_ERR;
+
+  status = val_cxl_find_ext_security_policy(cap_base, port_id, &policy, &policy_pa);
+  if (status == ACS_STATUS_SKIP)
+  {
+    /* The table contains entries for the Host Bridge's CXL.cache-capable RPs. */
+    val_print(ACS_PRINT_WARN, " No Extended Security Policy entry for BDF 0x%x", bdf);
+    return ACS_STATUS_PASS;
+  }
+  if (status != ACS_STATUS_PASS || policy == PCIE_UNKNOWN_RESPONSE)
+    return ACS_STATUS_ERR;
+
+  trust = policy & CXL_SECURITY_POLICY_TRUST_LEVEL_MASK;
+  if (trust == 3u)
+  {
+    val_print(ACS_PRINT_ERR, " Reserved Extended Security Trust Level for BDF 0x%x", bdf);
+    return ACS_STATUS_ERR;
+  }
+  /* CXL 3.1 8.2.4.21: toggle Trust Level between defined encodings,
+   * preserving other fields, including version-specific controls. */
+  return append_register(registers, count, policy_pa, trust == 1u ? 0x1u : 0x2u);
 }
 
 static uint32_t
@@ -278,7 +353,8 @@ collect_bi_decoder_registers(uint64_t component_base,
 }
 
 static uint32_t
-collect_rvsfpj_registers(uint32_t bdf,
+collect_rvsfpj_registers(uint32_t component_index,
+                         uint32_t bdf,
                          RVSFPJ_REGISTER_DESC *registers,
                          uint32_t *count)
 {
@@ -301,6 +377,11 @@ collect_rvsfpj_registers(uint32_t bdf,
     val_print(ACS_PRINT_ERR, " Collection status 0x%x", status);
     return ACS_STATUS_ERR;
   }
+
+  status = collect_host_bridge_registers(component_index, bdf, registers, count);
+  val_print(ACS_PRINT_DEBUG, " Collection count after Host Bridge: %u", *count);
+  if (status != ACS_STATUS_PASS)
+    return ACS_STATUS_ERR;
 
   status = val_cxl_find_component_register_base(bdf, &component_base);
   if (status != ACS_STATUS_PASS)
@@ -476,7 +557,7 @@ payload(void)
       enabled_here = 1u;
     }
 
-    status = collect_rvsfpj_registers(bdf, registers, &reg_count);
+    status = collect_rvsfpj_registers(comp, bdf, registers, &reg_count);
     /* Show partial collection too: discovery failure must not hide coverage. */
     val_print(ACS_PRINT_DEBUG, " RVSFPJ inventory for BDF 0x%x", bdf);
     val_print(ACS_PRINT_DEBUG, " Collected register count %u", reg_count);
