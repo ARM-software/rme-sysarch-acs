@@ -2898,6 +2898,7 @@ uint32_t val_pcie_rp_sec_prpty_check(uint64_t *register_entry_info)
   uint32_t data_rt, data_ns, org_data;
   uint32_t ret = 0;
   uint32_t tdisp_enabled = 0;
+  uint32_t restore_required = 0;
 
   register_entry = (REGISTER_INFO_TABLE *)register_entry_info;
 
@@ -2955,6 +2956,7 @@ uint32_t val_pcie_rp_sec_prpty_check(uint64_t *register_entry_info)
           shared_data->shared_data_access[0].addr = register_entry->address;
           shared_data->shared_data_access[0].access_type = WRITE_DATA;
           shared_data->shared_data_access[0].data = data_rt;
+          restore_required = 1;
           if (val_pe_access_mut_el3())
           {
             val_print(ACS_PRINT_ERR, " MUT access failed for 0x%llx", register_entry->address);
@@ -2978,23 +2980,11 @@ uint32_t val_pcie_rp_sec_prpty_check(uint64_t *register_entry_info)
           rd_data = val_mmio_read(register_entry->address);
 
           /* Fail if the NS write is successfull */
-          if (rd_data == data_rt)
+          if (rd_data != data_rt)
           {
-              val_print(ACS_PRINT_ERR, " Read is succesfull from NS for bdf: 0x%x", bdf);
+              val_print(ACS_PRINT_ERR, " Write is successful from NS for bdf: 0x%x", bdf);
               ret = 1;
               goto cleanup;
-          }
-
-          /* Restore the original data */
-          shared_data->num_access = 1;
-          shared_data->shared_data_access[0].addr = register_entry->address;
-          shared_data->shared_data_access[0].access_type = WRITE_DATA;
-          shared_data->shared_data_access[0].data = org_data;
-          if (val_pe_access_mut_el3())
-          {
-            val_print(ACS_PRINT_ERR, " MUT access failed for 0x%llx", register_entry->address);
-            ret = 1;
-            goto cleanup;
           }
 
           rd_data = 0;
@@ -3017,6 +3007,13 @@ uint32_t val_pcie_rp_sec_prpty_check(uint64_t *register_entry_info)
           shared_data->shared_data_access[0].addr = register_entry->address;
           shared_data->shared_data_access[0].access_type = WRITE_DATA;
           shared_data->shared_data_access[0].data = data_rt;
+          restore_required = 1;
+          if (val_pe_access_mut_el3())
+          {
+            val_print(ACS_PRINT_ERR, " MUT access failed for 0x%llx", register_entry->address);
+            ret = 1;
+            goto cleanup;
+          }
 
           /* Read the data from NS */
           rd_data = val_mmio_read(register_entry->address);
@@ -3031,26 +3028,25 @@ uint32_t val_pcie_rp_sec_prpty_check(uint64_t *register_entry_info)
 
           /* Write the data_ns from NS */
           val_mmio_write(register_entry->address, data_ns);
-          rd_data = val_mmio_read(register_entry->address);
 
-          /* Fail if the NS write is successfull */
-          if (rd_data == data_ns)
-          {
-              val_print(ACS_PRINT_ERR, " Write from NS is successfull for bdf: 0x%x", bdf);
-              ret = 1;
-              goto cleanup;
-          }
-
-          /* Restore the original data */
+          /* Read back through Root PAS to verify the NS write was blocked. */
           shared_data->num_access = 1;
           shared_data->shared_data_access[0].addr = register_entry->address;
-          shared_data->shared_data_access[0].access_type = WRITE_DATA;
-          shared_data->shared_data_access[0].data = org_data;
+          shared_data->shared_data_access[0].access_type = READ_DATA;
           if (val_pe_access_mut_el3())
           {
             val_print(ACS_PRINT_ERR, " MUT access failed for 0x%llx", register_entry->address);
             ret = 1;
             goto cleanup;
+          }
+          rd_data = shared_data->shared_data_access[0].data;
+
+          /* Fail if the NS write changed the Root-visible value. */
+          if (rd_data != data_rt)
+          {
+              val_print(ACS_PRINT_ERR, " Write is successful from NS for bdf: 0x%x", bdf);
+              ret = 1;
+              goto cleanup;
           }
 
           rd_data = 0;
@@ -3063,6 +3059,19 @@ uint32_t val_pcie_rp_sec_prpty_check(uint64_t *register_entry_info)
   }
 
 cleanup:
+  if (restore_required)
+  {
+      shared_data->num_access = 1;
+      shared_data->shared_data_access[0].addr = register_entry->address;
+      shared_data->shared_data_access[0].access_type = WRITE_DATA;
+      shared_data->shared_data_access[0].data = org_data;
+      if (val_pe_access_mut_el3())
+      {
+          val_print(ACS_PRINT_ERR, " Failed to restore register 0x%llx", register_entry->address);
+          ret = 1;
+      }
+  }
+
   if (tdisp_enabled)
     (void)val_pcie_disable_tdisp(bdf);
 
