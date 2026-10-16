@@ -53,8 +53,7 @@
 #define ACS_STATUS_SKIP   0x10000000
 #define ACS_STATUS_PASS   0x0
 #define ACS_INVALID_INDEX 0xFFFFFFFF
-
-#define NOT_IMPLEMENTED 0x4B1D /* Feature or API not imeplemented */
+#define NOT_IMPLEMENTED   0x4B1D
 
 #define VAL_EXTRACT_BITS(data, start, end) \
   (((uint64_t)(data) >> (start)) & \
@@ -124,8 +123,10 @@ uint32_t val_rme_install_handler_el3(void);
 uint32_t val_disable_ns_encryption(void);
 uint32_t val_read_pe_regs_bfr_low_pwr_el3(void);
 uint32_t val_cmpr_pe_regs_aftr_low_pwr_el3(void);
+/* Return the PAL status: 0 on success, NOT_IMPLEMENTED, or another nonzero error. */
 uint32_t val_prog_legacy_tz(int enable);
 uint32_t val_wd_set_ws0_el3(uint64_t VA_RT_WDOG, uint32_t timeout, uint64_t counter_freq);
+/* Return the PAL status: 0 on success, NOT_IMPLEMENTED, or another nonzero error. */
 uint32_t val_pas_filter_active_mode_el3(int enable);
 uint32_t val_smmu_access_disable(uint64_t smmu_base);
 uint32_t val_smmu_access_enable(uint64_t smmu_base);

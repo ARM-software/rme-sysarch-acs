@@ -1,5 +1,5 @@
 /** @file
-  * Copyright (c) 2022-2025, Arm Limited or its affiliates. All rights reserved.
+  * Copyright (c) 2022-2026, Arm Limited or its affiliates. All rights reserved.
   * SPDX-License-Identifier : Apache-2.0
 
   * Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,6 +19,7 @@
 #include <val_el3_exception.h>
 #include <val_el3_memory.h>
 #include <val_el3_pe.h>
+#include <pal_el3.h>
 
 #define TEST_DATA 0x999
 
@@ -55,6 +56,19 @@ void val_el3_ack_handler(void)
   INFO("Inside EL3 ACK Handler\n");
 
   if (shared_data->exception_expected == SET && shared_data->access_mut == CLEAR) {
+    if (shared_data->pas_filter_flag == SET &&
+        shared_data->generic_flag == PAS_FILTER_INACTIVE_PROBE) {
+        uint64_t esr = val_el3_read_esr_el3();
+        uint64_t far = val_el3_read_far();
+
+        shared_data->esr_value = esr;
+        shared_data->exception_generated =
+            pal_el3_pas_filter_check_exception(esr, far, shared_data->arg1) ? SET : CLEAR;
+        INFO("PAS filter probe: ESR_EL3=0x%lx FAR_EL3=0x%lx\n", esr, far);
+        shared_data->exception_expected = CLEAR;
+        val_el3_asm_eret();
+        return;
+    }
     INFO("The Fault is encountered\n");
     if (val_el3_read_esr_el3() == GPF_ESR_READ || val_el3_read_esr_el3() == GPF_ESR_WRITE) {
         INFO("The GPF was expected, encountered and handled\n");

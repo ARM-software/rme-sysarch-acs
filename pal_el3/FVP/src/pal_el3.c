@@ -39,12 +39,15 @@ uint32_t pal_el3_disable_ns_encryption(void)
  * @param enable  Non-zero to enable, zero to disable.
  *
  * Partner must implement IMPLEMNTATION_DEFINED register programming to control legacy TZ.
+ * @return 0 after programming the requested state, PAL_EL3_NOT_IMPLEMENTED if the
+ *         operation is unimplemented, or another nonzero value on failure.
  */
-void pal_el3_prog_legacy_tz(int enable)
+uint32_t pal_el3_prog_legacy_tz(int enable)
 {
   //Partner shall implement their own IMPLEMNTATION_DEFINED
   //register for enabling the LEGACY_TZ_EN feature
-  return;
+  (void)enable;
+  return PAL_EL3_NOT_IMPLEMENTED;
 }
 
 /**
@@ -53,10 +56,38 @@ void pal_el3_prog_legacy_tz(int enable)
  * @param enable  Non-zero to set Active mode, zero for Inactive.
  *
  * Partner must implement IMPLEMNTATION_DEFINED method to change PAS filter mode.
+ * @return 0 after the requested mode is established, PAL_EL3_NOT_IMPLEMENTED if the
+ *         operation is unimplemented, or another nonzero value on failure.
  */
-void pal_el3_pas_filter_active_mode(int enable)
+uint32_t pal_el3_pas_filter_active_mode(int enable)
 {
   //Partner shall implement their own IMPLEMNTATION_DEFINED
   //way for changing the Active mode of pas filter
-  return;
+  (void)enable;
+  return PAL_EL3_NOT_IMPLEMENTED;
+}
+
+/**
+ * @brief Verify that a captured exception is an inactive PAS filter read denial.
+ *
+ * @param esr      ESR_EL3 captured by the ACS exception handler.
+ * @param far      FAR_EL3 captured by the ACS exception handler.
+ * @param address  Untagged virtual address of the load being tested.
+ *
+ * Implement the platform's documented denial-syndrome checks. Accept only a
+ * synchronous read denial with a valid FAR matching address. Reject GPF,
+ * translation and permission faults, and unrelated errors. If the syndrome
+ * alone cannot identify the PAS filter as the source, also check the platform's
+ * filter error status. Do not accept an arbitrary Data Abort as a denial.
+ *
+ * This hook only verifies the exception; ACS EL3 code performs recovery.
+ * @return true for a verified denial; false for an unexpected or unverifiable
+ *         exception, including when this hook is not implemented.
+ */
+bool pal_el3_pas_filter_check_exception(uint64_t esr, uint64_t far, uint64_t address)
+{
+  (void)esr;
+  (void)far;
+  (void)address;
+  return false;
 }
