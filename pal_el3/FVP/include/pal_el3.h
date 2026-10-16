@@ -23,9 +23,19 @@
 #include <pal_el3_pcie_ide.h>
 #include <pal_el3_cxl_ide.h>
 
+/* Shared ACS status value; propagated unchanged through EL3. */
+#define PAL_EL3_NOT_IMPLEMENTED 0x4B1D
+
 uint32_t pal_el3_disable_ns_encryption(void);
-void pal_el3_prog_legacy_tz(int enable);
-void pal_el3_pas_filter_active_mode(int enable);
+/* Return 0 on success, PAL_EL3_NOT_IMPLEMENTED for a stub, or another nonzero error. */
+uint32_t pal_el3_prog_legacy_tz(int enable);
+/* Return 0 on success, PAL_EL3_NOT_IMPLEMENTED for a stub, or another nonzero error. */
+uint32_t pal_el3_pas_filter_active_mode(int enable);
+/* True only for a synchronous read denial caused by the inactive PAS filter.
+ * Validate the syndrome, FAR validity and its match to the untagged probe VA.
+ * GPF, translation and permission faults must not satisfy this check.
+ */
+bool pal_el3_pas_filter_check_exception(uint64_t esr, uint64_t far, uint64_t address);
 
 /* Platform PAL owns CXL.cachemem register discovery and key-bank selection. */
 uint32_t pal_cxl_rp_ide_cfg_address(uint64_t ecam_base, uint32_t rp_id, uint64_t *config);

@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2025, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2025-2026, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -31,6 +31,7 @@
 #define SHARED_OFFSET_ESR_VAL (PLAT_SHARED_ADDRESS + 0x30)
 #define SHARED_OFFSET_ARG0    (PLAT_SHARED_ADDRESS + 0x38)
 #define SHARED_OFFSET_ARG1    (PLAT_SHARED_ADDRESS + 0x40)
+#define SHARED_OFFSET_GENERIC_FLAG (PLAT_SHARED_ADDRESS + 0x80)
 #define ACS_EL3_STACK (PLAT_SHARED_ADDRESS + SIZE_4KB - 0x100)
 #define ACS_EL3_HANDLER_SAVED_POINTER (PLAT_SHARED_ADDRESS + 0x800)
 

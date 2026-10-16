@@ -30,8 +30,9 @@ uint32_t val_el3_disable_ns_encryption(void)
  * @brief Program Legacy TZ enable state at EL3 via PAL.
  *
  * @param enable  Non-zero to enable, zero to disable.
+ * @return PAL status: 0 on success, NOT_IMPLEMENTED, or another nonzero error.
  */
-void val_el3_prog_legacy_tz(int enable)
+uint32_t val_el3_prog_legacy_tz(int enable)
 {
   return pal_el3_prog_legacy_tz(enable);
 }
@@ -58,9 +59,9 @@ void val_el3_security_state_change(uint64_t attr_nse_ns)
  * @brief Set PAS filter to Active/Inactive mode at EL3 via PAL.
  *
  * @param enable  Non-zero to set Active mode, zero for Inactive.
+ * @return PAL status: 0 on success, NOT_IMPLEMENTED, or another nonzero error.
  */
-void val_el3_pas_filter_active_mode(int enable)
+uint32_t val_el3_pas_filter_active_mode(int enable)
 {
-  //Change the mode to Active from In-active
-  pal_el3_pas_filter_active_mode(enable);
+  return pal_el3_pas_filter_active_mode(enable);
 }
