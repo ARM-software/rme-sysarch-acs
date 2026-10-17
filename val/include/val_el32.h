@@ -37,7 +37,7 @@
 #define MEC_SERVICE               0x13
 #define RME_CMO_POE               0x14
 #define RME_GET_SHARED_MEM        0x15
-#define EL3_IDE_KM                0x16
+#define EL3_CXL_IDE_KM            0x16
 #define EL3_PCIE_IDE_KM           0x17
 #define SMMU_ROOT_CONTROL        0x18
 
@@ -62,9 +62,9 @@
 #define INVALIDATE           0x3
 #define SET                  1
 #define CLEAR                0
-#define IDE_ENABLE           1
-#define IDE_DISABLE          2
-#define IDE_GET_BASE         3
+#define IDE_CXL_KEY_PROG     8
+#define IDE_CXL_KEY_GO       9
+#define IDE_CXL_KEY_STOP     10
 #define IDE_PCIE_KEY_PROG    5
 #define IDE_PCIE_KEY_GO      6
 #define IDE_PCIE_KEY_STOP    7

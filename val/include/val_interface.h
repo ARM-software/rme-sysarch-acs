@@ -152,16 +152,14 @@ uint32_t val_cmo_to_poe(uint64_t PA);
 uint32_t val_rlm_configure_mecid(uint32_t mecid);
 uint32_t val_smmu_rlm_configure_mecid(smmu_master_attributes_t *smmu_attr, uint32_t mecid);
 void val_map_shared_mem_el3(uint64_t shared_addr);
-uint32_t val_cxl_root_port_ide_program_and_enable_el3(uint64_t bar0_base,
+uint32_t val_cxl_root_port_ide_program_el3(uint32_t rp_bdf,
                                                        uint8_t stream_id,
                                                        uint8_t key_slot,
                                                        const CXL_IDE_KEY_BUFFER *rx_key,
                                                        const CXL_IDE_KEY_BUFFER *tx_key);
-uint32_t val_cxl_root_port_ide_disable_el3(uint64_t bar0_base,
-                                            uint8_t stream_id,
-                                            uint8_t key_slot);
-uint32_t val_cxl_root_port_ide_get_base_el3(uint64_t bar0_base,
-                                             uint64_t *ide_km_base);
+uint32_t val_cxl_root_port_ide_go_el3(uint32_t rp_bdf, uint8_t stream_id, uint8_t key_slot,
+                                      uint8_t mode);
+uint32_t val_cxl_root_port_ide_stop_el3(uint32_t rp_bdf, uint8_t stream_id, uint8_t key_slot);
 
 /* PCIe VAL APIs */
 void val_pcie_create_info_table(uint64_t *pcie_info_table);

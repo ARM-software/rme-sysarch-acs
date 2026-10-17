@@ -47,6 +47,7 @@ verify_root_port(const CXL_COMPONENT_TABLE *table,
       (uint16_t)(CXL_TSP_MEMORY_ENCRYPTION_FEATURES_ENABLE_ENCRYPTION |
                  CXL_TSP_MEMORY_ENCRYPTION_FEATURES_ENABLE_CKID_BASED_ENCRYPTION);
   uint32_t tsp_locked = 0u;
+  uint32_t ide_active = 0u;
 
   /* Check if RP supports CXL IDE*/
   if ((root_port->component_reg_base == 0u) ||
@@ -113,6 +114,8 @@ verify_root_port(const CXL_COMPONENT_TABLE *table,
   if (status != ACS_STATUS_PASS)
     goto cleanup;
 
+  ide_active = 1u;
+
   /* Configure memory encryption features and lock the TSP instance. */
   status = val_cxl_tsp_configure_and_lock(root_index,
                                           endpoint_index,
@@ -127,6 +130,12 @@ verify_root_port(const CXL_COMPONENT_TABLE *table,
   result = ACS_STATUS_PASS;
 
 cleanup:
+  /* Successful TSP setup uses the reset/unlock path below. */
+  if ((ide_active != 0u) && (tsp_locked == 0u) &&
+      (val_cxl_ide_disable_link(root_index, endpoint_index, &ctx, session_id) !=
+       ACS_STATUS_PASS))
+    val_print(ACS_PRINT_WARN, " RPHWMM: IDE cleanup failed for EP 0x%x",
+              (uint64_t)endpoint->bdf);
   if (session_active != 0u)
     (void)val_spdm_session_close(&ctx, session_id);
   if (tsp_locked != 0u)
