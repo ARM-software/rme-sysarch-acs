@@ -69,6 +69,7 @@ extern void pal_mem_free(void *ptr);
 #define MBEDTLS_PKCS1_V21
 #define MBEDTLS_ECP_C
 #define MBEDTLS_ECDH_C
+#define MBEDTLS_DHM_C
 #define MBEDTLS_ECP_RESTARTABLE
 #define MBEDTLS_ECDSA_C
 #define MBEDTLS_ECP_DP_SECP256R1_ENABLED
