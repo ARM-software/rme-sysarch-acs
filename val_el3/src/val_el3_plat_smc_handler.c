@@ -14,6 +14,7 @@
   * See the License for the specific language governing permissions and
   * limitations under the License.
   **/
+#include <val_el3_cxl_ide.h>
 #include <val_el3_debug.h>
 #include <val_el3_exception.h>
 #include <val_el3_memory.h>
@@ -92,38 +93,37 @@ void plat_arm_acs_smc_handler(uint64_t services, uint64_t arg0, uint64_t arg1, u
       shared_data->status_code = val_el3_pcie_ide_km_handle(shared_data->arg0,
                                                          shared_data->arg1);
       break;
-    case EL3_IDE_KM:
+    case EL3_CXL_IDE_KM:
       INFO("EL3 IDE_KM service \n");
-      if (shared_data->arg0 == IDE_ENABLE) {
-        if (val_el3_ide_km_program_and_enable(shared_data->arg2,
-                                              (uint8_t)shared_data->arg3,
-                                              (uint8_t)shared_data->arg4,
-                                              (const CXL_IDE_KEY_BUFFER *)
-                                              shared_data->arg5,
-                                              (const CXL_IDE_KEY_BUFFER *)
-                                              shared_data->arg6) != 0u) {
+      if (shared_data->arg0 == IDE_CXL_KEY_GO) {
+        shared_data->status_code = val_el3_ide_km_go(shared_data->arg2,
+                                                (uint32_t)shared_data->arg1,
+                                                     (uint8_t)shared_data->arg3,
+                                                     (uint8_t)shared_data->arg4,
+                                                     (uint8_t)shared_data->arg5);
+      } else if (shared_data->arg0 == IDE_CXL_KEY_PROG) {
+        uint32_t status = val_el3_ide_km_program(shared_data->arg2,
+                                                (uint32_t)shared_data->arg1,
+                                                (uint8_t)shared_data->arg3,
+                                                (uint8_t)shared_data->arg4,
+                                                (const CXL_IDE_KEY_BUFFER *)shared_data->arg5,
+                                                (const CXL_IDE_KEY_BUFFER *)shared_data->arg6);
+
+        if (status != 0u) {
           shared_data->status_code = 1;
-          const char *msg = "EL3: IDE_KM enable failed";
+          const char *msg = "EL3: IDE_KM programming failed";
           int i = 0; while (msg[i] && i < sizeof(shared_data->error_msg) - 1) {
               shared_data->error_msg[i] = msg[i]; i++;
           }
           shared_data->error_msg[i] = '\0';
         }
-      } else if (shared_data->arg0 == IDE_DISABLE) {
-        if (val_el3_ide_km_disable(shared_data->arg2,
+      } else if (shared_data->arg0 == IDE_CXL_KEY_STOP) {
+        if (val_el3_ide_km_stop(shared_data->arg2,
+                                                (uint32_t)shared_data->arg1,
                                    (uint8_t)shared_data->arg3,
                                    (uint8_t)shared_data->arg4) != 0u) {
           shared_data->status_code = 1;
           const char *msg = "EL3: IDE_KM disable failed";
-          int i = 0; while (msg[i] && i < sizeof(shared_data->error_msg) - 1) {
-              shared_data->error_msg[i] = msg[i]; i++;
-          }
-          shared_data->error_msg[i] = '\0';
-        }
-      } else if (shared_data->arg0 == IDE_GET_BASE) {
-        if (val_el3_ide_km_get_base(shared_data->arg2, &shared_data->arg2) != 0u) {
-          shared_data->status_code = 1;
-          const char *msg = "EL3: IDE_KM base query failed";
           int i = 0; while (msg[i] && i < sizeof(shared_data->error_msg) - 1) {
               shared_data->error_msg[i] = msg[i]; i++;
           }
