@@ -92,7 +92,8 @@ establishment; it is not an optional backend operation.
 
 ### Register mapping and memory access
 
-EL3 maps the configuration address before calling
+`pal_pcie_rp_ide_cfg_address()` must resolve the configuration address without
+reading MMIO. EL3 maps that address before calling
 `pal_pcie_rp_ide_km_address()`. It then maps the nonzero `registers->keys` and
 `registers->control` addresses before PROGRAM, GO, or STOP. Mappings are identity
 mappings with Root PAS, Device-nGnRnE attributes, and read/write permission;
@@ -124,65 +125,99 @@ or invocation fields in diagnostics.
 
 ## CXL
 
-The existing CXL RP APIs are declared in each platform's `pal_el3.h` and
-implemented in `pal_el3/<platform>/src/pal_el3.c`. This section documents the
-current interface; it does not require moving CXL to the PCIe request model.
+Implement the CXL.cachemem backend in
+`pal_el3/<platform>/src/pal_cxl_ide.c`, alongside `pal_pcie_ide.c`.
+The PAL uses the same discovery, PROGRAM, GO and STOP structure as PCIe, with
+CXL-specific selectors and register regions declared in
+[`pal_el3_cxl_ide.h`](../pal_el3/include/pal_el3_cxl_ide.h).
+Entry points are declared in each platform's `pal_el3.h`; EL3 VAL declarations
+are in [`val_el3_cxl_ide.h`](../val_el3/include/val_el3_cxl_ide.h).
 
 ### Responsibilities and request flow
 
 ```text
 Host CXL VAL -> val_cxl_root_port_ide_*_el3()
-             -> EL3_IDE_KM SMC
+             -> EL3_CXL_IDE_KM SMC
              -> val_el3_ide_km_*()
-             -> pal_cxl_root_port_ide_*()
+             -> pal_cxl_rp_ide_cfg_address()
+             -> pal_cxl_rp_ide_km_address()
+             -> pal_cxl_rp_ide_key_program() / key_go() / key_stop()
 ```
 
-Host VAL obtains the RP BAR0 address and queries the key-management base through
-EL3. It maps that register region with Root PAS, Device-nGnRnE attributes,
-read/write permission, and GPT_ANY. For programming, Host VAL also maps the RX
-and TX key buffers for EL3 access. Unlike PCIe discovery, this mapping is
-arranged by Host VAL before the programming call.
+Host VAL supplies the segment ECAM base and packed Root Port Requester ID.
+EL3 asks PAL to resolve the configuration address, maps it in Root PAS, then
+asks PAL to discover the AES and CXL.CM pages. EL3 maps those pages as
+Device-nGnRnE, read/write, GPT_ANY; a shared AES/CM page is mapped once.
+Host VAL maps RX/TX key buffers for EL3 access before PROGRAM.
+Platforms with fixed register apertures resolve them in PAL without VAL macros.
+Discovery runs before each PROGRAM, GO and STOP. Initialize both register-region
+outputs on success. Return zero only for regions the backend does not access.
+As with PCIe, bases do not describe aperture lengths: each accessed register
+must lie in a mapped granule, or EL3 mapping must be extended accordingly.
 
-The existing Host helper assumes a 4 KiB key-management register region. Check
-that this covers the ported backend; extend the mapping if its registers span
-additional translation granules.
+PROGRAM, GO and STOP are separate operations. RP PROGRAM completes before
+either endpoint KEY_SET_GO. Both endpoint KEY_SET_GO operations complete before
+RP GO. A failed PROGRAM must not invoke GO. Failures from the RP PROGRAM attempt
+onward trigger best-effort STOP at both endpoint directions and the RP, while
+preserving the original establishment result. STOP must handle partially
+programmed or already inactive banks. Teardown attempts all three STOPs before
+returning the first failure; after successful STOPs, VAL verifies both ports are
+Insecure. Use bounded hardware completion polling in each PAL operation.
 
 ### EL3 service arguments
 
-| Field | Current CXL service meaning |
+| Field | CXL service meaning |
 | --- | --- |
-| `shared_data->arg0` | `IDE_GET_BASE`, `IDE_ENABLE`, or `IDE_DISABLE`. |
-| `shared_data->arg2` | RP BAR0 base; GET_BASE returns the key-management base here. |
-| `shared_data->arg3` | Stream ID for ENABLE and DISABLE. |
-| `shared_data->arg4` | Platform key-slot selector for ENABLE and DISABLE. |
-| `shared_data->arg5` | Address of the RP RX key buffer for ENABLE. |
-| `shared_data->arg6` | Address of the RP TX key buffer for ENABLE. |
-
-`CXL_IDE_KEY_BUFFER` contains `key[8]` and `iv[3]`, both arrays of 32-bit words.
-The RX/TX names are relative to the RP: endpoint TX feeds RP RX, and endpoint RX
-consumes RP TX. Interpret key/IV representation and slot selection according to
-the platform backend. The reference programming function currently writes the
-key words, but does not consume the supplied `iv` array; port IV programming
-explicitly where the hardware requires it.
+| `shared_data->arg0` | `IDE_CXL_KEY_PROG`, `IDE_CXL_KEY_GO`, or `IDE_CXL_KEY_STOP`. |
+| `shared_data->arg1` | Packed Root Port Requester ID. |
+| `shared_data->arg2` | Segment ECAM base. |
+| `shared_data->arg3` | Stream ID. |
+| `shared_data->arg4` | Paired key-bank slot. |
+| `shared_data->arg5` | Address of the RP RX key buffer for PROGRAM; IDE mode for GO (0 = Skid, 1 = Containment). |
+| `shared_data->arg6` | Address of the RP TX key buffer for PROGRAM. |
 
 ### PAL entry points
 
 | API | Implementation responsibility |
 | --- | --- |
-| `pal_cxl_root_port_ide_get_km_base(bar0_base, ide_km_base)` | Discover and return the RP key-management register base. This query precedes register mapping; do not rely on unmapped key-management MMIO during discovery. |
-| `pal_cxl_root_port_ide_program_and_enable(bar0_base, stream_id, key_slot, rx_key, tx_key)` | Resolve the selected stream/slot, program both RP directions, and activate the RP according to its backend rules. Programming and activation are combined in this interface. |
-| `pal_cxl_root_port_ide_disable(bar0_base, stream_id, key_slot)` | Stop the selected RP stream/slot and verify completion. |
+| `pal_cxl_rp_ide_cfg_address(ecam_base, rp_id, config)` | Resolve configuration address without MMIO access. |
+| `pal_cxl_rp_ide_km_address(config, registers)` | Discover AES and CXL.CM pages after EL3 maps configuration space. |
+| `pal_cxl_rp_ide_key_program(registers, selector, rx_key, tx_key)` | Load both RP directions and complete RX preparation for incoming IDE.START, without starting RP TX. |
+| `pal_cxl_rp_ide_key_go(registers, selector, mode)` | Apply the requested mode, then activate the selected bank after the endpoint is armed. |
+| `pal_cxl_rp_ide_key_stop(registers, selector)` | Stop the selected stream/key bank and verify completion. |
 
-These APIs return zero for success and nonzero for failure. The current CXL SMC
-handler reports PAL failures through `shared_data->status_code` and
-`shared_data->error_msg`; it does not use the PCIe unsupported-to-SKIP mapping.
+`CXL_IDE_SELECTOR` contains eight-bit `stream_id` and `key_slot` fields; current
+establishment uses stream 0 and slot 0.
+`CXL_IDE_RP_REGISTERS` contains `aes` and `cm_host`; these can name the same page
+or separate pages. `CXL_IDE_KEY_BUFFER` contains `key[8]` and `iv[3]`, both arrays
+of 32-bit words. RX/TX directions are relative to the RP: endpoint TX feeds RP
+RX, and endpoint RX consumes RP TX. The paired programming API reflects this
+CXL flow; PCIe PR/NPR/Completion substream selectors do not apply.
 
-Support the supplied stream and slot selectors, or reject unsupported values
-explicitly. The reference disable function does not use those selectors, so
-check their handling when porting to a backend with multiple streams or slots.
-Use bounded completion polling and platform MMIO access/barrier rules. Do not
-retain key-buffer pointers or print key material.
+Establishment programs endpoint RX/TX and then RP RX/TX before issuing any GO.
+Successful RP PROGRAM must leave its receiver ready to accept the endpoint's
+IDE.START; complete any platform-specific RX arming in that operation. Endpoint
+RX GO and TX GO then complete before RP GO starts the RP transmitter. A backend
+must not defer RX readiness until the paired RP GO operation.
 
-Do not assume PCIe PR/NPR/Completion selectors or separate RP PROGRAM/GO/STOP
-operations apply to the CXL API. Any future interface migration should update
-Host VAL and EL3 together; the existing CXL path remains separate.
+The FVP backend retains its synthetic BAR-relative page. It writes key words
+and does not consume `iv`, because this synthetic interface has no IV
+registers. A hardware backend must implement its required key/IV representation,
+bank selection, completion polling and MMIO/barrier rules. Do not retain
+key-buffer pointers or print key material.
+
+The RD-V3 backend provides empty placeholders, like its PCIe IDE backend.
+Every CXL entry point returns `CXL_IDE_UNSUPPORTED` without accessing registers
+or writing output arguments. A platform implementation is required.
+
+CXL PAL operations return `CXL_IDE_SUCCESS` (zero), `CXL_IDE_ERROR` (one), or
+`CXL_IDE_UNSUPPORTED` (two). The current CXL SMC interface treats nonzero PAL
+status as failure; it does not yet propagate unsupported as a Host SKIP.
+The CXL SMC handler returns operation status in `shared_data->status_code`.
+PROGRAM and STOP failures also populate `shared_data->error_msg`; the Host GO
+wrapper prints its own failure message.
+
+Implement all five PAL entry points listed above.
+
+The EL3 Makefile collects all platform `src/*.c` files, so the dedicated CXL
+source is included automatically.

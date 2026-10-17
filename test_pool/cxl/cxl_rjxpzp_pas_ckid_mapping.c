@@ -551,6 +551,7 @@ exercise_root_port(const CXL_COMPONENT_TABLE *table,
   val_spdm_context_t ctx;
   uint32_t session_id = 0u;
   uint32_t session_active = 0u;
+  uint32_t ide_active = 0u;
   uint32_t mec_enabled = 0u;
   uint32_t tsp_locked = 0u;
   PCIE_ENDPOINT_CFG endpoint_cfg;
@@ -802,6 +803,16 @@ exercise_root_port(const CXL_COMPONENT_TABLE *table,
   feature_enable_mask = (uint16_t)(CXL_TSP_MEMORY_ENCRYPTION_FEATURES_ENABLE_ENCRYPTION |
                                    CXL_TSP_MEMORY_ENCRYPTION_FEATURES_ENABLE_CKID_BASED_ENCRYPTION);
 
+  /* Establish IDE before locking TSP and issuing protected CXL.mem traffic. */
+  status = val_cxl_ide_establish_link(root_index, endpoint_index, &ctx, session_id);
+  if (status != ACS_STATUS_PASS)
+  {
+    restore_decoders(&context);
+    (void)val_spdm_session_close(&ctx, session_id);
+    return (status == ACS_STATUS_SKIP) ? ACS_STATUS_SKIP : ACS_STATUS_FAIL;
+  }
+  ide_active = 1u;
+
   /* Configure and lock TSP with CKID-based encryption enabled. */
   status = val_cxl_tsp_configure_and_lock(root_index,
                                           endpoint_index,
@@ -811,12 +822,14 @@ exercise_root_port(const CXL_COMPONENT_TABLE *table,
                                           feature_enable_mask);
   if (status == ACS_STATUS_SKIP)
   {
+    (void)val_cxl_ide_disable_link(root_index, endpoint_index, &ctx, session_id);
     restore_decoders(&context);
     (void)val_spdm_session_close(&ctx, session_id);
     return ACS_STATUS_SKIP;
   }
   if (status != ACS_STATUS_PASS)
   {
+    (void)val_cxl_ide_disable_link(root_index, endpoint_index, &ctx, session_id);
     restore_decoders(&context);
     (void)val_spdm_session_close(&ctx, session_id);
     return ACS_STATUS_FAIL;
@@ -827,6 +840,7 @@ exercise_root_port(const CXL_COMPONENT_TABLE *table,
   /* Enable MEC so MECID programming affects CXL.mem transactions. */
   if (val_is_mec_supported() == 0u)
   {
+    (void)val_cxl_ide_disable_link(root_index, endpoint_index, &ctx, session_id);
     (void)val_spdm_session_close(&ctx, session_id);
     (void)val_cxl_unlock_tsp_best_effort(root_bdf, endpoint->bdf, &endpoint_cfg);
     restore_decoders(&context);
@@ -835,6 +849,7 @@ exercise_root_port(const CXL_COMPONENT_TABLE *table,
 
   if (val_rlm_enable_mec())
   {
+    (void)val_cxl_ide_disable_link(root_index, endpoint_index, &ctx, session_id);
     (void)val_spdm_session_close(&ctx, session_id);
     (void)val_cxl_unlock_tsp_best_effort(root_bdf, endpoint->bdf, &endpoint_cfg);
     restore_decoders(&context);
@@ -1031,6 +1046,11 @@ exercise_root_port(const CXL_COMPONENT_TABLE *table,
 
   if (mec_enabled != 0u)
     (void)val_rlm_disable_mec();
+
+  if ((ide_active != 0u) &&
+      (val_cxl_ide_disable_link(root_index, endpoint_index, &ctx, session_id) !=
+       ACS_STATUS_PASS))
+    failures++;
 
   if (session_active != 0u)
     (void)val_spdm_session_close(&ctx, session_id);

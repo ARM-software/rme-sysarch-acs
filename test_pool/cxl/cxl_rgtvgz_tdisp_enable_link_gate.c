@@ -539,6 +539,7 @@ verify_root_port(const CXL_COMPONENT_TABLE *table,
   uint32_t ide_supported = 0u;
   uint32_t session_id = 0u;
   uint32_t session_active = 0u;
+  uint32_t ide_cleanup_required = 0u;
   uint16_t endpoint_rid;
   val_spdm_context_t spdm_ctx;
   smmu_master_attributes_t master;
@@ -626,6 +627,8 @@ verify_root_port(const CXL_COMPONENT_TABLE *table,
     result = ACS_STATUS_FAIL;
     goto cleanup;
   }
+
+  ide_cleanup_required = 1u;
 
   /* Read IDE status and require active state for this case. */
   status = is_ide_link_active(root_index, &ide_active, &ide_supported);
@@ -853,6 +856,7 @@ verify_root_port(const CXL_COMPONENT_TABLE *table,
                                     context.endpoint_index,
                                     &spdm_ctx,
                                     session_id);
+  ide_cleanup_required = 0u; /* The deliberate STOP attempted all directions. */
   if (status == ACS_STATUS_SKIP)
   {
     val_print(ACS_PRINT_INFO, "  RGTVGZ: KEY_SET_STOP unsupported", 0);
@@ -946,6 +950,10 @@ cleanup:
   if (buffer_valid != 0u)
     val_memory_free_pages(buffer_va, 2);
 
+  if ((ide_cleanup_required != 0u) &&
+      (val_cxl_ide_disable_link(root_index, endpoint_index, &spdm_ctx, session_id) !=
+       ACS_STATUS_PASS))
+    val_print(ACS_PRINT_WARN, "  RGTVGZ: IDE cleanup failed", 0);
   if (session_active != 0u)
     (void)val_spdm_session_close(&spdm_ctx, session_id);
 
