@@ -20,6 +20,7 @@
 #include "include/val_pe.h"
 #include "include/val_interface.h"
 #include "include/val_el32.h"
+#include "include/val_pcie.h"
 
 /**
  *  @brief  This API is used to set the given memory with the required data
@@ -109,7 +110,7 @@ val_map_shared_mem_el3(uint64_t shared_addr)
 }
 
 uint32_t
-val_cxl_root_port_ide_program_and_enable_el3(uint64_t bar0_base,
+val_cxl_root_port_ide_program_el3(uint32_t rp_bdf,
                                               uint8_t stream_id,
                                               uint8_t key_slot,
                                               const CXL_IDE_KEY_BUFFER *rx_key,
@@ -118,13 +119,14 @@ val_cxl_root_port_ide_program_and_enable_el3(uint64_t bar0_base,
   if ((rx_key == NULL) || (tx_key == NULL))
     return 1;
 
-  shared_data->arg0 = IDE_ENABLE;
-  shared_data->arg2 = bar0_base;
+  shared_data->arg0 = IDE_CXL_KEY_PROG;
+  shared_data->arg1 = PCIE_CREATE_BDF_PACKED(rp_bdf);
+  shared_data->arg2 = val_pcie_get_ecam_base(rp_bdf);
   shared_data->arg3 = stream_id;
   shared_data->arg4 = key_slot;
   shared_data->arg5 = (uint64_t)rx_key;
   shared_data->arg6 = (uint64_t)tx_key;
-  UserCallSMC(ARM_ACS_SMC_FID, EL3_IDE_KM, 0, 0, 0);
+  UserCallSMC(ARM_ACS_SMC_FID, EL3_CXL_IDE_KM, 0, 0, 0);
   if (val_pe_get_index_mpid(val_pe_get_mpid()) != 0)
       return shared_data->status_code ? 1 : 0;
   if (shared_data->status_code != 0) {
@@ -138,17 +140,35 @@ val_cxl_root_port_ide_program_and_enable_el3(uint64_t bar0_base,
 }
 
 uint32_t
-val_cxl_root_port_ide_disable_el3(uint64_t bar0_base,
+val_cxl_root_port_ide_go_el3(uint32_t rp_bdf, uint8_t stream_id, uint8_t key_slot,
+                                      uint8_t mode)
+{
+  shared_data->arg0 = IDE_CXL_KEY_GO;
+  shared_data->arg1 = PCIE_CREATE_BDF_PACKED(rp_bdf);
+  shared_data->arg2 = val_pcie_get_ecam_base(rp_bdf);
+  shared_data->arg3 = stream_id;
+  shared_data->arg4 = key_slot;
+  shared_data->arg5 = mode;
+  shared_data->arg6 = 0u;
+  UserCallSMC(ARM_ACS_SMC_FID, EL3_CXL_IDE_KM, 0, 0, 0);
+  if (shared_data->status_code != 0u)
+    val_print(ACS_PRINT_ERR, " EL3: IDE_KM GO failed", 0);
+  return shared_data->status_code ? 1u : 0u;
+}
+
+uint32_t
+val_cxl_root_port_ide_stop_el3(uint32_t rp_bdf,
                                    uint8_t stream_id,
                                    uint8_t key_slot)
 {
-  shared_data->arg0 = IDE_DISABLE;
-  shared_data->arg2 = bar0_base;
+  shared_data->arg0 = IDE_CXL_KEY_STOP;
+  shared_data->arg1 = PCIE_CREATE_BDF_PACKED(rp_bdf);
+  shared_data->arg2 = val_pcie_get_ecam_base(rp_bdf);
   shared_data->arg3 = stream_id;
   shared_data->arg4 = key_slot;
   shared_data->arg5 = 0;
   shared_data->arg6 = 0;
-  UserCallSMC(ARM_ACS_SMC_FID, EL3_IDE_KM, 0, 0, 0);
+  UserCallSMC(ARM_ACS_SMC_FID, EL3_CXL_IDE_KM, 0, 0, 0);
   if (val_pe_get_index_mpid(val_pe_get_mpid()) != 0)
       return shared_data->status_code ? 1 : 0;
   if (shared_data->status_code != 0) {
@@ -159,31 +179,6 @@ val_cxl_root_port_ide_disable_el3(uint64_t bar0_base,
     val_print(ACS_PRINT_INFO, " EL3: IDE_KM disable successful", 0);
     return 0;
   }
-}
-
-uint32_t
-val_cxl_root_port_ide_get_base_el3(uint64_t bar0_base,
-                                    uint64_t *ide_km_base)
-{
-  if (ide_km_base == NULL)
-    return 1;
-
-  shared_data->arg0 = IDE_GET_BASE;
-  shared_data->arg2 = bar0_base;
-  shared_data->arg3 = 0;
-  shared_data->arg4 = 0;
-  shared_data->arg5 = 0;
-  shared_data->arg6 = 0;
-  UserCallSMC(ARM_ACS_SMC_FID, EL3_IDE_KM, 0, 0, 0);
-  if (val_pe_get_index_mpid(val_pe_get_mpid()) != 0)
-      return shared_data->status_code ? 1 : 0;
-  if (shared_data->status_code != 0) {
-    val_print(ACS_PRINT_ERR, shared_data->error_msg, 0);
-    return 1;
-  }
-
-  *ide_km_base = shared_data->arg2;
-  return 0;
 }
 
 /**

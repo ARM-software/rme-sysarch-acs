@@ -246,11 +246,13 @@ uint32_t cxl_rfdvzc_tdisp_disable_entry(uint32_t num_pe);
 uint32_t cxl_rbytyv_root_port_pas_behavior_entry(uint32_t num_pe);
 uint32_t cxl_rnycll_tdisp_disable_reject_entry(uint32_t num_pe);
 uint32_t cxl_rgtvgz_tdisp_enable_link_gate_entry(uint32_t num_pe);
-uint32_t val_cxl_root_port_ide_program_and_enable(uint32_t rp_bdf,
-                                                  uint8_t stream_id,
-                                                  uint8_t key_slot,
-                                                  const CXL_IDE_KEY_BUFFER *rx_key,
-                                                  const CXL_IDE_KEY_BUFFER *tx_key);
+/* CXL.cachemem operations address a paired RX/TX bank, relative to the RP. */
+uint32_t val_cxl_rp_ide_key_program(uint32_t rp_bdf, const CXL_IDE_SELECTOR *selector,
+                                     const CXL_IDE_KEY_BUFFER *rx_key,
+                                     const CXL_IDE_KEY_BUFFER *tx_key);
+uint32_t val_cxl_rp_ide_key_go(uint32_t rp_bdf, const CXL_IDE_SELECTOR *selector,
+                        uint8_t mode);
+uint32_t val_cxl_rp_ide_key_stop(uint32_t rp_bdf, const CXL_IDE_SELECTOR *selector);
 uint32_t val_cxl_ide_disable_link(uint32_t root_index,
                                   uint32_t endpoint_index,
                                   val_spdm_context_t *context,

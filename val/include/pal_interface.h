@@ -349,6 +349,15 @@ typedef struct {
   CXL_INFO_BLOCK device[];
 } CXL_INFO_TABLE;
 
+#define CXL_IDE_MODE_SKID        0u
+#define CXL_IDE_MODE_CONTAINMENT 1u
+
+/* CXL.cachemem uses a paired RX/TX key bank, relative to the Root Port. */
+typedef struct {
+  uint8_t stream_id;
+  uint8_t key_slot;
+} CXL_IDE_SELECTOR;
+
 typedef struct {
   uint32_t key[8];
   uint32_t iv[3];
@@ -389,17 +398,9 @@ uint32_t pal_link_get_exposure(uint16_t segment,
                                uint8_t device,
                                uint8_t function,
                                uint32_t *exposed);
-uint32_t pal_cxl_root_port_ide_program_and_enable(uint32_t rp_bdf,
-                                                  uint8_t stream_id,
-                                                  uint8_t key_slot,
-                                                  const CXL_IDE_KEY_BUFFER *rx_key,
-                                                  const CXL_IDE_KEY_BUFFER *tx_key);
 uint32_t pal_cxl_rp_is_not_subject_to_host_gpc(uint32_t rp_bdf);
 uint32_t pal_cxl_rp_is_realm_access_authorized(uint32_t rp_bdf);
 uint32_t pal_cxl_is_chi_c2c_supported(uint32_t bdf);
-uint32_t pal_cxl_root_port_ide_disable(uint32_t rp_bdf,
-                                       uint8_t stream_id,
-                                       uint8_t key_slot);
 /**
   @brief  Instance of SMMU INFO block
 **/

@@ -217,13 +217,22 @@ payload(void)
                                             session_id,
                                             requested_ckids,
                                             feature_enable_mask);
-    (void)val_spdm_session_close(&spdm_context, session_id);
     if (status != ACS_STATUS_PASS)
     {
       val_print(ACS_PRINT_WARN, " Failed to lock TSP for EP 0x%x", endpoint_bdf);
+      if (val_cxl_ide_disable_link(root_index, endpoint_index,
+                                    &spdm_context, session_id) != ACS_STATUS_PASS)
+      {
+        val_print(ACS_PRINT_WARN, " IDE cleanup failed for EP 0x%x", endpoint_bdf);
+        failures++;
+      }
+      (void)val_spdm_session_close(&spdm_context, session_id);
       skipped_lock_setup++;
       continue;
     }
+
+    /* Keep IDE active for the reset stimulus on the successful path. */
+    (void)val_spdm_session_close(&spdm_context, session_id);
 
     /* Preserve endpoint BARs and command bits before performing a reset. */
     PCIE_ENDPOINT_CFG endpoint_cfg;
