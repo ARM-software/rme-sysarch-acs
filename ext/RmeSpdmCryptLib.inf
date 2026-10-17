@@ -32,6 +32,7 @@
   libspdm/library/spdm_crypt_lib/libspdm_crypt_hkdf.c
   libspdm/library/spdm_crypt_lib/libspdm_crypt_hmac.c
   libspdm/library/spdm_crypt_lib/libspdm_crypt_rng.c
+  libspdm/os_stub/cryptlib_openssl/pk/dh.c
 
 [Packages]
   MdePkg/MdePkg.dec
@@ -44,10 +45,13 @@
   BaseMemoryLib
   DebugLib
   BaseCryptLib
+  OpensslLib
   RngLib
   MemLibWrapper
 
 [BuildOptions]
+  *_*_AARCH64_CC_FLAGS = -DLIBSPDM_CPU_AARCH64
+  *_*_*_CC_FLAGS = -I$(WORKSPACE)/ShellPkg/Application/rme-acs/ext/include/hal -I$(WORKSPACE)/ShellPkg/Application/rme-acs/ext/libspdm/os_stub/include -I$(WORKSPACE)/ShellPkg/Application/rme-acs/ext/libspdm/include/hal -I$(WORKSPACE)/ShellPkg/Application/rme-acs/ext/libspdm/os_stub/cryptlib_openssl -I$(WORKSPACE)/CryptoPkg/Library/Include -I$(WORKSPACE)/CryptoPkg/Library/OpensslLib/openssl/include -I$(WORKSPACE)/CryptoPkg/Library/OpensslLib/OpensslGen/include -I$(WORKSPACE)/ShellPkg/Application/rme-acs/ext/libspdm/os_stub/openssllib/include -Wno-deprecated-declarations
   GCC:*_*_*_CC_FLAGS         = -I$(WORKSPACE)/ShellPkg/Application/rme-acs/ext/include -I$(WORKSPACE)/ShellPkg/Application/rme-acs/ext/libspdm/include
   CLANGPDB:*_*_*_CC_FLAGS    = -I$(WORKSPACE)/ShellPkg/Application/rme-acs/ext/include -I$(WORKSPACE)/ShellPkg/Application/rme-acs/ext/libspdm/include -Wno-non-literal-null-conversion
   CLANGDWARF:*_*_*_CC_FLAGS  = -I$(WORKSPACE)/ShellPkg/Application/rme-acs/ext/include -I$(WORKSPACE)/ShellPkg/Application/rme-acs/ext/libspdm/include -Wno-non-literal-null-conversion
