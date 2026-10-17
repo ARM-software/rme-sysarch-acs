@@ -28,16 +28,6 @@ uint32_t val_el3_disable_ns_encryption(void);
 void val_el3_prog_legacy_tz(int enable);
 void val_el3_pas_filter_active_mode(int enable);
 void val_el3_security_state_change(uint64_t attr_nse_ns);
-uint32_t val_el3_ide_km_program_and_enable(uint64_t bar0_base,
-                                           uint8_t stream_id,
-                                           uint8_t key_slot,
-                                           const CXL_IDE_KEY_BUFFER *rx_key,
-                                           const CXL_IDE_KEY_BUFFER *tx_key);
-uint32_t val_el3_ide_km_disable(uint64_t bar0_base,
-                                uint8_t stream_id,
-                                uint8_t key_slot);
-uint32_t val_el3_ide_km_get_base(uint64_t bar0_base,
-                                 uint64_t *ide_km_base);
 #endif /* __ASSEMBLER__ */
 
 #endif /* VAL_EL3_SECURITY_H */
