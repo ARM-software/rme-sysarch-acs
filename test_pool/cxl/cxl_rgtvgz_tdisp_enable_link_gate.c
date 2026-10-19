@@ -355,7 +355,8 @@ init_rmecda_context(const CXL_COMPONENT_ENTRY *root_port,
 }
 
 static uint32_t
-program_ctl1_mode(const RGTVGZ_CONTEXT *context,
+program_ctl1_mode(uint32_t root_bdf,
+                  const RGTVGZ_CONTEXT *context,
                   uint32_t tdisp_en,
                   uint32_t link_str_lock)
 {
@@ -363,16 +364,24 @@ program_ctl1_mode(const RGTVGZ_CONTEXT *context,
   uint32_t readback;
   uint32_t expected_bits = 0u;
   uint32_t checked_bits;
+  uint32_t status;
 
   if (context == NULL)
     return ACS_STATUS_ERR;
 
-  rmecda_ctl1 = context->rmecda_ctl1_orig &
-                ~(RMECDA_CTL1_TDISP_EN_MASK |
-                  RMECDA_CTL1_LINK_STR_LOCK_MASK);
+  status = tdisp_en ? val_pcie_enable_tdisp(root_bdf) : val_pcie_disable_tdisp(root_bdf);
+  if (status ||
+      read_from_root(context->rmecda_cfg_va + context->rmecda_cap_base +
+                     RMECDA_CTL1_OFFSET, &rmecda_ctl1) != ACS_STATUS_PASS)
+  {
+    val_print(ACS_PRINT_ERR, "  RGTVGZ: TDISP state setup failed", 0);
+    return ACS_STATUS_FAIL;
+  }
+
+  /* Preserve the TDISP state established by the common helper */
+  rmecda_ctl1 &= ~RMECDA_CTL1_LINK_STR_LOCK_MASK;
   if (tdisp_en != 0u)
   {
-    rmecda_ctl1 |= RMECDA_CTL1_TDISP_EN_MASK;
     expected_bits |= RMECDA_CTL1_TDISP_EN_MASK;
   }
 
@@ -816,7 +825,7 @@ verify_root_port(const CXL_COMPONENT_TABLE *table,
    * Case 1: TDISP_EN=1, LINK_STR_LOCK=1 and IDE active -> request permitted.
    * The payload should propagate, so source and destination buffers must match.
    */
-  status = program_ctl1_mode(&context, 1u, 1u);
+  status = program_ctl1_mode(root_port->bdf, &context, 1u, 1u);
   if (status != ACS_STATUS_PASS)
   {
     val_print(ACS_PRINT_ERR, "  RGTVGZ: RMECDA_CTL1 setup failed", 0);
@@ -870,7 +879,7 @@ verify_root_port(const CXL_COMPONENT_TABLE *table,
   }
 
   /* Case 3: TDISP_EN=1, LINK_STR_LOCK=0 -> request rejected. */
-  status = program_ctl1_mode(&context, 1u, 0u);
+  status = program_ctl1_mode(root_port->bdf, &context, 1u, 0u);
   if (status != ACS_STATUS_PASS)
   {
     val_print(ACS_PRINT_ERR, "  RGTVGZ: LINK_STR_LOCK clear failed", 0);
@@ -891,7 +900,7 @@ verify_root_port(const CXL_COMPONENT_TABLE *table,
   }
 
   /* Case 4: TDISP_EN=0 -> request rejected as per RNYCLL fallback path. */
-  status = program_ctl1_mode(&context, 0u, 1u);
+  status = program_ctl1_mode(root_port->bdf, &context, 0u, 1u);
   if (status != ACS_STATUS_PASS)
   {
     val_print(ACS_PRINT_ERR, "  RGTVGZ: TDISP_EN clear failed", 0);
