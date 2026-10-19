@@ -30,8 +30,9 @@
 
 /*
  * @brief  The test validates that coherent interconnect supports CMO to PoPA.
- * 1. Mark PA as ALL_ACCESS and initialise it  with INIT_DATA
+ * 1. Mark PA as ALL_ACCESS
  * 2. VA_NS and VA_S are mapped to the PA with Non-Secure and Secure access PAS respectively.
+ *    Initialize through VA_NS and complete an NS CMO to PoPA.
  * 3. Access VA_NS and VA_S returns rd_data_ns and rd_data_s respectively.
  * 4. Store wt_data_s in VA_S and then issue CMO to PoPA for PA with secure and non-secure PASs.
  * 5. Access VA_NS and expect a data, ns_data_popa, that is different from rd_data_ns.
@@ -56,10 +57,6 @@ void payload(void)
       return;
   }
 
-  /*PA is initialized with the initial DATA*/
-  val_print(ACS_PRINT_TEST, " Initializing PA with data 0x%lx", INIT_DATA);
-  *(uint64_t *)PA = (uint64_t) INIT_DATA;
-
   if (val_add_mmu_entry_el3(VA_S/* VA1 */, PA, (attr | LOWER_ATTRS(PAS_ATTR(SECURE_PAS)))))
   {
       val_print(ACS_PRINT_ERR, "\n  Failed to add MMU entry for VA1 0x%lx", VA_S);
@@ -71,6 +68,24 @@ void payload(void)
   {
       val_print(ACS_PRINT_ERR, "\n  Failed to add MMU entry for VA2 0x%lx", VA_NS);
       val_set_status(index, "FAIL", 03);
+      return;
+  }
+
+  /* Initialize through the NS alias, then remove dirty NS state before the Secure write. */
+  val_print(ACS_PRINT_TEST, " Initializing PA through NS PAS with data 0x%lx", INIT_DATA);
+  shared_data->num_access = 1;
+  shared_data->shared_data_access[0].addr = VA_NS;
+  shared_data->shared_data_access[0].data = INIT_DATA;
+  shared_data->shared_data_access[0].access_type = WRITE_DATA;
+  if (val_pe_access_mut_el3()) {
+      val_print(ACS_PRINT_ERR, " Failed to initialize VA_NS = 0x%lx", VA_NS);
+      val_set_status(index, "FAIL", 9);
+      return;
+  }
+
+  if (val_data_cache_ops_by_pa_el3(PA, NONSECURE_PAS)) {
+      val_print(ACS_PRINT_ERR, " Failed to issue initialization CMO for PA 0x%lx", PA);
+      val_set_status(index, "FAIL", 10);
       return;
   }
 
