@@ -327,7 +327,7 @@
 #define RC_MAP0_INPUT_BASE            0x0
 #define RC_MAP0_ID_COUNT              0xFFFF
 #define RC_MAP0_OUTPUT_BASE           0x0
-#define RC_MAP0_OUTPUT_REF            0x250
+#define RC_MAP0_OUTPUT_REF            0x138
 
 #define SMMUV3_0_ID_MAP0_INPUT_BASE   0x0
 #define SMMUV3_0_ID_MAP0_ID_COUNT     0xFFFF
@@ -349,6 +349,19 @@
 #define DMA_BUS_ADDR    0x010
 #define DMA_LEN         0x018
 #define DMASTATUS       0x01C
+
+/* Reference exerciser DMA register fields and completion polling budget. */
+#define EXERCISER_DMA_TRIGGER_MASK    0xFU
+#define EXERCISER_DMA_TRIGGER_START   0x1U
+#define EXERCISER_DMA_DIRECTION_MASK  (1U << 4)
+#define EXERCISER_DMA_STATUS_MASK     0x3U
+#define EXERCISER_DMA_STATUS_CLEAR    (1U << 2)
+
+/* Maximum MMIO polls, not elapsed time. Platforms may override this budget. */
+#ifndef EXERCISER_DMA_POLL_LIMIT
+#define EXERCISER_DMA_POLL_LIMIT PLATFORM_OVERRIDE_TIMEOUT_LARGE
+#endif
+
 #define PCI_MAX_BUS     255
 #define PCI_MAX_DEVICE  31
 #define PASID_VAL       0x020

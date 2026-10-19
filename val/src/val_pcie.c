@@ -1769,6 +1769,13 @@ val_pcie_enable_eru(uint32_t bdf)
   dis_mask = (1 << CR_SERRE_SHIFT);
   val_pcie_write_cfg(bdf, TYPE01_CR, reg_value | dis_mask);
 
+  /* Enable SERR# forwarding for functions with a Type 1 configuration header. */
+  if (val_pcie_function_header_type(bdf) == TYPE1_HEADER)
+  {
+      val_pcie_read_cfg(bdf, TYPE01_ILR, &reg_value);
+      val_pcie_write_cfg(bdf, TYPE01_ILR, reg_value | BRIDGE_CTRL_SERRE_SET);
+  }
+
   /* Get the PCI Express Capability structure offset and
    * use that offset to read the Device Control register
    */
@@ -1805,6 +1812,13 @@ val_pcie_disable_eru(uint32_t bdf)
   val_pcie_read_cfg(bdf, TYPE01_CR, &reg_value);
   dis_mask = ~(1 << CR_SERRE_SHIFT);
   val_pcie_write_cfg(bdf, TYPE01_CR, reg_value & dis_mask);
+
+  /* Disable SERR# forwarding for functions with a Type 1 configuration header. */
+  if (val_pcie_function_header_type(bdf) == TYPE1_HEADER)
+  {
+      val_pcie_read_cfg(bdf, TYPE01_ILR, &reg_value);
+      val_pcie_write_cfg(bdf, TYPE01_ILR, reg_value & ~BRIDGE_CTRL_SERRE_SET);
+  }
 
   /* Get the PCI Express Capability structure offset and
    * use that offset to read the Device Control register
@@ -2730,6 +2744,7 @@ uint32_t val_pcie_enable_tdisp(uint32_t bdf)
 {
   uint64_t va;
   uint64_t cfg_addr;
+  uint64_t tg, reg_pa;
   uint64_t attr;
   uint32_t cap_base, reg_value;
   uint32_t reg_offset;
@@ -2756,10 +2771,14 @@ uint32_t val_pcie_enable_tdisp(uint32_t bdf)
     return 1;
   }
 
-  va = val_get_free_va(val_get_min_tg());
+  tg = val_get_min_tg();
+  if (!tg || (tg & (tg - 1u)))
+    return 1;
+
+  va = val_get_free_va(tg);
   cfg_addr = val_pcie_get_bdf_config_addr(bdf);
 
-  if (cfg_addr == 0u)
+  if (!cfg_addr || !va || (va & (tg - 1u)))
     return 1;
 
   if (val_pcie_read_cfg(bdf, cap_base + reg_offset, &reg_value) != PCIE_SUCCESS ||
@@ -2770,13 +2789,16 @@ uint32_t val_pcie_enable_tdisp(uint32_t bdf)
   attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(OUTER_SHAREABLE)
                   | GET_ATTR_INDEX(DEV_MEM_nGnRnE) | PGT_ENTRY_AP_RW);
 
-  if (val_add_mmu_entry_el3(va, cfg_addr, (attr | LOWER_ATTRS(PAS_ATTR(ROOT_PAS)))))
+  /* A PCIe function's 4KB configuration space can start partway through a page. */
+  reg_pa = cfg_addr + cap_base + reg_offset;
+  if (val_add_mmu_entry_el3(va, reg_pa & ~(tg - 1u),
+                           (attr | LOWER_ATTRS(PAS_ATTR(ROOT_PAS)))))
   {
     val_print(ACS_PRINT_ERR, " MMU mapping failed for cfg_addr: 0x%llx", cfg_addr);
     return 1;
   }
   shared_data->num_access = 1;
-  shared_data->shared_data_access[0].addr = va + cap_base + reg_offset;
+  shared_data->shared_data_access[0].addr = va + (reg_pa & (tg - 1u));
   shared_data->shared_data_access[0].access_type = WRITE_DATA;
   shared_data->shared_data_access[0].data = write_value;
   if (val_pe_access_mut_el3())
@@ -2803,6 +2825,7 @@ uint32_t val_pcie_disable_tdisp(uint32_t bdf)
 {
   uint64_t va;
   uint64_t cfg_addr;
+  uint64_t tg, reg_pa;
   uint64_t attr;
   uint32_t cap_base, reg_value;
   uint32_t reg_offset;
@@ -2829,10 +2852,14 @@ uint32_t val_pcie_disable_tdisp(uint32_t bdf)
     return 1;
   }
 
-  va = val_get_free_va(val_get_min_tg());
+  tg = val_get_min_tg();
+  if (!tg || (tg & (tg - 1u)))
+    return 1;
+
+  va = val_get_free_va(tg);
   cfg_addr = val_pcie_get_bdf_config_addr(bdf);
 
-  if (cfg_addr == 0u)
+  if (!cfg_addr || !va || (va & (tg - 1u)))
     return 1;
 
   if (val_pcie_read_cfg(bdf, cap_base + reg_offset, &reg_value) != PCIE_SUCCESS ||
@@ -2843,18 +2870,21 @@ uint32_t val_pcie_disable_tdisp(uint32_t bdf)
   attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(OUTER_SHAREABLE)
                   | GET_ATTR_INDEX(DEV_MEM_nGnRnE) | PGT_ENTRY_AP_RW);
 
-  if (val_add_mmu_entry_el3(va, cfg_addr, (attr | LOWER_ATTRS(PAS_ATTR(ROOT_PAS)))))
+  /* A PCIe function's 4KB configuration space can start partway through a page. */
+  reg_pa = cfg_addr + cap_base + reg_offset;
+  if (val_add_mmu_entry_el3(va, reg_pa & ~(tg - 1u),
+                           (attr | LOWER_ATTRS(PAS_ATTR(ROOT_PAS)))))
   {
     val_print(ACS_PRINT_ERR, " MMU mapping failed for cfg_addr: 0x%llx", cfg_addr);
     return 1;
   }
   shared_data->num_access = 1;
-  shared_data->shared_data_access[0].addr = va + cap_base + reg_offset;
+  shared_data->shared_data_access[0].addr = va + (reg_pa & (tg - 1u));
   shared_data->shared_data_access[0].access_type = WRITE_DATA;
   shared_data->shared_data_access[0].data = write_value;
   if (val_pe_access_mut_el3())
   {
-    val_print(ACS_PRINT_ERR, " MUT Access failed for 0x%llx", (va + cap_base + reg_offset));
+    val_print(ACS_PRINT_ERR, " MUT Access failed for 0x%llx", (va + (reg_pa & (tg - 1u))));
     return 1;
   }
 
@@ -2983,6 +3013,7 @@ uint32_t val_pcie_rp_sec_prpty_check(uint64_t *register_entry_info)
   uint32_t data_rt, data_ns, org_data;
   uint32_t ret = 0;
   uint32_t tdisp_enabled = 0;
+  uint32_t restore_required = 0;
 
   register_entry = (REGISTER_INFO_TABLE *)register_entry_info;
 
@@ -3040,6 +3071,7 @@ uint32_t val_pcie_rp_sec_prpty_check(uint64_t *register_entry_info)
           shared_data->shared_data_access[0].addr = register_entry->address;
           shared_data->shared_data_access[0].access_type = WRITE_DATA;
           shared_data->shared_data_access[0].data = data_rt;
+          restore_required = 1;
           if (val_pe_access_mut_el3())
           {
             val_print(ACS_PRINT_ERR, " MUT access failed for 0x%llx", register_entry->address);
@@ -3063,23 +3095,11 @@ uint32_t val_pcie_rp_sec_prpty_check(uint64_t *register_entry_info)
           rd_data = val_mmio_read(register_entry->address);
 
           /* Fail if the NS write is successfull */
-          if (rd_data == data_rt)
+          if (rd_data != data_rt)
           {
-              val_print(ACS_PRINT_ERR, " Read is succesfull from NS for bdf: 0x%x", bdf);
+              val_print(ACS_PRINT_ERR, " Write is successful from NS for bdf: 0x%x", bdf);
               ret = 1;
               goto cleanup;
-          }
-
-          /* Restore the original data */
-          shared_data->num_access = 1;
-          shared_data->shared_data_access[0].addr = register_entry->address;
-          shared_data->shared_data_access[0].access_type = WRITE_DATA;
-          shared_data->shared_data_access[0].data = org_data;
-          if (val_pe_access_mut_el3())
-          {
-            val_print(ACS_PRINT_ERR, " MUT access failed for 0x%llx", register_entry->address);
-            ret = 1;
-            goto cleanup;
           }
 
           rd_data = 0;
@@ -3102,6 +3122,13 @@ uint32_t val_pcie_rp_sec_prpty_check(uint64_t *register_entry_info)
           shared_data->shared_data_access[0].addr = register_entry->address;
           shared_data->shared_data_access[0].access_type = WRITE_DATA;
           shared_data->shared_data_access[0].data = data_rt;
+          restore_required = 1;
+          if (val_pe_access_mut_el3())
+          {
+            val_print(ACS_PRINT_ERR, " MUT access failed for 0x%llx", register_entry->address);
+            ret = 1;
+            goto cleanup;
+          }
 
           /* Read the data from NS */
           rd_data = val_mmio_read(register_entry->address);
@@ -3116,26 +3143,25 @@ uint32_t val_pcie_rp_sec_prpty_check(uint64_t *register_entry_info)
 
           /* Write the data_ns from NS */
           val_mmio_write(register_entry->address, data_ns);
-          rd_data = val_mmio_read(register_entry->address);
 
-          /* Fail if the NS write is successfull */
-          if (rd_data == data_ns)
-          {
-              val_print(ACS_PRINT_ERR, " Write from NS is successfull for bdf: 0x%x", bdf);
-              ret = 1;
-              goto cleanup;
-          }
-
-          /* Restore the original data */
+          /* Read back through Root PAS to verify the NS write was blocked. */
           shared_data->num_access = 1;
           shared_data->shared_data_access[0].addr = register_entry->address;
-          shared_data->shared_data_access[0].access_type = WRITE_DATA;
-          shared_data->shared_data_access[0].data = org_data;
+          shared_data->shared_data_access[0].access_type = READ_DATA;
           if (val_pe_access_mut_el3())
           {
             val_print(ACS_PRINT_ERR, " MUT access failed for 0x%llx", register_entry->address);
             ret = 1;
             goto cleanup;
+          }
+          rd_data = shared_data->shared_data_access[0].data;
+
+          /* Fail if the NS write changed the Root-visible value. */
+          if (rd_data != data_rt)
+          {
+              val_print(ACS_PRINT_ERR, " Write is successful from NS for bdf: 0x%x", bdf);
+              ret = 1;
+              goto cleanup;
           }
 
           rd_data = 0;
@@ -3148,6 +3174,19 @@ uint32_t val_pcie_rp_sec_prpty_check(uint64_t *register_entry_info)
   }
 
 cleanup:
+  if (restore_required)
+  {
+      shared_data->num_access = 1;
+      shared_data->shared_data_access[0].addr = register_entry->address;
+      shared_data->shared_data_access[0].access_type = WRITE_DATA;
+      shared_data->shared_data_access[0].data = org_data;
+      if (val_pe_access_mut_el3())
+      {
+          val_print(ACS_PRINT_ERR, " Failed to restore register 0x%llx", register_entry->address);
+          ret = 1;
+      }
+  }
+
   if (tdisp_enabled)
     (void)val_pcie_disable_tdisp(bdf);
 

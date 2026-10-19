@@ -39,6 +39,13 @@
 #define RME_GET_SHARED_MEM        0x15
 #define EL3_IDE_KM                0x16
 #define EL3_PCIE_IDE_KM           0x17
+#define SMMU_ROOT_CONTROL        0x18
+
+/* SMMU_ROOT_CONTROL operations; the legacy access service keeps its ABI. */
+#define SMMU_ROOT_CR0_READ        2
+#define SMMU_ROOT_CR0_WRITE       3
+#define SMMU_ROOT_ACCESSEN        (1U << 0)
+#define SMMU_ROOT_GPCEN           (1U << 1)
 
 /* General Defines used by tests */
 #define INIT_DATA            0x11

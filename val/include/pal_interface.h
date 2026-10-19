@@ -247,6 +247,12 @@ typedef enum {
   ENTRY_TYPE_GICH
 } GIC_INFO_TYPE_e;
 
+/* ITS is disabled/quiescent. Preserve mappings and invalidate all translation
+ * caches; return 0 only after completion, NOT_IMPLEMENTED without changing
+ * hardware if unsupported. On other errors VAL leaves ITS stopped.
+ */
+uint32_t pal_gic_its_invalidate_cache(uint64_t its_base);
+
 void pal_gic_create_info_table(GIC_INFO_TABLE *gic_info_table);
 uint32_t pal_gic_install_isr(uint32_t int_id, void (*isr)(void));
 void pal_gic_end_of_interrupt(uint32_t int_id);
@@ -684,9 +690,6 @@ void pal_restore_global_test_data(uint64_t nvm_mem, uint32_t *total_tests, uint3
 #define TEST_DDR_REGION_CNT 16
 #define RID_VALID           1
 #define RID_NOT_VALID       0
-
-#define EXERCISER_ID 0xED0113B5 // device id + vendor id
-
 typedef enum {
   TYPE0 = 0x0,
   TYPE1 = 0x1,
@@ -777,7 +780,8 @@ typedef enum {
   ATS_TXN_REQ          = 0xd,
   INJECT_ERROR         = 0xe,
   ATS_INV_CACHE        = 0xf,
-  CXL_CMD_START        = 0x10
+  CXL_CMD_START        = 0x10,
+  DMA_WAIT             = 0x11
 } EXERCISER_OPS;
 
 #define CXL_CMD_OP_BACKDOOR_READ64           0x1u

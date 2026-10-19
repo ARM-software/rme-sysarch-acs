@@ -260,7 +260,8 @@ run_smmu_gpt_tlb_sequence(uint32_t instance, uint32_t e_bdf, uint32_t smmu_index
   val_print(ACS_PRINT_TEST, " Disabling SMMU of index: %d", master.smmu_index);
   val_smmu_disable(master.smmu_index);
 
-  val_exerciser_set_param(DMA_ATTRIBUTES, dram_buf_in_phys, dma_len, instance);
+  if (val_exerciser_set_param(DMA_ATTRIBUTES, dram_buf_in_phys, dma_len, instance))
+      goto test_clean;
 
   /* Change the GPI for the PA */
   if (val_add_gpt_entry_el3(dram_buf_in_phys, GPT_ROOT))
@@ -274,8 +275,9 @@ run_smmu_gpt_tlb_sequence(uint32_t instance, uint32_t e_bdf, uint32_t smmu_index
   val_smmu_enable(master.smmu_index);
 
   /* Trigger DMA from input buffer to exerciser memory */
-  if (!(val_exerciser_ops(START_DMA, EDMA_TO_DEVICE, instance))) {
-        val_print(ACS_PRINT_ERR, " ERROR:      DMA write success to exerciser %4x", instance);
+  if (val_exerciser_ops(START_DMA, EDMA_TO_DEVICE, instance) !=
+        EXERCISER_DMA_INTERNAL_ERROR) {
+        val_print(ACS_PRINT_ERR, " Expected completed DMA rejection for exerciser %4x", instance);
         goto test_clean;
   }
 

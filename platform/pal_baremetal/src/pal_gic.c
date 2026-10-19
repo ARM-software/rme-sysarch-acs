@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022-2023, 2025, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2023, 2025-2026, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -249,4 +249,17 @@ pal_gic_set_intr_trigger(uint32_t int_id, INTR_TRIGGER_INFO_TYPE_e trigger_type)
   (void) int_id;
   (void) trigger_type;
   return 0;
+}
+
+/**
+ * Platform fallback for ITS translation-cache invalidation when GITS_TYPER.INV=0.
+ * Called with ITS disabled and quiescent, while the ITT is still Non-secure.
+ * Implementations must preserve mapping data, complete invalidation before
+ * returning success, and leave ITS disabled until VAL resumes it.
+ */
+uint32_t
+pal_gic_its_invalidate_cache(uint64_t its_base)
+{
+  (void)its_base;
+  return NOT_IMPLEMENTED;
 }

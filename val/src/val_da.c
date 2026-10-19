@@ -164,7 +164,7 @@ get_rmsd_access_va(uint64_t pa_page,
     return alias_page->va[pas_index];
 
   va = val_get_free_va(tg);
-  if (va <= 1u)
+  if (va <= 1u || (va & (tg - 1u)))
     return 0u;
 
   if (val_add_mmu_entry_el3(va,
@@ -183,27 +183,62 @@ get_rmsd_access_va(uint64_t pa_page,
           write of the provided value, checks whether the update is accepted or blocked, and
           finally restores the original contents. Realm and Root PAS writes must succeed
           while Non-secure and Secure PAS writes must be ignored.
+          This API requires a change for Root/Realm writes; use the masked variant
+          to verify the requested value in every known writable bit.
+          Restoration uses Root PAS and is verified before continuing.
 
   @param  pa             Physical address of the register to be validated.
   @param  new_value      Value to attempt writing during the check.
   @param  original_value Known-good value used to restore the register and as reference.
 
   @retval 0             All PAS checks behaved as expected.
-  @retval >0            Number of PAS contexts that violated the expected behaviour.
+  @retval >0            One or more setup, access, validation or restoration failures.
 **/
 uint32_t
 val_rmsd_write_protect_check(uint64_t pa,
                              uint32_t new_value,
                              uint32_t original_value)
 {
+  /* Preserve the comparison used by callers with read-only or self-clearing fields. */
+  return val_rmsd_write_protect_check_masked(pa, new_value, original_value, 0u);
+}
+
+/**
+  @brief  Check RMSD write protection and readback of known writable bits.
+
+          Root and Realm writes must change the register and match new_value in
+          every bit selected by write_mask. Non-secure and Secure writes must
+          leave the entire register unchanged. A zero mask checks only that
+          Root and Realm writes change the register, as in the existing API.
+          After each write attempt, restore through Root PAS and verify the
+          original value, including after an access error. Stop on failure.
+
+  @param  pa             Physical address of the register to be validated.
+  @param  new_value      Value to attempt writing during the check.
+  @param  original_value Known-good register value used for comparison and restoration.
+  @param  write_mask     Writable bits whose readback must match new_value.
+
+  @retval 0             All PAS checks behaved as expected.
+  @retval >0            One or more setup, access, validation or restoration failures.
+**/
+uint32_t
+val_rmsd_write_protect_check_masked(uint64_t pa,
+                                    uint32_t new_value,
+                                    uint32_t original_value,
+                                    uint32_t write_mask)
+{
   static const uint64_t pas_list[] = {ROOT_PAS, REALM_PAS, NONSECURE_PAS, SECURE_PAS};
   uint32_t failures = 0u;
+  uint32_t read_value;
   uint64_t attr;
   uint64_t tg;
   uint64_t pa_page;
   uint64_t offset;
+  uint64_t root_va;
 
   tg = val_get_min_tg();
+  if (!tg || (tg & (tg - 1u)))
+    return 1u;
   pa_page = pa & ~(tg - 1u);
   offset = pa - pa_page;
   attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(OUTER_SHAREABLE) |
@@ -211,9 +246,15 @@ val_rmsd_write_protect_check(uint64_t pa,
 
   if (val_add_gpt_entry_el3(pa_page, GPT_ANY))
   {
-    val_print(ACS_PRINT_ERR,
-              " Failed to add GPT entry for 0x%llx ",
-              pa_page);
+    val_print(ACS_PRINT_ERR, " Failed to add GPT entry for 0x%llx", pa_page);
+    return 1u;
+  }
+
+  /* Establish the restore path before any register write can take effect. */
+  root_va = get_rmsd_access_va(pa_page, 0u, ROOT_PAS, attr, tg);
+  if (root_va == 0u)
+  {
+    val_print(ACS_PRINT_ERR, " Failed to create Root access alias for 0x%llx", pa_page);
     return 1u;
   }
 
@@ -224,14 +265,10 @@ val_rmsd_write_protect_check(uint64_t pa,
 
     if (va == 0u)
     {
-      val_print(ACS_PRINT_ERR,
-                " Failed to create RMSD access alias for 0x%llx ",
-                pa_page);
-      val_print(ACS_PRINT_ERR,
-                " with PAS 0x%llx",
-                pas);
+      val_print(ACS_PRINT_ERR, " Failed to create RMSD access alias for 0x%llx", pa_page);
+      val_print(ACS_PRINT_ERR, " with PAS 0x%llx", pas);
       failures++;
-      continue;
+      break;
     }
 
     shared_data->num_access = 1;
@@ -247,7 +284,7 @@ val_rmsd_write_protect_check(uint64_t pa,
                 " with PAS 0x%llx",
                 pas);
       failures++;
-      continue;
+      goto restore_register;
     }
 
     shared_data->num_access = 1;
@@ -262,21 +299,25 @@ val_rmsd_write_protect_check(uint64_t pa,
                 " with PAS 0x%llx",
                 pas);
       failures++;
-      continue;
+      goto restore_register;
     }
 
-    uint32_t read_value = shared_data->shared_data_access[0].data;
+    read_value = shared_data->shared_data_access[0].data;
 
     if ((pas == REALM_PAS) || (pas == ROOT_PAS))
     {
-      if (read_value == original_value)
+      if (read_value == original_value ||
+          ((read_value ^ new_value) & write_mask) != 0u)
       {
         val_print(ACS_PRINT_ERR,
-                  " Register 0x%llx not updated for RMSD write ",
+                  " Register 0x%llx has unexpected RMSD write readback ",
                   pa);
         val_print(ACS_PRINT_ERR,
                   " with PAS 0x%llx",
                   pas);
+        val_print(ACS_PRINT_ERR, " Write value 0x%x", new_value);
+        val_print(ACS_PRINT_ERR, " Read value 0x%x", read_value);
+        val_print(ACS_PRINT_ERR, " Readback mask 0x%x", write_mask);
         failures++;
       }
     }
@@ -294,8 +335,9 @@ val_rmsd_write_protect_check(uint64_t pa,
       }
     }
 
+restore_register:
     shared_data->num_access = 1;
-    shared_data->shared_data_access[0].addr = va + offset;
+    shared_data->shared_data_access[0].addr = root_va + offset;
     shared_data->shared_data_access[0].access_type = WRITE_DATA;
     shared_data->shared_data_access[0].data = original_value;
     if (val_pe_access_mut_el3())
@@ -305,8 +347,130 @@ val_rmsd_write_protect_check(uint64_t pa,
                 pa);
       val_print(ACS_PRINT_ERR,
                 " with PAS 0x%llx",
-                pas);
+                (uint64_t)ROOT_PAS);
       failures++;
+    }
+
+    /* Verify even after a restore error: the write may still have taken effect. */
+    shared_data->num_access = 1;
+    shared_data->shared_data_access[0].addr = root_va + offset;
+    shared_data->shared_data_access[0].access_type = READ_DATA;
+    if (val_pe_access_mut_el3())
+    {
+      val_print(ACS_PRINT_ERR, " Failed to verify restoration of register 0x%llx", pa);
+      failures++;
+    }
+    else if ((uint32_t)shared_data->shared_data_access[0].data != original_value)
+    {
+      val_print(ACS_PRINT_ERR, " Register 0x%llx not restored through Root PAS", pa);
+      failures++;
+    }
+
+    if (failures)
+      break;
+  }
+
+  return failures;
+}
+
+/**
+  @brief Verify RMSD write-protect with byte-sized MMIO accesses.
+
+  Flex Bus Port Control at DVSEC + 0x0c occupies the low halfword of a
+  DWORD whose high halfword is Status, including RW1C fields. A 32-bit
+  write/readback test can clear unrelated status. This helper writes just
+  the selected Control byte and restores it through Root PAS each time.
+
+  @return Number of failed checks (zero on success).
+**/
+uint32_t
+val_rmsd_write_protect_check_byte(uint64_t pa,
+                                  uint8_t new_value,
+                                  uint8_t original_value)
+{
+  static const uint64_t pas_list[] = {ROOT_PAS, REALM_PAS, NONSECURE_PAS, SECURE_PAS};
+  uint64_t tg = val_get_min_tg();
+  uint64_t page, offset, attr, root_va;
+  uint32_t failures = 0u;
+
+  if (tg == 0u)
+    return 1u;
+
+  page = pa & ~(tg - 1u);
+  offset = pa - page;
+  attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(OUTER_SHAREABLE) |
+                     GET_ATTR_INDEX(DEV_MEM_nGnRnE) | PGT_ENTRY_AP_RW);
+  if (val_add_gpt_entry_el3(page, GPT_ANY))
+    return 1u;
+
+  root_va = val_get_free_va(tg);
+  if (!root_va || (root_va & (tg - 1u)) ||
+      val_add_mmu_entry_el3(root_va, page, attr | LOWER_ATTRS(PAS_ATTR(ROOT_PAS))))
+    return 1u;
+
+  for (uint32_t index = 0u; index < 4u; ++index)
+  {
+    uint64_t pas = pas_list[index];
+    uint64_t va = val_get_free_va(tg);
+    uint32_t readback;
+
+    if (!va || (va & (tg - 1u)) ||
+        val_add_mmu_entry_el3(va, page, attr | LOWER_ATTRS(PAS_ATTR(pas))))
+    {
+      failures++;
+      continue;
+    }
+
+    shared_data->num_access = 1;
+    shared_data->shared_data_access[0].addr = va + offset;
+    shared_data->shared_data_access[0].access_type = WRITE_DATA_BYTE;
+    shared_data->shared_data_access[0].data = new_value;
+    if (val_pe_access_mut_el3())
+    {
+      failures++;
+      goto restore_byte;
+    }
+
+    shared_data->num_access = 1;
+    shared_data->shared_data_access[0].addr = va + offset;
+    shared_data->shared_data_access[0].access_type = READ_DATA_BYTE;
+    if (val_pe_access_mut_el3())
+    {
+      failures++;
+      goto restore_byte;
+    }
+    readback = (uint32_t)shared_data->shared_data_access[0].data & 0xffu;
+
+    if ((pas == ROOT_PAS || pas == REALM_PAS) ?
+        (readback != (uint32_t)new_value) :
+        (readback != (uint32_t)original_value))
+    {
+      val_print(ACS_PRINT_ERR,
+                " RMSD byte write-protect failure at 0x%llx", pa);
+      val_print(ACS_PRINT_ERR, " with PAS 0x%llx", pas);
+      failures++;
+    }
+
+restore_byte:
+    /* Always restore through an authorized PAS.  Restoring through NS/S
+     * cannot recover a failed write-protect implementation. */
+    shared_data->num_access = 1;
+    shared_data->shared_data_access[0].addr = root_va + offset;
+    shared_data->shared_data_access[0].access_type = WRITE_DATA_BYTE;
+    shared_data->shared_data_access[0].data = original_value;
+    if (val_pe_access_mut_el3())
+    {
+      failures++;
+      break;
+    }
+    shared_data->num_access = 1;
+    shared_data->shared_data_access[0].addr = root_va + offset;
+    shared_data->shared_data_access[0].access_type = READ_DATA_BYTE;
+    if (val_pe_access_mut_el3() ||
+        (((uint32_t)shared_data->shared_data_access[0].data & 0xffu) != original_value))
+    {
+      failures++;
+      break;
     }
   }
 
@@ -1031,6 +1195,43 @@ val_device_unlock(uint32_t bdf)
 #endif
 }
 
+/* Update one RP stream lock through Root PAS, preserving the other streams. */
+uint32_t
+val_ide_set_sel_stream_lock(uint32_t rp_bdf, uint32_t count, uint32_t lock)
+{
+  uint32_t capability, value;
+  uint64_t va, cfg, attributes, tg, reg_pa, reg_pa_page;
+
+  if (!count || count > 32u || val_pcie_find_da_capability(rp_bdf, &capability) ||
+      val_pcie_read_cfg(rp_bdf, capability + RMEDA_CTL2, &value))
+    return ACS_STATUS_ERR;
+  value = lock ? value | (1u << (count - 1u)) : value & ~(1u << (count - 1u));
+  tg = val_get_min_tg();
+  if (!tg || (tg & (tg - 1u)))
+    return ACS_STATUS_ERR;
+
+  cfg = val_pcie_get_bdf_config_addr(rp_bdf);
+  va = val_get_free_va(tg);
+  reg_pa = cfg + capability + RMEDA_CTL2;
+  reg_pa_page = reg_pa & ~(tg - 1u);
+  attributes = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(OUTER_SHAREABLE) |
+                          GET_ATTR_INDEX(DEV_MEM_nGnRnE) | PGT_ENTRY_AP_RW |
+                          PAS_ATTR(ROOT_PAS));
+  if (!cfg || !va || (va & (tg - 1u)) ||
+      val_add_gpt_entry_el3(reg_pa_page, GPT_ANY) ||
+      val_add_mmu_entry_el3(va, reg_pa_page, attributes))
+    return ACS_STATUS_ERR;
+  shared_data->num_access = 1;
+  shared_data->shared_data_access[0].addr = va + (reg_pa & (tg - 1u));
+  shared_data->shared_data_access[0].data = value;
+  shared_data->shared_data_access[0].access_type = WRITE_DATA;
+  if (val_pe_access_mut_el3() ||
+      val_pcie_read_cfg(rp_bdf, capability + RMEDA_CTL2, &capability) ||
+      capability != value)
+    return ACS_STATUS_ERR;
+  return ACS_STATUS_PASS;
+}
+
 uint32_t val_ide_set_sel_stream(uint32_t bdf, uint32_t str_cnt, uint32_t enable)
 {
   uint32_t reg_value;
@@ -1647,6 +1848,8 @@ uint32_t val_intercnt_sec_prpty_check(uint64_t *register_entry_info)
   REGISTER_INFO_TABLE *register_entry;
   uint32_t rd_data = 0;
   uint32_t data_rt, data_ns, org_data;
+  uint32_t ret = 0;
+  uint32_t restore_required = 0;
 
   register_entry = (REGISTER_INFO_TABLE *)register_entry_info;
 
@@ -1669,7 +1872,8 @@ uint32_t val_intercnt_sec_prpty_check(uint64_t *register_entry_info)
           if (val_pe_access_mut_el3())
           {
             val_print(ACS_PRINT_ERR, " MUT access failed for 0x%llx", register_entry->address);
-            return 1;
+            ret = 1;
+            goto cleanup;
           }
           org_data = shared_data->shared_data_access[0].data;
 
@@ -1678,6 +1882,13 @@ uint32_t val_intercnt_sec_prpty_check(uint64_t *register_entry_info)
           shared_data->shared_data_access[0].addr = register_entry->address;
           shared_data->shared_data_access[0].access_type = WRITE_DATA;
           shared_data->shared_data_access[0].data = data_rt;
+          restore_required = 1;
+          if (val_pe_access_mut_el3())
+          {
+            val_print(ACS_PRINT_ERR, " MUT access failed for 0x%llx", register_entry->address);
+            ret = 1;
+            goto cleanup;
+          }
 
           /* Read the data from NS */
           rd_data = val_mmio_read(register_entry->address);
@@ -1687,30 +1898,32 @@ uint32_t val_intercnt_sec_prpty_check(uint64_t *register_entry_info)
           {
               val_print(ACS_PRINT_ERR, " Read success from NS for addr: 0x%lx",
                         register_entry->address);
-              return 1;
+              ret = 1;
+              goto cleanup;
           }
 
           /* Write the data_ns from NS */
           val_mmio_write(register_entry->address, data_ns);
-          rd_data = val_mmio_read(register_entry->address);
 
-          /* Fail if the NS write is successfull */
-          if (rd_data == data_ns)
-          {
-              val_print(ACS_PRINT_ERR, " Write from NS is successfull for address: 0x%x",
-                        register_entry->address);
-              return 1;
-          }
-
-          /* Restore the original data */
+          /* Read back through Root PAS to verify the NS write was blocked. */
           shared_data->num_access = 1;
           shared_data->shared_data_access[0].addr = register_entry->address;
-          shared_data->shared_data_access[0].access_type = WRITE_DATA;
-          shared_data->shared_data_access[0].data = org_data;
+          shared_data->shared_data_access[0].access_type = READ_DATA;
           if (val_pe_access_mut_el3())
           {
             val_print(ACS_PRINT_ERR, " MUT access failed for 0x%llx", register_entry->address);
-            return 1;
+            ret = 1;
+            goto cleanup;
+          }
+          rd_data = shared_data->shared_data_access[0].data;
+
+          /* Fail if the NS write changed the Root-visible value. */
+          if (rd_data != data_rt)
+          {
+              val_print(ACS_PRINT_ERR, " Write from NS is successful for address: 0x%llx",
+                        register_entry->address);
+              ret = 1;
+              goto cleanup;
           }
 
           rd_data = 0;
@@ -1718,8 +1931,23 @@ uint32_t val_intercnt_sec_prpty_check(uint64_t *register_entry_info)
 
     default:
       val_print(ACS_PRINT_ERR, " Invalid Security Property: %d", register_entry->property);
-      return 1;
+      ret = 1;
+      goto cleanup;
   }
 
-  return 0;
+cleanup:
+  if (restore_required)
+  {
+      shared_data->num_access = 1;
+      shared_data->shared_data_access[0].addr = register_entry->address;
+      shared_data->shared_data_access[0].access_type = WRITE_DATA;
+      shared_data->shared_data_access[0].data = org_data;
+      if (val_pe_access_mut_el3())
+      {
+          val_print(ACS_PRINT_ERR, " Failed to restore register 0x%llx", register_entry->address);
+          ret = 1;
+      }
+  }
+
+  return ret;
 }

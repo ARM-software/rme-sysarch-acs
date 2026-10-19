@@ -72,6 +72,10 @@ val_ide_program_stream_id(uint32_t bdf, uint32_t str_cnt, uint32_t stream_id);
 uint32_t
 val_ide_set_sel_stream(uint32_t bdf, uint32_t str_cnt, uint32_t enable);
 
+/* Set/clear one RP RMEDA_CTL2 lock bit through Root PAS; count starts at 1. */
+uint32_t
+val_ide_set_sel_stream_lock(uint32_t rp_bdf, uint32_t count, uint32_t lock);
+
 uint32_t
 val_ide_program_address_range(uint32_t bdf, uint32_t str_cnt,
                               uint64_t base, uint64_t limit, uint32_t valid);
@@ -92,6 +96,22 @@ uint32_t
 val_rmsd_write_protect_check(uint64_t pa,
                              uint32_t new_value,
                              uint32_t original_value);
+
+/* Also require Root/Realm readback to match new_value in every write_mask bit.
+ * A zero mask retains the existing check that at least one bit changes.
+ * Both APIs restore through Root PAS and verify the original value after each
+ * write attempt, including on error, and stop on any failure.
+ */
+uint32_t
+val_rmsd_write_protect_check_masked(uint64_t pa,
+                                    uint32_t new_value,
+                                    uint32_t original_value,
+                                    uint32_t write_mask);
+/* Byte-sized test for CXL configuration controls adjacent to RW1C status. */
+uint32_t
+val_rmsd_write_protect_check_byte(uint64_t pa,
+                                  uint8_t new_value,
+                                  uint8_t original_value);
 
 uint32_t da_dvsec_register_config_entry(uint32_t num_pe);
 uint32_t da_smmu_implementation_entry(uint32_t num_pe);

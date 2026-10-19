@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022-2024, 2025, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022-2026, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -189,15 +189,16 @@ pal_pcie_get_base(UINT32 bdf, UINT32 bar_index)
           if (!EFI_ERROR (Status)) {
             Device = &PciHeader.Device.Device;
             pal_mem_free(HandleBuffer);
+            bar_value = Device->Bar[bar_index] &
+                        ((UINT32)BAR_BASE_MASK << BAR_BASE_SHIFT);
             if ((((Device->Bar[bar_index]) >> BAR_MDT_SHIFT) & BAR_MDT_MASK) == BITS_64)
             {
-                bar_value = Device->Bar[bar_index + 1];
-                bar_value = (bar_value << 32) | (Device->Bar[bar_index]);
+                bar_value |= (UINT64)Device->Bar[bar_index + 1] << 32;
                 return bar_value;
             }
 
             else
-                return (Device->Bar[bar_index]);
+                return bar_value;
         }
       }
 
@@ -250,4 +251,3 @@ pal_pcie_check_device_valid(UINT32 bdf)
 
   return 0;
 }
-

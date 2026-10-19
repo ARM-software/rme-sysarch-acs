@@ -707,7 +707,10 @@ check_device_to_host_dma(uint32_t endpoint_bdf,
     goto cleanup;
   }
 
-  (void)val_exerciser_ops_by_bdf(START_DMA, EDMA_TO_DEVICE, endpoint_bdf);
+  if (val_exerciser_ops_by_bdf(START_DMA, EDMA_TO_DEVICE, endpoint_bdf) != EXERCISER_DMA_SUCCESS) {
+      result = ACS_STATUS_ERR;
+      goto cleanup;
+  }
 
   status = val_exerciser_set_param_by_bdf(DMA_ATTRIBUTES,
                                           buffer_dst_pa,
@@ -720,7 +723,11 @@ check_device_to_host_dma(uint32_t endpoint_bdf,
     goto cleanup;
   }
 
-  (void)val_exerciser_ops_by_bdf(START_DMA, EDMA_FROM_DEVICE, endpoint_bdf);
+  if (val_exerciser_ops_by_bdf(START_DMA, EDMA_FROM_DEVICE, endpoint_bdf) !=
+      EXERCISER_DMA_SUCCESS) {
+      result = ACS_STATUS_ERR;
+      goto cleanup;
+  }
 
   status = compare_buffers_el3((uint64_t)buffer_src_ns_alias,
                                (uint64_t)buffer_dst_ns_alias,
@@ -769,7 +776,11 @@ check_device_to_host_dma(uint32_t endpoint_bdf,
     goto cleanup;
   }
 
-  (void)val_exerciser_ops_by_bdf(START_DMA, EDMA_FROM_DEVICE, endpoint_bdf);
+  if (!val_exerciser_dma_status_valid(
+          val_exerciser_ops_by_bdf(START_DMA, EDMA_FROM_DEVICE, endpoint_bdf))) {
+      result = ACS_STATUS_ERR;
+      goto cleanup;
+  }
 
   status = compare_buffers_el3((uint64_t)buffer_src_ns_alias,
                                (uint64_t)buffer_dst_ns_alias,
@@ -845,7 +856,11 @@ check_device_to_host_dma(uint32_t endpoint_bdf,
     goto cleanup;
   }
 
-  (void)val_exerciser_ops_by_bdf(START_DMA, EDMA_FROM_DEVICE, endpoint_bdf);
+  if (!val_exerciser_dma_status_valid(
+          val_exerciser_ops_by_bdf(START_DMA, EDMA_FROM_DEVICE, endpoint_bdf))) {
+      result = ACS_STATUS_ERR;
+      goto cleanup;
+  }
 
   if (compare_buffers_el3((uint64_t)buffer_src,
                           (uint64_t)buffer_dst,

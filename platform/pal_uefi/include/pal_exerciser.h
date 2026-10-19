@@ -52,6 +52,19 @@
 #define DMA_BUS_ADDR  0x010
 #define DMA_LEN       0x018
 #define DMASTATUS     0x01C
+
+/* Reference exerciser DMA register fields and completion polling budget. */
+#define EXERCISER_DMA_TRIGGER_MASK    0xFU
+#define EXERCISER_DMA_TRIGGER_START   0x1U
+#define EXERCISER_DMA_DIRECTION_MASK  (1U << 4)
+#define EXERCISER_DMA_STATUS_MASK     0x3U
+#define EXERCISER_DMA_STATUS_CLEAR    (1U << 2)
+
+/* Maximum MMIO polls, not elapsed time. Platforms may override this budget. */
+#ifndef EXERCISER_DMA_POLL_LIMIT
+#define EXERCISER_DMA_POLL_LIMIT PLATFORM_OVERRIDE_TIMEOUT_LARGE
+#endif
+
 #define PASID_VAL     0x020
 #define ATSCTL        0x024
 #define DMA_USE_ATC_ENTRY_MASK (1u << 9)
@@ -114,10 +127,6 @@
 #define CXL_CMD_CLEAR_ERR     (1u << 30)
 #define CXL_CMD_TRIGGER       (1u << 31)
 
-#define CXL_CMD_OP_BACKDOOR_READ64  0x1u
-#define CXL_CMD_OP_BACKDOOR_WRITE64 0x2u
-#define CXL_CMD_OP_BISNP            0x3u
-
 #define PCI_CAP_PTR_OFFSET 8
 #define PCIE_CAP_PTR_OFFSET 20
 
@@ -154,6 +163,15 @@ typedef enum {
     CFG_READ   = 0x0,
     CFG_WRITE  = 0x1,
 } EXERCISER_CFG_TXN_ATTR;
+
+/* DMA operation results; keep values consistent with the VAL exerciser API. */
+#define EXERCISER_DMA_SUCCESS         0U
+#define EXERCISER_DMA_RANGE_ERROR     1U
+#define EXERCISER_DMA_INTERNAL_ERROR  2U
+#define EXERCISER_DMA_RESERVED        3U
+#define EXERCISER_DMA_INVALID         0xFFFFFFFDU
+#define EXERCISER_DMA_BUSY            0xFFFFFFFEU
+#define EXERCISER_DMA_TIMEOUT         0xFFFFFFFFU
 
 typedef enum {
     EDMA_NO_SUPPORT   = 0x0,
@@ -235,7 +253,8 @@ typedef enum {
     ATS_TXN_REQ          = 0xd,
     INJECT_ERROR         = 0xe,
     ATS_INV_CACHE        = 0xf,
-    CXL_CMD_START        = 0x10
+    CXL_CMD_START        = 0x10,
+    DMA_WAIT            = 0x11
 } EXERCISER_OPS;
 
 #define CXL_CMD_OP_BACKDOOR_READ64           0x1u

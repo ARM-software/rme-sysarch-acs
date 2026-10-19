@@ -26,6 +26,7 @@
 #include "val/include/val_smmu.h"
 #include "val/include/val_pe.h"
 #include "val/include/val_da.h"
+#include "val/include/val_dpt.h"
 #include "val/include/val_iovirt.h"
 #include "val/include/val_gic.h"
 #include "val/include/val_gic_support.h"
@@ -34,6 +35,9 @@
 #define TEST_NAME "da_p2p_btw_2_tdisp_devices"
 #define TEST_DESC "P2P traffic between two TDISP devices                  "
 #define TEST_RULE "RMDPKR"
+
+/* The peers are on different Root Ports, so each uses stream block 1. */
+#define P2P_IDE_STREAM 1u
 
 uint32_t
 get_target_exer_bdf(uint32_t req_rp_bdf, uint32_t *tgt_e_bdf,
@@ -83,7 +87,10 @@ get_target_exer_bdf(uint32_t req_rp_bdf, uint32_t *tgt_e_bdf,
              goto test_fail;
           }
 
-          if (req_rp_ecam_index != erp_ecam_index)
+          if ((val_pcie_get_info(PCIE_INFO_ECAM, req_rp_ecam_index) !=
+               val_pcie_get_info(PCIE_INFO_ECAM, erp_ecam_index)) ||
+              (val_pcie_get_info(PCIE_INFO_SEGMENT, req_rp_ecam_index) !=
+               val_pcie_get_info(PCIE_INFO_SEGMENT, erp_ecam_index)))
               continue;
 
           *tgt_e_bdf = e_bdf;
@@ -109,9 +116,17 @@ test_fail:
 uint32_t
 check_p2p_transaction(uint32_t req_instance, uint64_t bar_base)
 {
-  /* P2P transaction must fail */
-  val_exerciser_set_param(DMA_ATTRIBUTES, (uint64_t)bar_base, 1, req_instance);
-  val_exerciser_ops(START_DMA, EDMA_TO_DEVICE, req_instance);
+  if (val_exerciser_set_param(DMA_ATTRIBUTES, bar_base, 1, req_instance) != ACS_STATUS_PASS)
+  {
+      val_print(ACS_PRINT_ERR, " Failed to configure P2P DMA for exerciser %u", req_instance);
+      return ACS_STATUS_ERR;
+  }
+
+  if (val_exerciser_ops(START_DMA, EDMA_TO_DEVICE, req_instance) != ACS_STATUS_PASS)
+  {
+      val_print(ACS_PRINT_ERR, " P2P DMA read failed for exerciser %u", req_instance);
+      return ACS_STATUS_ERR;
+  }
 
   return ACS_STATUS_PASS;
 }
@@ -131,8 +146,12 @@ payload(void)
   uint32_t test_skip;
   uint64_t bar_base;
   uint32_t test_fails;
-  uint32_t req_locked = 0;
-  uint32_t tgt_locked = 0;
+  uint32_t req_ide_active = 0;
+  uint32_t tgt_ide_active = 0;
+  uint32_t ide_unsupported = 0;
+  uint32_t dma_failed = 0;
+  uint32_t req_tdisp_attempted = 0;
+  uint32_t tgt_tdisp_attempted = 0;
 
   test_skip = 1;
   test_fails = 0;
@@ -147,6 +166,11 @@ payload(void)
 
   while (instance-- != 0)
   {
+      req_ide_active = 0;
+      tgt_ide_active = 0;
+      dma_failed = 0;
+      req_tdisp_attempted = 0;
+      tgt_tdisp_attempted = 0;
 
       /* if init fail moves to next exerciser */
       if (val_exerciser_init(instance))
@@ -166,72 +190,107 @@ payload(void)
 
       test_skip = 0;
 
+      /* An enable failure can occur after TDISP_EN was written. */
+      req_tdisp_attempted = 1;
       if (val_pcie_enable_tdisp(req_rp_bdf))
       {
           val_print(ACS_PRINT_ERR, " Unable to set tdisp_en for BDF: 0x%x", req_rp_bdf);
           test_fails++;
-          continue;
+          goto test_clean;
       }
 
+      tgt_tdisp_attempted = 1;
       if (val_pcie_enable_tdisp(tgt_rp_bdf))
       {
           val_print(ACS_PRINT_ERR, " Unable to set tdisp_en for BDF: 0x%x", tgt_rp_bdf);
           test_fails++;
-          continue;
+          goto test_clean;
       }
 
       val_print(ACS_PRINT_DEBUG, " Target exerciser BDF - 0x%x", tgt_e_bdf);
 
+      status = val_pcie_ide_establish(req_e_bdf, req_rp_bdf, P2P_IDE_STREAM,
+                          val_generate_stream_id(), PCIE_CREATE_BDF_PACKED(req_e_bdf));
+      if (status == ACS_STATUS_SKIP)
+      {
+          ide_unsupported = 1;
+          goto test_clean;
+      }
+      if (status != ACS_STATUS_PASS)
+      {
+          val_print(ACS_PRINT_ERR, " Failed to establish requester IDE, BDF: 0x%x", req_e_bdf);
+          test_fails++;
+          goto test_clean;
+      }
+
+      req_ide_active = P2P_IDE_STREAM;
+      if (val_ide_set_sel_stream_lock(req_rp_bdf, req_ide_active, 1))
+      {
+          val_print(ACS_PRINT_ERR, " Failed to lock requester IDE, RP BDF: 0x%x", req_rp_bdf);
+          test_fails++;
+          goto test_clean;
+      }
+
+      /* The target helper establishes IDE, associates the single-byte BAR read,
+       * verifies Secure state, locks the RP stream and transitions the TDI to RUN.
+       */
+      status = val_dpt_ide_setup_target(tgt_e_bdf, tgt_rp_bdf, req_rp_bdf,
+                                      bar_base, 1u, &tgt_ide_active);
+      if (status == ACS_STATUS_SKIP)
+      {
+          ide_unsupported = 1;
+          goto test_clean;
+      }
+      if (status != ACS_STATUS_PASS)
+      {
+          val_print(ACS_PRINT_ERR, " Failed to establish target IDE, BDF: 0x%x", tgt_e_bdf);
+          test_fails++;
+          goto test_clean;
+      }
+
       if (val_device_lock(req_e_bdf))
       {
           val_print(ACS_PRINT_ERR, " Failed to lock the device: 0x%lx", req_e_bdf);
+          test_fails++;
           goto test_clean;
       }
-
-      req_locked = 1;
-
-      if (val_device_lock(tgt_e_bdf))
-      {
-          val_print(ACS_PRINT_ERR, " Failed to lock the device: 0x%lx", tgt_e_bdf);
-          goto test_clean;
-      }
-
-      tgt_locked = 1;
 
       /* Check if P2P transaction causes any deadlock */
       status = check_p2p_transaction(instance, bar_base);
       if (status)
       {
-          val_print(ACS_PRINT_DEBUG, " Putting the devices into unlocked state", 0);
-          if (req_locked)
-              val_device_unlock(req_e_bdf);
-          val_pcie_disable_tdisp(req_rp_bdf);
-          if (tgt_locked)
-              val_device_unlock(tgt_e_bdf);
-          val_pcie_disable_tdisp(tgt_rp_bdf);
-          val_set_status(index, "FAIL", 1);
-          return;
+          test_fails++;
+          dma_failed = 1;
       }
 
 test_clean:
       val_print(ACS_PRINT_DEBUG, " Putting the devices back into unlocked state", 0);
-      if (req_locked && val_device_unlock(req_e_bdf) != ACS_STATUS_PASS)
+      if (req_ide_active &&
+          val_dpt_ide_stop(req_e_bdf, req_rp_bdf, P2P_IDE_STREAM, req_ide_active))
           test_fails++;
-      if (tgt_locked && val_device_unlock(tgt_e_bdf) != ACS_STATUS_PASS)
+      if (tgt_ide_active &&
+          val_dpt_ide_stop(tgt_e_bdf, tgt_rp_bdf, P2P_IDE_STREAM, tgt_ide_active))
           test_fails++;
-      if (val_pcie_disable_tdisp(req_rp_bdf))
+      if (req_tdisp_attempted && val_pcie_disable_tdisp(req_rp_bdf))
           test_fails++;
-      if (val_pcie_disable_tdisp(tgt_rp_bdf))
+      if (tgt_tdisp_attempted && val_pcie_disable_tdisp(tgt_rp_bdf))
           test_fails++;
       /* Clear Error Status Bits */
       val_pcie_clear_device_status_error(req_rp_bdf);
       val_pcie_clear_sig_target_abort(req_rp_bdf);
+      if (dma_failed)
+      {
+          val_set_status(index, "FAIL", test_fails);
+          return;
+      }
   }
 
-  if (test_skip)
-    val_set_status(index, "SKIP", 02);
-  else if (test_fails)
+  if (test_fails)
       val_set_status(index, "FAIL", test_fails);
+  else if (ide_unsupported)
+      val_set_status(index, "SKIP", 03);
+  else if (test_skip)
+      val_set_status(index, "SKIP", 02);
   else
       val_set_status(index, "PASS", 01);
 

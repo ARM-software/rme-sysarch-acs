@@ -434,8 +434,10 @@ uint32_t val_el3_smmu_dpt_init(smmu_dev_t *smmu);
 int32_t val_el3_smmu_reg_write_sync(smmu_dev_t *smmu, uint32_t val,
                                     uint32_t reg_off, uint32_t ack_off);
 void val_el3_smmu_dpti_all(smmu_dev_t *smmu);
-void val_el3_smmu_access_disable(uint64_t smmu_base);
-void val_el3_smmu_access_enable(uint64_t smmu_base);
+uint32_t val_el3_smmu_access_disable(uint64_t smmu_base);
+uint32_t val_el3_smmu_access_enable(uint64_t smmu_base);
+uint32_t val_el3_smmu_root_cr0_read(uint64_t smmu_base, uint32_t *value);
+uint32_t val_el3_smmu_root_cr0_write(uint64_t smmu_base, uint32_t value);
 void val_el3_smmu_root_config_service(uint64_t arg0, uint64_t arg1, uint64_t arg2);
 void val_el3_smmu_init(uint32_t num_smmu, uint64_t smmu_base_arr[]);
 uint32_t val_el3_smmu_rlm_map(smmu_master_attributes_t master_attr, pgt_descriptor_t pgt_desc);

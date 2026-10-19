@@ -439,9 +439,24 @@ Testcase checklist
 
     -
 
-      If SMMU is in reset state it blocks all memory access requests from the devices attached to it.
+      Check that an exerciser cannot read host memory when its associated SMMU
+      Root controls are at reset values.
 
-      DMA accesses from Exerciser is blocked.
+      1. Select an exerciser associated with an SMMU and wait for any previous DMA to complete.
+      2. Save the SMMU Root control, Non-secure translation state and global bypass attributes.
+      3. Disable translation, clear GBPA.ABORT and enable Root access, waiting for register updates to complete.
+      4. Seed the exerciser using a DMA read, then write its data to a separate host buffer and compare with the source.
+      5. Change the source data, write the Root control reset value and wait for acknowledgement.
+      6. Issue the prohibited DMA read and wait for completion. Reject setup errors, invalid status and timeouts.
+      7. Enable Root access and read back the exerciser data. Wait for all readback writes to become visible in host memory.
+      8. Check every byte contains the original seed or zero. Fail on the new source data or any unexpected data.
+      9. Repeat the permitted DMA round trip and restore the saved SMMU state before testing the next exerciser.
+
+      Note:
+
+      - Root control accesses require the matching ACS EL3 implementation for acknowledgement handling.
+      - If DMA remains active or readback visibility is uncertain, fail, disable bus mastering,
+        attempt to block Root access and retain the DMA buffer. Platform recovery/reset is required.
 
   * -
 
@@ -667,9 +682,12 @@ Testcase checklist
       Peer-to-Peer transaction between two TDISP devices must be handled correctly.
 
       1. Get two Exerciser EPs under two different RPs.
-      2. Transition both the exerciser into TDISP RUN state.
-      3. Perform a Peer-to-Peer transaction.
-      4. Check the competition is obtained only after it is arrived from the target peer.
+      2. Enable TDISP on both RPs and establish matching EP/RP IDE keys and Secure Selective IDE streams for both peers.
+      3. Program the target RP's address association for the peer BAR read, recheck Secure state at both ends, and lock each RP's stream register block through Root PAS.
+      4. The shared VAL target setup transitions the target exerciser into TDISP RUN state. Transition the requester into RUN and perform a Peer-to-Peer read, checking the DMA result.
+      5. Use shared VAL teardown to unlock the RP stream blocks, stop TDISP and IDE, close the sessions, and clear the address associations. Disable TDISP on both RPs, including on setup and transfer failures.
+
+      The DMA result checks successful transfer only; rejection of completions from an unintended peer requires additional exerciser support and is not verified by this test.
 
   * -
 
@@ -731,9 +749,12 @@ Testcase checklist
 
     -
 
-      1. Read the RMEDA_CTL registers and check if they can be updated from the Root world.
-      2. Also check if they cannot be updated from the Secure and Non-Secure world.
-      3. RMEDA_CTL registers should behave as write-protect.
+      1. Save the RMEDA_CTL register values and original TDISP_EN state. Fail before writing if a configuration read fails or the configuration address is invalid.
+      2. Set and verify TDISP_EN to 0 through Root PAS, then repeat the checks below with TDISP_EN set to 1.
+      3. Check RMSD write protection of RMEDA_CTL2 from Root, Realm, Secure and Non-secure PAS, using a pattern that toggles every implemented lock bit. Root and Realm readback must match every implemented bit in the requested value.
+      4. Check the same access permissions for RMEDA_CTL1 by attempting to toggle TDISP_EN from each PAS.
+      5. Restore each register through Root PAS and verify its original value after every PAS write attempt, including after an access failure. Stop further protection checks for the port on failure.
+      6. Restore the original TDISP_EN state through Root PAS and verify readback, including after a failed state change.
 
   * -
 

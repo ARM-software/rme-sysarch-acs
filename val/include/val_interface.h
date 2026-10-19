@@ -129,6 +129,8 @@ uint32_t val_wd_set_ws0_el3(uint64_t VA_RT_WDOG, uint32_t timeout, uint64_t coun
 uint32_t val_pas_filter_active_mode_el3(int enable);
 uint32_t val_smmu_access_disable(uint64_t smmu_base);
 uint32_t val_smmu_access_enable(uint64_t smmu_base);
+uint32_t val_smmu_root_cr0_read(uint64_t smmu_base, uint32_t *value);
+uint32_t val_smmu_root_cr0_write(uint64_t smmu_base, uint32_t value);
 uint32_t val_change_security_state_el3(int sec_state);
 void write_gpr_and_reset(void);
 uint32_t check_gpr_after_reset(void);
@@ -213,9 +215,10 @@ void val_gic_set_intr_trigger(uint32_t int_id, INTR_TRIGGER_INFO_TYPE_e trigger_
 uint32_t val_gic_get_intr_trigger_type(uint32_t int_id, INTR_TRIGGER_INFO_TYPE_e *trigger_type);
 uint32_t val_gic_its_configure(void);
 uint32_t val_gic_get_its_index(uint32_t its_id);
+/* Program PCIe MSI/MSI-X only; caller must create and clean up the ITS mapping. */
 uint32_t val_gic_request_msi(uint32_t bdf, uint32_t device_id, uint32_t its_id, uint32_t int_id,
                              uint32_t msi_index);
-void val_gic_free_msi(uint32_t bdf, uint32_t device_id, uint32_t its_id, uint32_t int_id,
+uint32_t val_gic_free_msi(uint32_t bdf, uint32_t device_id, uint32_t its_id, uint32_t int_id,
                       uint32_t msi_index);
 uint32_t val_gic_its_get_base(uint32_t its_id, uint64_t *its_base);
 

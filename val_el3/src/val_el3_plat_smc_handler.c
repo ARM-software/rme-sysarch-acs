@@ -204,12 +204,44 @@ uintptr_t plat_arm_acs_smc_handler(unsigned int smc_fid, uint64_t services,
       val_el3_pas_filter_active_mode(arg0);
       break;
     case SMMU_ROOT_SERVICE:
-      INFO("ROOT SMMU service \n");
-      if (arg1)
-        val_el3_smmu_access_enable(arg0);
-      else
-        val_el3_smmu_access_disable(arg0);
+    case SMMU_ROOT_CONTROL:
+    {
+      uint32_t control;
+      uint32_t status;
+
+      switch (arg1) {
+      case CLEAR:
+        status = val_el3_smmu_access_disable(arg0);
+        break;
+      case SET:
+        status = val_el3_smmu_access_enable(arg0);
+        break;
+      case SMMU_ROOT_CR0_READ:
+        status = val_el3_smmu_root_cr0_read(arg0, &control);
+        if (status == 0)
+            shared_data->shared_data_access[0].data = control;
+        break;
+      case SMMU_ROOT_CR0_WRITE:
+        status = val_el3_smmu_root_cr0_write(arg0, (uint32_t)arg2);
+        if (status == 0)
+            shared_data->shared_data_access[0].data = (uint32_t)arg2;
+        break;
+      default:
+        status = 1;
+        break;
+      }
+      shared_data->status_code = status;
+      if (status) {
+        const char *msg = "EL3: SMMU Root control update failed";
+        unsigned int i = 0;
+        while (msg[i] && i < sizeof(shared_data->error_msg) - 1) {
+          shared_data->error_msg[i] = msg[i];
+          i++;
+        }
+        shared_data->error_msg[i] = '\0';
+      }
       break;
+    }
     case SEC_STATE_CHANGE:
       INFO("Security STte change service \n");
       val_el3_security_state_change(arg0);
