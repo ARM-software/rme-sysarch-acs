@@ -101,6 +101,37 @@ check_cxl_link_streams_insecure(uint32_t component_index)
   return ACS_STATUS_PASS;
 }
 
+static uint32_t
+check_cxl_link_streams_active(uint32_t component_index)
+{
+  uint32_t status;
+  uint32_t ide_status;
+  uint32_t rx_state;
+  uint32_t tx_state;
+  uint64_t component_base;
+
+  component_base =
+    val_cxl_get_component_info(CXL_COMPONENT_INFO_COMPONENT_BASE, component_index);
+  if ((component_base == 0u) ||
+      (val_cxl_find_capability(component_base, CXL_CAPID_IDE, NULL) != ACS_STATUS_PASS))
+    return ACS_STATUS_SKIP;
+
+  status = val_cxl_ide_get_status(component_index, &ide_status);
+  if (status != ACS_STATUS_PASS)
+    return status;
+
+  rx_state = ide_status & CXL_IDE_STATUS_FIELD_MASK;
+  tx_state = (ide_status >> CXL_IDE_STATUS_TX_SHIFT) & CXL_IDE_STATUS_FIELD_MASK;
+  if ((rx_state == CXL_IDE_STATE_INSECURE) || (tx_state == CXL_IDE_STATE_INSECURE))
+  {
+      val_print(ACS_PRINT_WARN, " CXL IDE link did not become Active for component %u",
+                component_index);
+      return ACS_STATUS_SKIP;
+  }
+
+  return ACS_STATUS_PASS;
+}
+
 static
 void
 payload(void)
@@ -142,7 +173,6 @@ payload(void)
       uint32_t reg_value;
       uint32_t status;
       uint32_t sel_index = 0u;
-      uint32_t link_checked = 0u;
       uint32_t session_active = 0u;
       val_spdm_context_t spdm_context;
 
@@ -173,7 +203,6 @@ payload(void)
                     " Failed to get number of selective streams for BDF: 0x%x",
                     bdf);
           failure_count++;
-          tested_ports = 1u;
           continue;
       }
 
@@ -184,62 +213,116 @@ payload(void)
                     " Failed to get number of link streams for BDF: 0x%x",
                     bdf);
           failure_count++;
-          tested_ports = 1u;
           continue;
       }
 
-      tested_ports = 1u;
-
-      /* Establish the CXL IDE link before enabling TDISP protection. */
+      /* Establish and observe an Active CXL IDE link before the transition. */
       status = val_cxl_find_downstream_endpoint(comp, &endpoint_index);
-      if (status == ACS_STATUS_PASS)
-      {
-          endpoint_bdf = (uint32_t)val_cxl_get_component_info(
-            CXL_COMPONENT_INFO_BDF_INDEX, endpoint_index);
-          if (endpoint_bdf != CXL_COMPONENT_INVALID_INDEX)
-          {
-              status = val_spdm_session_open(endpoint_bdf, &spdm_context, &session_id);
-              if (status == ACS_STATUS_SKIP)
-              {
-                  val_print(ACS_PRINT_WARN,
-                            " SPDM session unavailable for endpoint BDF: 0x%x",
-                            endpoint_bdf);
-              }
-              else if (status != ACS_STATUS_PASS)
-              {
-                  val_print(ACS_PRINT_ERR,
-                            " SPDM session open failed for endpoint BDF: 0x%x",
-                            endpoint_bdf);
-                  failure_count++;
-              }
-              else
-              {
-                  session_active = 1u;
-                  status = val_cxl_ide_establish_link(comp, endpoint_index,
-                                                      &spdm_context, session_id);
-                  if (status == ACS_STATUS_SKIP)
-                  {
-                      val_print(ACS_PRINT_WARN,
-                                " IDE link establish skipped for endpoint BDF: 0x%x",
-                                endpoint_bdf);
-                  }
-                  else if (status != ACS_STATUS_PASS)
-                  {
-                      val_print(ACS_PRINT_ERR,
-                                " IDE link establish failed for endpoint BDF: 0x%x",
-                                endpoint_bdf);
-                      failure_count++;
-                  }
-              }
-          }
-      }
-      else if (status != ACS_STATUS_SKIP)
+      if (status == ACS_STATUS_SKIP)
+          continue;
+      if (status != ACS_STATUS_PASS)
       {
           val_print(ACS_PRINT_ERR,
                     " Failed to locate downstream endpoint for BDF: 0x%x",
                     bdf);
           failure_count++;
+          continue;
       }
+
+      endpoint_bdf = (uint32_t)val_cxl_get_component_info(
+        CXL_COMPONENT_INFO_BDF_INDEX, endpoint_index);
+      if (endpoint_bdf == CXL_COMPONENT_INVALID_INDEX)
+      {
+          skipped_invalid_bdf++;
+          continue;
+      }
+
+      status = val_spdm_session_open(endpoint_bdf, &spdm_context, &session_id);
+      if (status == ACS_STATUS_SKIP)
+      {
+          val_print(ACS_PRINT_WARN,
+                    " SPDM session unavailable for endpoint BDF: 0x%x",
+                    endpoint_bdf);
+          continue;
+      }
+      if (status != ACS_STATUS_PASS)
+      {
+          val_print(ACS_PRINT_ERR,
+                    " SPDM session open failed for endpoint BDF: 0x%x",
+                    endpoint_bdf);
+          failure_count++;
+          continue;
+      }
+      session_active = 1u;
+
+      status = val_cxl_ide_establish_link(comp, endpoint_index,
+                                          &spdm_context, session_id);
+      if (status != ACS_STATUS_PASS)
+      {
+          val_print(status == ACS_STATUS_SKIP ? ACS_PRINT_WARN : ACS_PRINT_ERR,
+                    " IDE link establishment unavailable for endpoint BDF: 0x%x",
+                    endpoint_bdf);
+          if (status != ACS_STATUS_SKIP)
+              failure_count++;
+          (void)val_spdm_session_close(&spdm_context, session_id);
+          session_active = 0u;
+          continue;
+      }
+
+      status = check_cxl_link_streams_active(comp);
+      if (status != ACS_STATUS_PASS)
+      {
+          if (status != ACS_STATUS_SKIP)
+              failure_count++;
+          (void)val_spdm_session_close(&spdm_context, session_id);
+          session_active = 0u;
+          continue;
+      }
+
+      status = val_pcie_enable_tdisp(bdf);
+      if (status)
+      {
+          val_print(ACS_PRINT_ERR, " Unable to enable TDISP for BDF: 0x%x", bdf);
+          failure_count++;
+          (void)val_spdm_session_close(&spdm_context, session_id);
+          session_active = 0u;
+          continue;
+      }
+
+      status = val_pcie_disable_tdisp(bdf);
+      if (status)
+      {
+          val_print(ACS_PRINT_ERR, " Failed to disable TDISP for BDF: 0x%x", bdf);
+          failure_count++;
+          (void)val_spdm_session_close(&spdm_context, session_id);
+          session_active = 0u;
+          continue;
+      }
+
+      status = check_cxl_link_streams_insecure(comp);
+      if (status != ACS_STATUS_PASS)
+      {
+          val_print(ACS_PRINT_ERR,
+                    " CXL IDE link did not transition to Insecure for BDF: 0x%x", bdf);
+          failure_count++;
+          (void)val_spdm_session_close(&spdm_context, session_id);
+          session_active = 0u;
+          continue;
+      }
+
+      if (num_link_str > 0u)
+      {
+          status = check_link_streams_insecure(bdf, num_link_str);
+          if (status != ACS_STATUS_PASS)
+          {
+              failure_count++;
+              (void)val_spdm_session_close(&spdm_context, session_id);
+              session_active = 0u;
+              continue;
+          }
+      }
+
+      tested_ports = 1u;
 
       while (sel_index++ < num_sel_str)
       {
@@ -284,20 +367,6 @@ payload(void)
               failure_count++;
           }
 
-          if (!link_checked)
-          {
-              /* Verify the one-time link status after the first disable. */
-              uint32_t link_status = check_link_streams_insecure(bdf, num_link_str);
-              if ((link_status == ACS_STATUS_FAIL) || (link_status == ACS_STATUS_ERR))
-                  failure_count++;
-
-              uint32_t cxl_status = check_cxl_link_streams_insecure(comp);
-              if ((cxl_status == ACS_STATUS_FAIL) || (cxl_status == ACS_STATUS_ERR))
-                  failure_count++;
-
-              link_checked = 1u;
-          }
-
           status = val_get_sel_str_status(bdf, sel_index, &reg_value);
           if (status)
           {
@@ -330,17 +399,17 @@ payload(void)
           (void)val_spdm_session_close(&spdm_context, session_id);
   }
 
-  if (!tested_ports)
+  if (failure_count)
+      val_set_status(pe_index, "FAIL", failure_count);
+  else if (!tested_ports)
   {
-      val_print(ACS_PRINT_INFO, " No eligible root ports found", 0);
+      val_print(ACS_PRINT_INFO, " No eligible root ports completed an IDE transition", 0);
       val_print(ACS_PRINT_INFO, " Components scanned %u", (uint32_t)component_count);
       val_print(ACS_PRINT_INFO, " Skipped non-root %u", skipped_role);
       val_print(ACS_PRINT_INFO, " Skipped invalid BDF %u", skipped_invalid_bdf);
       val_print(ACS_PRINT_INFO, " Skipped no CDA cap %u", skipped_no_cda);
       val_set_status(pe_index, "SKIP", 02);
   }
-  else if (failure_count)
-      val_set_status(pe_index, "FAIL", failure_count);
   else
       val_set_status(pe_index, "PASS", 01);
 }
