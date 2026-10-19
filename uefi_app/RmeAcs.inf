@@ -43,7 +43,7 @@
   ../test_pool/cxl/cxl_rlqmcy_type3_host_mpe.c
   ../test_pool/cxl/cxl_rhcqws_host_side_mpe.c
   ../test_pool/cxl/cxl_rhmxtf_host_hdm_decoder.c
-  ../test_pool/cxl/cxl_rdhwnr_link_stream_lock.c
+  ../test_pool/cxl/cxl_rdhnwr_link_stream_lock.c
   ../test_pool/cxl/cxl_rwyvcq_link_unlock_reject.c
   ../test_pool/cxl/cxl_rgbgqx_ctc_link_ide.c
   ../test_pool/cxl/cxl_rxwjnn_type3_link_ide.c

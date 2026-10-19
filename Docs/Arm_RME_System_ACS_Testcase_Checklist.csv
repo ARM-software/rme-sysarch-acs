@@ -128,7 +128,7 @@ Sl No,Rule ID,Rule Description,Coverage,Notes,Exerciser PAL APIs Used
 127,RNYCLL,"When CDA TDISP is disabled, Realm device/host memory requests are rejected.",cxl_rnycll_tdisp_disable_reject,CHI-C2C exerciser VIP required,"pal_exerciser_set_param (CFG_TXN_ATTRIBUTES, EXERCISER_SEC_SID, DMA_ATTRIBUTES, EXERCISER_CXL_CMD_OP, EXERCISER_CXL_CMD_ADDR); pal_exerciser_get_param (EXERCISER_CXL_CMD_DATA0); pal_exerciser_ops (START_DMA, CXL_CMD_START)"
 128,RWPGJB,The RMECDA_CTL registers are RMSD write-protect by hardware default.,cxl_rwpgjb_rmsd_write_protect_property,,
 129,RPLYKV,All host ports in a system that supports Coherent RME-DA implement the RME-CDA DVSEC.,cxl_rplykv_rdfwkw_rme_cda_dvsec,,
-130,RDHNWR,Coherent Link IDE lock state controls register protection and stream lock state.,cxl_rdhwnr_link_stream_lock,,
+130,RDHNWR,Coherent Link IDE lock state controls register protection and stream lock state.,cxl_rdhnwr_link_stream_lock,,
 131,RWYVCQ,Unlocked coherent link streams reject Realm host-to-device requests.,cxl_rwyvcq_link_unlock_reject,,
 132,RGTVGZ,"With CDA TDISP enabled, Realm device-to-host requests are permitted only on locked active links or equivalent safe paths.",cxl_rgtvgz_tdisp_enable_link_gate,CHI-C2C exerciser VIP required,"pal_exerciser_set_param (EXERCISER_SEC_SID, DMA_ATTRIBUTES); pal_exerciser_ops (START_DMA)"
 133,RXQHNG,Locked CDA host ports reject out-of-range or invalid Requester IDs.,cxl_rxqhng_rid_range_reject,CHI-C2C exerciser VIP required,"pal_exerciser_set_param (CFG_TXN_ATTRIBUTES, DMA_ATTRIBUTES); pal_exerciser_ops (START_DMA)"
