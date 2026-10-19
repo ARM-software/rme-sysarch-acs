@@ -15,6 +15,7 @@
   * limitations under the License.
   **/
 #include <val_el3_pe.h>
+#include <val_el3_memory.h>
 #include <val_el3_pcie_ide.h>
 #include <val_el3_pgt.h>
 #include <pal_el3.h>
@@ -33,6 +34,7 @@ pcie_ide_map_mmio(uint64_t address)
     return PCIE_IDE_SUCCESS;
   if (val_el3_add_gpt_entry(address, GPT_ANY) != 0)
     return PCIE_IDE_ERROR;
+  val_el3_tlbi_paallos();
   return val_el3_add_mmu_entry(address, address, attributes);
 }
 
