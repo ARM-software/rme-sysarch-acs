@@ -18,6 +18,7 @@
 #include <val_el3_debug.h>
 #include <val_el3_pgt.h>
 #include <val_el3_memory.h>
+#include <stdint.h>
 
 #define get_min(a, b) (((a) < (b))?(a):(b))
 
@@ -34,6 +35,30 @@
 #define GPT_GPI_MASK       0xfull
 
 uint64_t free_pa = PLAT_FREE_MEM_START;
+
+/* EL3 translation tables and runtime GPT tables use the same Root pool. */
+static uint64_t val_el3_alloc_table_storage(uint64_t size, uint64_t alignment)
+{
+    const uint64_t pool_end = PLAT_FREE_MEM_START + PLAT_MEMORY_POOL_SIZE;
+    uint64_t aligned;
+
+    if (size == 0 || alignment == 0 || (alignment & (alignment - 1)) != 0 ||
+        free_pa < PLAT_FREE_MEM_START || free_pa > pool_end ||
+        free_pa > UINT64_MAX - (alignment - 1)) {
+        ERROR("Invalid EL3 table allocation request or pool cursor\n");
+        return 0;
+    }
+
+    aligned = (free_pa + alignment - 1) & ~(alignment - 1);
+    if (aligned > pool_end || size > pool_end - aligned) {
+        ERROR("EL3 table pool exhausted: size=0x%lx alignment=0x%lx\n",
+              size, alignment);
+        return 0;
+    }
+
+    free_pa = aligned + size;
+    return aligned;
+}
 
 /**
   @brief Return the descriptor output-address mask for the configured translation granule.
@@ -187,13 +212,15 @@ static uint64_t *val_el3_split_gpt_l0_block(uint64_t *l0_entry, uint8_t l0gptsz,
         return NULL;
     }
 
-    free_pa = (free_pa + table_size - 1) & ~(table_size - 1);
-    l1_table_pa = free_pa;
-    free_pa += table_size;
+    l1_table_pa = val_el3_alloc_table_storage(table_size, table_size);
+    if (l1_table_pa == 0)
+        return NULL;
     l1_table = (uint64_t *)l1_table_pa;
 
-    if (((val_el3_at_s1e3w((uint64_t)l1_table)) & 0x1) == 0x1)
-        val_el3_add_mmu_entry((uint64_t)l1_table, (uint64_t)l1_table, ROOT_PAS);
+    if (((val_el3_at_s1e3w((uint64_t)l1_table)) & 0x1) == 0x1 &&
+        val_el3_add_mmu_entry((uint64_t)l1_table, (uint64_t)l1_table,
+                              ROOT_PAS) != 0)
+        return NULL;
 
     for (i = 0; i < entry_count; i++)
         l1_table[i] = val_el3_create_gpt_l1_entry(old_gpi);
@@ -382,13 +409,16 @@ uint32_t val_el3_add_gpt_entry(uint64_t arg0, uint64_t arg1)
         gpt_desc.gpt_base = *l0_entry & (((0x1ull << 40) - 1) << 12);
         VERBOSE("val_pe_gpt_map_add: gpt_desc.gpt_base at L0 = %lx     \n", gpt_desc.gpt_base);
 
-    } else {
+    } else if (IS_GPT_ENTRY_BLOCK(*l0_entry)) {
         /* Block_descriptor[63:8] = RES0 */
         VERBOSE("The Block Descriptor\n");
         gpt_desc.gpt_base = (uint64_t)val_el3_split_gpt_l0_block(l0_entry, l0gptsz, p);
         if (gpt_desc.gpt_base == 0)
             return 1;
         VERBOSE("val_pe_gpt_map_add: l0 block split to table = %lx     \n", gpt_desc.gpt_base);
+    } else {
+        ERROR("Invalid L0 GPT descriptor at PA 0x%lx\n", PA);
+        return 1;
     }
 
         /*              Level 1 GPT walk        */
@@ -676,12 +706,15 @@ uint32_t val_el3_add_mmu_entry(uint64_t arg0, uint64_t arg1, uint64_t arg2)
             replace_block_desc = (old_desc != 0) &&
                                  IS_PGT_ENTRY_BLOCK(old_desc) &&
                                  ((old_desc & 0xf) != 0xf);
-            tt_base_phys = free_pa;
-            free_pa = free_pa + page_size;
+            tt_base_phys = val_el3_alloc_table_storage(page_size, page_size);
+            if (tt_base_phys == 0)
+                return 1;
             tt_base_virt = (uint64_t *)tt_base_phys;
-            if (((val_el3_at_s1e3w((uint64_t)tt_base_virt)) & 0x1) == 0x1)
+            if (((val_el3_at_s1e3w((uint64_t)tt_base_virt)) & 0x1) == 0x1 &&
                 val_el3_add_mmu_entry((uint64_t)tt_base_virt,
-                                      (uint64_t)tt_base_virt, NONSECURE_PAS);
+                                      (uint64_t)tt_base_virt,
+                                      NONSECURE_PAS) != 0)
+                return 1;
 
             num_entries = page_size / sizeof(uint64_t);
             if (replace_block_desc)
