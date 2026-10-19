@@ -531,24 +531,39 @@ pal_mem_phys_to_virt (
 }
 
 /**
-  Stalls the CPU for the number of microseconds specified by MicroSeconds.
+  Stalls the CPU for at least the requested number of microseconds.
 
   @param  MicroSeconds  The minimum number of microseconds to delay.
 
-  @return 1 - Success, 0 -Failure
+  @return 1 - Success, 0 - Failure
 
 **/
 uint64_t
 pal_time_delay_ms(uint64_t MicroSeconds)
 {
-  #ifdef ENABLE_OOB
-  /* Below code is not applicable for Bare-metal
-   * Only for FVP OOB experience
-   */
-  gBS->Stall(MicroSeconds);
-  #endif
-  (void) MicroSeconds;
-  return 0;
+  uint64_t counter_freq;
+  uint64_t ticks_per_us;
+
+  __asm__ volatile("mrs %0, cntfrq_el0" : "=r" (counter_freq));
+  if (counter_freq == 0u)
+    return 0;
+
+  /* Round up each microsecond without multiplying by the requested delay. */
+  ticks_per_us = counter_freq / 1000000u;
+  if ((counter_freq % 1000000u) != 0u)
+    ticks_per_us++;
+
+  while (MicroSeconds-- != 0u) {
+    uint64_t start_count;
+    uint64_t current_count;
+
+    __asm__ volatile("isb\n\tmrs %0, cntpct_el0" : "=r" (start_count));
+    do {
+      __asm__ volatile("isb\n\tmrs %0, cntpct_el0" : "=r" (current_count));
+    } while ((current_count - start_count) < ticks_per_us);
+  }
+
+  return 1;
 }
 
 /**
