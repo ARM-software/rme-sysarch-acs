@@ -190,7 +190,7 @@
 #define CXL_HDM_DECODER_TARGET_HIGH(n) (0x28 + (n) * CXL_HDM_DECODER_STRIDE)
 #define CXL_HDM_COMMIT_BIT                (1u << 9)
 #define CXL_HDM_COMMITTED_BIT             (1u << 10)
-#define CXL_HDM_COMMIT_TIMEOUT_MS         20u
+#define CXL_HDM_COMMIT_TIMEOUT_US         20000u
 
 #define CXL_BI_DECODER_CAP_OFFSET      0x00
 #define CXL_BI_DECODER_CTRL_OFFSET     0x04

@@ -191,7 +191,7 @@ clear_decoder(uint64_t comp_base,
   /* Clear COMMIT to release the decoder if it is still active. */
   ctrl = val_mmio_read(ctrl_addr);
   val_mmio_write(ctrl_addr, ctrl & ~CXL_HDM_COMMIT_BIT);
-  for (attempt = 0; attempt < CXL_HDM_COMMIT_TIMEOUT_MS; ++attempt)
+  for (attempt = 0; attempt < CXL_HDM_COMMIT_TIMEOUT_US; ++attempt)
   {
     uint32_t status = val_mmio_read(ctrl_addr);
     if ((status & CXL_HDM_COMMITTED_BIT) == 0u)
