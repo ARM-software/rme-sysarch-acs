@@ -38,15 +38,30 @@ uint32_t dma_len;
 uint32_t attr;
 uint32_t test_data_blk_size;
 
+/* Keep cache maintenance at EL3 for buffers written through the EL3 mapping */
+static uint32_t clean_invalidate_range_el3(uint64_t address, uint32_t length)
+{
+    uint64_t line_size = 4ULL << ((val_pe_reg_read(CTR_EL0) >> 16) & 0xf);
+    uint64_t end = address + length;
+
+    for (address &= ~(line_size - 1); address < end; address += line_size) {
+        if (val_data_cache_ops_by_va_el3(address, CLEAN_AND_INVALIDATE))
+            return 1;
+    }
+    /* Each EL3 cache operation completes with DSB SY. */
+    return 0;
+}
+
 static
 uint32_t test_sequence1(void *dram_buf1_virt, void *dram_buf1_phys, uint32_t instance)
 {
 
   uint64_t res_pas[4] = {GPT_REALM, GPT_NONSECURE, GPT_SECURE, GPT_ROOT}, PA;
   void *dram_buf2_virt;
+  uint64_t dram_buf2_phys;
 
-  dram_buf2_virt = dram_buf1_virt + (test_data_blk_size / 2);
-  dma_len = test_data_blk_size / 2;
+  dram_buf2_virt = (uint8_t *)dram_buf1_virt + dma_len;
+  dram_buf2_phys = (uint64_t)dram_buf1_phys + dma_len;
 
   val_print(ACS_PRINT_TEST, " DMA transaction for Non-Secure memory", 0);
   /* Write dram_buf1 with known data and flush the buffer to main memory */
@@ -56,7 +71,7 @@ uint32_t test_sequence1(void *dram_buf1_virt, void *dram_buf1_phys, uint32_t ins
       return 1;
   }
 
-  if (val_data_cache_ops_by_va_el3((uint64_t)dram_buf1_virt, CLEAN_AND_INVALIDATE))
+  if (clean_invalidate_range_el3((uint64_t)dram_buf1_virt, dma_len))
   {
       val_print(ACS_PRINT_ERR,
         "\n        Failed to clean and invalidate dram_buf1 for instance %4x", instance);
@@ -64,18 +79,28 @@ uint32_t test_sequence1(void *dram_buf1_virt, void *dram_buf1_phys, uint32_t ins
   }
 
   /* Perform DMA OUT to copy contents of dram_buf1 to exerciser memory */
-  val_exerciser_set_param(DMA_ATTRIBUTES, (uint64_t)dram_buf1_phys, dma_len, instance);
+  if (val_exerciser_set_param(DMA_ATTRIBUTES, (uint64_t)dram_buf1_phys, dma_len, instance)) {
+      val_print(ACS_PRINT_ERR, " Failed to program DMA source for exerciser %4x", instance);
+      return 1;
+  }
   if (val_exerciser_ops(START_DMA, EDMA_TO_DEVICE, instance)) {
       val_print(ACS_PRINT_ERR, " DMA write failure to exerciser %4x", instance);
       return 1;
   }
 
-  /* Perform DMA IN to copy the content from exerciser memory to dram_buf1 */
-  val_exerciser_set_param(DMA_ATTRIBUTES, (uint64_t)dram_buf2_virt, dma_len, instance);
+  /* AT=Translated requires the destination PA; the VA is only for CPU access. */
+  if (val_exerciser_set_param(DMA_ATTRIBUTES, dram_buf2_phys, dma_len, instance)) {
+      val_print(ACS_PRINT_ERR, " Failed to program DMA destination for exerciser %4x", instance);
+      return 1;
+  }
   if (val_exerciser_ops(START_DMA, EDMA_FROM_DEVICE, instance)) {
       val_print(ACS_PRINT_ERR, " DMA read failure from exerciser %4x", instance);
       return 1;
   }
+
+  /* Invalidate the CPU alias after the endpoint has completed its writes. */
+  val_pe_cache_invalidate_range((uint64_t)dram_buf2_virt, dma_len);
+  __asm__ volatile ("dsb sy" ::: "memory");
 
   /* Compare the contents of ddr_buf1 and ddr_buf2 for NEW_DATA */
   if (val_memory_compare(dram_buf1_virt, dram_buf2_virt, dma_len)) {
@@ -86,7 +111,8 @@ uint32_t test_sequence1(void *dram_buf1_virt, void *dram_buf1_phys, uint32_t ins
 
   //Clean the memory before further process
   val_memory_set(dram_buf1_virt, dma_len, 0);
-  val_data_cache_ops_by_va((addr_t)dram_buf1_virt, CLEAN_AND_INVALIDATE);
+  val_pe_cache_clean_invalidate_range((uint64_t)dram_buf1_virt, dma_len);
+  __asm__ volatile ("dsb sy" ::: "memory");
 
   val_print(ACS_PRINT_DEBUG, " DMA transaction is done for NS memory", 0);
 
@@ -111,18 +137,13 @@ uint32_t test_sequence1(void *dram_buf1_virt, void *dram_buf1_phys, uint32_t ins
      * observe that DMA transaction is not successful
      * */
     if (val_exerciser_set_param(DMA_ATTRIBUTES, PA, dma_len/2, instance)) {
-      val_add_gpt_entry_el3(PA, GPT_ANY);
+      val_print(ACS_PRINT_ERR, " Failed to program protected DMA for GPI 0x%x", res_pas[mem_cnt]);
       return 1;
     }
     if (val_exerciser_ops(START_DMA, EDMA_TO_DEVICE, instance) !=
         EXERCISER_DMA_INTERNAL_ERROR) {
       val_print(ACS_PRINT_ERR, " Expected completed DMA rejection for GPI 0x%x", res_pas[mem_cnt]);
-      //Clear the memory and it's protection by making it NS
-      val_add_gpt_entry_el3(PA, GPT_ANY);
-      val_add_mmu_entry_el3((uint64_t)dram_buf1_virt, PA,
-                      (attr | LOWER_ATTRS(PAS_ATTR(NONSECURE_PAS))));
-      val_memory_set_el3((uint64_t *)dram_buf1_virt, dma_len/2, 0);
-      val_data_cache_ops_by_va_el3((uint64_t)dram_buf1_virt, CLEAN_AND_INVALIDATE);
+      /* The payload drains DMA before its common GPT cleanup. */
       return 1;
     }
     //Clear the memory and it's protection by making it NS
@@ -145,7 +166,7 @@ uint32_t test_sequence1(void *dram_buf1_virt, void *dram_buf1_phys, uint32_t ins
       return 1;
     }
 
-    if (val_data_cache_ops_by_va_el3((uint64_t)dram_buf1_virt, CLEAN_AND_INVALIDATE))
+    if (clean_invalidate_range_el3((uint64_t)dram_buf1_virt, dma_len/2))
     {
       val_print(ACS_PRINT_ERR,
         "\n  Failed to clean and invalidate dram_buf1 for instance %4x", instance);
@@ -181,6 +202,7 @@ payload (void)
     uint32_t page_size = val_memory_page_size();
     uint32_t size;
     uint32_t smmu_mapped = 0;
+    uint32_t gpt_modified = 0;
     uint32_t exerciser_ready = 0;
     uint32_t exerciser_found = 0;
     uint32_t num_exercisers;
@@ -198,6 +220,7 @@ payload (void)
     val_memory_set(&smmu_pgt_desc, sizeof(smmu_pgt_desc), 0);
 
     test_data_blk_size = page_size * TEST_DATA_NUM_PAGES;
+    dma_len = test_data_blk_size / 2U;
     pe_index = val_pe_get_index_mpid(val_pe_get_mpid());
 
     attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(NON_SHAREABLE) | PGT_ENTRY_AP_RW);
@@ -270,6 +293,11 @@ payload (void)
     master.smmu_index = val_iovirt_get_rc_smmu_index(PCIE_EXTRACT_BDF_SEG(e_bdf),
                     PCIE_CREATE_BDF_PACKED(e_bdf));
 
+    if (master.smmu_index >= num_smmu) {
+        val_print(ACS_PRINT_ERR, " No SMMU mapping found for exerciser BDF 0x%x", e_bdf);
+        goto test_fail;
+    }
+
     /* Enable SMMU globally so that the transaction passes
      * through the SMMU.
      */
@@ -285,6 +313,11 @@ payload (void)
     size = val_get_min_tg();
     dram_buf1_phys = (void *)val_get_free_pa(test_data_blk_size * NUM_PAS, size);
     dram_buf1_virt = (void *)val_get_free_va(test_data_blk_size * NUM_PAS);
+    /* The free-address helpers return 1 on failure. */
+    if ((uint64_t)dram_buf1_phys <= 1U || (uint64_t)dram_buf1_virt <= 1U) {
+        val_print(ACS_PRINT_ERR, " Unable to allocate DMA test VA/PA buffers", 0);
+        goto test_fail;
+    }
     attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(NON_SHAREABLE) | PGT_ENTRY_AP_RW);
 
 
@@ -332,6 +365,8 @@ payload (void)
       mem_desc->length = test_data_blk_size;
       mem_desc->attributes |= (PGT_STAGE1_AP_RW);
 
+      /* Include partial GPT setup failures in the common cleanup path. */
+      gpt_modified = 1;
       if (val_add_gpt_entry_el3(mem_desc->physical_address, GPT_NONSECURE))
       {
           val_print(ACS_PRINT_ERR,
@@ -347,15 +382,15 @@ payload (void)
           goto test_fail;
       }
 
-      //Clear the memory
-      if (val_memory_set_el3((uint64_t *)dram_buf1_virt, dma_len/2, 0))
+      /* Prepare both halves so dirty CPU lines cannot overwrite incoming DMA. */
+      if (val_memory_set_el3((uint64_t *)dram_buf1_virt, test_data_blk_size, 0))
       {
           val_print(ACS_PRINT_ERR,
             "\n       Failed to set memory to 0 for instance %4x", instance);
           goto test_fail;
       }
 
-      if (val_data_cache_ops_by_va_el3((uint64_t)dram_buf1_virt, CLEAN_AND_INVALIDATE))
+      if (clean_invalidate_range_el3((uint64_t)dram_buf1_virt, test_data_blk_size))
       {
           val_print(ACS_PRINT_ERR,
             "\n       Failed to clean and invalidate dram_buf1 for instance %4x", instance);
@@ -364,6 +399,8 @@ payload (void)
 
       /* Need to know input and output address sizes before creating page table */
       smmu_pgt_desc = cpu_pgt_desc;
+      /* Never let an early failure destroy the CPU's existing page table. */
+      smmu_pgt_desc.pgt_base = (uint64_t) NULL;
       smmu_pgt_desc.ias = val_smmu_get_info(SMMU_IN_ADDR_SIZE, master.smmu_index);
       if ((smmu_pgt_desc.ias) == 0) {
             val_print(ACS_PRINT_ERR,
@@ -378,8 +415,6 @@ payload (void)
             goto test_fail;
       }
 
-      /* set pgt_base to NULL to create a new translation table for the SMMU */
-      smmu_pgt_desc.pgt_base = (uint64_t) NULL;
       if (val_pgt_create(mem_desc, &smmu_pgt_desc)) {
             val_print(ACS_PRINT_ERR,
                       " Unable to create page table with given attributes", 0);
@@ -397,7 +432,10 @@ payload (void)
     }
 
     /* Configure Exerciser to issue subsequent DMA transactions with Address Translated bit Set */
-    val_exerciser_set_param(CFG_TXN_ATTRIBUTES, TXN_ADDR_TYPE, AT_TRANSLATED, instance);
+    if (val_exerciser_set_param(CFG_TXN_ATTRIBUTES, TXN_ADDR_TYPE, AT_TRANSLATED, instance)) {
+        val_print(ACS_PRINT_ERR, " Unable to configure AT=Translated for exerciser %4x", instance);
+        goto test_fail;
+    }
 
     if (test_sequence1(dram_buf1_virt, dram_buf1_phys, instance))
         goto test_fail;
@@ -409,6 +447,25 @@ test_fail:
     val_set_status(pe_index, "FAIL", 02);
 
 test_clean:
+  /* A timed-out command can still access the buffers and translation tables. */
+  if (exerciser_ready &&
+      val_exerciser_ops(DMA_WAIT, 0, instance) > EXERCISER_DMA_RESERVED) {
+      val_pcie_disable_bme(e_bdf);
+      val_print(ACS_PRINT_ERR, " DMA still active; retain mappings and reset exerciser %x",
+                instance);
+      val_set_status(pe_index, "FAIL", 02);
+      return;
+  }
+
+  /* Retain the test's existing GPT_ANY teardown, including all failure paths. */
+  if (gpt_modified && val_add_gpt_entry_el3((uint64_t)dram_buf1_phys, GPT_ANY)) {
+      val_pcie_disable_bme(e_bdf);
+      val_print(ACS_PRINT_ERR, " Failed to clear test GPT entry for PA 0x%llx",
+                (uint64_t)dram_buf1_phys);
+      val_set_status(pe_index, "FAIL", 02);
+      return;
+  }
+
   if (smmu_mapped)
       val_smmu_unmap(master);
 
