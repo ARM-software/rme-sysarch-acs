@@ -618,9 +618,17 @@ payload(void)
       goto cleanup;
     }
 
-    rmecda_ctl1 = context.rmecda_ctl1_orig |
-                  RMECDA_CTL1_TDISP_EN_MASK |
-                  RMECDA_CTL1_LINK_STR_LOCK_MASK;
+    /* Restore the original control even if programming or readback fails. */
+    context.rmecda_ctl1_valid = 1u;
+    if (val_pcie_enable_tdisp(table->component[context.root_index].bdf) ||
+        read_from_root(context.rmecda_cfg_va + context.rmecda_cap_base + RMECDA_CTL1_OFFSET,
+                       &rmecda_ctl1) != ACS_STATUS_PASS)
+    {
+      val_set_status(pe_index, "SKIP", 04);
+      goto cleanup;
+    }
+
+    rmecda_ctl1 |= RMECDA_CTL1_LINK_STR_LOCK_MASK;
     if (write_from_root(context.rmecda_cfg_va + context.rmecda_cap_base + RMECDA_CTL1_OFFSET,
                         rmecda_ctl1) != ACS_STATUS_PASS)
     {
@@ -641,8 +649,6 @@ payload(void)
       val_set_status(pe_index, "SKIP", 05);
       goto cleanup;
     }
-
-    context.rmecda_ctl1_valid = 1u;
   }
 
   /* Step B: Run same behavior for Realm PAS and Non-secure PAS. */

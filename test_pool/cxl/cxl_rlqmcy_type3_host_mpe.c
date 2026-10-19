@@ -844,9 +844,18 @@ payload(void)
 
       /* Restore the original control even if programming or readback fails. */
       ctl1_valid = 1u;
-      ctl1_programmed = ctl1_original |
-                        RMECDA_CTL1_TDISP_EN_MASK |
-                        RMECDA_CTL1_LINK_STR_LOCK_MASK;
+      if (val_pcie_enable_tdisp(root->bdf) ||
+          read_from_root(cfg_va + rmecda_cap_base + RMECDA_CTL1_OFFSET,
+                         &ctl1_programmed) != ACS_STATUS_PASS)
+      {
+        val_print(ACS_PRINT_ERR,
+                  " RLQMCY: TDISP setup failed for BDF 0x%x",
+                  (uint64_t)root->bdf);
+        failures++;
+        goto device_cleanup;
+      }
+
+      ctl1_programmed |= RMECDA_CTL1_LINK_STR_LOCK_MASK;
       if (write_from_root(cfg_va + rmecda_cap_base + RMECDA_CTL1_OFFSET,
                           ctl1_programmed) != ACS_STATUS_PASS)
       {
