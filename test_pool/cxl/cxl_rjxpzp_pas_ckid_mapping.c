@@ -251,14 +251,18 @@ static uint32_t
 program_rmecda_ctl1(uint32_t root_bdf,
                     uint64_t cfg_va,
                     uint32_t rmecda_cap_base,
-                    uint32_t original_ctl1,
                     uint16_t first_tee_ckid)
 {
   /* Update FIRST_TEE_CKID for the current test vector. */
-  uint32_t ctl1_value = original_ctl1;
+  uint32_t ctl1_value;
   uint32_t ctl1_readback = 0u;
 
-  ctl1_value |= RMECDA_CTL1_TDISP_EN_MASK | RMECDA_CTL1_LINK_STR_LOCK_MASK;
+  if (val_pcie_enable_tdisp(root_bdf) ||
+      read_from_root(cfg_va + rmecda_cap_base + RMECDA_CTL1_OFFSET,
+                     &ctl1_value) != ACS_STATUS_PASS)
+    return ACS_STATUS_ERR;
+
+  ctl1_value |= RMECDA_CTL1_LINK_STR_LOCK_MASK;
   ctl1_value &= ~RMECDA_CTL1_FIRST_TEE_CKID_MASK;
   ctl1_value |= ((uint32_t)first_tee_ckid << RMECDA_CTL1_FIRST_TEE_CKID_SHIFT)
                 & RMECDA_CTL1_FIRST_TEE_CKID_MASK;
@@ -892,7 +896,6 @@ exercise_root_port(const CXL_COMPONENT_TABLE *table,
     if (program_rmecda_ctl1(root_bdf,
                             cfg_va,
                             rmecda_cap_base,
-                            rmecda_ctl1_original,
                             first_tee_ckid) != ACS_STATUS_PASS)
     {
       failures++;
