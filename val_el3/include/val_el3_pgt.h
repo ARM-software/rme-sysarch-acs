@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2025, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2025-2026, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -31,7 +31,7 @@
 
 #define RME_ACS_GPCCR_PPS_MASK      (0x7ull << RME_ACS_GPCCR_PPS_SHIFT)
 #define RME_ACS_GPCCR_L0GPTSZ_MASK  (0xfull << RME_ACS_GPCCR_L0GPTSZ_SHIFT)
-#define RME_ACS_GPCCR_PGS_MASK      (0x2ull << RME_ACS_GPCCR_PGS_SHIFT)
+#define RME_ACS_GPCCR_PGS_MASK      (0x3ull << RME_ACS_GPCCR_PGS_SHIFT)
 #define RME_ACS_GPCCR_ORGN_MASK     (0X2ull << RME_ACS_GPCCR_ORGN_SHIFT)
 #define RME_ACS_GPCCR_IRGN_MASK     (0X2ull << RME_ACS_GPCCR_IRGN_SHIFT)
 #define RME_ACS_GPCCR_SH_MASK       (0X2ull << RME_ACS_GPCCR_SH_SHIFT)
@@ -137,6 +137,7 @@ typedef struct {
 
 void val_el3_setup_acs_pgt_values(void);
 void val_el3_add_gpt_entry(uint64_t arg0, uint64_t arg1);
+uint32_t val_el3_get_gpt_gpi(uint64_t pa, uint64_t *gpi);
 uint64_t val_el3_get_gpt_index(uint64_t pa, uint8_t level, uint8_t l0gptsz,
                        uint8_t pps, uint8_t p);
 bool val_el3_is_gpi_valid(uint64_t gpi);

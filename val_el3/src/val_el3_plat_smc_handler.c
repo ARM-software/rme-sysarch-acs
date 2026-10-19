@@ -45,6 +45,19 @@ void plat_arm_acs_smc_handler(uint64_t services, uint64_t arg0, uint64_t arg1, u
 
   bool mapped = ((val_el3_at_s1e3w((uint64_t)shared_data)) & 0x1) != 0x1;
 
+  /*
+   * RME_MAP_SHARED_MEM establishes the shared-data mapping, while handler
+   * installation does not access shared_data. Reject every other service
+   * before it can dereference an inaccessible shared-data pointer.
+   */
+  if (!mapped &&
+      (services != RME_MAP_SHARED_MEM) &&
+      (services != RME_INSTALL_HANDLER))
+  {
+    ERROR("Shared data is not mapped for service 0x%lx\n", services);
+    return 1u;
+  }
+
   if (mapped) {
     shared_data->status_code = 0;
     shared_data->error_code = 0;
@@ -60,6 +73,10 @@ void plat_arm_acs_smc_handler(uint64_t services, uint64_t arg0, uint64_t arg1, u
       INFO("RME GPT mapping service \n");
       val_el3_add_gpt_entry(arg0, arg1);
       val_el3_tlbi_paallos();
+      break;
+    case RME_GET_GPT_ENTRY:
+      INFO("RME GPT read service \n");
+      shared_data->status_code = val_el3_get_gpt_gpi(arg0, &shared_data->arg0);
       break;
     case RME_ADD_MMU_ENTRY:
       INFO("RME MMU mapping service \n");
