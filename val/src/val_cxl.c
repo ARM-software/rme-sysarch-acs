@@ -2146,7 +2146,7 @@ val_cxl_program_decoder_common(uint64_t cap_base,
   if ((ctrl & CXL_HDM_COMMIT_BIT) != 0u) {
     uint32_t cleared = ctrl & ~CXL_HDM_COMMIT_BIT;
     val_mmio_write(ctrl_addr, cleared);
-    for (attempt = 0; attempt < CXL_HDM_COMMIT_TIMEOUT_MS; ++attempt) {
+    for (attempt = 0; attempt < CXL_HDM_COMMIT_TIMEOUT_US; ++attempt) {
       uint32_t status = val_mmio_read(ctrl_addr);
       if ((status & CXL_HDM_COMMITTED_BIT) == 0u)
         break;
@@ -2170,7 +2170,7 @@ val_cxl_program_decoder_common(uint64_t cap_base,
   ctrl |= CXL_HDM_COMMIT_BIT;
   val_mmio_write(ctrl_addr, ctrl);
 
-  for (attempt = 0; attempt < CXL_HDM_COMMIT_TIMEOUT_MS; ++attempt) {
+  for (attempt = 0; attempt < CXL_HDM_COMMIT_TIMEOUT_US; ++attempt) {
     uint32_t status = val_mmio_read(ctrl_addr);
 
     if ((status & CXL_HDM_ERROR_BIT) != 0u) {
