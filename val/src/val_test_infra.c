@@ -97,9 +97,9 @@ MODULE_TEST_DISPATCHER_s g_module_test_table[MODULE_SENTINEL] = {
         .entry_fn = cxl_rcnslj_type3_no_tsp_entry,
         .test_text = "cxl_rcnslj_type3_no_tsp",
       },
-      [CXL_ENTRY_CXL_RDHWNR_LINK_STREAM_LOCK_ENTRY] = {
-        .entry_fn = cxl_rdhwnr_link_stream_lock_entry,
-        .test_text = "cxl_rdhwnr_link_stream_lock",
+      [CXL_ENTRY_CXL_RDHNWR_LINK_STREAM_LOCK_ENTRY] = {
+        .entry_fn = cxl_rdhnwr_link_stream_lock_entry,
+        .test_text = "cxl_rdhnwr_link_stream_lock",
       },
       [CXL_ENTRY_CXL_RFDVZC_TDISP_DISABLE_ENTRY] = {
         .entry_fn = cxl_rfdvzc_tdisp_disable_entry,

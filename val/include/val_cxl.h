@@ -230,7 +230,7 @@ uint32_t cxl_rphcgc_rmsd_full_protect_entry(uint32_t num_pe);
 uint32_t cxl_rphwmm_rme_cda_tsp_entry(uint32_t num_pe);
 uint32_t cxl_rjxpzp_pas_ckid_mapping_entry(uint32_t num_pe);
 uint32_t cxl_rhmxtf_host_hdm_decoder_entry(uint32_t num_pe);
-uint32_t cxl_rdhwnr_link_stream_lock_entry(uint32_t num_pe);
+uint32_t cxl_rdhnwr_link_stream_lock_entry(uint32_t num_pe);
 uint32_t cxl_rwyvcq_link_unlock_reject_entry(uint32_t num_pe);
 uint32_t cxl_rxqhng_rid_range_reject_entry(uint32_t num_pe);
 uint32_t cxl_rkjypb_cache_disable_entry(uint32_t num_pe);

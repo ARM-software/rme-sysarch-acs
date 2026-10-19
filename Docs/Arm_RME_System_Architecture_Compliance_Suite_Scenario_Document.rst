@@ -1105,7 +1105,7 @@ Testcase checklist
 
   * -
 
-      `cxl_rdhwnr_link_stream_lock <../test_pool/cxl/cxl_rdhwnr_link_stream_lock.c>`_
+      `cxl_rdhnwr_link_stream_lock <../test_pool/cxl/cxl_rdhnwr_link_stream_lock.c>`_
 
     -
 
