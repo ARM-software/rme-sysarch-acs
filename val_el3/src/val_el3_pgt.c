@@ -409,6 +409,53 @@ void val_el3_add_gpt_entry(uint64_t arg0, uint64_t arg1)
 
 }
 
+uint32_t val_el3_get_gpt_gpi(uint64_t pa, uint64_t *gpi)
+{
+    uint64_t gpccr, gptbr, gpt_base, index, entry;
+    uint64_t *table;
+    uint8_t p, pps, l0gptsz, l0_idx_width, align;
+    static const uint8_t pgs[] = {12, 16, 14};
+    static const uint8_t pps_bits[] = {32, 36, 40, 42, 44, 48, 52};
+
+    if (gpi == NULL)
+        return 1u;
+
+    gpccr = val_el3_read_gpccr_el3();
+    p = (uint8_t)((gpccr & RME_ACS_GPCCR_PGS_MASK) >> RME_ACS_GPCCR_PGS_SHIFT);
+    pps = (uint8_t)((gpccr & RME_ACS_GPCCR_PPS_MASK) >> RME_ACS_GPCCR_PPS_SHIFT);
+    if (p > 2u || pps > 6u)
+        return 1u;
+
+    p = pgs[p];
+    pps = pps_bits[pps];
+    l0gptsz = (uint8_t)(((gpccr & RME_ACS_GPCCR_L0GPTSZ_MASK) >>
+                         RME_ACS_GPCCR_L0GPTSZ_SHIFT) + 30u);
+    l0_idx_width = (pps > l0gptsz) ? (uint8_t)(pps - l0gptsz) : 0u;
+    align = (uint8_t)get_max(l0_idx_width + 3u, 12u);
+    gptbr = val_el3_read_gptbr_el3();
+    gpt_base = (gptbr << 12) & ~((1ull << align) - 1ull);
+
+    table = (uint64_t *)gpt_base;
+    index = val_el3_get_gpt_index(pa, 0, l0gptsz, pps, p);
+    entry = table[index];
+    if (IS_GPT_ENTRY_TABLE(entry)) {
+        gpt_base = entry & (((1ull << 40) - 1ull) << 12);
+        table = (uint64_t *)gpt_base;
+        index = val_el3_get_gpt_index(pa, 1, l0gptsz, pps, p);
+        entry = table[index];
+        if (IS_GPT_ENTRY_CONTIG(entry))
+            *gpi = (entry >> 4) & GPT_GPI_MASK;
+        else
+            *gpi = (entry >> (4u * ((pa >> p) & 0xfull))) & GPT_GPI_MASK;
+    } else if (IS_GPT_ENTRY_BLOCK(entry)) {
+        *gpi = (entry >> 4) & GPT_GPI_MASK;
+    } else {
+        return 1u;
+    }
+
+    return val_el3_is_gpi_valid(*gpi) ? 0u : 1u;
+}
+
 /**
   @brief   This function provides the Index for the corresponding level of GPT
            1. Caller       -  Test Suite

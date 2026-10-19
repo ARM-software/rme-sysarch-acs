@@ -846,6 +846,8 @@ typedef struct {
   uint32_t bdf;
   uint64_t address;
   uint32_t property;
+  uint32_t write_mask;
+  uint64_t valid_address;
 } REGISTER_INFO_TABLE;
 
 /**

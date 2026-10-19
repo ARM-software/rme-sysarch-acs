@@ -52,6 +52,13 @@ payload(void)
 
   for (index = 0; index < table_entries; index++)
   {
+      if ((register_tbl_ptr->type != INTERCONNECT) ||
+          (register_tbl_ptr->property != RMSD_PROTECT))
+      {
+          register_tbl_ptr++;
+          continue;
+      }
+
       test_skip = 0;
       ret = val_intercnt_sec_prpty_check((void *)register_tbl_ptr);
       if (ret)
