@@ -288,5 +288,6 @@
   _(RT_REG_2_START_ADDR, RT_REG_2_SIZE) \
   _(RT_REG_3_START_ADDR, RT_REG_3_SIZE)
 
-#define EXPAND_REGISTER_INFO(reg_type, reg_bdf, reg_addr, reg_prop) \
-  {.type = reg_type, .bdf = reg_bdf, .address = reg_addr, .property = reg_prop},
+#define EXPAND_REGISTER_INFO(reg_type, reg_bdf, reg_addr, reg_prop, reg_mask, valid_addr) \
+  {.type = reg_type, .bdf = reg_bdf, .address = reg_addr, .property = reg_prop, \
+   .write_mask = reg_mask, .valid_address = valid_addr},

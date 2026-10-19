@@ -70,6 +70,8 @@ typedef struct
   UINT32 bdf;
   UINT64 address;
   UINT32 property;
+  UINT32 write_mask;
+  UINT64 valid_address;
 } REGISTER_INFO_TABLE;
 
 typedef enum
