@@ -25,7 +25,7 @@
 #include "val/include/val_memory.h"
 #include "val/include/val_pe.h"
 
-#define TEST_NAME "cxl_rdhwnr_link_stream_lock"
+#define TEST_NAME "cxl_rdhnwr_link_stream_lock"
 #define TEST_DESC "Validate CXL IDE registers respect LINK_STR_LOCK     "
 #define TEST_RULE "RDHNWR"
 
@@ -253,7 +253,7 @@ payload(void)
     executed++;
     val_print(ACS_PRINT_TEST, " Checking Root Port BDF: 0x%x", (uint64_t)bdf);
 
-    /* Verify the RDHWNR Rule */
+    /* Verify the RDHNWR Rule */
     if (verify_link_lock(idx, rmecda_cap_base, ide_cap_base) != ACS_STATUS_PASS)
       failures++;
   }
@@ -267,7 +267,7 @@ payload(void)
 }
 
 uint32_t
-cxl_rdhwnr_link_stream_lock_entry(uint32_t num_pe)
+cxl_rdhnwr_link_stream_lock_entry(uint32_t num_pe)
 {
   num_pe = 1;
   uint32_t status;
