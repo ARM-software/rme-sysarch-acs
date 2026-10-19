@@ -1323,13 +1323,13 @@ uint64_t val_get_free_va(uint64_t size)
     if (val_pe_reg_read_tcr(0 /*for TTBR0*/, &pgt_desc.tcr))
     {
       val_print(ACS_PRINT_ERR, " TCR read failure", 0);
-      return 1;
+      return 0;
     }
 
     if (val_pe_reg_read_ttbr(0 /*for TTBR0*/, &ttbr))
     {
       val_print(ACS_PRINT_ERR, " TTBR0 read failure", 0);
-      return 1;
+      return 0;
     }
 
     val_memory_set(mem_desc_array, sizeof(mem_desc_array), 0);
@@ -1349,13 +1349,13 @@ uint64_t val_get_free_va(uint64_t size)
     if (val_pgt_create(mem_desc, &pgt_desc))
     {
       val_print(ACS_PRINT_ERR, " Unable to create page table with given attributes", 0);
-      return 1;
+      return 0;
     }
   }
   if (!Aarch64VaIsMappedForWrite((void *)free_mem_var_va))
   {
     val_print(ACS_PRINT_ERR, "The VA is still not mapped for write", 0);
-    return 1;
+    return 0;
   }
   mem_base = free_mem_var_va;
   free_mem_var_va += size;

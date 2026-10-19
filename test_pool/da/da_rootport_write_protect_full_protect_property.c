@@ -52,6 +52,14 @@ payload(void)
 
   for (index = 0; index < table_entries; index++)
   {
+      if ((register_tbl_ptr->type != PCIE_RP) ||
+          ((register_tbl_ptr->property != RMSD_WRITE_PROTECT) &&
+           (register_tbl_ptr->property != RMSD_FULL_PROTECT)))
+      {
+          register_tbl_ptr++;
+          continue;
+      }
+
       test_skip = 0;
       ret = val_pcie_rp_sec_prpty_check((void *)register_tbl_ptr);
       if (ret)
