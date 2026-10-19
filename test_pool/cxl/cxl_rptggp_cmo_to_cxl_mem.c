@@ -536,9 +536,15 @@ payload(void)
 
     /* Restore the original control even if programming or readback fails. */
     context.rmecda_ctl1_valid = 1u;
-    rmecda_ctl1 = context.rmecda_ctl1_orig |
-                  RMECDA_CTL1_TDISP_EN_MASK |
-                  RMECDA_CTL1_LINK_STR_LOCK_MASK;
+    if (val_pcie_enable_tdisp(table->component[context.root_index].bdf) ||
+        read_from_root(context.rmecda_cfg_va + rmecda_cap_base + RMECDA_CTL1_OFFSET,
+                       &rmecda_ctl1) != ACS_STATUS_PASS)
+    {
+      result = ACS_STATUS_FAIL;
+      goto cleanup;
+    }
+
+    rmecda_ctl1 |= RMECDA_CTL1_LINK_STR_LOCK_MASK;
     if (write_from_root(context.rmecda_cfg_va + rmecda_cap_base + RMECDA_CTL1_OFFSET,
                         rmecda_ctl1) != ACS_STATUS_PASS)
     {
