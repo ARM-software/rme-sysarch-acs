@@ -1780,111 +1780,335 @@ val_ide_establish_stream(uint32_t bdf, uint32_t count, uint32_t stream_id, uint3
   return 0;
 }
 
+/* Access an interconnect register through an explicitly mapped PAS alias. */
+static uint32_t
+interconnect_access(uint64_t va, uint32_t access_type, uint32_t *data)
+{
+  shared_data->num_access = 1;
+  shared_data->shared_data_access[0].addr = va;
+  shared_data->shared_data_access[0].access_type = access_type;
+  shared_data->shared_data_access[0].data = (access_type == WRITE_DATA) ? *data : 0u;
+  if (val_pe_access_mut_el3())
+      return 1u;
+  if (access_type == READ_DATA)
+      *data = (uint32_t)shared_data->shared_data_access[0].data;
+  return 0u;
+}
+
+static uint32_t
+interconnect_root_write_check(uint64_t va, uint32_t value)
+{
+  uint32_t readback = 0u;
+
+  if (interconnect_access(va, WRITE_DATA, &value) ||
+      interconnect_access(va, READ_DATA, &readback))
+      return 1u;
+  if (readback != value)
+  {
+      val_print(ACS_PRINT_ERR, " Root write expected 0x%x", value);
+      val_print(ACS_PRINT_ERR, " Root read returned 0x%x", readback);
+      return 1u;
+  }
+  return 0u;
+}
+
+/* Return success only when the requested 32-bit access generates a GPF. */
+static uint32_t
+interconnect_expect_gpf(uint64_t va, uint32_t access_type, uint32_t *data)
+{
+  uint32_t status;
+  uint32_t fault_seen;
+  uint32_t gpf_seen;
+
+  if ((access_type != READ_DATA) && (access_type != WRITE_DATA))
+      return 1u;
+
+  shared_data->pas_filter_flag = CLEAR;
+  shared_data->exception_generated = CLEAR;
+  shared_data->exception_expected = SET;
+  shared_data->access_mut = SET;
+  shared_data->arg1 = va;
+  shared_data->shared_data_access[0].addr = va;
+  shared_data->shared_data_access[0].access_type =
+      (access_type == READ_DATA) ? READ_DATA_GPF : WRITE_DATA_GPF;
+  shared_data->shared_data_access[0].data =
+      (access_type == WRITE_DATA) ? *data : 0u;
+  shared_data->status_code = 0u;
+
+  status = val_pe_access_mut_el3();
+  fault_seen = (shared_data->exception_expected == CLEAR);
+  gpf_seen = (shared_data->exception_generated == SET);
+
+  shared_data->exception_expected = CLEAR;
+  shared_data->exception_generated = CLEAR;
+  shared_data->access_mut = CLEAR;
+  shared_data->shared_data_access[0].access_type = access_type;
+
+  if (status)
+      return 1u;
+  return (fault_seen && gpf_seen) ? 0u : 1u;
+}
+
 uint32_t val_intercnt_sec_prpty_check(uint64_t *register_entry_info)
 {
-  REGISTER_INFO_TABLE *register_entry;
-  uint32_t rd_data = 0;
-  uint32_t data_rt, data_ns, org_data;
-  uint32_t ret = 0;
-  uint32_t restore_required = 0;
+  static const uint64_t pas_list[] = {ROOT_PAS, NONSECURE_PAS, SECURE_PAS, REALM_PAS};
+  REGISTER_INFO_TABLE *entry = (REGISTER_INFO_TABLE *)register_entry_info;
+  uint64_t va[4], tg, page, attr, valid_pa, valid_va = 0u, page_offset, original_gpi;
+  uint32_t mask, original, valid_original = 0u, saved, baseline, attempt, readback;
+  uint32_t failures = 0u;
+  uint32_t requester_failures = 0u;
+  uint32_t gpt_modified = 0u;
+  uint32_t has_valid_register;
+  uint32_t restore_failed;
+  uint32_t status = 1u;
 
-  register_entry = (REGISTER_INFO_TABLE *)register_entry_info;
+  if (entry == NULL)
+      return 1u;
+  if (entry->type != INTERCONNECT)
+      return 0u;
+  if (entry->property != RMSD_PROTECT || (entry->address & 3u))
+      return 1u;
 
-  if (register_entry->type != INTERCONNECT)
-      return 0;
-
-  val_print(ACS_PRINT_DEBUG, " Address: 0x%x", register_entry->bdf);
-  val_print(ACS_PRINT_ALWAYS, " Property: %d", register_entry->property);
-
-  data_rt = TEST_DATA_1;
-  data_ns = TEST_DATA_2;
-
-  switch (register_entry->property)
+  val_print(ACS_PRINT_TEST, " Interconnect register 0x%llx", entry->address);
+  mask = entry->write_mask;
+  valid_pa = entry->valid_address;
+  has_valid_register = (valid_pa != 0u);
+  if (!mask)
   {
-     case RMSD_PROTECT:
-          /* Store the original data */
-          shared_data->num_access = 1;
-          shared_data->shared_data_access[0].addr = register_entry->address;
-          shared_data->shared_data_access[0].access_type = READ_DATA;
-          if (val_pe_access_mut_el3())
-          {
-            val_print(ACS_PRINT_ERR, " MUT access failed for 0x%llx", register_entry->address);
-            ret = 1;
-            goto cleanup;
-          }
-          org_data = shared_data->shared_data_access[0].data;
-
-          /* Write the data_rt from ROOT */
-          shared_data->num_access = 1;
-          shared_data->shared_data_access[0].addr = register_entry->address;
-          shared_data->shared_data_access[0].access_type = WRITE_DATA;
-          shared_data->shared_data_access[0].data = data_rt;
-          restore_required = 1;
-          if (val_pe_access_mut_el3())
-          {
-            val_print(ACS_PRINT_ERR, " MUT access failed for 0x%llx", register_entry->address);
-            ret = 1;
-            goto cleanup;
-          }
-
-          /* Read the data from NS */
-          rd_data = val_mmio_read(register_entry->address);
-
-          /* Fail if the NS read is successfull */
-          if (rd_data == data_rt)
-          {
-              val_print(ACS_PRINT_ERR, " Read success from NS for addr: 0x%lx",
-                        register_entry->address);
-              ret = 1;
-              goto cleanup;
-          }
-
-          /* Write the data_ns from NS */
-          val_mmio_write(register_entry->address, data_ns);
-
-          /* Read back through Root PAS to verify the NS write was blocked. */
-          shared_data->num_access = 1;
-          shared_data->shared_data_access[0].addr = register_entry->address;
-          shared_data->shared_data_access[0].access_type = READ_DATA;
-          if (val_pe_access_mut_el3())
-          {
-            val_print(ACS_PRINT_ERR, " MUT access failed for 0x%llx", register_entry->address);
-            ret = 1;
-            goto cleanup;
-          }
-          rd_data = shared_data->shared_data_access[0].data;
-
-          /* Fail if the NS write changed the Root-visible value. */
-          if (rd_data != data_rt)
-          {
-              val_print(ACS_PRINT_ERR, " Write from NS is successful for address: 0x%llx",
-                        register_entry->address);
-              ret = 1;
-              goto cleanup;
-          }
-
-          rd_data = 0;
-          break;
-
-    default:
-      val_print(ACS_PRINT_ERR, " Invalid Security Property: %d", register_entry->property);
-      ret = 1;
-      goto cleanup;
+      val_print(ACS_PRINT_ERR, " No safe interconnect stimulus for 0x%llx", entry->address);
+      return 1u;
+  }
+  if (!has_valid_register)
+  {
+      val_print(ACS_PRINT_WARN,
+                " No routing-valid register for 0x%llx; testing with routing enabled",
+                entry->address);
   }
 
-cleanup:
-  if (restore_required)
+  tg = val_get_min_tg();
+  if (!tg || (tg & (tg - 1u)))
+      return 1u;
+  page = entry->address & ~(tg - 1u);
+  page_offset = entry->address - page;
+  if (val_get_gpt_entry_el3(page, &original_gpi))
+      return 1u;
+  /* A supplied routing-valid register must be aligned and share this mapped page. */
+  if (has_valid_register &&
+      ((valid_pa & 3u) || ((valid_pa & ~(tg - 1u)) != page)))
+      return 1u;
+
+  /* The routing-valid bit is a control bit, not an address-field stimulus. */
+  if (has_valid_register && (valid_pa == entry->address))
+      mask &= ~1u;
+  if (!mask)
   {
-      shared_data->num_access = 1;
-      shared_data->shared_data_access[0].addr = register_entry->address;
-      shared_data->shared_data_access[0].access_type = WRITE_DATA;
-      shared_data->shared_data_access[0].data = org_data;
-      if (val_pe_access_mut_el3())
+      val_print(ACS_PRINT_ERR, " No non-valid writable bits for 0x%llx", entry->address);
+      return 1u;
+  }
+
+  attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(OUTER_SHAREABLE) |
+                     GET_ATTR_INDEX(DEV_MEM_nGnRnE) | PGT_ENTRY_AP_RW);
+  for (uint32_t index = 0u; index < 4u; ++index)
+  {
+      va[index] = val_get_free_va(tg);
+      if (!va[index] || (va[index] & (tg - 1u)) ||
+          val_add_mmu_entry_el3(va[index], page,
+                            attr | LOWER_ATTRS(PAS_ATTR(pas_list[index]))))
+          goto restore_gpt;
+      va[index] += page_offset;
+  }
+  if (has_valid_register)
+      valid_va = va[0] - page_offset + (valid_pa - page);
+
+  if (interconnect_access(va[0], READ_DATA, &original))
+      goto restore_gpt;
+  if (has_valid_register)
+  {
+      if (interconnect_access(valid_va, READ_DATA, &valid_original))
+          goto restore_gpt;
+  }
+  val_print(ACS_PRINT_TEST, " Root original 0x%x", original);
+  val_print(ACS_PRINT_TEST, " Writable address mask 0x%x", mask);
+
+  /* Disable routing when the platform supplies an associated valid register. */
+  if (has_valid_register)
+  {
+      if (interconnect_root_write_check(valid_va, valid_original & ~1u))
       {
-          val_print(ACS_PRINT_ERR, " Failed to restore register 0x%llx", register_entry->address);
-          ret = 1;
+          if (interconnect_root_write_check(valid_va, valid_original))
+              status = VAL_INTERCONNECT_RESTORE_FAILED;
+          goto restore_gpt;
+      }
+  }
+  saved = original;
+  if (has_valid_register)
+  {
+      if (valid_pa == entry->address)
+          saved = original & ~1u;
+  }
+  attempt = saved & ~mask;
+  baseline = attempt | mask;
+
+  /* Keep the visible baseline distinct from common blocked-read values. */
+  if (baseline == 0xffffffffu)
+  {
+      if (attempt != 0u)
+      {
+          baseline = attempt;
+          attempt = 0xffffffffu;
+      }
+      else
+      {
+          baseline = mask & (~mask + 1u);
       }
   }
 
-  return ret;
+  /* Prove both address-field values through Root and leave a nonzero baseline. */
+  if (interconnect_root_write_check(va[0], attempt) ||
+      interconnect_root_write_check(va[0], baseline))
+  {
+      val_print(ACS_PRINT_ERR, " Root stimulus failed at 0x%llx", entry->address);
+      failures = 1u;
+      goto restore;
+  }
+  val_print(ACS_PRINT_TEST, " Root verified baseline 0x%x", baseline);
+
+  /* Validate the Root GPT association established by platform firmware. */
+  for (uint32_t index = 1u; index < 4u; ++index)
+  {
+      uint32_t pas_failures = 0u;
+
+      readback = 0u;
+      if (interconnect_expect_gpf(va[index], READ_DATA, &readback))
+          pas_failures++;
+
+      readback = attempt;
+      if (interconnect_expect_gpf(va[index], WRITE_DATA, &readback))
+          pas_failures++;
+
+      val_print(pas_failures ? ACS_PRINT_WARN : ACS_PRINT_TEST,
+                pas_failures ? " Requester-side GPC check FAIL: 0x%llx" :
+                               " Requester-side GPC check PASS: 0x%llx", pas_list[index]);
+      requester_failures += pas_failures;
+
+      if (interconnect_root_write_check(va[0], baseline))
+      {
+          status = VAL_INTERCONNECT_RESTORE_FAILED;
+          goto restore;
+      }
+  }
+
+  /* Temporarily bypass the GPC to exercise the interconnect completer filter. */
+  if (val_add_gpt_entry_el3(page, GPT_ANY))
+  {
+      val_print(ACS_PRINT_ERR, " Failed to set GPT_ANY for page 0x%llx", page);
+      status = 1u;
+      goto restore;
+  }
+  gpt_modified = 1u;
+
+  for (uint32_t index = 1u; index < 4u; ++index)
+  {
+      uint32_t pas_failures = 0u;
+
+      val_print(ACS_PRINT_TEST, " Checking access PAS 0x%llx", pas_list[index]);
+      if (interconnect_access(va[index], READ_DATA, &readback))
+          pas_failures++;
+      else
+      {
+          val_print(ACS_PRINT_TEST, " PAS read before write 0x%x", readback);
+          if (readback == baseline)
+              pas_failures++;
+      }
+
+      if (interconnect_access(va[index], WRITE_DATA, &attempt))
+          pas_failures++;
+      /* A Root read observes the register even when the unauthorized read is filtered. */
+      if (interconnect_access(va[0], READ_DATA, &readback))
+          pas_failures++;
+      else
+      {
+          val_print(ACS_PRINT_TEST, " Root read after PAS write 0x%x", readback);
+          if (readback != baseline)
+              pas_failures++;
+      }
+      val_print(pas_failures ? ACS_PRINT_WARN : ACS_PRINT_TEST,
+                pas_failures ? " Completer-side PAS check FAIL: 0x%llx" :
+                               " Completer-side PAS check PASS: 0x%llx", pas_list[index]);
+      failures += pas_failures;
+      /* Recover an incorrectly accepted write before testing the next PAS. */
+      if (interconnect_root_write_check(va[0], baseline))
+      {
+          status = VAL_INTERCONNECT_RESTORE_FAILED;
+          goto restore;
+      }
+  }
+
+  /* Restore the GPT association that was programmed by platform firmware. */
+  if (val_add_gpt_entry_el3(page, original_gpi))
+  {
+      val_print(ACS_PRINT_ERR, " Failed to restore original GPT for page 0x%llx", page);
+      status = VAL_INTERCONNECT_RESTORE_FAILED;
+      goto restore;
+  }
+  gpt_modified = 0u;
+
+  if (failures && requester_failures)
+  {
+      val_print(ACS_PRINT_ERR,
+                " Interconnect register is not protected by either enforcement path", 0);
+      status = 1u;
+  }
+  else
+  {
+      if (failures)
+          val_print(ACS_PRINT_WARN,
+                    " Completer-side check failed; requester-side GPC provides protection", 0);
+      if (requester_failures)
+          val_print(ACS_PRINT_WARN,
+                    " Requester-side check failed; completer-side filter provides protection", 0);
+      status = 0u;
+  }
+
+restore:
+  /* Restore address fields while the routing window remains disabled. */
+  restore_failed = interconnect_root_write_check(va[0], saved);
+  if (has_valid_register)
+  {
+      if (restore_failed)
+      {
+          /* Do not re-enable a window whose address fields were not restored. */
+          if (interconnect_root_write_check(valid_va, valid_original & ~1u))
+              val_print(ACS_PRINT_ERR,
+                        " Failed to keep routing window disabled at 0x%llx", valid_pa);
+      }
+      else
+      {
+          /* Restore the original valid state only after the address fields. */
+          if (interconnect_root_write_check(valid_va, valid_original))
+          {
+              restore_failed = 1u;
+              if (interconnect_root_write_check(valid_va, valid_original & ~1u))
+                  val_print(ACS_PRINT_ERR,
+                            " Failed to keep routing window disabled at 0x%llx", valid_pa);
+          }
+      }
+  }
+  if (restore_failed)
+  {
+      val_print(ACS_PRINT_ERR, " Interconnect restore failed at 0x%llx", entry->address);
+      status = VAL_INTERCONNECT_RESTORE_FAILED;
+  }
+  else
+  {
+      val_print(ACS_PRINT_TEST, " Root restored original 0x%x", original);
+  }
+
+restore_gpt:
+  if (gpt_modified && val_add_gpt_entry_el3(page, original_gpi))
+  {
+      val_print(ACS_PRINT_ERR, " Failed to restore original GPT for page 0x%llx", page);
+      return VAL_INTERCONNECT_RESTORE_FAILED;
+  }
+  return status;
 }

@@ -220,6 +220,21 @@ val_add_gpt_entry_el3(uint64_t PA, uint64_t gpi)
   }
 }
 
+uint32_t
+val_get_gpt_entry_el3(uint64_t PA, uint64_t *gpi)
+{
+  if (gpi == NULL)
+      return 1u;
+
+  shared_data->arg0 = 0u;
+  UserCallSMC(ARM_ACS_SMC_FID, RME_GET_GPT_ENTRY, PA, 0, 0);
+  if (shared_data->status_code != 0u)
+      return 1u;
+
+  *gpi = shared_data->arg0;
+  return 0u;
+}
+
 /**
  *  @brief   This API provides access to MUT at EL3 to write on or read from.
  *           Returns 1 on error, 0 on success.
