@@ -118,6 +118,7 @@ uint32_t val_data_cache_ops_by_va_el3(uint64_t address, uint32_t type);
 uint32_t val_memory_set_el3(void *buf, uint32_t size, uint8_t value);
 uint32_t val_add_mmu_entry_el3(uint64_t VA, uint64_t PA, uint64_t attr);
 uint32_t val_add_gpt_entry_el3(uint64_t PA, uint64_t gpi);
+uint32_t val_get_gpt_entry_el3(uint64_t PA, uint64_t *gpi);
 uint32_t val_pe_access_mut_el3(void);
 uint32_t val_data_cache_ops_by_pa_el3(uint64_t PA, uint64_t acc_pas);
 uint32_t val_rme_install_handler_el3(void);

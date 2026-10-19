@@ -58,6 +58,8 @@
         .globl val_el3_tlbi_alle3is
         .globl val_el3_isb
         .globl val_el3_acs_str
+        .globl val_el3_acs_str32
+        .globl val_el3_acs_ldr32
         .globl val_el3_acs_ldr_pas_filter
         .globl val_el3_write_mair_el3
         .globl val_el3_read_mair_el3
@@ -141,6 +143,61 @@ val_el3_acs_str:
        ldr    x2, [x0, #0x10]
        msr    elr_el3, x1
        msr    spsr_el3, x2
+       isb
+       eret
+
+/**
+ * @brief Perform one fault-safe 32-bit store and return from the originating SMC.
+ * @param1 Virtual address on which the data is stored.
+ * @param2 32-bit data to store.
+ * @return None
+ */
+val_el3_acs_str32:
+       msr    spsel, #0
+       ldp    x10,  x11,  [sp],#0x10
+       ldp    x6,  x7,  [sp],#0x10
+       ldp    x4,  x5,  [sp],#0x10
+       ldp    x2,  x3,  [sp],#0x10
+       ldp    x8,  x9,  [sp],#0x10
+       msr    spsel, #1
+       mov    sp, x11
+       msr    sp_el0, x10
+
+       str    w1, [x0]
+       dsb    sy
+       ldr    x0, =PLAT_SHARED_ADDRESS
+       str    xzr, [x0, #0x18]
+       ldr    x1, [x0, #0x8]
+       ldr    x2, [x0, #0x10]
+       msr    elr_el3, x1
+       msr    spsr_el3, x2
+       isb
+       eret
+
+/**
+ * @brief Perform one fault-safe 32-bit load and return from the originating SMC.
+ * @param1 Virtual address from which the data is loaded.
+ * @return None
+ */
+val_el3_acs_ldr32:
+       msr    spsel, #0
+       ldp    x10,  x11,  [sp],#0x10
+       ldp    x6,  x7,  [sp],#0x10
+       ldp    x4,  x5,  [sp],#0x10
+       ldp    x2,  x3,  [sp],#0x10
+       ldp    x8,  x9,  [sp],#0x10
+       msr    spsel, #1
+       mov    sp, x11
+       msr    sp_el0, x10
+
+       ldr    w1, [x0]
+       dsb    sy
+       ldr    x0, =PLAT_SHARED_ADDRESS
+       str    xzr, [x0, #0x18]
+       ldr    x2, [x0, #0x8]
+       ldr    x3, [x0, #0x10]
+       msr    elr_el3, x2
+       msr    spsr_el3, x3
        isb
        eret
 

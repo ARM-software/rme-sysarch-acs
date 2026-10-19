@@ -1,5 +1,5 @@
 /** @file
-  * Copyright (c) 2022-2025, Arm Limited or its affiliates. All rights reserved.
+  * Copyright (c) 2022-2026, Arm Limited or its affiliates. All rights reserved.
   * SPDX-License-Identifier : Apache-2.0
 
   * Licensed under the Apache License, Version 2.0 (the "License");
@@ -93,7 +93,13 @@ void val_el3_ack_handler(void)
         VERBOSE("Exception Expected\n");
         VERBOSE("Saved elr = %lx\n", *(elr_ptr));
         VERBOSE("Saved spsr = %lx\n", *(spsr_ptr));
-        val_el3_acs_str((uint64_t *)shared_data->arg1, data);
+        if (shared_data->shared_data_access[0].access_type == READ_DATA_GPF)
+            val_el3_acs_ldr32((uint32_t *)shared_data->arg1);
+        else if (shared_data->shared_data_access[0].access_type == WRITE_DATA_GPF)
+            val_el3_acs_str32((uint32_t *)shared_data->arg1,
+                              (uint32_t)shared_data->shared_data_access[0].data);
+        else
+            val_el3_acs_str((uint64_t *)shared_data->arg1, data);
     } else
         data = *(uint64_t *)shared_data->arg1;
     //Now restore the contents of the registers to be used in eret

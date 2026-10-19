@@ -637,6 +637,8 @@ VOID pal_register_create_info_table(REGISTER_INFO_TABLE* registerInfoTable)
     UINT64 def_bdf = pal_rp_regs[index].bdf;
     UINT64 def_addr = pal_rp_regs[index].address;
     UINT64 def_prop = pal_rp_regs[index].property;
+    UINT64 def_mask = pal_rp_regs[index].write_mask;
+    UINT64 def_valid_addr = pal_rp_regs[index].valid_address;
 
     UnicodeSPrint(key, sizeof(key), L"RP_REG_%u_TYPE", index);
     pal_rp_regs[index].type = (UINT32)RmeCfgGetU64(key, def_type);
@@ -646,6 +648,10 @@ VOID pal_register_create_info_table(REGISTER_INFO_TABLE* registerInfoTable)
     pal_rp_regs[index].address = RmeCfgGetU64(key, def_addr);
     UnicodeSPrint(key, sizeof(key), L"RP_REG_%u_PROPERTY", index);
     pal_rp_regs[index].property = (UINT32)RmeCfgGetU64(key, def_prop);
+    UnicodeSPrint(key, sizeof(key), L"RP_REG_%u_WRITE_MASK", index);
+    pal_rp_regs[index].write_mask = (UINT32)RmeCfgGetU64(key, def_mask);
+    UnicodeSPrint(key, sizeof(key), L"RP_REG_%u_VALID_ADDR", index);
+    pal_rp_regs[index].valid_address = RmeCfgGetU64(key, def_valid_addr);
 
     registerInfoTable[index] = pal_rp_regs[index];
   }

@@ -46,6 +46,7 @@
 #define SMMU_ROOT_CR0_WRITE       3
 #define SMMU_ROOT_ACCESSEN        (1U << 0)
 #define SMMU_ROOT_GPCEN           (1U << 1)
+#define RME_GET_GPT_ENTRY         0x19
 
 /* General Defines used by tests */
 #define INIT_DATA            0x11
@@ -57,6 +58,8 @@
 #define WRITE_DATA           1
 #define READ_DATA_BYTE       2
 #define WRITE_DATA_BYTE      3
+#define READ_DATA_GPF        4
+#define WRITE_DATA_GPF       5
 #define CLEAN_AND_INVALIDATE 0x1
 #define CLEAN                0x2
 #define INVALIDATE           0x3
