@@ -83,6 +83,11 @@ uint32_t test_sequence1(void *dram_buf1_virt, void *dram_buf1_phys, uint32_t ins
       val_print(ACS_PRINT_ERR, " Failed to program DMA source for exerciser %4x", instance);
       return 1;
   }
+  /* The exerciser clears transaction attributes after each DMA command. */
+  if (val_exerciser_set_param(CFG_TXN_ATTRIBUTES, TXN_ADDR_TYPE, AT_TRANSLATED, instance)) {
+      val_print(ACS_PRINT_ERR, " Unable to configure translated DMA for exerciser %4x", instance);
+      return 1;
+  }
   if (val_exerciser_ops(START_DMA, EDMA_TO_DEVICE, instance)) {
       val_print(ACS_PRINT_ERR, " DMA write failure to exerciser %4x", instance);
       return 1;
@@ -91,6 +96,10 @@ uint32_t test_sequence1(void *dram_buf1_virt, void *dram_buf1_phys, uint32_t ins
   /* AT=Translated requires the destination PA; the VA is only for CPU access. */
   if (val_exerciser_set_param(DMA_ATTRIBUTES, dram_buf2_phys, dma_len, instance)) {
       val_print(ACS_PRINT_ERR, " Failed to program DMA destination for exerciser %4x", instance);
+      return 1;
+  }
+  if (val_exerciser_set_param(CFG_TXN_ATTRIBUTES, TXN_ADDR_TYPE, AT_TRANSLATED, instance)) {
+      val_print(ACS_PRINT_ERR, " Unable to configure translated DMA for exerciser %4x", instance);
       return 1;
   }
   if (val_exerciser_ops(START_DMA, EDMA_FROM_DEVICE, instance)) {
@@ -138,6 +147,10 @@ uint32_t test_sequence1(void *dram_buf1_virt, void *dram_buf1_phys, uint32_t ins
      * */
     if (val_exerciser_set_param(DMA_ATTRIBUTES, PA, dma_len/2, instance)) {
       val_print(ACS_PRINT_ERR, " Failed to program protected DMA for GPI 0x%x", res_pas[mem_cnt]);
+      return 1;
+    }
+    if (val_exerciser_set_param(CFG_TXN_ATTRIBUTES, TXN_ADDR_TYPE, AT_TRANSLATED, instance)) {
+      val_print(ACS_PRINT_ERR, " Unable to configure translated DMA for exerciser %4x", instance);
       return 1;
     }
     if (val_exerciser_ops(START_DMA, EDMA_TO_DEVICE, instance) !=
@@ -429,12 +442,6 @@ payload (void)
             goto test_fail;
       }
       smmu_mapped = 1;
-    }
-
-    /* Configure Exerciser to issue subsequent DMA transactions with Address Translated bit Set */
-    if (val_exerciser_set_param(CFG_TXN_ATTRIBUTES, TXN_ADDR_TYPE, AT_TRANSLATED, instance)) {
-        val_print(ACS_PRINT_ERR, " Unable to configure AT=Translated for exerciser %4x", instance);
-        goto test_fail;
     }
 
     if (test_sequence1(dram_buf1_virt, dram_buf1_phys, instance))
