@@ -160,26 +160,9 @@ val_el3_set_daif:
  *         recovers the SP_EL3, SP_EL0 and 10 GPRS and updates
  *         ELR_EL3 and SPSR_EL3.
  * @param1 Virtual address to be loaded.
- * @return None; the inactive probe returns normally, legacy callers use ERET.
+ * @return Data loaded from the VA.
  */
 val_el3_acs_ldr_pas_filter:
-       ldr    x2, =SHARED_OFFSET_GENERIC_FLAG
-       ldr    x2, [x2]
-       cmp    x2, #PAS_FILTER_INACTIVE_PROBE
-       b.ne   .Lpas_filter_legacy_entry
-
-       /* The inactive probe is called directly. Recovery bypasses the C
-        * handler epilogue, so preserve its caller's callee-saved state here.
-        */
-       stp    x19, x20, [sp, #-16]!
-       stp    x21, x22, [sp, #-16]!
-       stp    x23, x24, [sp, #-16]!
-       stp    x25, x26, [sp, #-16]!
-       stp    x27, x28, [sp, #-16]!
-       stp    x29, x30, [sp, #-16]!
-       b      .Lpas_filter_load
-
-.Lpas_filter_legacy_entry:
        msr    spsel, #0
        ldp    x10,  x11,  [sp],#0x10
        ldp    x6,  x7,  [sp],#0x10
@@ -190,14 +173,8 @@ val_el3_acs_ldr_pas_filter:
        mov    sp, x11
        msr    sp_el0, x10
 
-.Lpas_filter_load:
        ldr    x1, [x0]
        dsb    sy
-       ldr    x0, =SHARED_OFFSET_GENERIC_FLAG
-       ldr    x2, [x0]
-       cmp    x2, #PAS_FILTER_INACTIVE_PROBE
-       b.eq   .Lpas_filter_probe_return
-
        ldr    x0, =PLAT_SHARED_ADDRESS
        str    xzr, [x0, #0x18]
        ldr    x2, [x0, #0x8]
@@ -206,15 +183,6 @@ val_el3_acs_ldr_pas_filter:
        msr    spsr_el3, x3
        isb
        eret
-
-.Lpas_filter_probe_return:
-       ldp    x29, x30, [sp], #16
-       ldp    x27, x28, [sp], #16
-       ldp    x25, x26, [sp], #16
-       ldp    x23, x24, [sp], #16
-       ldp    x21, x22, [sp], #16
-       ldp    x19, x20, [sp], #16
-       ret
 
 /* @brief  TLBI by VA operation for EL3.
  * @param  Virtual Address by which Cached copies are invalidated from TLBs.
