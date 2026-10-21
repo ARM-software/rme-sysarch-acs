@@ -59,6 +59,7 @@ void payload(void)
     val_set_status(index, "SKIP", 01);
     return;
   }
+
   //Change the Active mode of the PAS filter
   val_print(ACS_PRINT_TEST, " Changing the Active mode of the PAS filter to In-Active", 0);
   status = val_pas_filter_active_mode_el3(CLEAR);
