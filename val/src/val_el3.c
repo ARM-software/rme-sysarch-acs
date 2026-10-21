@@ -116,12 +116,17 @@ val_cxl_root_port_ide_program_el3(uint32_t rp_bdf,
                                               const CXL_IDE_KEY_BUFFER *rx_key,
                                               const CXL_IDE_KEY_BUFFER *tx_key)
 {
+  uint64_t config = val_pcie_get_bdf_config_addr(rp_bdf);
+
+  if (config == 0u)
+    return 1u;
+
   if ((rx_key == NULL) || (tx_key == NULL))
     return 1;
 
   shared_data->arg0 = IDE_CXL_KEY_PROG;
   shared_data->arg1 = PCIE_CREATE_BDF_PACKED(rp_bdf);
-  shared_data->arg2 = val_pcie_get_ecam_base(rp_bdf);
+  shared_data->arg2 = config - (shared_data->arg1 << 12);
   shared_data->arg3 = stream_id;
   shared_data->arg4 = key_slot;
   shared_data->arg5 = (uint64_t)rx_key;
@@ -143,9 +148,14 @@ uint32_t
 val_cxl_root_port_ide_go_el3(uint32_t rp_bdf, uint8_t stream_id, uint8_t key_slot,
                                       uint8_t mode)
 {
+  uint64_t config = val_pcie_get_bdf_config_addr(rp_bdf);
+
+  if (config == 0u)
+    return 1u;
+
   shared_data->arg0 = IDE_CXL_KEY_GO;
   shared_data->arg1 = PCIE_CREATE_BDF_PACKED(rp_bdf);
-  shared_data->arg2 = val_pcie_get_ecam_base(rp_bdf);
+  shared_data->arg2 = config - (shared_data->arg1 << 12);
   shared_data->arg3 = stream_id;
   shared_data->arg4 = key_slot;
   shared_data->arg5 = mode;
@@ -161,9 +171,14 @@ val_cxl_root_port_ide_stop_el3(uint32_t rp_bdf,
                                    uint8_t stream_id,
                                    uint8_t key_slot)
 {
+  uint64_t config = val_pcie_get_bdf_config_addr(rp_bdf);
+
+  if (config == 0u)
+    return 1u;
+
   shared_data->arg0 = IDE_CXL_KEY_STOP;
   shared_data->arg1 = PCIE_CREATE_BDF_PACKED(rp_bdf);
-  shared_data->arg2 = val_pcie_get_ecam_base(rp_bdf);
+  shared_data->arg2 = config - (shared_data->arg1 << 12);
   shared_data->arg3 = stream_id;
   shared_data->arg4 = key_slot;
   shared_data->arg5 = 0;
