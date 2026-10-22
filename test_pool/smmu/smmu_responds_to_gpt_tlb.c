@@ -58,8 +58,6 @@ run_smmu_gpt_tlb_sequence(uint32_t instance, uint32_t e_bdf, uint32_t smmu_index
   void *dram_buf_out_virt = NULL;
   uint64_t dram_buf_in_phys = 0;
   uint64_t dram_buf_out_phys = 0;
-  uint64_t dram_buf_in_iova = 0;
-  uint64_t dram_buf_out_iova = 0;
   uint32_t device_id, its_id;
   uint32_t page_size = val_memory_page_size();
   memory_region_descriptor_t mem_desc_array[2], *mem_desc;
@@ -148,9 +146,6 @@ run_smmu_gpt_tlb_sequence(uint32_t instance, uint32_t e_bdf, uint32_t smmu_index
         goto test_clean;
   }
 
-  dram_buf_in_iova = dram_buf_in_phys;
-  dram_buf_out_iova = dram_buf_out_phys;
-
   if (val_iovirt_get_device_info(PCIE_CREATE_BDF_PACKED(e_bdf),
                                  PCIE_EXTRACT_BDF_SEG(e_bdf),
                                  &device_id, &master.streamid,
@@ -214,15 +209,15 @@ run_smmu_gpt_tlb_sequence(uint32_t instance, uint32_t e_bdf, uint32_t smmu_index
   }
   smmu_mapped = 1;
 
-  dram_buf_in_iova = mem_desc->virtual_address;
-  dram_buf_out_iova = dram_buf_in_iova + (test_data_blk_size / 2);
-
   /* Initialize the sender buffer with test specific data */
   val_memory_set((uint64_t *)dram_buf_in_virt, dma_len, TEST_DATA);
   val_data_cache_ops_by_va((uint64_t)dram_buf_in_virt, CLEAN_AND_INVALIDATE);
 
-  /* Configure Exerciser to issue subsequent DMA transactions with Address Translated bit Set */
-  val_exerciser_set_param(CFG_TXN_ATTRIBUTES, TXN_ADDR_TYPE, AT_TRANSLATED, instance);
+  /* Configure each DMA as translated; the exerciser may clear Address Type on completion. */
+  if (val_exerciser_set_param(CFG_TXN_ATTRIBUTES, TXN_ADDR_TYPE, AT_TRANSLATED, instance)) {
+        val_print(ACS_PRINT_ERR, " DMA address type setting failure %4x", instance);
+        goto test_clean;
+  }
 
   if (val_exerciser_set_param(DMA_ATTRIBUTES, dram_buf_in_phys, dma_len, instance)) {
         val_print(ACS_PRINT_ERR, " DMA attributes setting failure %4x", instance);
@@ -235,8 +230,13 @@ run_smmu_gpt_tlb_sequence(uint32_t instance, uint32_t e_bdf, uint32_t smmu_index
         goto test_clean;
   }
 
-  if (val_exerciser_set_param(DMA_ATTRIBUTES, dram_buf_out_iova, dma_len, instance)) {
+  if (val_exerciser_set_param(DMA_ATTRIBUTES, dram_buf_out_phys, dma_len, instance)) {
         val_print(ACS_PRINT_ERR, " DMA attributes setting failure %4x", instance);
+        goto test_clean;
+  }
+
+  if (val_exerciser_set_param(CFG_TXN_ATTRIBUTES, TXN_ADDR_TYPE, AT_TRANSLATED, instance)) {
+        val_print(ACS_PRINT_ERR, " DMA address type setting failure %4x", instance);
         goto test_clean;
   }
 
@@ -273,6 +273,11 @@ run_smmu_gpt_tlb_sequence(uint32_t instance, uint32_t e_bdf, uint32_t smmu_index
   /* Enable smmu now */
   val_print(ACS_PRINT_TEST, " Enabling SMMU of index: %d", master.smmu_index);
   val_smmu_enable(master.smmu_index);
+
+  if (val_exerciser_set_param(CFG_TXN_ATTRIBUTES, TXN_ADDR_TYPE, AT_TRANSLATED, instance)) {
+        val_print(ACS_PRINT_ERR, " DMA address type setting failure %4x", instance);
+        goto test_clean;
+  }
 
   /* Trigger DMA from input buffer to exerciser memory */
   if (val_exerciser_ops(START_DMA, EDMA_TO_DEVICE, instance) !=
