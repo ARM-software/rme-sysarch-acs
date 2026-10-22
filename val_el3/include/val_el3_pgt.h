@@ -136,7 +136,7 @@ typedef struct {
 } memory_region_descriptor_t;
 
 void val_el3_setup_acs_pgt_values(void);
-void val_el3_add_gpt_entry(uint64_t arg0, uint64_t arg1);
+uint32_t val_el3_add_gpt_entry(uint64_t arg0, uint64_t arg1);
 uint32_t val_el3_get_gpt_gpi(uint64_t pa, uint64_t *gpi);
 uint64_t val_el3_get_gpt_index(uint64_t pa, uint8_t level, uint8_t l0gptsz,
                        uint8_t pps, uint8_t p);

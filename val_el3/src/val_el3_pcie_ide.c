@@ -31,7 +31,8 @@ pcie_ide_map_mmio(uint64_t address)
   /* A zero address means PAL does not require this register mapping. */
   if (address == 0u)
     return PCIE_IDE_SUCCESS;
-  val_el3_add_gpt_entry(address, GPT_ANY);
+  if (val_el3_add_gpt_entry(address, GPT_ANY) != 0)
+    return PCIE_IDE_ERROR;
   return val_el3_add_mmu_entry(address, address, attributes);
 }
 
