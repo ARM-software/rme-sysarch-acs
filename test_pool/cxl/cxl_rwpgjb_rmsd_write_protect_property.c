@@ -86,7 +86,7 @@ payload()
       }
 
       if (val_pcie_read_cfg(bdf, rmecda_cap_base + RMECDA_CTL1_OFFSET, &reg_ctl1) !=
-              PCIE_SUCCESS ||
+              PCIE_SUCCESS || reg_ctl1 == PCIE_UNKNOWN_RESPONSE ||
           val_pcie_read_cfg(bdf, rmecda_cap_base + RMECDA_CTL2_OFFSET, &reg_ctl2) !=
               PCIE_SUCCESS ||
           val_pcie_read_cfg(bdf, ide_cap_base + IDE_CAP_REG, &reg_value) != PCIE_SUCCESS ||
