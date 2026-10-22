@@ -1040,9 +1040,25 @@ exercise_root_port(const CXL_COMPONENT_TABLE *table,
       }
     }
   }
- /* Restore hardware state for the next test instance. */
-  (void)write_from_root(cfg_va + rmecda_cap_base + RMECDA_CTL1_OFFSET,
-                        rmecda_ctl1_original);
+  /* Restore other fields without changing TDISP outside the common helpers. */
+  uint32_t ctl1_current;
+  if (read_from_root(cfg_va + rmecda_cap_base + RMECDA_CTL1_OFFSET,
+                     &ctl1_current) != ACS_STATUS_PASS ||
+      write_from_root(cfg_va + rmecda_cap_base + RMECDA_CTL1_OFFSET,
+                       (rmecda_ctl1_original & ~RMECDA_CTL1_TDISP_EN_MASK) |
+                       (ctl1_current & RMECDA_CTL1_TDISP_EN_MASK)) != ACS_STATUS_PASS)
+  {
+    val_print(ACS_PRINT_ERR, " RJXPZP: RMECDA_CTL1 restore failed", 0);
+    failures++;
+  }
+
+  status = (rmecda_ctl1_original & RMECDA_CTL1_TDISP_EN_MASK) ?
+           val_pcie_enable_tdisp(root_bdf) : val_pcie_disable_tdisp(root_bdf);
+  if (status)
+  {
+    val_print(ACS_PRINT_ERR, " RJXPZP: TDISP restore failed", 0);
+    failures++;
+  }
 
   if (mec_enabled != 0u)
     (void)val_rlm_disable_mec();

@@ -958,9 +958,29 @@ cleanup:
     (void)val_spdm_session_close(&spdm_ctx, session_id);
 
   if ((context.rmecda_ctl1_valid != 0u) && (context.rmecda_cfg_va != 0u))
-    (void)write_from_root(context.rmecda_cfg_va + context.rmecda_cap_base +
-                          RMECDA_CTL1_OFFSET,
-                          context.rmecda_ctl1_orig);
+  {
+    uint32_t ctl1_current;
+
+    /* Restore other fields without changing TDISP outside the common helpers. */
+    if (read_from_root(context.rmecda_cfg_va + context.rmecda_cap_base +
+                       RMECDA_CTL1_OFFSET, &ctl1_current) != ACS_STATUS_PASS ||
+        write_from_root(context.rmecda_cfg_va + context.rmecda_cap_base +
+                         RMECDA_CTL1_OFFSET,
+                         (context.rmecda_ctl1_orig & ~RMECDA_CTL1_TDISP_EN_MASK) |
+                         (ctl1_current & RMECDA_CTL1_TDISP_EN_MASK)) != ACS_STATUS_PASS)
+    {
+      val_print(ACS_PRINT_ERR, "  RGTVGZ: RMECDA_CTL1 restore failed", 0);
+      result = ACS_STATUS_FAIL;
+    }
+
+    status = (context.rmecda_ctl1_orig & RMECDA_CTL1_TDISP_EN_MASK) ?
+             val_pcie_enable_tdisp(root_port->bdf) : val_pcie_disable_tdisp(root_port->bdf);
+    if (status)
+    {
+      val_print(ACS_PRINT_ERR, "  RGTVGZ: TDISP restore failed", 0);
+      result = ACS_STATUS_FAIL;
+    }
+  }
   if ((context.rmecda_ctl3_valid != 0u) && (context.rmecda_cfg_va != 0u))
     (void)write_from_root(context.rmecda_cfg_va + context.rmecda_cap_base +
                           RMECDA_CTL3_OFFSET,
