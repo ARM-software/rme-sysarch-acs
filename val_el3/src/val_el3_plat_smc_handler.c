@@ -74,8 +74,23 @@ uintptr_t plat_arm_acs_smc_handler(unsigned int smc_fid, uint64_t services,
       break;
     case RME_ADD_GPT_ENTRY:
       INFO("RME GPT mapping service \n");
-      val_el3_add_gpt_entry(arg0, arg1);
-      val_el3_tlbi_paallos();
+      shared_data->status_code = val_el3_add_gpt_entry(arg0, arg1);
+      if (shared_data->status_code == 0)
+      {
+        shared_data->error_msg[0] = '\0';
+        val_el3_tlbi_paallos();
+      }
+      else
+      {
+        const char *message = "EL3: GPT address outside PPS or mapping failed";
+        unsigned int index = 0;
+        while (message[index] && index < sizeof(shared_data->error_msg) - 1)
+        {
+          shared_data->error_msg[index] = message[index];
+          index++;
+        }
+        shared_data->error_msg[index] = '\0';
+      }
       break;
     case RME_GET_GPT_ENTRY:
       INFO("RME GPT read service \n");

@@ -296,9 +296,9 @@ uint64_t get_block_size(uint32_t level)
            1. Caller       -  Test Suite
   @param   arg0 - Physical Address needed to be mapped into the GPT table
   @param   arg1 - GPI encoding required for the corresponding Physical Address
-  @return  None
+  @return  0 on success, 1 if the PA exceeds PPS or mapping fails
 **/
-void val_el3_add_gpt_entry(uint64_t arg0, uint64_t arg1)
+uint32_t val_el3_add_gpt_entry(uint64_t arg0, uint64_t arg1)
 {
     gpt_descriptor_t gpt_desc;
     uint64_t PA = arg0;
@@ -327,8 +327,12 @@ void val_el3_add_gpt_entry(uint64_t arg0, uint64_t arg1)
         /* Get GPTBR */
     base = val_el3_read_gptbr_el3();
     INFO("GPT_base = 0x%lx\n", base);
+    if (gpt_desc.gpccr.pgs >= 3 || gpt_desc.gpccr.pps >= 7)
+        return 1;
     p = pgs[gpt_desc.gpccr.pgs];
     pps = pps_[gpt_desc.gpccr.pps];
+    if (PA >= (1ull << pps))
+        return 1;
     l0gptsz = gpt_desc.gpccr.l0gptsz + 30;
     l0_idx_width = (pps > l0gptsz) ? (pps - l0gptsz) : 0;
     /* The level 0 GPT is aligned in memory to the greater of:
@@ -361,7 +365,7 @@ void val_el3_add_gpt_entry(uint64_t arg0, uint64_t arg1)
         VERBOSE("The Block Descriptor\n");
         gpt_desc.gpt_base = (uint64_t)val_el3_split_gpt_l0_block(l0_entry, l0gptsz, p);
         if (gpt_desc.gpt_base == 0)
-            return;
+            return 1;
         VERBOSE("val_pe_gpt_map_add: l0 block split to table = %lx     \n", gpt_desc.gpt_base);
     }
 
@@ -405,7 +409,7 @@ void val_el3_add_gpt_entry(uint64_t arg0, uint64_t arg1)
     VERBOSE("val_pe_gpt_map_add: size  = %u     \n", gpt_desc.size);
     VERBOSE("val_pe_gpt_map_add: contiguous size  = %u     \n", gpt_desc.contig_size);
     VERBOSE("val_pe_gpt_map_add: PA  = %lx     \n", gpt_desc.pa);
-    return;
+    return 0;
 
 }
 
