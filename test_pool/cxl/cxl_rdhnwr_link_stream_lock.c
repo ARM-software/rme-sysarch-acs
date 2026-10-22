@@ -29,8 +29,26 @@
 #define TEST_DESC "Validate CXL IDE registers respect LINK_STR_LOCK     "
 #define TEST_RULE "RDHNWR"
 
+#define RMECDA_CTL1_TDISP_EN_MASK        (1u << 0)
 #define RMECDA_CTL1_LINK_STR_LOCK_MASK   (1u << 1)
 #define CXL_IDE_CONTROL_PCRC_DISABLE_BIT (1u << 0)
+
+static int
+read_from_root(uint64_t address, uint32_t *data)
+{
+  shared_data->num_access = 1;
+  shared_data->shared_data_access[0].addr = address;
+  shared_data->shared_data_access[0].access_type = READ_DATA;
+
+  if (val_pe_access_mut_el3())
+  {
+    val_print(ACS_PRINT_ERR, " MUT Access failed for 0x%llx", address);
+    return 1;
+  }
+
+  *data = (uint32_t)shared_data->shared_data_access[0].data;
+  return 0;
+}
 
 /* Wrapper for Root/EL3 writes*/
 static int
@@ -56,15 +74,18 @@ verify_link_lock(uint32_t component_index, uint64_t rmecda_cap_base, uint64_t id
   uint32_t result = ACS_STATUS_PASS;
   uint32_t bdf;
   uint32_t ctl1_original = 0;
-  uint32_t ctl1_unlocked = 0;
   uint32_t ctl1_locked = 0;
   uint32_t ctl1_readback;
   uint64_t cfg_addr;
   uint64_t cfg_va;
+  uint64_t ctl1_addr;
+  uint64_t ctl1_va;
   uint64_t ide_control_addr = 0;
   uint32_t control_original = 0;
   uint32_t control_toggle = 0;
   uint32_t control_after;
+  uint32_t control_valid = 0;
+  uint32_t unlock_confirmed = 0;
   uint32_t attr;
   uint64_t tg;
 
@@ -75,33 +96,33 @@ verify_link_lock(uint32_t component_index, uint64_t rmecda_cap_base, uint64_t id
   /* Get configuration address for the BDF*/
   cfg_addr = val_pcie_get_bdf_config_addr(bdf);
   tg = val_get_min_tg();
-  if (tg == 0u)
+  if ((tg == 0u) || ((tg & (tg - 1u)) != 0u))
   {
     val_print(ACS_PRINT_ERR, " Invalid translation granule size", 0);
     return ACS_STATUS_ERR;
   }
 
   cfg_va = val_get_free_va(tg);
-  if (cfg_va == 0u)
+  if ((cfg_va == 0u) || ((cfg_va & (tg - 1u)) != 0u))
   {
     val_print(ACS_PRINT_ERR, " Failed to allocate VA for cfg space", 0);
     return ACS_STATUS_ERR;
   }
 
-  /* Map the configuration region at EL3 */
+  /* Map the granule containing RMECDA_CTL1 at EL3. */
+  ctl1_addr = cfg_addr + rmecda_cap_base + RMECDA_CTL1_OFFSET;
+  ctl1_va = cfg_va + (ctl1_addr & (tg - 1u));
   attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(OUTER_SHAREABLE) |
                      GET_ATTR_INDEX(DEV_MEM_nGnRnE) | PGT_ENTRY_AP_RW |
                      PAS_ATTR(ROOT_PAS));
-  if (val_add_mmu_entry_el3(cfg_va, cfg_addr, attr))
+  if (val_add_mmu_entry_el3(cfg_va, ctl1_addr & ~(tg - 1u), attr))
   {
-    val_print(ACS_PRINT_ERR, " MMU map failed for cfg_addr 0x%llx", cfg_addr);
+    val_print(ACS_PRINT_ERR, " MMU map failed for ctl1_addr 0x%llx", ctl1_addr);
     return ACS_STATUS_ERR;
   }
 
   /* Read the original value of RMECDA_CTL1*/
-  if (val_pcie_read_cfg(bdf,
-                        rmecda_cap_base + RMECDA_CTL1_OFFSET,
-                        &ctl1_original))
+  if (read_from_root(ctl1_va, &ctl1_original))
   {
     val_print(ACS_PRINT_ERR,
               " Failed to read RMECDA_CTL1 for BDF 0x%x",
@@ -109,27 +130,22 @@ verify_link_lock(uint32_t component_index, uint64_t rmecda_cap_base, uint64_t id
     return ACS_STATUS_ERR;
   }
 
-  /* Reset RMECDA_CTL1.LINK_STR_LOCK bit*/
-  ctl1_unlocked = ctl1_original & ~RMECDA_CTL1_LINK_STR_LOCK_MASK;
-  if (write_from_root(cfg_va + rmecda_cap_base + RMECDA_CTL1_OFFSET,
-                      ctl1_unlocked))
+  /* Keep TDISP enabled while testing the unlocked and locked states. */
+  if (val_pcie_enable_tdisp(bdf) ||
+      read_from_root(ctl1_va, &ctl1_readback) ||
+      ((ctl1_readback & RMECDA_CTL1_TDISP_EN_MASK) == 0u))
   {
-    val_print(ACS_PRINT_ERR,
-              " Unable to clear LINK_STR_LOCK for BDF 0x%x",
-              (uint64_t)bdf);
+    val_print(ACS_PRINT_ERR, " Unable to enable TDISP for BDF 0x%x", (uint64_t)bdf);
     result = ACS_STATUS_FAIL;
     goto restore_control;
   }
 
-  /* Verify RMECDA_CTL1.LINK_STR_LOCK is cleared */
-  if (val_pcie_read_cfg(bdf,
-                        rmecda_cap_base + RMECDA_CTL1_OFFSET,
-                        &ctl1_readback) ||
-      ((ctl1_readback & RMECDA_CTL1_LINK_STR_LOCK_MASK) != 0u))
+  if (write_from_root(ctl1_va, ctl1_readback & ~RMECDA_CTL1_LINK_STR_LOCK_MASK) ||
+      read_from_root(ctl1_va, &ctl1_readback) ||
+      ((ctl1_readback & (RMECDA_CTL1_TDISP_EN_MASK |
+                         RMECDA_CTL1_LINK_STR_LOCK_MASK)) != RMECDA_CTL1_TDISP_EN_MASK))
   {
-    val_print(ACS_PRINT_ERR,
-              " LINK_STR_LOCK not cleared for BDF 0x%x",
-              (uint64_t)bdf);
+    val_print(ACS_PRINT_ERR, " Unable to unlock BDF 0x%x", (uint64_t)bdf);
     result = ACS_STATUS_FAIL;
     goto restore_control;
   }
@@ -137,6 +153,7 @@ verify_link_lock(uint32_t component_index, uint64_t rmecda_cap_base, uint64_t id
   /* Validate IDE capability structure has no security porperty*/
   ide_control_addr = ide_cap_base + CXL_IDE_REG_CONTROL;
   control_original = val_mmio_read(ide_control_addr);
+  control_valid = 1;
   control_toggle = control_original ^ CXL_IDE_CONTROL_PCRC_DISABLE_BIT;
 
   val_mmio_write(ide_control_addr, control_toggle);
@@ -152,11 +169,29 @@ verify_link_lock(uint32_t component_index, uint64_t rmecda_cap_base, uint64_t id
 
   /* Restore original control value before locking */
   val_mmio_write(ide_control_addr, control_original);
+  if (val_mmio_read(ide_control_addr) != control_original)
+  {
+    val_print(ACS_PRINT_ERR,
+              " IDE Control restore failed before locking (BDF 0x%x)",
+              (uint64_t)bdf);
+    result = ACS_STATUS_FAIL;
+    goto restore_control;
+  }
 
-  /* Set RMECDA_CTL1.LINK_STR_LOCK bit*/
-  ctl1_locked = ctl1_unlocked | RMECDA_CTL1_LINK_STR_LOCK_MASK;
-  if (write_from_root(cfg_va + rmecda_cap_base + RMECDA_CTL1_OFFSET,
-                      ctl1_locked))
+  /* Verify TDISP remains enabled and the link remains unlocked. */
+  if (read_from_root(ctl1_va, &ctl1_readback) ||
+      ((ctl1_readback & (RMECDA_CTL1_TDISP_EN_MASK |
+                         RMECDA_CTL1_LINK_STR_LOCK_MASK)) != RMECDA_CTL1_TDISP_EN_MASK))
+  {
+    val_print(ACS_PRINT_ERR,
+              " TDISP_EN or LINK_STR_LOCK changed before locking BDF 0x%x",
+              (uint64_t)bdf);
+    result = ACS_STATUS_FAIL;
+    goto restore_control;
+  }
+
+  ctl1_locked = ctl1_readback | RMECDA_CTL1_LINK_STR_LOCK_MASK;
+  if (write_from_root(ctl1_va, ctl1_locked))
   {
     val_print(ACS_PRINT_ERR,
               " Unable to set LINK_STR_LOCK for BDF 0x%x",
@@ -166,10 +201,10 @@ verify_link_lock(uint32_t component_index, uint64_t rmecda_cap_base, uint64_t id
   }
 
   /* Verify that RMECDA_CTL1.LINK_STR_LOCK is set */
-  if (val_pcie_read_cfg(bdf,
-                        rmecda_cap_base + RMECDA_CTL1_OFFSET,
-                        &ctl1_readback) ||
-      ((ctl1_readback & RMECDA_CTL1_LINK_STR_LOCK_MASK) == 0u))
+  if (read_from_root(ctl1_va, &ctl1_readback) ||
+      ((ctl1_readback & (RMECDA_CTL1_TDISP_EN_MASK |
+                         RMECDA_CTL1_LINK_STR_LOCK_MASK)) !=
+       (RMECDA_CTL1_TDISP_EN_MASK | RMECDA_CTL1_LINK_STR_LOCK_MASK)))
   {
     val_print(ACS_PRINT_ERR,
               " LINK_STR_LOCK refused to set for BDF 0x%x",
@@ -190,15 +225,70 @@ verify_link_lock(uint32_t component_index, uint64_t rmecda_cap_base, uint64_t id
   }
 
 restore_control:
-  if (ide_control_addr != 0u)
-    val_mmio_write(ide_control_addr, control_original);
+  /* Unlock with TDISP enabled before restoring IDE Control from Non-secure PAS. */
+  if (read_from_root(ctl1_va, &ctl1_readback) ||
+      write_from_root(ctl1_va, ctl1_readback & ~RMECDA_CTL1_LINK_STR_LOCK_MASK) ||
+      read_from_root(ctl1_va, &ctl1_readback) ||
+      ((ctl1_readback & (RMECDA_CTL1_TDISP_EN_MASK |
+                         RMECDA_CTL1_LINK_STR_LOCK_MASK)) != RMECDA_CTL1_TDISP_EN_MASK))
+  {
+    val_print(ACS_PRINT_WARN, " Failed to unlock with TDISP enabled for BDF 0x%x", (uint64_t)bdf);
+    result = ACS_STATUS_FAIL;
+  }
+  else
+    unlock_confirmed = 1;
 
-  if (write_from_root(cfg_va + rmecda_cap_base + RMECDA_CTL1_OFFSET,
-                      ctl1_original))
+  if (control_valid != 0u)
+  {
+    if (unlock_confirmed != 0u)
+    {
+      val_mmio_write(ide_control_addr, control_original);
+      if (val_mmio_read(ide_control_addr) != control_original)
+      {
+        val_print(ACS_PRINT_WARN,
+                  " Failed to restore IDE Control for BDF 0x%x", (uint64_t)bdf);
+        result = ACS_STATUS_FAIL;
+      }
+    }
+    else
+      val_print(ACS_PRINT_WARN,
+                " Skipped IDE Control restore: RP still protected (BDF 0x%x)",
+                (uint64_t)bdf);
+  }
+
+  if ((unlock_confirmed == 0u) &&
+      ((ctl1_original & RMECDA_CTL1_TDISP_EN_MASK) == 0u))
+  {
+    val_print(ACS_PRINT_WARN,
+              " Skipped TDISP disable: link not confirmed unlocked (BDF 0x%x)",
+              (uint64_t)bdf);
+    result = ACS_STATUS_FAIL;
+  }
+  else if (((ctl1_original & RMECDA_CTL1_TDISP_EN_MASK) != 0u ?
+            val_pcie_enable_tdisp(bdf) : val_pcie_disable_tdisp(bdf)) != 0u)
+  {
+    val_print(ACS_PRINT_WARN, " Failed to restore TDISP_EN for BDF 0x%x", (uint64_t)bdf);
+    result = ACS_STATUS_FAIL;
+  }
+
+  if (read_from_root(ctl1_va, &ctl1_readback) ||
+      ((ctl1_readback & RMECDA_CTL1_TDISP_EN_MASK) !=
+       (ctl1_original & RMECDA_CTL1_TDISP_EN_MASK)))
+  {
+    val_print(ACS_PRINT_WARN,
+              " Skipped RMECDA_CTL1 lock restore: TDISP state unverified for BDF 0x%x",
+              (uint64_t)bdf);
+    result = ACS_STATUS_FAIL;
+  }
+  else if (write_from_root(ctl1_va, (ctl1_original & ~RMECDA_CTL1_TDISP_EN_MASK) |
+                                   (ctl1_readback & RMECDA_CTL1_TDISP_EN_MASK)) ||
+           read_from_root(ctl1_va, &ctl1_readback) ||
+           (ctl1_readback != ctl1_original))
   {
     val_print(ACS_PRINT_WARN,
               " Failed to restore RMECDA_CTL1 for BDF 0x%x",
               (uint64_t)bdf);
+    result = ACS_STATUS_FAIL;
   }
 
   return result;
