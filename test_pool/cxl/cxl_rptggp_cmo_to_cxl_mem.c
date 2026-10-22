@@ -133,11 +133,6 @@ restore_decoders(const RPTGGP_CONTEXT *context)
                                             DECODER_SLOT,
                                             context->endpoint_decoder_base_orig,
                                             context->endpoint_decoder_size_orig);
-
-  if ((context->rmecda_ctl1_valid != 0u) && (context->rmecda_cfg_va != 0u))
-    (void)write_from_root(context->rmecda_cfg_va + context->rmecda_cap_base +
-                          RMECDA_CTL1_OFFSET,
-                          context->rmecda_ctl1_orig);
 }
 
 static uint32_t
@@ -677,20 +672,54 @@ payload(void)
 cleanup:
   if ((context.rmecda_ctl1_valid != 0u) && (context.rmecda_cfg_va != 0u))
   {
-    rmecda_ctl1 = context.rmecda_ctl1_orig &
-                  ~(RMECDA_CTL1_TDISP_EN_MASK | RMECDA_CTL1_LINK_STR_LOCK_MASK);
-    (void)write_from_root(context.rmecda_cfg_va + context.rmecda_cap_base +
-                          RMECDA_CTL1_OFFSET,
-                          rmecda_ctl1);
+    /* Unlock the link while preserving TDISP for the common disable helper. */
+    if (read_from_root(context.rmecda_cfg_va + context.rmecda_cap_base +
+                       RMECDA_CTL1_OFFSET, &rmecda_ctl1) != ACS_STATUS_PASS ||
+        write_from_root(context.rmecda_cfg_va + context.rmecda_cap_base +
+                         RMECDA_CTL1_OFFSET,
+                         rmecda_ctl1 & ~RMECDA_CTL1_LINK_STR_LOCK_MASK) != ACS_STATUS_PASS ||
+        read_from_root(context.rmecda_cfg_va + context.rmecda_cap_base +
+                       RMECDA_CTL1_OFFSET, &rmecda_ctl1) != ACS_STATUS_PASS ||
+        (rmecda_ctl1 & RMECDA_CTL1_LINK_STR_LOCK_MASK) != 0u)
+    {
+      val_print(ACS_PRINT_ERR, " RPTGGP: LINK_STR_LOCK clear failed", 0);
+      result = ACS_STATUS_FAIL;
+    }
+
+    if (val_pcie_disable_tdisp(table->component[context.root_index].bdf))
+    {
+      val_print(ACS_PRINT_ERR, " RPTGGP: TDISP disable failed", 0);
+      result = ACS_STATUS_FAIL;
+    }
   }
 
   /* Restore HDM decoder programming before reporting status. */
   restore_decoders(&context);
 
   if ((context.rmecda_ctl1_valid != 0u) && (context.rmecda_cfg_va != 0u))
-    (void)write_from_root(context.rmecda_cfg_va + context.rmecda_cap_base +
-                          RMECDA_CTL1_OFFSET,
-                          context.rmecda_ctl1_orig);
+  {
+    uint32_t root_bdf = table->component[context.root_index].bdf;
+
+    /* Restore other fields without changing TDISP outside the common helpers. */
+    if (read_from_root(context.rmecda_cfg_va + context.rmecda_cap_base +
+                       RMECDA_CTL1_OFFSET, &rmecda_ctl1) != ACS_STATUS_PASS ||
+        write_from_root(context.rmecda_cfg_va + context.rmecda_cap_base +
+                         RMECDA_CTL1_OFFSET,
+                         (context.rmecda_ctl1_orig & ~RMECDA_CTL1_TDISP_EN_MASK) |
+                         (rmecda_ctl1 & RMECDA_CTL1_TDISP_EN_MASK)) != ACS_STATUS_PASS)
+    {
+      val_print(ACS_PRINT_ERR, " RPTGGP: RMECDA_CTL1 restore failed", 0);
+      result = ACS_STATUS_FAIL;
+    }
+
+    status = (context.rmecda_ctl1_orig & RMECDA_CTL1_TDISP_EN_MASK) ?
+             val_pcie_enable_tdisp(root_bdf) : val_pcie_disable_tdisp(root_bdf);
+    if (status)
+    {
+      val_print(ACS_PRINT_ERR, " RPTGGP: TDISP restore failed", 0);
+      result = ACS_STATUS_FAIL;
+    }
+  }
 
   if (result == ACS_STATUS_PASS)
     val_set_status(pe_index, "PASS", 01);

@@ -932,8 +932,27 @@ device_cleanup:
 
     if (ctl1_valid != 0u)
     {
-      (void)write_from_root(cfg_va + rmecda_cap_base + RMECDA_CTL1_OFFSET,
-                            ctl1_original);
+      uint32_t ctl1_current;
+      uint32_t restore_status;
+
+      /* Restore other fields without changing TDISP outside the common helpers. */
+      if (read_from_root(cfg_va + rmecda_cap_base + RMECDA_CTL1_OFFSET,
+                         &ctl1_current) != ACS_STATUS_PASS ||
+          write_from_root(cfg_va + rmecda_cap_base + RMECDA_CTL1_OFFSET,
+                           (ctl1_original & ~RMECDA_CTL1_TDISP_EN_MASK) |
+                           (ctl1_current & RMECDA_CTL1_TDISP_EN_MASK)) != ACS_STATUS_PASS)
+      {
+        val_print(ACS_PRINT_ERR, " RLQMCY: RMECDA_CTL1 restore failed", 0);
+        failures++;
+      }
+
+      restore_status = (ctl1_original & RMECDA_CTL1_TDISP_EN_MASK) ?
+                       val_pcie_enable_tdisp(root->bdf) : val_pcie_disable_tdisp(root->bdf);
+      if (restore_status)
+      {
+        val_print(ACS_PRINT_ERR, " RLQMCY: TDISP restore failed", 0);
+        failures++;
+      }
     }
     /* Close the SPDM session if one was opened. */
     if (session_active != 0u)

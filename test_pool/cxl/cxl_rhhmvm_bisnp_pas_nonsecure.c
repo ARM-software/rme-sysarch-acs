@@ -174,11 +174,6 @@ restore_decoders(const RHHMVM_CONTEXT *context)
                                             DECODER_SLOT,
                                             context->endpoint_decoder_base_orig,
                                             context->endpoint_decoder_size_orig);
-
-  if ((context->rmecda_ctl1_valid != 0u) && (context->rmecda_cfg_va != 0u))
-    (void)write_from_root(context->rmecda_cfg_va + context->rmecda_cap_base +
-                          RMECDA_CTL1_OFFSET,
-                          context->rmecda_ctl1_orig);
 }
 
 static uint32_t
@@ -292,7 +287,7 @@ issue_bisnp(uint32_t endpoint_bdf, uint64_t pa, uint32_t allow_reject)
 }
 
 static uint32_t
-exercise_bisnp_behavior(const RHHMVM_CONTEXT *context, uint32_t host_pas)
+exercise_bisnp_behavior(uint32_t root_bdf, const RHHMVM_CONTEXT *context, uint32_t host_pas)
 {
   volatile uint32_t *cached_va = NULL;
   uint64_t media_value = 0u;
@@ -351,22 +346,32 @@ exercise_bisnp_behavior(const RHHMVM_CONTEXT *context, uint32_t host_pas)
   {
     uint32_t rmecda_ctl1;
 
-    rmecda_ctl1 = context->rmecda_ctl1_orig &
-                  ~(RMECDA_CTL1_TDISP_EN_MASK | RMECDA_CTL1_LINK_STR_LOCK_MASK);
+    if (read_from_root(context->rmecda_cfg_va + context->rmecda_cap_base +
+                       RMECDA_CTL1_OFFSET, &rmecda_ctl1) != ACS_STATUS_PASS)
+      return ACS_STATUS_ERR;
+
+    /* Preserve TDISP until the common disable helper programs it. */
+    rmecda_ctl1 &= ~RMECDA_CTL1_LINK_STR_LOCK_MASK;
     if (write_from_root(context->rmecda_cfg_va + context->rmecda_cap_base +
                         RMECDA_CTL1_OFFSET,
                         rmecda_ctl1) != ACS_STATUS_PASS)
-      return ACS_STATUS_FAIL;
+      return ACS_STATUS_ERR;
 
     if (read_from_root(context->rmecda_cfg_va + context->rmecda_cap_base +
                        RMECDA_CTL1_OFFSET,
                        &rmecda_ctl1) != ACS_STATUS_PASS)
-      return ACS_STATUS_FAIL;
+      return ACS_STATUS_ERR;
 
-    if ((rmecda_ctl1 & (RMECDA_CTL1_TDISP_EN_MASK | RMECDA_CTL1_LINK_STR_LOCK_MASK)) != 0u)
+    if ((rmecda_ctl1 & RMECDA_CTL1_LINK_STR_LOCK_MASK) != 0u)
     {
-      val_print(ACS_PRINT_ERR, " RHHMVM: CTL1 disable verify failed 0x%x", rmecda_ctl1);
-      return ACS_STATUS_FAIL;
+      val_print(ACS_PRINT_ERR, " RHHMVM: LINK_STR_LOCK clear failed 0x%x", rmecda_ctl1);
+      return ACS_STATUS_ERR;
+    }
+
+    if (val_pcie_disable_tdisp(root_bdf))
+    {
+      val_print(ACS_PRINT_ERR, " RHHMVM: TDISP disable failed", 0);
+      return ACS_STATUS_ERR;
     }
   }
 
@@ -657,15 +662,27 @@ payload(void)
   uint32_t fail_count = 0u;
   uint32_t pass_count = 0u;
 
-  status_rlm = exercise_bisnp_behavior(&context, REALM_PAS);
+  status_rlm = exercise_bisnp_behavior(table->component[context.root_index].bdf,
+                                      &context, REALM_PAS);
   val_print(ACS_PRINT_DEBUG, " RHHMVM: exercise_bisnp_behavior Realm status %d", status_rlm);
+  if (status_rlm == ACS_STATUS_ERR)
+  {
+    val_set_status(pe_index, "FAIL", 07);
+    goto cleanup;
+  }
   if (status_rlm == ACS_STATUS_FAIL)
     fail_count++;
   else if (status_rlm == ACS_STATUS_PASS)
     pass_count++;
 
-  status_ns = exercise_bisnp_behavior(&context, NONSECURE_PAS);
+  status_ns = exercise_bisnp_behavior(table->component[context.root_index].bdf,
+                                     &context, NONSECURE_PAS);
   val_print(ACS_PRINT_DEBUG, " RHHMVM: exercise_bisnp_behavior NS status %d", status_ns);
+  if (status_ns == ACS_STATUS_ERR)
+  {
+    val_set_status(pe_index, "FAIL", 07);
+    goto cleanup;
+  }
   if (status_ns == ACS_STATUS_FAIL)
     fail_count++;
   else if (status_ns == ACS_STATUS_PASS)
@@ -683,6 +700,30 @@ payload(void)
 
 cleanup:
   restore_decoders(&context);
+  if ((context.rmecda_ctl1_valid != 0u) && (context.rmecda_cfg_va != 0u))
+  {
+    uint32_t root_bdf = table->component[context.root_index].bdf;
+
+    /* Restore other fields without changing TDISP outside the common helpers. */
+    if (read_from_root(context.rmecda_cfg_va + context.rmecda_cap_base +
+                       RMECDA_CTL1_OFFSET, &rmecda_ctl1) != ACS_STATUS_PASS ||
+        write_from_root(context.rmecda_cfg_va + context.rmecda_cap_base +
+                         RMECDA_CTL1_OFFSET,
+                         (context.rmecda_ctl1_orig & ~RMECDA_CTL1_TDISP_EN_MASK) |
+                         (rmecda_ctl1 & RMECDA_CTL1_TDISP_EN_MASK)) != ACS_STATUS_PASS)
+    {
+      val_print(ACS_PRINT_ERR, " RHHMVM: RMECDA_CTL1 restore failed", 0);
+      val_set_status(pe_index, "FAIL", 8);
+    }
+
+    status = (context.rmecda_ctl1_orig & RMECDA_CTL1_TDISP_EN_MASK) ?
+             val_pcie_enable_tdisp(root_bdf) : val_pcie_disable_tdisp(root_bdf);
+    if (status)
+    {
+      val_print(ACS_PRINT_ERR, " RHHMVM: TDISP restore failed", 0);
+      val_set_status(pe_index, "FAIL", 8);
+    }
+  }
 }
 
 uint32_t

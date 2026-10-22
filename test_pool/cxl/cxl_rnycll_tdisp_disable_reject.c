@@ -910,23 +910,6 @@ read_from_root(uint64_t address, uint32_t *value)
 }
 
 static uint32_t
-write_from_root(uint64_t address, uint32_t value)
-{
-  shared_data->num_access = 1;
-  shared_data->shared_data_access[0].addr = address;
-  shared_data->shared_data_access[0].data = value;
-  shared_data->shared_data_access[0].access_type = WRITE_DATA;
-
-  if (val_pe_access_mut_el3())
-  {
-    val_print(ACS_PRINT_ERR, " RNYCLL: MUT write failed for 0x%llx", address);
-    return ACS_STATUS_ERR;
-  }
-
-  return ACS_STATUS_PASS;
-}
-
-static uint32_t
 disable_tdisp(const CXL_COMPONENT_ENTRY *root_port,
               RNYCLL_CONTEXT *context)
 {
@@ -934,7 +917,6 @@ disable_tdisp(const CXL_COMPONENT_ENTRY *root_port,
   uint64_t cfg_addr;
   uint64_t tg;
   uint32_t attr;
-  uint32_t rmecda_ctl1;
 
   if ((root_port == NULL) || (context == NULL))
     return ACS_STATUS_ERR;
@@ -979,30 +961,14 @@ disable_tdisp(const CXL_COMPONENT_ENTRY *root_port,
     return ACS_STATUS_FAIL;
   }
 
-  rmecda_ctl1 = context->rmecda_ctl1_orig & ~RMECDA_CTL1_TDISP_EN_MASK;
-  if (write_from_root(context->rmecda_cfg_va + rmecda_cap_base +
-                      RMECDA_CTL1_OFFSET,
-                      rmecda_ctl1) != ACS_STATUS_PASS)
-  {
-    val_print(ACS_PRINT_ERR, " RNYCLL: RMECDA_CTL1 write failed", 0);
-    return ACS_STATUS_FAIL;
-  }
-
-  if (read_from_root(context->rmecda_cfg_va + rmecda_cap_base +
-                     RMECDA_CTL1_OFFSET,
-                     &rmecda_ctl1) != ACS_STATUS_PASS)
-  {
-    val_print(ACS_PRINT_ERR, " RNYCLL: RMECDA_CTL1 readback failed", 0);
-    return ACS_STATUS_FAIL;
-  }
-
-  if ((rmecda_ctl1 & RMECDA_CTL1_TDISP_EN_MASK) != 0u)
-  {
-    val_print(ACS_PRINT_ERR, " RNYCLL: TDISP_EN still set", 0);
-    return ACS_STATUS_FAIL;
-  }
-
+  /* A failed disable may already have changed TDISP_EN. */
   context->rmecda_ctl1_valid = 1u;
+  if (val_pcie_disable_tdisp(root_port->bdf))
+  {
+    val_print(ACS_PRINT_ERR, " RNYCLL: TDISP disable failed", 0);
+    return ACS_STATUS_FAIL;
+  }
+
   return ACS_STATUS_PASS;
 }
 
@@ -1204,9 +1170,15 @@ verify_root_port(const CXL_COMPONENT_TABLE *table,
 cleanup:
   restore_decoders(&context);
   if ((context.rmecda_ctl1_valid != 0u) && (context.rmecda_cfg_va != 0u))
-    (void)write_from_root(context.rmecda_cfg_va + context.rmecda_cap_base +
-                          RMECDA_CTL1_OFFSET,
-                          context.rmecda_ctl1_orig);
+  {
+    status = (context.rmecda_ctl1_orig & RMECDA_CTL1_TDISP_EN_MASK) ?
+             val_pcie_enable_tdisp(root_port->bdf) : val_pcie_disable_tdisp(root_port->bdf);
+    if (status)
+    {
+      val_print(ACS_PRINT_ERR, " RNYCLL: TDISP restore failed", 0);
+      result = ACS_STATUS_FAIL;
+    }
+  }
 
   return result;
 }
