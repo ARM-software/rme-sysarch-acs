@@ -232,8 +232,10 @@ check_hdm_with_permitted_path(const CXL_COMPONENT_ENTRY *component)
   va = val_get_free_va(tg);
   attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(OUTER_SHAREABLE) |
                     GET_ATTR_INDEX(DEV_MEM_nGnRnE) | PGT_ENTRY_AP_RW | PAS_ATTR(ROOT_PAS));
-  if ((va == 0u) || val_add_mmu_entry_el3(va, cfg, attr))
+  if ((va == 0u) || val_add_mmu_entry_el3(va, cfg & ~(tg - 1u), attr))
     return ACS_STATUS_FAIL;
+  /* Preserve the function's offset within the EL3 translation granule. */
+  va += cfg & (tg - 1u);
 
   shared_data->num_access = 1;
   shared_data->shared_data_access[0].addr = va + cda_offset + RMECDA_CTL1_OFFSET;

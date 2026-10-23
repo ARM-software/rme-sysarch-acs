@@ -815,7 +815,7 @@ verify_root_port(const CXL_COMPONENT_TABLE *table,
   if (page_size != 0u)
   {
     status = check_device_to_host_dma(endpoint->bdf, (uint32_t)page_size);
-    if (status == ACS_STATUS_FAIL)
+    if ((status == ACS_STATUS_FAIL) || (status == ACS_STATUS_ERR))
     {
       val_print(ACS_PRINT_ERR, " RBYTYV: Device-to-host reject failed", 0);
       result = ACS_STATUS_FAIL;

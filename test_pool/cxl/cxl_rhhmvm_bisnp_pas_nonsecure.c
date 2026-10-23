@@ -249,7 +249,11 @@ permit_host_access(uint32_t root_bdf, const RHHMVM_CONTEXT *context)
   uint64_t address;
 
   if (context->rmecda_ctl1_valid == 0u)
-    return ACS_STATUS_SKIP;
+  {
+    /* Without CDA controls, setup needs an already-authorized Realm path. */
+    return val_cxl_rp_is_realm_access_authorized(root_bdf) ?
+           ACS_STATUS_PASS : ACS_STATUS_SKIP;
+  }
   address = context->rmecda_cfg_va + context->rmecda_cap_base + RMECDA_CTL1_OFFSET;
   if (val_pcie_enable_tdisp(root_bdf) ||
       read_from_root(address, &value) != ACS_STATUS_PASS)
@@ -681,7 +685,8 @@ candidate_cleanup:
     val_print(ACS_PRINT_INFO, " RHHMVM: observational path hit; marking test SKIP", 0);
     val_set_status(pe_index, "SKIP", 06);
   }
-  else if (pass_count == 0u)
+  /* Both PAS observations are needed; an NS-only observation is incomplete. */
+  else if (pass_count != 2u)
     val_set_status(pe_index, "SKIP", 06);
   else
     val_set_status(pe_index, "PASS", 01);
