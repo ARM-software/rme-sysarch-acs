@@ -25,6 +25,8 @@
 #define SMMUV3_ROOT_REG_OFFSET  (0xA0000)
 
 #define PLAT_FREE_MEM_START     0x8080000000ULL
+/* Size of the reserved, Root-mapped EL3 MMU/GPT table region. */
+#define PLAT_FREE_MEM_SIZE      (2 * 1024 * 1024)
 
 #define PLAT_SHARED_ADDRESS     0xE0000000ULL
 
