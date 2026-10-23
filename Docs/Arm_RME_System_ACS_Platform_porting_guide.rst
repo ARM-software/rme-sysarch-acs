@@ -513,7 +513,7 @@ This command runs only the RME module and skips RME test mec_effect_of_popa_cmo.
      - Yes
      - Yes
 
-Note: Platform-specific means the partner must provide their implementation for that PAL API.
+Note: Platform-specific means the partner must provide their implementation for that PAL API
 
 For PCIe and CXL Root Port IDE key-management APIs implemented in EL3 PAL, see
 the `IDE-KM PAL porting guide <IDE_KM_PAL_porting_guide.md>`_.
@@ -528,8 +528,11 @@ requirements are met.
 - When Non-secure EL2 executes 'smc' with SMC FID, 0xC7000030, EL3 Firmware is expected to branch to
   plat_arm_acs_smc_handler function which is predefined in ACK.
 - To generate binary file for EL3 code, follow the build steps in README of val_el3.
-- 2MB memory must be flat mapped in EL3-MMU with Root access PAS and GPI as ROOT/ALL_ACCESS, which
-  is used for MMU tables in EL3.
+- Reserve a region starting at ``PLAT_FREE_MEM_START`` with size ``PLAT_FREE_MEM_SIZE``
+  for EL3 MMU and runtime GPT tables. Flat-map the region in EL3-MMU with Root access
+  PAS and GPI as ROOT/ALL_ACCESS. Define both macros in the EL3 platform configuration
+  to match the reserved and mapped region (2 MiB on FVP and RD-V3). This region is
+  independent of the SMMU pool sized by ``PLAT_MEMORY_POOL_SIZE``.
 - 2MB Free memory which is used as PA in tests.
 - Memory region starting at ``PLAT_FREE_MEM_SMMU``, flat-mapped as Realm PAS, with
   ``PLAT_MEMORY_POOL_SIZE`` chosen based on ``PLATFORM_OVERRIDE_SMMU_STRTAB_BITS`` plus space
