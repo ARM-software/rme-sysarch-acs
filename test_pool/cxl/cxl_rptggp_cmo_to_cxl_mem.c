@@ -181,6 +181,8 @@ payload(void)
   CXL_COMPONENT_TABLE *table = val_cxl_component_table_ptr();
   RPTGGP_CONTEXT context;
   uint64_t buffer_pa = 0u;
+  uint64_t original_gpi = 0u;
+  uint32_t gpt_modified = 0u;
   volatile uint32_t *buffer_va = NULL;
   uint32_t pattern = 0xA5A5A5A5U;
   uint32_t status;
@@ -490,6 +492,15 @@ payload(void)
     goto cleanup;
   }
 
+  /* Establish Realm GPT permission independently of the translation mapping. */
+  if (val_get_gpt_entry_el3(buffer_pa, &original_gpi) ||
+      val_add_gpt_entry_el3(buffer_pa, GPT_REALM))
+  {
+    result = ACS_STATUS_FAIL;
+    goto cleanup;
+  }
+  gpt_modified = 1u;
+
   /* Map a cacheable Realm alias for the selected CXL.mem window. */
   va = val_get_free_va(page_size);
   if (va == 0u)
@@ -570,6 +581,15 @@ payload(void)
   result = ACS_STATUS_PASS;
 
 cleanup:
+  if (gpt_modified != 0u)
+  {
+    /* Drain Realm cache state while the decoder and GPT still permit access. */
+    if ((buffer_va != NULL) && val_data_cache_ops_by_pa_el3(buffer_pa, REALM_PAS))
+      result = ACS_STATUS_FAIL;
+    if (val_add_gpt_entry_el3(buffer_pa, original_gpi))
+      result = ACS_STATUS_FAIL;
+  }
+
   if ((context.rmecda_ctl1_valid != 0u) && (context.rmecda_cfg_va != 0u))
   {
     /* Unlock the link while preserving TDISP for the common disable helper. */
