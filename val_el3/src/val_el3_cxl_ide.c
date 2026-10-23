@@ -30,8 +30,12 @@ cxl_ide_map_mmio(uint64_t address)
 
   if (address == 0u)
     return CXL_IDE_SUCCESS;
-  val_el3_add_gpt_entry(address, GPT_ANY);
+
+  if (val_el3_add_gpt_entry(address, GPT_ANY) != 0)
+    return CXL_IDE_ERROR;
+
   val_el3_tlbi_paallos();
+
   return val_el3_add_mmu_entry(address, address, attributes);
 }
 
@@ -44,14 +48,17 @@ cxl_ide_get_mapped_backend(uint64_t ecam_base, uint32_t rp_id,
 
   if (status != CXL_IDE_SUCCESS)
     return status;
+
   if (cxl_ide_map_mmio(config) != CXL_IDE_SUCCESS)
     return CXL_IDE_ERROR;
 
   status = pal_cxl_rp_ide_km_address(config, registers);
   if (status != CXL_IDE_SUCCESS)
     return status;
+
   if (cxl_ide_map_mmio(registers->aes) != CXL_IDE_SUCCESS)
     return CXL_IDE_ERROR;
+
   if (registers->cm_host != registers->aes)
     return cxl_ide_map_mmio(registers->cm_host);
   return CXL_IDE_SUCCESS;
@@ -85,6 +92,7 @@ val_el3_ide_km_go(uint64_t ecam_base, uint32_t rp_id, uint8_t stream_id,
 
   if (status != CXL_IDE_SUCCESS)
     return status;
+
   return pal_cxl_rp_ide_key_go(&registers, &selector, mode);
 }
 
@@ -99,5 +107,6 @@ val_el3_ide_km_stop(uint64_t ecam_base, uint32_t rp_id,
 
   if (status != CXL_IDE_SUCCESS)
     return status;
+
   return pal_cxl_rp_ide_key_stop(&registers, &selector);
 }
