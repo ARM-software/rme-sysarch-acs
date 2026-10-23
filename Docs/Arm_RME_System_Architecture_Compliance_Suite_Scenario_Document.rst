@@ -734,7 +734,7 @@ Testcase checklist
     -
 
       1. Establish an IDE stream in the RP and set the TDISP_EN to 1.
-      2. Ensure the stream is in secure state.
+      2. Ensure the stream is in Secure state.
       3. Lock the corresponding Selective IDE register block in RMEDA_CTL2 register.
       4. Map the configuration address before writing as REALM PAS.
       5. Perform a DMA transaction with IDE-Tbit = 1.
@@ -757,20 +757,6 @@ Testcase checklist
       4. Check the same access permissions for RMEDA_CTL1 by attempting to toggle TDISP_EN from each PAS.
       5. Restore each register through Root PAS and verify its original value after every PAS write attempt, including after an access failure. Stop further protection checks for the port on failure.
       6. Restore the original TDISP_EN state through Root PAS and verify readback, including after a failed state change.
-
-  * -
-
-      `da_ide_state_rootport_error <../test_pool/da/da_ide_state_rootport_error.c>`_
-
-    -
-
-      RPJGJK: IDE stream must be transitioned to insecure state from secure state when RP has error.
-
-    -
-
-      1. Establish an IDE stream between the Exerciser EP and its RP.
-      2. Inject an error from the exerciser which reaches the RP.
-      3. The IDE stream should be transitioned to insecure state from secure state.
 
   * -
 
@@ -1927,6 +1913,10 @@ The following rules are out of compliance scope due to the following reasons:
         RVCRRM: An RME-DA Root Port must support IDE key refresh operations in compliance with [13].
 
         RFSFST: The RP IDE logic must be able to detect that an IDE key set requires a refresh and perform one or more of the following: Assert a dedicated interrupt that will be delivered to a Trusted subsystem. Transition the corresponding IDE Stream to Insecure state.
+
+        RPJGJK: If a Root Port encounters an internal uncorrectable data integrity error, it must either poison the affected TLPs or transition the associated IDE Streams to Insecure state.
+
+        RPJGJK requires platform-specific paper analysis. ACS cannot assume that production Root Ports provide an internal error injection interface. An ERR_FATAL message injected by an endpoint does not exercise this rule.
 
         RBWFTS: RMSD ensures that Selective IDE Streams are configured such that different IDE Streams are assigned with RID ranges and address ranges that are not overlapping.
 

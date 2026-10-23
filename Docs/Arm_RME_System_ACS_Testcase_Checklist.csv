@@ -112,7 +112,7 @@ Sl No,Rule ID,Rule Description,Coverage,Notes,Exerciser PAL APIs Used
 111,RLMFSV,TDISP-enabled Root Port debug features are disabled unless explicitly authorized.,Not covered,Root Port debug functionality is implementation-defined.,
 112,RGSTJC,Security-affecting RP reset or state loss transitions hosted IDE streams to Insecure.,da_rmsd_write_detect_property,,
 113,RMJNLW,Requests that are autonomously initiated by the RP over its host interface are tagged with PAS == Non-secure.,da_autonomous_rootport_request_ns_pas,PCIe exerciser VIP required,"pal_exerciser_set_param (ERROR_INJECT_TYPE); pal_exerciser_ops (INJECT_ERROR)"
-114,RPJGJK,Root Ports poison affected TLPs or transition IDE streams to Insecure on integrity errors.,da_ide_state_rootport_error,PCIe exerciser VIP required,"pal_exerciser_set_param (ERROR_INJECT_TYPE); pal_exerciser_ops (INJECT_ERROR)"
+114,RPJGJK,Root Ports poison affected TLPs or transition associated IDE streams to Insecure on internal uncorrectable data integrity errors.,Not covered,Out of ACS scope; requires paper analysis.,
 115,RMJSFF,"An RME system must not include an SMMU that supports the XT extensions, unless all RPs either support the XT extensions or override the XT-bit to 0 for incoming requests.",Planned,,
 116,RJXRNG,TDISP XT-capable Root Ports set XT-bit behavior according to XT enablement and traffic type.,Planned,,
 117,RGBVTS,"As a completer of memory requests, a TDISP-compliant RCiEP extracts the request IDE T-bit from the request PAS.","da_ide_tbit_0_for_root_request, da_outgoing_realm_rqst_ide_tbit_1",,
