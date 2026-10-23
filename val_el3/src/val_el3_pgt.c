@@ -39,7 +39,7 @@ uint64_t free_pa = PLAT_FREE_MEM_START;
 /* EL3 translation tables and runtime GPT tables use the same Root pool. */
 static uint64_t val_el3_alloc_table_storage(uint64_t size, uint64_t alignment)
 {
-    const uint64_t pool_end = PLAT_FREE_MEM_START + PLAT_MEMORY_POOL_SIZE;
+    const uint64_t pool_end = PLAT_FREE_MEM_START + PLAT_FREE_MEM_SIZE;
     uint64_t aligned;
 
     if (size == 0 || alignment == 0 || (alignment & (alignment - 1)) != 0 ||
