@@ -50,7 +50,7 @@ payload()
 {
 
   uint32_t reg_value, write_val, ide_reg_value;
-  uint32_t original_reg_val;
+  uint32_t original_reg_val, rw_mask, read_status;
   uint64_t va;
   uint64_t cfg_addr;
   uint32_t pgt_attr_el3;
@@ -115,99 +115,112 @@ payload()
           }
 
           /* Write to RMEDA_CTL1 register in Root to check it's RW attr */
-          val_pcie_read_cfg(bdf, da_cap_base + RMEDA_CTL1, &original_reg_val);
-          reg_value = original_reg_val;
-
-          write_val = (reg_value == 0x1) ? 0x0 : 0x1;
-          if (write_from_root(va + da_cap_base + RMEDA_CTL1, write_val))
+          if (val_pcie_read_cfg(bdf, da_cap_base + RMEDA_CTL1, &original_reg_val)
+              != PCIE_SUCCESS)
           {
-            test_fails++;
-            continue;
+              val_print(ACS_PRINT_ERR, " Unable to read RMEDA_CTL1 for RP bdf, 0x%x", bdf);
+              test_fails++;
+              continue;
           }
-          val_pcie_read_cfg(bdf, da_cap_base + RMEDA_CTL1, &reg_value);
 
-          if (reg_value != write_val)
+          write_val = original_reg_val ^ 0x1u;
+          if (write_from_root(va + da_cap_base + RMEDA_CTL1, write_val) != 0)
+          {
+              val_print(ACS_PRINT_ERR, " RMEDA_CTL1 test write failed for RP bdf, 0x%x", bdf);
+              test_fails++;
+          }
+          read_status = val_pcie_read_cfg(bdf, da_cap_base + RMEDA_CTL1, &reg_value);
+          if (read_status != PCIE_SUCCESS)
+          {
+              val_print(ACS_PRINT_ERR, " RMEDA_CTL1 test read failed for RP bdf, 0x%x", bdf);
+              test_fails++;
+          }
+          if (read_status == PCIE_SUCCESS && reg_value != write_val)
           {
               val_print(ACS_PRINT_ERR, " TDISP_EN bit is not updated for RP bdf, 0x%x", bdf);
               test_fails++;
           }
 
           /* Restore the register */
-          if (write_from_root(va + da_cap_base + RMEDA_CTL1, original_reg_val))
+          if (write_from_root(va + da_cap_base + RMEDA_CTL1, original_reg_val) != 0)
           {
-            test_fails++;
-            continue;
+              val_print(ACS_PRINT_ERR, " RMEDA_CTL1 restore write failed for RP bdf, 0x%x", bdf);
+              test_fails++;
+          }
+          read_status = val_pcie_read_cfg(bdf, da_cap_base + RMEDA_CTL1, &reg_value);
+          if (read_status != PCIE_SUCCESS)
+          {
+              val_print(ACS_PRINT_ERR, " RMEDA_CTL1 restore read failed for RP bdf, 0x%x", bdf);
+              test_fails++;
+          }
+          if (read_status == PCIE_SUCCESS && reg_value != original_reg_val)
+          {
+              val_print(ACS_PRINT_ERR, " RMEDA_CTL1 restore failed for RP bdf, 0x%x", bdf);
+              test_fails++;
           }
 
           /* Write to RMEDA_CTL2 register in ROOT to check if it's attr */
-          val_pcie_read_cfg(bdf, da_cap_base + RMEDA_CTL2, &original_reg_val);
-          reg_value = original_reg_val;
-          val_pcie_read_cfg(bdf, ide_cap_base + IDE_CAP_REG, &ide_reg_value);
+          if (val_pcie_read_cfg(bdf, da_cap_base + RMEDA_CTL2, &original_reg_val)
+              != PCIE_SUCCESS ||
+              val_pcie_read_cfg(bdf, ide_cap_base + IDE_CAP_REG, &ide_reg_value)
+              != PCIE_SUCCESS)
+          {
+              val_print(ACS_PRINT_ERR, " Unable to read RMEDA_CTL2 or IDE_CAP for RP bdf, 0x%x",
+                        bdf);
+              test_fails++;
+              continue;
+          }
           val_print(ACS_PRINT_DEBUG, " IDE_REG value = 0x%lx", ide_reg_value);
 
           num_sel_ide_stream_supp = (ide_reg_value & NUM_SEL_STR_MASK) >> NUM_SEL_STR_SHIFT;
           num_sel_ide_stream_supp += 1;
 
-          /* If NUM_SEL_STR < 32, SEL_STR_LOCK[31:NUM_SEL_STR] is/are Res0/RsvdP */
-          if (num_sel_ide_stream_supp < 32)
+          rw_mask = (num_sel_ide_stream_supp >= 32) ? SEL_STR_LOCK_VALID_MAX :
+                    ((1u << num_sel_ide_stream_supp) - 1u);
+
+          /* SEL_STR_LOCK bits above the supported stream count are Res0/RsvdP. */
+          if (original_reg_val & ~rw_mask)
           {
-              /* Check for Res0/RsvdP */
-              write_val = reg_value;
-              if (write_from_root(va + da_cap_base + RMEDA_CTL2, write_val))
-              {
-                  test_fails++;
-                  continue;
-              }
-              reg_value = (reg_value >> num_sel_ide_stream_supp);
+              val_print(ACS_PRINT_ERR,
+                        " RMEDA_CTL2 unsupported bits not zero for RP bdf, 0x%x", bdf);
+              test_fails++;
+          }
 
-              if (reg_value != 0)
-              {
-                  val_print(ACS_PRINT_ERR,
-                  " RMEDA_CTL2 SEL_STR_LOC[31:NUM_SEL_STR] not RsvdP for RP bdf, 0x%x", bdf);
-                  test_fails++;
-              }
+          /* Toggle supported bits while preserving unsupported bits. */
+          write_val = original_reg_val ^ rw_mask;
+          if (write_from_root(va + da_cap_base + RMEDA_CTL2, write_val) != 0)
+          {
+              val_print(ACS_PRINT_ERR, " RMEDA_CTL2 test write failed for RP bdf, 0x%x", bdf);
+              test_fails++;
+          }
+          read_status = val_pcie_read_cfg(bdf, da_cap_base + RMEDA_CTL2, &reg_value);
+          if (read_status != PCIE_SUCCESS)
+          {
+              val_print(ACS_PRINT_ERR, " RMEDA_CTL2 test read failed for RP bdf, 0x%x", bdf);
+              test_fails++;
+          }
+          if (read_status == PCIE_SUCCESS && reg_value != write_val)
+          {
+              val_print(ACS_PRINT_ERR, " RMEDA_CTL2 readback failed for RP bdf, 0x%x", bdf);
+              test_fails++;
+          }
 
-              /* Now for SEL_STR_LOCK[NUM_SEL_STR - 1: 0] which should be RW */
-              write_val = reg_value ^ (REG_MASK(num_sel_ide_stream_supp - 1, 0) << 0);
-              if (write_from_root(va + da_cap_base + RMEDA_CTL2, write_val))
-              {
-                  test_fails++;
-                  continue;
-              }
-              val_pcie_read_cfg(bdf, da_cap_base + RMEDA_CTL2, &reg_value);
-
-              if (reg_value != write_val)
-              {
-                  val_print(ACS_PRINT_ERR,
-                  " RMEDA_CTL2 RW bits not updated for RP bdf, 0x%x", bdf);
-                  test_fails++;
-              }
-
-              /* Restore the resgister */
-              if (write_from_root(va + da_cap_base + RMEDA_CTL2, original_reg_val))
-              {
-                    test_fails++;
-                    continue;
-              }
-          } else {
-              write_val = ~reg_value;
-              if (write_from_root(va + da_cap_base + RMEDA_CTL2, write_val))
-              {
-                  test_fails++;
-              }
-
-              if (reg_value != write_val)
-              {
-                  val_print(ACS_PRINT_ERR,
-                  " RMEDA_CTL2 RW bits not updated for RP bdf, 0x%x", bdf);
-                  test_fails++;
-              }
-
-              /* Restore the resgister */
-              if (write_from_root(va + da_cap_base + RMEDA_CTL2, original_reg_val))
-              {
-                test_fails++;
-              }
+          /* Restore and verify the original register value. */
+          if (write_from_root(va + da_cap_base + RMEDA_CTL2, original_reg_val) != 0)
+          {
+              val_print(ACS_PRINT_ERR, " RMEDA_CTL2 restore write failed for RP bdf, 0x%x", bdf);
+              test_fails++;
+          }
+          read_status = val_pcie_read_cfg(bdf, da_cap_base + RMEDA_CTL2, &reg_value);
+          if (read_status != PCIE_SUCCESS)
+          {
+              val_print(ACS_PRINT_ERR, " RMEDA_CTL2 restore read failed for RP bdf, 0x%x", bdf);
+              test_fails++;
+          }
+          if (read_status == PCIE_SUCCESS && reg_value != original_reg_val)
+          {
+              val_print(ACS_PRINT_ERR, " RMEDA_CTL2 restore failed for RP bdf, 0x%x", bdf);
+              test_fails++;
           }
       }
   }
