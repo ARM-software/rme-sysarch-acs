@@ -62,7 +62,6 @@
   ../test_pool/da/da_autonomous_rootport_request_ns_pas.c
   ../test_pool/da/da_ctl_regs_rmsd_write_protect_property.c
   ../test_pool/da/da_dvsec_register_config.c
-  ../test_pool/da/da_ide_state_rootport_error.c
   ../test_pool/da/da_ide_state_tdisp_disable.c
   ../test_pool/da/da_ide_tbit_0_for_root_request.c
   ../test_pool/da/da_incoming_request_ide_non_sec_unlocked.c

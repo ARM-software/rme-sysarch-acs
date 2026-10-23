@@ -124,7 +124,6 @@ uint32_t da_p2p_btw_2_tdisp_devices_entry(uint32_t num_pe);
 uint32_t da_outgoing_request_with_ide_tbit_entry(uint32_t num_pe);
 uint32_t da_incoming_request_ide_sec_locked_entry(uint32_t num_pe);
 uint32_t da_ctl_regs_rmsd_write_protect_property_entry(uint32_t num_pe);
-uint32_t da_ide_state_rootport_error_entry(uint32_t num_pe);
 uint32_t da_ide_state_tdisp_disable_entry(uint32_t num_pe);
 uint32_t da_selective_ide_register_property_entry(uint32_t num_pe);
 uint32_t da_rootport_tdisp_disabled_entry(uint32_t num_pe);
