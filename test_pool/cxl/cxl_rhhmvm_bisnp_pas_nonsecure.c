@@ -52,6 +52,7 @@ typedef struct {
   uint32_t rmecda_ctl1_valid;
   uint32_t rmecda_cap_base;
   uint64_t rmecda_cfg_va;
+  uint32_t cache_cleanup_failed;
 } RHHMVM_CONTEXT;
 
 static uint32_t
@@ -269,7 +270,7 @@ permit_host_access(uint32_t root_bdf, const RHHMVM_CONTEXT *context)
 }
 
 static uint32_t
-exercise_bisnp_behavior(uint32_t root_bdf, const RHHMVM_CONTEXT *context, uint32_t host_pas)
+exercise_bisnp_behavior(uint32_t root_bdf, RHHMVM_CONTEXT *context, uint32_t host_pas)
 {
   volatile uint32_t *cached_va = NULL;
   uint64_t media_value = 0u;
@@ -448,9 +449,22 @@ exercise_bisnp_behavior(uint32_t root_bdf, const RHHMVM_CONTEXT *context, uint32
   result = ACS_STATUS_PASS;
 
 restore_gpt:
+  /* Error/unsupported BISnp exits can leave the Realm path closed. */
+  if ((cached_va != NULL) && (host_pas == REALM_PAS) &&
+      (permit_host_access(root_bdf, context) != ACS_STATUS_PASS))
+  {
+    val_print(ACS_PRINT_ERR, " RHHMVM: cannot authorize Realm cache cleanup", 0);
+    context->cache_cleanup_failed = 1u;
+    return ACS_STATUS_ERR;
+  }
+
   /* Drain the selected PAS cache line before changing its GPT permission. */
   if ((cached_va != NULL) && val_data_cache_ops_by_pa_el3(pa_in, host_pas))
-    result = ACS_STATUS_ERR;
+  {
+    val_print(ACS_PRINT_ERR, " RHHMVM: cache cleanup failed", 0);
+    context->cache_cleanup_failed = 1u;
+    return ACS_STATUS_ERR;
+  }
   if (val_add_gpt_entry_el3(pa_in, original_gpi))
     result = ACS_STATUS_ERR;
   return result;
@@ -741,6 +755,13 @@ candidate_cleanup:
     val_set_status(pe_index, "PASS", 01);
 
 cleanup:
+  /* A possibly dirty line still targets this window: retain its GPT and routing. */
+  if (context.cache_cleanup_failed != 0u)
+  {
+    val_print(ACS_PRINT_ERR, " RHHMVM: retaining window after cache cleanup failure", 0);
+    val_set_status(pe_index, "FAIL", 07);
+    return;
+  }
   if (restore_decoders(&context) != ACS_STATUS_PASS)
     val_set_status(pe_index, "FAIL", 07);
   if ((context.rmecda_ctl1_valid != 0u) && (context.rmecda_cfg_va != 0u))
