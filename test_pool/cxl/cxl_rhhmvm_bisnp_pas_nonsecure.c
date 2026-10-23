@@ -273,6 +273,8 @@ exercise_bisnp_behavior(uint32_t root_bdf, const RHHMVM_CONTEXT *context, uint32
 {
   volatile uint32_t *cached_va = NULL;
   uint64_t media_value = 0u;
+  uint64_t original_gpi;
+  uint32_t result = ACS_STATUS_FAIL;
   uint64_t page_size;
   uint64_t pa_in;
   uint64_t host_readback = 0u;
@@ -299,32 +301,53 @@ exercise_bisnp_behavior(uint32_t root_bdf, const RHHMVM_CONTEXT *context, uint32
       return status;
   }
 
+  /* Translation PAS does not change GPT permissions for the target granule. */
+  if (val_get_gpt_entry_el3(pa_in, &original_gpi))
+    return ACS_STATUS_ERR;
+
+  if (val_add_gpt_entry_el3(pa_in,
+                          (host_pas == REALM_PAS) ? GPT_REALM : GPT_NONSECURE))
+    return ACS_STATUS_ERR;
+
   /* Step 1: Write V1 through a cacheable alias in selected PAS so it remains host-cached. */
   if (map_alias(pa_in, host_pas, WRITE_BACK_NT, &cached_va) != ACS_STATUS_PASS)
-    return ACS_STATUS_FAIL;
+  {
+    result = ACS_STATUS_FAIL;
+    goto restore_gpt;
+  }
 
   shared_data->num_access = 1;
   shared_data->shared_data_access[0].addr = (uint64_t)cached_va;
   shared_data->shared_data_access[0].data = (uint64_t)TEST_HOST_VALUE_V1;
   shared_data->shared_data_access[0].access_type = WRITE_DATA;
   if (val_pe_access_mut_el3())
-    return ACS_STATUS_FAIL;
+  {
+    result = ACS_STATUS_FAIL;
+    goto restore_gpt;
+  }
 
   /*
    * Step 2: Modify PA through exerciser media backdoor write.
    */
   status = write_device_media(context->exerciser_bdf, pa_in, TEST_DEVICE_VALUE_V2);
   if (status != ACS_STATUS_PASS)
-    return status;
+  {
+    result = status;
+    goto restore_gpt;
+  }
 
   status = read_device_media(context->exerciser_bdf, pa_in, &media_value);
   if (status != ACS_STATUS_PASS)
-    return ACS_STATUS_FAIL;
+  {
+    result = ACS_STATUS_FAIL;
+    goto restore_gpt;
+  }
 
   if ((uint32_t)media_value != TEST_DEVICE_VALUE_V2)
   {
     val_print(ACS_PRINT_ERR, " RHHMVM: media write verify failed 0x%llx", media_value);
-    return ACS_STATUS_FAIL;
+    result = ACS_STATUS_FAIL;
+    goto restore_gpt;
   }
 
   /*
@@ -337,30 +360,41 @@ exercise_bisnp_behavior(uint32_t root_bdf, const RHHMVM_CONTEXT *context, uint32
 
     if (read_from_root(context->rmecda_cfg_va + context->rmecda_cap_base +
                        RMECDA_CTL1_OFFSET, &rmecda_ctl1) != ACS_STATUS_PASS)
-      return ACS_STATUS_ERR;
+    {
+      result = ACS_STATUS_ERR;
+      goto restore_gpt;
+    }
 
     /* Preserve TDISP until the common disable helper programs it. */
     rmecda_ctl1 &= ~RMECDA_CTL1_LINK_STR_LOCK_MASK;
     if (write_from_root(context->rmecda_cfg_va + context->rmecda_cap_base +
                         RMECDA_CTL1_OFFSET,
                         rmecda_ctl1) != ACS_STATUS_PASS)
-      return ACS_STATUS_ERR;
+    {
+      result = ACS_STATUS_ERR;
+      goto restore_gpt;
+    }
 
     if (read_from_root(context->rmecda_cfg_va + context->rmecda_cap_base +
                        RMECDA_CTL1_OFFSET,
                        &rmecda_ctl1) != ACS_STATUS_PASS)
-      return ACS_STATUS_ERR;
+    {
+      result = ACS_STATUS_ERR;
+      goto restore_gpt;
+    }
 
     if ((rmecda_ctl1 & RMECDA_CTL1_LINK_STR_LOCK_MASK) != 0u)
     {
       val_print(ACS_PRINT_ERR, " RHHMVM: LINK_STR_LOCK clear failed 0x%x", rmecda_ctl1);
-      return ACS_STATUS_ERR;
+      result = ACS_STATUS_ERR;
+      goto restore_gpt;
     }
 
     if (val_pcie_disable_tdisp(root_bdf))
     {
       val_print(ACS_PRINT_ERR, " RHHMVM: TDISP disable failed", 0);
-      return ACS_STATUS_ERR;
+      result = ACS_STATUS_ERR;
+      goto restore_gpt;
     }
   }
 
@@ -369,7 +403,8 @@ exercise_bisnp_behavior(uint32_t root_bdf, const RHHMVM_CONTEXT *context, uint32
   if (status != ACS_STATUS_PASS)
   {
     val_print(ACS_PRINT_INFO, " RHHMVM: BISnp command unsupported", 0);
-    return ACS_STATUS_SKIP;
+    result = ACS_STATUS_SKIP;
+    goto restore_gpt;
   }
 
   /* BISnp has completed with TDISP disabled. Reopen the Realm path before
@@ -380,7 +415,10 @@ exercise_bisnp_behavior(uint32_t root_bdf, const RHHMVM_CONTEXT *context, uint32
   {
     status = permit_host_access(root_bdf, context);
     if (status != ACS_STATUS_PASS)
-      return status;
+    {
+      result = status;
+      goto restore_gpt;
+    }
   }
 
   /* Step 5: Read PA back through MUT. */
@@ -388,7 +426,10 @@ exercise_bisnp_behavior(uint32_t root_bdf, const RHHMVM_CONTEXT *context, uint32
   shared_data->shared_data_access[0].addr = (uint64_t)cached_va;
   shared_data->shared_data_access[0].access_type = READ_DATA;
   if (val_pe_access_mut_el3())
-    return ACS_STATUS_FAIL;
+  {
+    result = ACS_STATUS_FAIL;
+    goto restore_gpt;
+  }
 
   host_readback = shared_data->shared_data_access[0].data;
   val_print(ACS_PRINT_DEBUG, " RHHMVM: host readback after BISnp 0x%llx", host_readback);
@@ -400,12 +441,20 @@ exercise_bisnp_behavior(uint32_t root_bdf, const RHHMVM_CONTEXT *context, uint32
      * BISnp trigger; treat mismatch as observational coverage, not hard fail.
      */
     val_print(ACS_PRINT_INFO, " RHHMVM: observational mismatch after BISnp; skipping", 0);
-    return ACS_STATUS_SKIP;
+    result = ACS_STATUS_SKIP;
+    goto restore_gpt;
   }
 
-  return ACS_STATUS_PASS;
-}
+  result = ACS_STATUS_PASS;
 
+restore_gpt:
+  /* Drain the selected PAS cache line before changing its GPT permission. */
+  if ((cached_va != NULL) && val_data_cache_ops_by_pa_el3(pa_in, host_pas))
+    result = ACS_STATUS_ERR;
+  if (val_add_gpt_entry_el3(pa_in, original_gpi))
+    result = ACS_STATUS_ERR;
+  return result;
+}
 
 static uint32_t
 force_all_smmus_disabled(void)
