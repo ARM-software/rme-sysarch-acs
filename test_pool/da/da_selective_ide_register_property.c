@@ -236,7 +236,7 @@ payload(void)
           /* Change only Stream ID through the normal Non-secure configuration access path. */
           stream_id = (control & SEL_IDE_STR_ID_MASK) >> SEL_IDE_STR_ID_SHIFT;
           stream_id = stream_id == 0xFFu ? 1u : stream_id + 1;
-          status = val_ide_program_stream_id(bdf, count, stream_id);
+          status = val_ide_program_stream_id(bdf, count, stream_id, 0u);
           if (status)
           {
               val_print(ACS_PRINT_ERR, " Failed to re-set Stream ID for BDF: 0x%x", bdf);
@@ -304,7 +304,7 @@ stream_cleanup:
               break;
           }
           /* Restore the key's Stream ID so PAL STOP resolves the original block. */
-          if (val_ide_program_stream_id(bdf, count, setup_stream_id))
+          if (val_ide_program_stream_id(bdf, count, setup_stream_id, 0u))
               test_fail++;
           /* A failed ID restore must not suppress session/key cleanup. */
           if (val_device_unlock(ep_bdf) != ACS_STATUS_PASS)
