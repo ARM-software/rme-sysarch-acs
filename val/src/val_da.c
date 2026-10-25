@@ -637,7 +637,7 @@ val_device_session_open(uint32_t bdf)
  * @param ep_count Endpoint Selective IDE block number, starting at 1.
  * @param rp_count Root Port Selective IDE block number, starting at 1.
  * @param stream_id Eight-bit Stream ID used at both ports.
- * @param rid Packed Requester ID used for the RID associations.
+ * @param rid Packed endpoint Requester ID used for the RP RID association.
  * @return ACS_STATUS_PASS when both ports are Secure, ACS_STATUS_SKIP when the
  *         RP backend is unsupported, or ACS_STATUS_ERR on setup failure.
  */
@@ -674,6 +674,7 @@ val_pcie_ide_establish_streams(uint32_t bdf, uint32_t rp_bdf,
   for (i = 0; i < 2; ++i) {
     uint32_t port = i ? rp_bdf : bdf;
     uint32_t count = i ? rp_count : ep_count;
+    uint32_t partner_rid = i ? rid : (PCIE_CREATE_BDF_PACKED(rp_bdf));
 
     stage = i ? " PCIe IDE setup: RP stream configuration" :
                 " PCIe IDE setup: EP stream configuration";
@@ -681,11 +682,13 @@ val_pcie_ide_establish_streams(uint32_t bdf, uint32_t rp_bdf,
     if (status != ACS_STATUS_PASS)
       goto cleanup;
 
-    status = val_ide_program_rid_base_limit_valid(port, count, rid, rid, 1);
+    /* Each port's RID association identifies its IDE partner. */
+    status = val_ide_program_rid_base_limit_valid(port, count, partner_rid, partner_rid, 1);
     if (status != ACS_STATUS_PASS)
       goto cleanup;
 
-    status = val_ide_program_stream_id(port, count, stream_id);
+    /* Match the EP default stream to the ID later sent in LOCK_INTERFACE. */
+    status = val_ide_program_stream_id(port, count, stream_id, i == 0u);
     if (status != ACS_STATUS_PASS)
       goto cleanup;
   }
@@ -730,8 +733,8 @@ val_pcie_ide_establish_streams(uint32_t bdf, uint32_t rp_bdf,
     if (status != ACS_STATUS_PASS)
       goto cleanup;
 
-    /* Initial invocation field for AES-GCM; the key material is fresh. */
-    ep_rx.iv[0] = ep_tx.iv[0] = 1u;
+    /* IDE-KM sends the upper IV DWORD first; start the invocation field at 1. */
+    ep_rx.iv[1] = ep_tx.iv[1] = 1u;
 
     /* Program the EP receive key and check transport status and KP_ACK */
     stage = " PCIe IDE setup: EP RX KEY_PROG";
@@ -760,7 +763,7 @@ val_pcie_ide_establish_streams(uint32_t bdf, uint32_t rp_bdf,
     for (j = 0; j < 8; ++j)
       rp_key.key[j] = ep_tx.key[j];
 
-    rp_key.initial_ifv = (uint64_t)ep_tx.iv[0] | ((uint64_t)ep_tx.iv[1] << 32);
+    rp_key.initial_ifv = ((uint64_t)ep_tx.iv[0] << 32) | ep_tx.iv[1];
     stage = " PCIe IDE setup: RP RX KEY_PROG";
     /* PROGRAM can fail after staging keys, so cleanup is required on any attempt. */
     slot->rp_key_cleanup_required = 1u;
@@ -774,7 +777,7 @@ val_pcie_ide_establish_streams(uint32_t bdf, uint32_t rp_bdf,
     for (j = 0; j < 8; ++j)
       rp_key.key[j] = ep_rx.key[j];
 
-    rp_key.initial_ifv = (uint64_t)ep_rx.iv[0] | ((uint64_t)ep_rx.iv[1] << 32);
+    rp_key.initial_ifv = ((uint64_t)ep_rx.iv[0] << 32) | ep_rx.iv[1];
     stage = " PCIe IDE setup: RP TX KEY_PROG";
     status = val_pcie_rp_ide_key_program(rp_bdf, &selector, &rp_key);
     if (status != ACS_STATUS_PASS)
@@ -887,7 +890,7 @@ cleanup:
  * @param rp_bdf Root Port BDF.
  * @param count Selectively addressed IDE block number, starting at 1.
  * @param stream_id Eight-bit Stream ID used at both ports.
- * @param rid Packed Requester ID used for the RID associations.
+ * @param rid Packed endpoint Requester ID used for the RP RID association.
  * @return Status returned by val_pcie_ide_establish_streams().
  */
 uint32_t
@@ -1344,9 +1347,12 @@ val_ide_program_address_range(uint32_t bdf, uint32_t str_cnt,
   return ACS_STATUS_ERR;
 }
 
-uint32_t val_ide_program_stream_id(uint32_t bdf, uint32_t str_cnt, uint32_t stream_id)
+uint32_t
+val_ide_program_stream_id(uint32_t bdf, uint32_t str_cnt,
+                          uint32_t stream_id, uint32_t default_stream)
 {
   uint32_t reg_value;
+  uint32_t ep_control_bits = 0u;
   uint32_t ide_cap_base;
   uint32_t num_tc_supp;
   uint32_t num_sel_ide_stream_supp;
@@ -1366,6 +1372,14 @@ uint32_t val_ide_program_stream_id(uint32_t bdf, uint32_t str_cnt, uint32_t stre
   /* Check if Selective IDE Stream is supported */
   if (val_pcie_read_cfg(bdf, ide_cap_base + IDE_CAP_REG, &reg_value) != PCIE_SUCCESS)
       return 1;
+
+  if (default_stream)
+  {
+      ep_control_bits = IDE_SEL_DEFAULT_STREAM;
+      if (reg_value & TEE_LIM_STR_SUPP_MASK)
+          ep_control_bits |= IDE_SEL_TEE_LIMITED_STREAM;
+  }
+
   sel_ide_str_supported = (reg_value & SEL_IDE_STR_MASK) >> SEL_IDE_STR_SHIFT;
   if (!sel_ide_str_supported)
   {
@@ -1404,10 +1418,16 @@ uint32_t val_ide_program_stream_id(uint32_t bdf, uint32_t str_cnt, uint32_t stre
                                &reg_value) != PCIE_SUCCESS)
               return 1;
 
-          /* Preserve Stream Enable and every control field other than Stream ID. */
+          /* Preserve other fields while updating Stream ID and EP controls below. */
           reg_value = (reg_value & ~SEL_IDE_STR_ID_MASK) |
                       ((stream_id << SEL_IDE_STR_ID_SHIFT) & SEL_IDE_STR_ID_MASK);
+          reg_value |= ep_control_bits;
           val_pcie_write_cfg(bdf, current_base_offset + SEL_IDE_CAP_CNTRL_REG, reg_value);
+          if (default_stream &&
+              (val_pcie_read_cfg(bdf, current_base_offset + SEL_IDE_CAP_CNTRL_REG,
+                                &reg_value) != PCIE_SUCCESS ||
+               (reg_value & ep_control_bits) != ep_control_bits))
+              return 1;
           return 0;
       }
 
@@ -1750,7 +1770,7 @@ val_ide_establish_stream(uint32_t bdf, uint32_t count, uint32_t stream_id, uint3
       return 1;
   }
 
-  status = val_ide_program_stream_id(bdf, count, stream_id);
+  status = val_ide_program_stream_id(bdf, count, stream_id, 0u);
   if (status)
   {
       val_print(ACS_PRINT_ERR, " Failed to set Stream ID for BDF: 0x%x", bdf);
