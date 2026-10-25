@@ -67,7 +67,8 @@ val_ide_program_rid_base_limit_valid(uint32_t bdf, uint32_t str_cnt,
                                      uint32_t base, uint32_t limit, uint32_t valid);
 
 uint32_t
-val_ide_program_stream_id(uint32_t bdf, uint32_t str_cnt, uint32_t stream_id);
+val_ide_program_stream_id(uint32_t bdf, uint32_t str_cnt,
+                          uint32_t stream_id, uint32_t default_stream);
 
 uint32_t
 val_ide_set_sel_stream(uint32_t bdf, uint32_t str_cnt, uint32_t enable);
