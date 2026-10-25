@@ -404,6 +404,10 @@
 /* Link IDE Stream Status Register Mask */
 #define LINK_IDE_STATE_MASK 0xF
 
+/* Selective IDE Stream control register masks */
+#define IDE_SEL_DEFAULT_STREAM (1u << 22)
+#define IDE_SEL_TEE_LIMITED_STREAM (1u << 23)
+
 /* Selective IDE Stream status register Mask */
 #define SEL_IDE_STATE_MASK 0xF
 
