@@ -629,10 +629,10 @@ uint32_t val_smmu_gpt_invalidate_el3(smmu_master_attributes_t *smmu_attr)
  *          Returns 1 on error, 0 on success.
  *  @return 1 on error, 0 on success
  */
-uint32_t val_dpt_add_entry(uint64_t translated_addr, uint32_t smmu_index)
+uint32_t val_dpt_add_entry(uint64_t translated_addr, uint64_t smmu_info)
 {
   UserCallSMC(ARM_ACS_SMC_FID, SMMU_CONFIG_SERVICE, SMMU_RLM_ADD_DPT_ENTRY,
-             translated_addr, smmu_index);
+             translated_addr, smmu_info);
   if (val_pe_get_index_mpid(val_pe_get_mpid()) != 0)
       return shared_data->status_code ? 1 : 0;
   if (shared_data->status_code != 0) {
