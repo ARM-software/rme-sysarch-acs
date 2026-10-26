@@ -220,6 +220,15 @@ program_rmecda_ctl1(uint32_t root_bdf,
     return ACS_STATUS_FAIL;
   }
 
+  if ((ctl1_readback & RMECDA_CTL1_FIRST_TEE_CKID_MASK) !=
+      ((uint32_t)first_tee_ckid << RMECDA_CTL1_FIRST_TEE_CKID_SHIFT))
+  {
+    val_print(ACS_PRINT_ERR,
+              " RJXPZP: FIRST_TEE_CKID readback mismatch for RP 0x%x",
+              root_bdf);
+    return ACS_STATUS_FAIL;
+  }
+
   return ACS_STATUS_PASS;
 }
 
@@ -501,6 +510,8 @@ exercise_root_port(const CXL_COMPONENT_TABLE *table,
   uint64_t cfg_addr;
   uint64_t cfg_va = 0u;
   uint64_t tg;
+  uint64_t original_gpi = 0u;
+  uint32_t gpt_modified = 0u;
   uint32_t attr;
 
   val_memory_set(&context, sizeof(context), 0);
@@ -776,6 +787,15 @@ exercise_root_port(const CXL_COMPONENT_TABLE *table,
   }
   mec_enabled = 1u;
 
+  if (val_get_gpt_entry_el3(context.window_base, &original_gpi) ||
+      val_add_gpt_entry_el3(context.window_base, GPT_ANY))
+  {
+    val_print(ACS_PRINT_ERR, " RJXPZP: CXL.mem GPT setup failed", 0);
+    failures++;
+    goto cleanup;
+  }
+  gpt_modified = 1u;
+
   /* Iterate the PAS/MECID vectors and validate expected outcomes. */
   for (uint32_t index = 0; index < (sizeof(test_stimulus) / sizeof(test_stimulus[0])); ++index)
   {
@@ -880,9 +900,19 @@ exercise_root_port(const CXL_COMPONENT_TABLE *table,
     /* Build a pattern to write to the device memory range. */
     if (vector->expectation == EXPECT_SUCCESS)
     {
-      /* The alias is mapped at EL3; access it through the MUT service. */
+      /* Read through the same EL3 PAS alias and MECID as the test access. */
+      shared_data->exception_expected = CLEAR;
+      val_cxl_aer_clear(root_bdf, aer_offset);
       if (read_from_root((uint64_t)mapped, &baseline) != ACS_STATUS_PASS)
       {
+        failures++;
+        continue;
+      }
+      if ((val_cxl_aer_read_uncorr(root_bdf, aer_offset, &aer_uncorr) !=
+           ACS_STATUS_PASS) || (aer_uncorr != 0u))
+      {
+        val_print(ACS_PRINT_ERR, " RJXPZP: baseline read failed for %a",
+                  (uint64_t)vector->name);
         failures++;
         continue;
       }
@@ -950,7 +980,12 @@ exercise_root_port(const CXL_COMPONENT_TABLE *table,
       shared_data->shared_data_access[0].addr = (uint64_t)mapped;
       shared_data->shared_data_access[0].data = baseline;
       shared_data->shared_data_access[0].access_type = WRITE_DATA;
-      (void)val_pe_access_mut_el3();
+      if (val_pe_access_mut_el3())
+      {
+        val_print(ACS_PRINT_ERR, " RJXPZP: baseline restore failed for %a",
+                  (uint64_t)vector->name);
+        failures++;
+      }
     }
     else
     {
@@ -964,6 +999,14 @@ exercise_root_port(const CXL_COMPONENT_TABLE *table,
       }
     }
   }
+cleanup:
+  if ((gpt_modified != 0u) &&
+      val_add_gpt_entry_el3(context.window_base, original_gpi))
+  {
+    val_print(ACS_PRINT_ERR, " RJXPZP: CXL.mem GPT restore failed", 0);
+    failures++;
+  }
+
   /* Restore other fields without changing TDISP outside the common helpers. */
   uint32_t ctl1_current;
   if (read_from_root(cfg_va + rmecda_cap_base + RMECDA_CTL1_OFFSET,
