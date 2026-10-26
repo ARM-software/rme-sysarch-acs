@@ -351,7 +351,12 @@ static int smmu_tlbi_prefetch_cfg(smmu_dev_t *smmu)
 
 int smmu_dpti_all(smmu_dev_t *smmu)
 {
-    return smmu_cmdq_issue_cmd(smmu, 0x70);
+    if (smmu_cmdq_issue_cmd(smmu, CMDQ_OP_DPTI_ALL))
+        return -1;
+    if (smmu_cmdq_issue_cmd(smmu, CMDQ_OP_CMD_SYNC))
+        return -1;
+
+    return smmu_cmdq_poll_until_consumed(smmu);
 }
 
 static int smmu_tlbi_cfgi(smmu_dev_t *smmu)
@@ -1611,21 +1616,21 @@ val_el3_smmu_get_dpt_base(smmu_dev_t *smmu)
   return dpt_base << 12;
 }
 
-void
+uint32_t
 val_el3_dpt_invalidate_all(uint64_t smmu_index)
 {
   smmu_dev_t *smmu;
 
   if ((g_smmu == NULL) || (smmu_index >= g_num_smmus))
-      return;
+      return 1;
 
   smmu = &g_smmu[smmu_index];
   if ((smmu->base == 0) || !smmu->supported.dpt) {
       WARN("\n SMMU Base: %lx DPT invalidate skipped, DPT unsupported", smmu->base);
-      return;
+      return 1;
   }
 
-  smmu_dpti_all(smmu);
+  return smmu_dpti_all(smmu) ? 1 : 0;
 }
 
 uint32_t
@@ -2100,7 +2105,15 @@ void val_el3_smmu_root_config_service(uint64_t arg0, uint64_t arg1, uint64_t arg
           break;
       case SMMU_RLM_DPTI:
           INFO("SMMU DPT Invalidate\n");
-          val_el3_dpt_invalidate_all(arg1);
+          if (val_el3_dpt_invalidate_all(arg1)) {
+              shared_data->status_code = 1;
+              shared_data->error_code = arg1;
+              const char *msg = "EL3: SMMU DPT invalidation failed";
+              int i = 0; while (msg[i] && i < sizeof(shared_data->error_msg) - 1) {
+                  shared_data->error_msg[i] = msg[i]; i++;
+              }
+              shared_data->error_msg[i] = '\0';
+          }
           break;
       case SMMU_CHECK_MEC_IMPL:
           smmu = NULL;

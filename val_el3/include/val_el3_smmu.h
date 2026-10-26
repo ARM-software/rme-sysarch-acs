@@ -444,7 +444,7 @@ uint32_t val_el3_smmu_rlm_map(smmu_master_attributes_t master_attr, pgt_descript
 uint32_t val_el3_smmu_unmap(smmu_master_attributes_t master_attr);
 uint32_t val_el3_smmu_gpt_invalidate(smmu_master_attributes_t master_attr);
 uint32_t val_el3_dpt_add_entry(uint64_t translated_addr, uint64_t smmu_info);
-void val_el3_dpt_invalidate_all(uint64_t smmu_index);
+uint32_t val_el3_dpt_invalidate_all(uint64_t smmu_index);
 uint32_t val_el3_smmu_set_rlm_ste_mecid(smmu_master_attributes_t master_attr, uint32_t mecid);
 bool val_el3_smmu_supports_mec(smmu_dev_t *smmu);
 uint32_t val_el3_smmu_get_mecidw(smmu_dev_t *smmu);

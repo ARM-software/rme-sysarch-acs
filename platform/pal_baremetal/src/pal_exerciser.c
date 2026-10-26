@@ -426,7 +426,7 @@ uint32_t pal_exerciser_ops(EXERCISER_OPS Ops, uint64_t Param, uint32_t Bdf)
   uint64_t Base;
   uint64_t Ecam;
   uint32_t CapabilityOffset;
-  uint32_t data;
+  uint32_t data, poll;
   Base = pal_exerciser_get_ecsr_base(Bdf,0);
   Ecam = pal_exerciser_get_ecam(Bdf);
   switch(Ops){
@@ -505,7 +505,13 @@ uint32_t pal_exerciser_ops(EXERCISER_OPS Ops, uint64_t Param, uint32_t Bdf)
     case ATS_TXN_REQ:
         pal_mmio_write(Base + DMA_BUS_ADDR, Param);
         pal_mmio_write(Base + ATSCTL, ATS_TRIGGER);
-        return !(pal_mmio_read(Base + ATSCTL) & ATS_STATUS);
+        /* Status is valid only after the translation is no longer in flight. */
+        for (poll = 0; poll < EXERCISER_ATS_POLL_LIMIT; ++poll) {
+            data = pal_mmio_read(Base + ATSCTL);
+            if (!(data & ATS_IN_FLIGHT))
+                return !(data & ATS_STATUS);
+        }
+        return 1;
 
     case ATS_INV_CACHE:
         pal_mmio_write(Base + ATSCTL, ATS_INV);
