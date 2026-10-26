@@ -3634,9 +3634,10 @@ val_rme_cxl_execute_tests(uint32_t num_pe)
 {
   uint32_t status = ACS_STATUS_SKIP;
   uint64_t num_smmus = val_smmu_get_info(SMMU_NUM_CTRL, 0);
+  uint64_t smmu_base_arr_size, smmu_base_arr_pages;
   uint64_t *smmu_base_arr = NULL;
   uint64_t pgt_attr_el3;
-  uint32_t smmu_cnt;
+  uint32_t smmu_cnt, page_size;
 
   g_curr_module = 1 << CXL_MODULE_ID;
 
@@ -3648,7 +3649,25 @@ val_rme_cxl_execute_tests(uint32_t num_pe)
 
   if (!g_rl_smmu_init)
   {
-    smmu_base_arr = val_memory_alloc_pages(1);
+    page_size = val_memory_page_size();
+    if (page_size == 0)
+    {
+      val_print(ACS_PRINT_ERR, " Invalid page size for smmu_base_arr allocation", 0);
+      return ACS_STATUS_ERR;
+    }
+
+    smmu_base_arr_size = num_smmus * sizeof(*smmu_base_arr);
+    smmu_base_arr_pages = smmu_base_arr_size / page_size;
+    if ((smmu_base_arr_size % page_size) != 0)
+      smmu_base_arr_pages++;
+
+    if (smmu_base_arr_pages > (~(uint32_t)0) / page_size)
+    {
+      val_print(ACS_PRINT_ERR, " smmu_base_arr allocation is too large", 0);
+      return ACS_STATUS_ERR;
+    }
+
+    smmu_base_arr = val_memory_alloc_pages((uint32_t)smmu_base_arr_pages);
     if (smmu_base_arr == NULL)
     {
       val_print(ACS_PRINT_ERR, " Failed to allocate smmu_base_arr", 0);
@@ -3665,23 +3684,28 @@ val_rme_cxl_execute_tests(uint32_t num_pe)
     /* Map the pointer in EL3 as NS access PAS so that EL3 can access it. */
     pgt_attr_el3 = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(OUTER_SHAREABLE) |
                                PGT_ENTRY_AP_RW | PAS_ATTR(NONSECURE_PAS));
-    if (val_add_mmu_entry_el3((uint64_t)(smmu_base_arr),
-                              (uint64_t)val_memory_virt_to_phys(smmu_base_arr),
-                              pgt_attr_el3))
+    for (uint64_t offset = 0; offset < smmu_base_arr_size; offset += PAGE_SIZE_4K)
     {
-      val_print(ACS_PRINT_ERR, " MMU mapping failed for smmu_base_arr", 0);
-      val_memory_free_pages(smmu_base_arr, 1);
-      return ACS_STATUS_ERR;
+      void *page = (uint8_t *)smmu_base_arr + offset;
+
+      if (val_add_mmu_entry_el3((uint64_t)page,
+                                (uint64_t)val_memory_virt_to_phys(page),
+                                pgt_attr_el3))
+      {
+        val_print(ACS_PRINT_ERR, " MMU mapping failed for smmu_base_arr", 0);
+        val_memory_free_pages(smmu_base_arr, (uint32_t)smmu_base_arr_pages);
+        return ACS_STATUS_ERR;
+      }
     }
     if (val_rlm_smmu_init(num_smmus, smmu_base_arr))
     {
       val_print(ACS_PRINT_ERR, " SMMU REALM INIT failed", 0);
-      val_memory_free_pages(smmu_base_arr, 1);
+      val_memory_free_pages(smmu_base_arr, (uint32_t)smmu_base_arr_pages);
       return ACS_STATUS_ERR;
     }
 
     g_rl_smmu_init = 1;
-    val_memory_free_pages(smmu_base_arr, 1);
+    val_memory_free_pages(smmu_base_arr, (uint32_t)smmu_base_arr_pages);
   }
 
   val_print(ACS_PRINT_ALWAYS, "\n\n*******************************************************\n", 0);
