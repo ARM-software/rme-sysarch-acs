@@ -402,8 +402,8 @@ payload(void)
           goto free_mem;
       }
 
-      /* Add DPT entry for the PA with Read Write Access */
-      if (val_dpt_add_entry((uint64_t)dram_buf_in_virt,
+      /* Deny access to the physical input buffer in the DPT. */
+      if (val_dpt_add_entry(dram_buf_in_phys,
                        ((((uint64_t)(master.smmu_index)) << 32) | DPT_NO_ACCESS_ENTRY)))
       {
           val_print(ACS_PRINT_ERR, " DPT entry add failure %4x", instance);
@@ -435,7 +435,9 @@ payload(void)
           goto free_mem;
       }
 
-      if (val_exerciser_set_param(DMA_ATTRIBUTES, (uint64_t)dram_buf_in_virt2, dma_len, instance))
+      if (val_exerciser_set_param(DMA_ATTRIBUTES,
+                                  (uint64_t)val_memory_virt_to_phys(dram_buf_in_virt2),
+                                  dma_len, instance))
       {
           val_print(ACS_PRINT_ERR, " DMA attributes setting failure %4x", instance);
           test_fail++;

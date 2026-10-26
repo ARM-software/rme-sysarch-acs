@@ -446,7 +446,11 @@
 #define RID_NOT_VALID  0
 #define ATS_TRIGGER    1
 #define ATS_INV        (1 << 5)
+#define ATS_IN_FLIGHT  (1ul << 6)
 #define ATS_STATUS     (1ul << 7)
+#ifndef EXERCISER_ATS_POLL_LIMIT
+#define EXERCISER_ATS_POLL_LIMIT PLATFORM_OVERRIDE_TIMEOUT_LARGE
+#endif
 #define TXN_INVALID    0xFFFFFFFF
 #define TXN_START      1
 #define TXN_STOP       0
