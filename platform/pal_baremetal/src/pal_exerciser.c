@@ -383,7 +383,8 @@ uint32_t pal_exerciser_get_param(EXERCISER_PARAM_TYPE Type, uint64_t *Value1, ui
           *Value1 = pal_mmio_read(Base + MSICTL);
           return pal_mmio_read(Base + MSICTL) | MASK_BIT;
       case ATS_RES_ATTRIBUTES:
-          *Value1 = pal_mmio_read(Base + ATS_ADDR);
+          *Value1 = (uint64_t)pal_mmio_read(Base + ATS_ADDR);
+          *Value1 |= (uint64_t)pal_mmio_read(Base + ATS_ADDR + 4) << 32;
           return 0;
       case EXERCISER_CXL_CMD_DATA0:
           *Value1 = (uint64_t)pal_mmio_read(Base + CXL_CMD_DATA0_LO);
