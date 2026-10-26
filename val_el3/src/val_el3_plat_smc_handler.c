@@ -26,7 +26,7 @@
 #include <val_el3_wd.h>
 #include <val_el3_mec.h>
 
-void plat_arm_acs_smc_handler(uint64_t services, uint64_t arg0, uint64_t arg1, uint64_t arg2);
+uintptr_t plat_arm_acs_smc_handler(uint64_t services, uint64_t arg0, uint64_t arg1, uint64_t arg2);
 
 /**
  *  @brief  This API is used to branch out to all the different functions in EL3
@@ -35,9 +35,9 @@ void plat_arm_acs_smc_handler(uint64_t services, uint64_t arg0, uint64_t arg1, u
  *  @param  arg0     -  The argument is specific to the test requirement
  *  @param  arg1     -  The argument is specific to the test requirement
  *  @param  arg2     -  The argument is specific to the test requirement
- *  @return None
+ *  @return 0 on dispatch completion, 1 if required shared data is not mapped
 **/
-void plat_arm_acs_smc_handler(uint64_t services, uint64_t arg0, uint64_t arg1, uint64_t arg2)
+uintptr_t plat_arm_acs_smc_handler(uint64_t services, uint64_t arg0, uint64_t arg1, uint64_t arg2)
 {
 
   INFO("User SMC Call started for service = 0x%lx arg0 = 0x%lx arg1 = 0x%lx arg2 = 0x%lx \n",
@@ -320,4 +320,5 @@ void plat_arm_acs_smc_handler(uint64_t services, uint64_t arg0, uint64_t arg1, u
       INFO(" Service not present\n");
       break;
   }
+  return 0;
 }
