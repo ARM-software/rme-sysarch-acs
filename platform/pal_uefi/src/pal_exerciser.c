@@ -482,7 +482,7 @@ pal_exerciser_ops (
   UINT64 Base;
   UINT64 Ecam;
   UINT32 CapabilityOffset = 0;
-  UINT32 data;
+  UINT32 data, poll;
   Base = pal_exerciser_get_ecsr_base(Bdf,0);
   Ecam = pal_pcie_get_mcfg_ecam_for_bdf(Bdf); // Getting the ECAM address
   switch(Ops){
@@ -561,7 +561,13 @@ pal_exerciser_ops (
     case ATS_TXN_REQ:
         pal_mmio_write(Base + DMA_BUS_ADDR, Param);
         pal_mmio_write(Base + ATSCTL, ATS_TRIGGER);
-        return !(pal_mmio_read(Base + ATSCTL) & ATS_STATUS);
+        /* Status is valid only after the translation is no longer in flight. */
+        for (poll = 0; poll < EXERCISER_ATS_POLL_LIMIT; ++poll) {
+            data = pal_mmio_read(Base + ATSCTL);
+            if (!(data & ATS_IN_FLIGHT))
+                return !(data & ATS_STATUS);
+        }
+        return 1;
 
     case ATS_INV_CACHE:
         pal_mmio_write(Base + ATSCTL, ATS_INV);
