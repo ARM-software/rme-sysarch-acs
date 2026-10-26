@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2024-2025, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2024-2026, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -47,15 +47,15 @@ pcie_cfgreg_bitfield_entry bf_info_table18[] = {
        "WARNING",                   // Warning message
        "ERROR Write-detect failed for Memory Space/Bus Master" // Error message
     },
-    // BIST Register - Start bit 0, End bit 3 (Bits [3:0])
+    // Start BIST: bit 6 of byte 0x0F, bit 30 of DWORD 0x0C
     {
        HEADER,                       // Part of PCIe header register
        0,                            // Capability ID for HEADER
        0,                            // Extended Capability ID (not applicable for HEADER)
        0x0C,                         // 4-byte aligned offset for BIST Register
        RP,                           // Root Port (RP)
-       6,                            // Start bit position (BIST Register)
-       6,                            // End bit position (BIST Register)
+       30,                           // Start bit position (BIST Register)
+       30,                           // End bit position (BIST Register)
        0,                            // Bit value
        WRITE_DETECT,                // Access type: WRITE_DETECT
        "WARNING",                   // Warning message
@@ -68,8 +68,8 @@ pcie_cfgreg_bitfield_entry bf_info_table18[] = {
        0,                            // Extended Capability ID (not applicable for HEADER)
        0x10,                         // 4-byte aligned offset for Base Address Registers
        RP,                           // Root Port (RP)
-       31,                           // Start bit position (Bits [31:0])
-       0,                            // End bit position (Bits [31:0])
+       0,                            // Start bit position (Bits [31:0])
+       31,                           // End bit position (Bits [31:0])
        0xFFFFFFFF,                   // Bit value
        WRITE_DETECT,                // Access type: WRITE_DETECT
        "WARNING",                   // Warning message
