@@ -150,11 +150,11 @@ uintptr_t plat_arm_acs_smc_handler(uint64_t services, uint64_t arg0, uint64_t ar
           shared_data->error_msg[i] = '\0';
         }
       } else if (shared_data->arg0 == IDE_CXL_KEY_STOP) {
-        if (val_el3_ide_km_stop(shared_data->arg2,
+        shared_data->status_code = val_el3_ide_km_stop(shared_data->arg2,
                                                 (uint32_t)shared_data->arg1,
                                    (uint8_t)shared_data->arg3,
-                                   (uint8_t)shared_data->arg4) != 0u) {
-          shared_data->status_code = 1;
+                                   (uint8_t)shared_data->arg4);
+        if (shared_data->status_code != 0u) {
           const char *msg = "EL3: IDE_KM disable failed";
           int i = 0; while (msg[i] && i < sizeof(shared_data->error_msg) - 1) {
               shared_data->error_msg[i] = msg[i]; i++;
