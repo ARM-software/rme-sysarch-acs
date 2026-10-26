@@ -980,7 +980,17 @@ exercise_root_port(const CXL_COMPONENT_TABLE *table,
       shared_data->shared_data_access[0].addr = (uint64_t)mapped;
       shared_data->shared_data_access[0].data = baseline;
       shared_data->shared_data_access[0].access_type = WRITE_DATA;
-      if (val_pe_access_mut_el3())
+      val_cxl_aer_clear(root_bdf, aer_offset);
+      status = val_pe_access_mut_el3();
+
+      if (status == ACS_STATUS_PASS)
+        status = read_from_root((uint64_t)mapped, &readback);
+
+      if (status == ACS_STATUS_PASS)
+        status = val_cxl_aer_read_uncorr(root_bdf, aer_offset, &aer_uncorr);
+
+      if ((status != ACS_STATUS_PASS) ||
+          (aer_uncorr != 0u) || (readback != baseline))
       {
         val_print(ACS_PRINT_ERR, " RJXPZP: baseline restore failed for %a",
                   (uint64_t)vector->name);
