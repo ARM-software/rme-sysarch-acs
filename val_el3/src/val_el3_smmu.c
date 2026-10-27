@@ -78,7 +78,7 @@ uint32_t dpt_l0dptsz[DPT_L0SZ_MAX_IDX] = {30, 0, 0, 0, 34, 0, 36, 0, 0, 39};
 uint32_t l0dptsz_value[DPT_L0SZ_MAX_IDX] = {1, 0, 0, 0, 16, 0, 64, 0, 0, 512};
 uint32_t dpt_dptgs[DPT_GS_MAX_IDX] = {0x1000, 0x10000, 0x4000, 0};
 uint32_t dptgs_value[DPT_GS_MAX_IDX] = {4/1000000, 64/1000000, 16/1000000, 0};
-uint32_t dpt_dptps[DPT_PS_MAX_IDX] = {32, 36, 40, 42, 44, 58, 52, 0};
+uint32_t dpt_dptps[DPT_PS_MAX_IDX] = {32, 36, 40, 42, 44, 48, 52, 0};
 uint32_t dptps_value[DPT_PS_MAX_IDX] = {4, 64, 1000, 4000, 16000, 256000, 4000000};
 
 #define MAX_LOG2_CMD_QUEUE_SIZE 8U
@@ -351,7 +351,12 @@ static int smmu_tlbi_prefetch_cfg(smmu_dev_t *smmu)
 
 int smmu_dpti_all(smmu_dev_t *smmu)
 {
-    return smmu_cmdq_issue_cmd(smmu, 0x70);
+    if (smmu_cmdq_issue_cmd(smmu, CMDQ_OP_DPTI_ALL))
+        return -1;
+    if (smmu_cmdq_issue_cmd(smmu, CMDQ_OP_CMD_SYNC))
+        return -1;
+
+    return smmu_cmdq_poll_until_consumed(smmu);
 }
 
 static int smmu_tlbi_cfgi(smmu_dev_t *smmu)
@@ -1611,21 +1616,21 @@ val_el3_smmu_get_dpt_base(smmu_dev_t *smmu)
   return dpt_base << 12;
 }
 
-void
+uint32_t
 val_el3_dpt_invalidate_all(uint64_t smmu_index)
 {
   smmu_dev_t *smmu;
 
   if ((g_smmu == NULL) || (smmu_index >= g_num_smmus))
-      return;
+      return 1;
 
   smmu = &g_smmu[smmu_index];
   if ((smmu->base == 0) || !smmu->supported.dpt) {
       WARN("\n SMMU Base: %lx DPT invalidate skipped, DPT unsupported", smmu->base);
-      return;
+      return 1;
   }
 
-  smmu_dpti_all(smmu);
+  return smmu_dpti_all(smmu) ? 1 : 0;
 }
 
 uint32_t
@@ -1661,12 +1666,18 @@ val_el3_dpt_add_entry(uint64_t translated_addr, uint64_t smmu_info)
   INFO("l0dptsz: %lx\n", l0dptsz);
   INFO("dptgs: %lx\n", dptgs);
 
+  if (!dptps || (translated_addr >> dptps))
+  {
+      ERROR("\n DPT address exceeds configured coverage");
+      return 1;
+  }
+
   l0_index = VAL_EXTRACT_BITS(translated_addr, l0dptsz, (dptps - 1));
   offset = l0_index * 8;
   val_el3_dpt_decode_dpt_cfg(&dptps_decode, &l0dptsz_decode, &dptgs_decode, smmu);
-  num_entry = dptps_decode/l0dptsz_decode;
+  num_entry = 1U << (dptps - l0dptsz);
 
-  if (l0_index > num_entry)
+  if (l0_index >= num_entry)
   {
       ERROR("\n     L0 Index is greater than num of entries");
       return 1;
@@ -1717,15 +1728,37 @@ val_el3_dpt_add_entry(uint64_t translated_addr, uint64_t smmu_info)
 uint32_t
 val_el3_smmu_dpt_init(smmu_dev_t *smmu)
 {
-  uint64_t dpt_base;
-  uint32_t ret;
+  uint64_t dpt_base, table_size;
+  uint32_t ret, dptps, l0dptsz, l0_encoding;
 
-  dpt_base = (uint64_t)val_el3_memory_calloc(1, SIZE_4KB, SIZE_4KB);
+  dptps = BITFIELD_GET(IDR5_OAS,
+                       val_el3_mmio_read(smmu->base + SMMU_IDR5_OFFSET));
+  if (dptps >= SMMU_OAS_MAX_IDX)
+      return 1;
+
+  /* Keep the L0 table within 4KB where possible; 52-bit coverage needs 64KB. */
+  if (smmu_oas[dptps] <= 39)
+      l0_encoding = 0;  /* 1GB blocks */
+  else if (smmu_oas[dptps] <= 43)
+      l0_encoding = 4;  /* 16GB blocks */
+  else if (smmu_oas[dptps] <= 45)
+      l0_encoding = 6;  /* 64GB blocks */
+  else
+      l0_encoding = 9;  /* 512GB blocks */
+
+  l0dptsz = dpt_l0dptsz[l0_encoding];
+  table_size = (1ULL << (smmu_oas[dptps] - l0dptsz)) * sizeof(uint64_t);
+  if (table_size < SIZE_4KB)
+      table_size = SIZE_4KB;
+  dpt_base = (uint64_t)val_el3_memory_calloc(1, table_size, table_size);
+  if (!dpt_base)
+      return 1;
   ret = val_el3_disable_dpt_walk(smmu);
   if (ret)
     return ret;
 
-  val_el3_mmio_write(smmu->base + SMMU_R_PAGE0_REG(smmu, SMMU_R_DPT_BASE_CFG), 0);
+  val_el3_mmio_write(smmu->base + SMMU_R_PAGE0_REG(smmu, SMMU_R_DPT_BASE_CFG),
+                     dptps | (l0_encoding << 20));
   ret = val_el3_smmu_program_dpt_base(smmu, dpt_base >> 12);
   if (ret)
     return ret;
@@ -2072,7 +2105,15 @@ void val_el3_smmu_root_config_service(uint64_t arg0, uint64_t arg1, uint64_t arg
           break;
       case SMMU_RLM_DPTI:
           INFO("SMMU DPT Invalidate\n");
-          val_el3_dpt_invalidate_all(arg1);
+          if (val_el3_dpt_invalidate_all(arg1)) {
+              shared_data->status_code = 1;
+              shared_data->error_code = arg1;
+              const char *msg = "EL3: SMMU DPT invalidation failed";
+              int i = 0; while (msg[i] && i < sizeof(shared_data->error_msg) - 1) {
+                  shared_data->error_msg[i] = msg[i]; i++;
+              }
+              shared_data->error_msg[i] = '\0';
+          }
           break;
       case SMMU_CHECK_MEC_IMPL:
           smmu = NULL;

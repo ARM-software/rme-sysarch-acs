@@ -41,9 +41,6 @@
 #define MECID2 0x2u
 #define TEST_DATA_PATTERN 0xA5A5A5A5U
 
-#define PCIE_LNKCAP_OFFSET 0x0Cu
-#define PCIE_LNKCAP_PN_SHIFT 24u
-#define PCIE_LNKCAP_PN_MASK 0xFFu
 #define RMECDA_CTL1_TDISP_EN_MASK 0x1u
 #define RMECDA_CTL1_LINK_STR_LOCK_MASK (1u << 1)
 
@@ -52,13 +49,8 @@ typedef struct {
   uint32_t endpoint_index;
   uint64_t window_base;
   uint64_t window_size;
-  uint64_t host_decoder_base_orig;
-  uint64_t host_decoder_size_orig;
-  uint64_t endpoint_decoder_base_orig;
-  uint64_t endpoint_decoder_size_orig;
-  uint32_t host_target_low_orig;
-  uint32_t host_target_high_orig;
-  uint32_t host_target_valid;
+  CXL_DECODER_STATE host_decoder;
+  CXL_DECODER_STATE endpoint_decoder;
 } CONTEXT;
 
 static uint32_t
@@ -156,195 +148,22 @@ map_window_alias(uint64_t phys,
   return ACS_STATUS_PASS;
 }
 
-static void
-clear_decoder(uint64_t comp_base,
-              uint32_t decoder_index,
-              uint32_t clear_targets)
+static uint32_t
+restore_decoders(CONTEXT *context)
 {
-  uint64_t cap_base;
-  uint64_t base_low_addr;
-  uint64_t base_high_addr;
-  uint64_t size_low_addr;
-  uint64_t size_high_addr;
-  uint64_t ctrl_addr;
-  uint64_t target_low_addr;
-  uint64_t target_high_addr;
-  uint32_t ctrl;
-  uint32_t attempt;
-
-  /* Exit early if the component base is invalid. */
-  if (comp_base == 0u)
-    return;
-
-  if (val_cxl_find_capability(comp_base, CXL_CAPID_HDM_DECODER, &cap_base)
-      != ACS_STATUS_PASS)
-    return;
-
-  base_low_addr = cap_base + CXL_HDM_DECODER_BASE_LOW(decoder_index);
-  base_high_addr = cap_base + CXL_HDM_DECODER_BASE_HIGH(decoder_index);
-  size_low_addr = cap_base + CXL_HDM_DECODER_SIZE_LOW(decoder_index);
-  size_high_addr = cap_base + CXL_HDM_DECODER_SIZE_HIGH(decoder_index);
-  ctrl_addr = cap_base + CXL_HDM_DECODER_CTRL(decoder_index);
-  target_low_addr = cap_base + CXL_HDM_DECODER_TARGET_LOW(decoder_index);
-  target_high_addr = cap_base + CXL_HDM_DECODER_TARGET_HIGH(decoder_index);
-
-  /* Clear COMMIT to release the decoder if it is still active. */
-  ctrl = val_mmio_read(ctrl_addr);
-  val_mmio_write(ctrl_addr, ctrl & ~CXL_HDM_COMMIT_BIT);
-  for (attempt = 0; attempt < CXL_HDM_COMMIT_TIMEOUT_MS; ++attempt)
-  {
-    uint32_t status = val_mmio_read(ctrl_addr);
-    if ((status & CXL_HDM_COMMITTED_BIT) == 0u)
-      break;
-    (void)val_time_delay_ms(1);
-  }
-
-  /* Clear the programmed base/size to avoid stale ranges. */
-  val_mmio_write(base_low_addr, 0u);
-  val_mmio_write(base_high_addr, 0u);
-  val_mmio_write(size_low_addr, 0u);
-  val_mmio_write(size_high_addr, 0u);
-
-  /* Clear the target list when requested. */
-  if (clear_targets != 0u)
-  {
-    val_mmio_write(target_low_addr, 0u);
-    val_mmio_write(target_high_addr, 0u);
-  }
-}
-
-static void
-restore_host_target_list(const CONTEXT *context)
-{
-  uint64_t comp_base;
-  uint64_t cap_base;
-
-  /* Exit early if there is no saved target list. */
-  if ((context == NULL) || (context->host_target_valid == 0u))
-    return;
-
-  comp_base = val_cxl_get_info(CXL_INFO_COMPONENT_BASE, context->host_index);
-  if (comp_base == 0u)
-    return;
-
-  if (val_cxl_find_capability(comp_base, CXL_CAPID_HDM_DECODER, &cap_base)
-      != ACS_STATUS_PASS)
-    return;
-
-  /* Restore the host target list programmed before the test. */
-  val_mmio_write(cap_base + CXL_HDM_DECODER_TARGET_LOW(DECODER_SLOT),
-                 context->host_target_low_orig);
-  val_mmio_write(cap_base + CXL_HDM_DECODER_TARGET_HIGH(DECODER_SLOT),
-                 context->host_target_high_orig);
-}
-
-static void
-restore_decoders(const CONTEXT *context)
-{
-  CXL_COMPONENT_TABLE *table;
-  uint64_t comp_base;
-
-  /* Exit early if there is no saved decoder context. */
-  if (context == NULL)
-    return;
-
-  /* Restore host decoder settings if they were captured. */
-  if (context->host_index != CXL_COMPONENT_INVALID_INDEX)
-  {
-    if (context->host_decoder_size_orig != 0u)
-    {
-      (void)val_cxl_program_host_decoder(context->host_index,
-                                         DECODER_SLOT,
-                                         context->host_decoder_base_orig,
-                                         context->host_decoder_size_orig);
-      restore_host_target_list(context);
-    }
-    else
-    {
-      comp_base = val_cxl_get_info(CXL_INFO_COMPONENT_BASE, context->host_index);
-      clear_decoder(comp_base, DECODER_SLOT, 1u);
-    }
-  }
-
-  /* Restore endpoint decoder settings if they were captured. */
-  if (context->endpoint_index != CXL_COMPONENT_INVALID_INDEX)
-  {
-    if (context->endpoint_decoder_size_orig != 0u)
-    {
-      (void)val_cxl_program_component_decoder(context->endpoint_index,
-                                              DECODER_SLOT,
-                                              context->endpoint_decoder_base_orig,
-                                              context->endpoint_decoder_size_orig);
-    }
-    else
-    {
-      table = val_cxl_component_table_ptr();
-      comp_base = 0u;
-      if ((table != NULL) && (context->endpoint_index < table->num_entries))
-        comp_base = table->component[context->endpoint_index].component_reg_base;
-      clear_decoder(comp_base, DECODER_SLOT, 0u);
-    }
-  }
+  /* Restore both complete snapshots, including initially inactive decoders. */
+  return val_cxl_restore_decoders(&context->host_decoder, &context->endpoint_decoder);
 }
 
 static uint32_t
-program_host_target_list(uint32_t bdf,
-                 uint64_t comp_base,
-                 uint32_t decoder_index,
-                 CONTEXT *context)
+prepare_decoders(uint32_t bdf, CONTEXT *context)
 {
-  uint32_t pcie_cap_offset;
-  uint32_t lnkcap;
-  uint32_t port_id;
-  uint64_t hdm_cap_base;
-  uint32_t target_low;
-  uint32_t target_high;
-
   if (context == NULL)
     return ACS_STATUS_ERR;
 
-  /* Read the root port number from PCIe LNKCAP.PN. */
-  if (val_pcie_find_capability(bdf, PCIE_CAP, CID_PCIECS, &pcie_cap_offset) != 0u)
-  {
-    val_print(ACS_PRINT_ERR, " RLQMCY: PCIe cap not found", 0);
-    return ACS_STATUS_ERR;
-  }
-
-  if (val_pcie_read_cfg(bdf, pcie_cap_offset + PCIE_LNKCAP_OFFSET, &lnkcap) != 0u)
-  {
-    val_print(ACS_PRINT_ERR, " RLQMCY: LNKCAP read failed", 0);
-    return ACS_STATUS_ERR;
-  }
-
-  port_id = (lnkcap >> PCIE_LNKCAP_PN_SHIFT) & PCIE_LNKCAP_PN_MASK;
-  val_print(ACS_PRINT_DEBUG, " RLQMCY: LNKCAP 0x%x\n", lnkcap);
-  val_print(ACS_PRINT_DEBUG, " RLQMCY: Root port ID %u\n", port_id);
-
-  /* Program the target list for the host decoder. */
-  if (val_cxl_find_capability(comp_base, CXL_CAPID_HDM_DECODER, &hdm_cap_base)
-      != ACS_STATUS_PASS)
-  {
-    val_print(ACS_PRINT_ERR, " RLQMCY: Host HDM cap missing", 0);
-    return ACS_STATUS_ERR;
-  }
-
-  /* Capture the original target list for restore. */
-  target_low = val_mmio_read(hdm_cap_base +
-                             CXL_HDM_DECODER_TARGET_LOW(decoder_index));
-  target_high = val_mmio_read(hdm_cap_base +
-                              CXL_HDM_DECODER_TARGET_HIGH(decoder_index));
-  context->host_target_low_orig = target_low;
-  context->host_target_high_orig = target_high;
-  context->host_target_valid = 1u;
-
-  /* Program the target list for the selected root port. */
-  val_mmio_write(hdm_cap_base + CXL_HDM_DECODER_TARGET_LOW(decoder_index),
-                 port_id);
-  val_mmio_write(hdm_cap_base + CXL_HDM_DECODER_TARGET_HIGH(decoder_index),
-                 0u);
-  val_print(ACS_PRINT_DEBUG, " RLQMCY: Target list programmed\n", 0);
-
-  return ACS_STATUS_PASS;
+  return val_cxl_prepare_decoders(context->host_index, context->endpoint_index,
+                                  DECODER_SLOT, bdf, &context->host_decoder,
+                                  &context->endpoint_decoder);
 }
 
 static uint32_t
@@ -372,7 +191,6 @@ setup_decoders(const CXL_COMPONENT_ENTRY *root,
   val_memory_set(context, sizeof(*context), 0);
   context->host_index = CXL_COMPONENT_INVALID_INDEX;
   context->endpoint_index = CXL_COMPONENT_INVALID_INDEX;
-  context->host_target_valid = 0u;
 
   /* Resolve the host bridge index for programming decoders. */
   host_index = root->host_bridge_index;
@@ -424,57 +242,34 @@ setup_decoders(const CXL_COMPONENT_ENTRY *root,
   context->endpoint_index = endpoint_index;
 
   /* Program the host target list to route to the downstream port. */
-  status = program_host_target_list(root->bdf,
-                                    host_comp_base,
-                                    DECODER_SLOT,
-                                    context);
+  status = prepare_decoders(root->bdf, context);
   if (status != ACS_STATUS_PASS)
   {
     val_print(ACS_PRINT_ERR, " RLQMCY: Target list programming failed", 0);
     return status;
   }
 
-  /* Save the original host decoder settings for restore. */
-  if (val_cxl_get_decoder(context->host_index,
-                          DECODER_SLOT,
-                          &context->host_decoder_base_orig,
-                          &context->host_decoder_size_orig) != 0u)
-  {
-    context->host_decoder_base_orig = 0u;
-    context->host_decoder_size_orig = 0u;
-  }
-
-  /* Save the original endpoint decoder settings for restore. */
-  if (val_cxl_get_component_decoder(context->endpoint_index,
-                                    DECODER_SLOT,
-                                    &context->endpoint_decoder_base_orig,
-                                    &context->endpoint_decoder_size_orig) != 0u)
-  {
-    context->endpoint_decoder_base_orig = 0u;
-    context->endpoint_decoder_size_orig = 0u;
-  }
-
   /* Program the host decoder to target the selected window. */
-  status = val_cxl_program_host_decoder(context->host_index,
-                                        DECODER_SLOT,
-                                        context->window_base,
-                                        context->window_size);
+  status = val_cxl_program_saved_decoder(&context->host_decoder,
+                                         context->window_base,
+                                         context->window_size);
   if (status != ACS_STATUS_PASS)
   {
     val_print(ACS_PRINT_ERR, " RLQMCY: Host decoder program failed\n", 0);
-    restore_decoders(context);
+    if (restore_decoders(context) != ACS_STATUS_PASS)
+      return ACS_STATUS_FAIL;
     return status;
   }
 
   /* Program the endpoint decoder to match the host window. */
-  status = val_cxl_program_component_decoder(context->endpoint_index,
-                                             DECODER_SLOT,
-                                             context->window_base,
-                                             context->window_size);
+  status = val_cxl_program_saved_decoder(&context->endpoint_decoder,
+                                         context->window_base,
+                                         context->window_size);
   if (status != ACS_STATUS_PASS)
   {
     val_print(ACS_PRINT_ERR, " RLQMCY: Endpoint decoder program failed\n", 0);
-    restore_decoders(context);
+    if (restore_decoders(context) != ACS_STATUS_PASS)
+      return ACS_STATUS_FAIL;
     return status;
   }
 
@@ -844,9 +639,18 @@ payload(void)
 
       /* Restore the original control even if programming or readback fails. */
       ctl1_valid = 1u;
-      ctl1_programmed = ctl1_original |
-                        RMECDA_CTL1_TDISP_EN_MASK |
-                        RMECDA_CTL1_LINK_STR_LOCK_MASK;
+      if (val_pcie_enable_tdisp(root->bdf) ||
+          read_from_root(cfg_va + rmecda_cap_base + RMECDA_CTL1_OFFSET,
+                         &ctl1_programmed) != ACS_STATUS_PASS)
+      {
+        val_print(ACS_PRINT_ERR,
+                  " RLQMCY: TDISP setup failed for BDF 0x%x",
+                  (uint64_t)root->bdf);
+        failures++;
+        goto device_cleanup;
+      }
+
+      ctl1_programmed |= RMECDA_CTL1_LINK_STR_LOCK_MASK;
       if (write_from_root(cfg_va + rmecda_cap_base + RMECDA_CTL1_OFFSET,
                           ctl1_programmed) != ACS_STATUS_PASS)
       {
@@ -918,14 +722,35 @@ payload(void)
     val_print(ACS_PRINT_DEBUG, " RLQMCY: Endpoint evaluated\n", 0);
 
 device_cleanup:
-    if (decoders_programmed != 0u)
-      restore_decoders(&context);
-
+    /* Release the link lock before restoring protected decoder registers. */
     if (ctl1_valid != 0u)
     {
-      (void)write_from_root(cfg_va + rmecda_cap_base + RMECDA_CTL1_OFFSET,
-                            ctl1_original);
+      uint32_t ctl1_current;
+      uint32_t restore_status;
+
+      /* Restore other fields without changing TDISP outside the common helpers. */
+      if (read_from_root(cfg_va + rmecda_cap_base + RMECDA_CTL1_OFFSET,
+                         &ctl1_current) != ACS_STATUS_PASS ||
+          write_from_root(cfg_va + rmecda_cap_base + RMECDA_CTL1_OFFSET,
+                           (ctl1_original & ~RMECDA_CTL1_TDISP_EN_MASK) |
+                           (ctl1_current & RMECDA_CTL1_TDISP_EN_MASK)) != ACS_STATUS_PASS)
+      {
+        val_print(ACS_PRINT_ERR, " RLQMCY: RMECDA_CTL1 restore failed", 0);
+        failures++;
+      }
+
+      restore_status = (ctl1_original & RMECDA_CTL1_TDISP_EN_MASK) ?
+                       val_pcie_enable_tdisp(root->bdf) : val_pcie_disable_tdisp(root->bdf);
+      if (restore_status)
+      {
+        val_print(ACS_PRINT_ERR, " RLQMCY: TDISP restore failed", 0);
+        failures++;
+      }
     }
+
+    if ((decoders_programmed != 0u) && (restore_decoders(&context) != ACS_STATUS_PASS))
+      failures++;
+
     /* Close the SPDM session if one was opened. */
     if (session_active != 0u)
     {

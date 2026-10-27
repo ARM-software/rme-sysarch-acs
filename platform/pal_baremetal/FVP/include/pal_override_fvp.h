@@ -448,12 +448,16 @@
 #define RID_NOT_VALID  0
 #define ATS_TRIGGER    1
 #define ATS_INV        (1 << 5)
+#define ATS_IN_FLIGHT  (1ul << 6)
 #define ATS_STATUS     (1ul << 7)
 #define ATS_REQUEST_ATTR_T       (1u << 0)
 #define ATS_REQUEST_ATTR_XT      (1u << 1)
 #define ATS_REQUEST_T_MASK       (1u << 10)
 #define ATS_REQUEST_XT_MASK      (1u << 11)
 #define ATS_REQUEST_ATTR_REG_MASK (ATS_REQUEST_T_MASK | ATS_REQUEST_XT_MASK)
+#ifndef EXERCISER_ATS_POLL_LIMIT
+#define EXERCISER_ATS_POLL_LIMIT PLATFORM_OVERRIDE_TIMEOUT_LARGE
+#endif
 #define TXN_INVALID    0xFFFFFFFF
 #define TXN_START      1
 #define TXN_STOP       0
@@ -473,15 +477,15 @@
 #define IS_COHERENT_DA_SUPPORTED 0x1
 
 /* CXL host bridge and CFMWS platform override configuration. */
-#define PLATFORM_OVERRIDE_CXL_HOST_BRIDGE_COUNT      0x0
+#define PLATFORM_OVERRIDE_CXL_HOST_BRIDGE_COUNT      0x1
 #define PLATFORM_OVERRIDE_CXL_MAX_CFMWS_WINDOWS      0x2
 #define PLATFORM_OVERRIDE_CXL_MAX_ROOT_PORTS         0x4
 
 #define PLATFORM_OVERRIDE_CXL_HB0_UID                0x0
-#define PLATFORM_OVERRIDE_CXL_HB0_COMPONENT_BASE     0x66E000000ULL
+#define PLATFORM_OVERRIDE_CXL_HB0_COMPONENT_BASE     0x2B600000ULL
 #define PLATFORM_OVERRIDE_CXL_HB0_COMPONENT_LENGTH   0x10000ULL
 #define PLATFORM_OVERRIDE_CXL_HB0_CFMWS_COUNT        0x1
-#define PLATFORM_OVERRIDE_CXL_HB0_CFMWS0_BASE        0x8C0000000ULL
+#define PLATFORM_OVERRIDE_CXL_HB0_CFMWS0_BASE        0x1000000000ULL
 #define PLATFORM_OVERRIDE_CXL_HB0_CFMWS0_LENGTH      0x20000000ULL
 #define PLATFORM_OVERRIDE_CXL_HB0_CFMWS1_BASE        0x0ULL
 #define PLATFORM_OVERRIDE_CXL_HB0_CFMWS1_LENGTH      0x0ULL
@@ -599,8 +603,9 @@
 
 #define REGISTER_INFO_TABLE_ENTRIES(_)
 
-#define EXPAND_REGISTER_INFO(reg_type, reg_bdf, reg_addr, reg_prop) \
-    { .type = reg_type, .bdf = reg_bdf, .address = reg_addr, .property = reg_prop },
+#define EXPAND_REGISTER_INFO(reg_type, reg_bdf, reg_addr, reg_prop, reg_mask, valid_addr) \
+    { .type = reg_type, .bdf = reg_bdf, .address = reg_addr, .property = reg_prop, \
+      .write_mask = reg_mask, .valid_address = valid_addr },
 
 /* Defines related to System memory */
 #define PLAT_MTE_PROTECTED_REGION_BASE      0xFFC00000ULL

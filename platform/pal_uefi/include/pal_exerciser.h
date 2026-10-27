@@ -144,12 +144,16 @@
 #define RID_NOT_VALID  0
 #define ATS_TRIGGER    1
 #define ATS_INV        (1 << 5)
+#define ATS_IN_FLIGHT  (1ul << 6)
 #define ATS_STATUS     (1ul << 7)
 #define ATS_REQUEST_ATTR_T       (1u << 0)
 #define ATS_REQUEST_ATTR_XT      (1u << 1)
 #define ATS_REQUEST_T_MASK       (1u << 10)
 #define ATS_REQUEST_XT_MASK      (1u << 11)
 #define ATS_REQUEST_ATTR_REG_MASK (ATS_REQUEST_T_MASK | ATS_REQUEST_XT_MASK)
+#ifndef EXERCISER_ATS_POLL_LIMIT
+#define EXERCISER_ATS_POLL_LIMIT PLATFORM_OVERRIDE_TIMEOUT_LARGE
+#endif
 #define TXN_INVALID    0xFFFFFFFF
 #define TXN_START      1
 #define TXN_STOP       0

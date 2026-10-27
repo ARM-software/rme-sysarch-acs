@@ -170,6 +170,33 @@ uint32_t val_cxl_get_cfmws(uint32_t index,
                            uint32_t window_index,
                            uint64_t *base,
                            uint64_t *length);
+
+/* Complete decoder configuration, including target list or endpoint DPA skip. */
+#define CXL_HDM_DECODER_STATE_WORDS 7u
+typedef struct {
+  uint64_t cap_base;
+  uint32_t decoder_index;
+  uint32_t reg[CXL_HDM_DECODER_STATE_WORDS];
+  uint32_t valid;
+  uint32_t changed;
+} CXL_DECODER_STATE;
+
+/*
+ * Use zero-initialized snapshots and restore them before reusing them.
+ * The caller owns the window and must stop DMA before borrowing its decoders.
+ * Locked, unsettled or errored decoders are skipped without modifying hardware.
+ */
+uint32_t val_cxl_save_decoder(uint64_t component_base, uint32_t decoder_index,
+                               CXL_DECODER_STATE *saved);
+uint32_t val_cxl_disable_decoder(CXL_DECODER_STATE *saved);
+uint32_t val_cxl_restore_decoder(CXL_DECODER_STATE *saved);
+uint32_t val_cxl_prepare_decoders(uint32_t host_index, uint32_t endpoint_index,
+                                   uint32_t decoder_index, uint32_t root_bdf,
+                                   CXL_DECODER_STATE *host, CXL_DECODER_STATE *endpoint);
+uint32_t val_cxl_program_saved_decoder(CXL_DECODER_STATE *saved, uint64_t base,
+                                       uint64_t size);
+uint32_t val_cxl_restore_decoders(CXL_DECODER_STATE *host, CXL_DECODER_STATE *endpoint);
+
 uint32_t val_cxl_program_host_decoder(uint32_t host_index,
                                       uint32_t decoder_index,
                                       uint64_t base,
@@ -257,7 +284,7 @@ uint32_t cxl_rphcgc_rmsd_full_protect_entry(uint32_t num_pe);
 uint32_t cxl_rphwmm_rme_cda_tsp_entry(uint32_t num_pe);
 uint32_t cxl_rjxpzp_pas_ckid_mapping_entry(uint32_t num_pe);
 uint32_t cxl_rhmxtf_host_hdm_decoder_entry(uint32_t num_pe);
-uint32_t cxl_rdhwnr_link_stream_lock_entry(uint32_t num_pe);
+uint32_t cxl_rdhnwr_link_stream_lock_entry(uint32_t num_pe);
 uint32_t cxl_rwyvcq_link_unlock_reject_entry(uint32_t num_pe);
 uint32_t cxl_rxqhng_rid_range_reject_entry(uint32_t num_pe);
 uint32_t cxl_rkjypb_cache_disable_entry(uint32_t num_pe);
@@ -273,11 +300,13 @@ uint32_t cxl_rfdvzc_tdisp_disable_entry(uint32_t num_pe);
 uint32_t cxl_rbytyv_root_port_pas_behavior_entry(uint32_t num_pe);
 uint32_t cxl_rnycll_tdisp_disable_reject_entry(uint32_t num_pe);
 uint32_t cxl_rgtvgz_tdisp_enable_link_gate_entry(uint32_t num_pe);
-uint32_t val_cxl_root_port_ide_program_and_enable(uint32_t rp_bdf,
-                                                  uint8_t stream_id,
-                                                  uint8_t key_slot,
-                                                  const CXL_IDE_KEY_BUFFER *rx_key,
-                                                  const CXL_IDE_KEY_BUFFER *tx_key);
+/* CXL.cachemem operations address a paired RX/TX bank, relative to the RP. */
+uint32_t val_cxl_rp_ide_key_program(uint32_t rp_bdf, const CXL_IDE_SELECTOR *selector,
+                                     const CXL_IDE_KEY_BUFFER *rx_key,
+                                     const CXL_IDE_KEY_BUFFER *tx_key);
+uint32_t val_cxl_rp_ide_key_go(uint32_t rp_bdf, const CXL_IDE_SELECTOR *selector,
+                        uint8_t mode);
+uint32_t val_cxl_rp_ide_key_stop(uint32_t rp_bdf, const CXL_IDE_SELECTOR *selector);
 uint32_t val_cxl_ide_disable_link(uint32_t root_index,
                                   uint32_t endpoint_index,
                                   val_spdm_context_t *context,

@@ -97,13 +97,8 @@ typedef struct {
   uint32_t endpoint_index;
   uint64_t window_base;
   uint64_t window_size;
-  uint64_t host_decoder_base_orig;
-  uint64_t host_decoder_size_orig;
-  uint64_t endpoint_decoder_base_orig;
-  uint64_t endpoint_decoder_size_orig;
-  uint32_t host_target_low_orig;
-  uint32_t host_target_high_orig;
-  uint32_t host_target_valid;
+  CXL_DECODER_STATE host_decoder;
+  CXL_DECODER_STATE endpoint_decoder;
 } CONTEXT;
 
 static uint32_t
@@ -170,95 +165,40 @@ write_from_root(uint64_t address, uint32_t value)
   return ACS_STATUS_PASS;
 }
 
-static void
-restore_decoders(const CONTEXT *context)
+static uint32_t
+restore_decoders(CONTEXT *context)
 {
-  /* Restore HDM decoder programming to the original state. */
-  uint64_t host_comp_base;
-  uint64_t hdm_cap_base;
-
-  if (context == NULL)
-    return;
-
-  if ((context->host_index != CXL_COMPONENT_INVALID_INDEX) &&
-      (context->host_target_valid != 0u))
-  {
-    host_comp_base = val_cxl_get_info(CXL_INFO_COMPONENT_BASE, context->host_index);
-    if ((host_comp_base != 0u) &&
-        (val_cxl_find_capability(host_comp_base, CXL_CAPID_HDM_DECODER, &hdm_cap_base) ==
-         ACS_STATUS_PASS))
-    {
-      val_mmio_write(hdm_cap_base + CXL_HDM_DECODER_TARGET_LOW(DECODER_SLOT),
-                     context->host_target_low_orig);
-      val_mmio_write(hdm_cap_base + CXL_HDM_DECODER_TARGET_HIGH(DECODER_SLOT),
-                     context->host_target_high_orig);
-    }
-  }
-
-  if ((context->host_index != CXL_COMPONENT_INVALID_INDEX) &&
-      (context->host_decoder_size_orig != 0u))
-    (void)val_cxl_program_host_decoder(context->host_index,
-                                       DECODER_SLOT,
-                                       context->host_decoder_base_orig,
-                                       context->host_decoder_size_orig);
-
-  if ((context->endpoint_index != CXL_COMPONENT_INVALID_INDEX) &&
-      (context->endpoint_decoder_size_orig != 0u))
-    (void)val_cxl_program_component_decoder(context->endpoint_index,
-                                            DECODER_SLOT,
-                                            context->endpoint_decoder_base_orig,
-                                            context->endpoint_decoder_size_orig);
+  /* Restore both complete snapshots, including initially inactive decoders. */
+  return val_cxl_restore_decoders(&context->host_decoder, &context->endpoint_decoder);
 }
 
 static uint32_t
-program_host_target_list(uint32_t bdf,
-                         uint64_t comp_base,
-                         uint32_t decoder_index,
-                         CONTEXT *context)
+prepare_decoders(uint32_t bdf, CONTEXT *context)
 {
-  uint32_t port_id;
-  uint64_t hdm_cap_base;
-  uint32_t target_low;
-  uint32_t target_high;
-
   if (context == NULL)
     return ACS_STATUS_ERR;
 
-  if (val_pcie_get_root_port_id(bdf, &port_id) != PCIE_SUCCESS)
-    return ACS_STATUS_ERR;
-
-  if (val_cxl_find_capability(comp_base, CXL_CAPID_HDM_DECODER, &hdm_cap_base)
-      != ACS_STATUS_PASS)
-    return ACS_STATUS_ERR;
-
-  target_low = val_mmio_read(hdm_cap_base +
-                             CXL_HDM_DECODER_TARGET_LOW(decoder_index));
-  target_high = val_mmio_read(hdm_cap_base +
-                              CXL_HDM_DECODER_TARGET_HIGH(decoder_index));
-  context->host_target_low_orig = target_low;
-  context->host_target_high_orig = target_high;
-  context->host_target_valid = 1u;
-
-  val_mmio_write(hdm_cap_base + CXL_HDM_DECODER_TARGET_LOW(decoder_index),
-                 port_id);
-  val_mmio_write(hdm_cap_base + CXL_HDM_DECODER_TARGET_HIGH(decoder_index),
-                 0u);
-
-  return ACS_STATUS_PASS;
+  return val_cxl_prepare_decoders(context->host_index, context->endpoint_index,
+                                  DECODER_SLOT, bdf, &context->host_decoder,
+                                  &context->endpoint_decoder);
 }
 
 static uint32_t
 program_rmecda_ctl1(uint32_t root_bdf,
                     uint64_t cfg_va,
                     uint32_t rmecda_cap_base,
-                    uint32_t original_ctl1,
                     uint16_t first_tee_ckid)
 {
   /* Update FIRST_TEE_CKID for the current test vector. */
-  uint32_t ctl1_value = original_ctl1;
+  uint32_t ctl1_value;
   uint32_t ctl1_readback = 0u;
 
-  ctl1_value |= RMECDA_CTL1_TDISP_EN_MASK | RMECDA_CTL1_LINK_STR_LOCK_MASK;
+  if (val_pcie_enable_tdisp(root_bdf) ||
+      read_from_root(cfg_va + rmecda_cap_base + RMECDA_CTL1_OFFSET,
+                     &ctl1_value) != ACS_STATUS_PASS)
+    return ACS_STATUS_ERR;
+
+  ctl1_value |= RMECDA_CTL1_LINK_STR_LOCK_MASK;
   ctl1_value &= ~RMECDA_CTL1_FIRST_TEE_CKID_MASK;
   ctl1_value |= ((uint32_t)first_tee_ckid << RMECDA_CTL1_FIRST_TEE_CKID_SHIFT)
                 & RMECDA_CTL1_FIRST_TEE_CKID_MASK;
@@ -276,6 +216,15 @@ program_rmecda_ctl1(uint32_t root_bdf,
   {
     val_print(ACS_PRINT_ERR,
               " RJXPZP: RMECDA_CTL1 lock/tdisp not set for RP 0x%x",
+              root_bdf);
+    return ACS_STATUS_FAIL;
+  }
+
+  if ((ctl1_readback & RMECDA_CTL1_FIRST_TEE_CKID_MASK) !=
+      ((uint32_t)first_tee_ckid << RMECDA_CTL1_FIRST_TEE_CKID_SHIFT))
+  {
+    val_print(ACS_PRINT_ERR,
+              " RJXPZP: FIRST_TEE_CKID readback mismatch for RP 0x%x",
               root_bdf);
     return ACS_STATUS_FAIL;
   }
@@ -547,6 +496,7 @@ exercise_root_port(const CXL_COMPONENT_TABLE *table,
   val_spdm_context_t ctx;
   uint32_t session_id = 0u;
   uint32_t session_active = 0u;
+  uint32_t ide_active = 0u;
   uint32_t mec_enabled = 0u;
   uint32_t tsp_locked = 0u;
   PCIE_ENDPOINT_CFG endpoint_cfg;
@@ -560,6 +510,8 @@ exercise_root_port(const CXL_COMPONENT_TABLE *table,
   uint64_t cfg_addr;
   uint64_t cfg_va = 0u;
   uint64_t tg;
+  uint64_t original_gpi = 0u;
+  uint32_t gpt_modified = 0u;
   uint32_t attr;
 
   val_memory_set(&context, sizeof(context), 0);
@@ -659,51 +611,31 @@ exercise_root_port(const CXL_COMPONENT_TABLE *table,
     return ACS_STATUS_ERR;
 
   /* Capture and program HDM decoder settings. */
-  if (val_cxl_get_decoder(context.host_index,
-                          DECODER_SLOT,
-                          &context.host_decoder_base_orig,
-                          &context.host_decoder_size_orig) != 0u)
-  {
-    context.host_decoder_base_orig = 0u;
-    context.host_decoder_size_orig = 0u;
-  }
-
-  if (val_cxl_get_component_decoder(context.endpoint_index,
-                                    DECODER_SLOT,
-                                    &context.endpoint_decoder_base_orig,
-                                    &context.endpoint_decoder_size_orig) != 0u)
-  {
-    context.endpoint_decoder_base_orig = 0u;
-    context.endpoint_decoder_size_orig = 0u;
-  }
-
-  status = program_host_target_list(root_bdf,
-                                    host_comp_base,
-                                    DECODER_SLOT,
-                                    &context);
+  status = prepare_decoders(root_bdf, &context);
   if (status != ACS_STATUS_PASS)
   {
-    restore_decoders(&context);
+    if (restore_decoders(&context) != ACS_STATUS_PASS)
+      return ACS_STATUS_FAIL;
     return status;
   }
 
-  status = val_cxl_program_host_decoder(context.host_index,
-                                        DECODER_SLOT,
-                                        context.window_base,
-                                        context.window_size);
+  status = val_cxl_program_saved_decoder(&context.host_decoder,
+                                         context.window_base,
+                                         context.window_size);
   if (status != ACS_STATUS_PASS)
   {
-    restore_decoders(&context);
+    if (restore_decoders(&context) != ACS_STATUS_PASS)
+      return ACS_STATUS_FAIL;
     return (status == ACS_STATUS_SKIP) ? ACS_STATUS_SKIP : ACS_STATUS_FAIL;
   }
 
-  status = val_cxl_program_component_decoder(context.endpoint_index,
-                                             DECODER_SLOT,
-                                             context.window_base,
-                                             context.window_size);
+  status = val_cxl_program_saved_decoder(&context.endpoint_decoder,
+                                         context.window_base,
+                                         context.window_size);
   if (status != ACS_STATUS_PASS)
   {
-    restore_decoders(&context);
+    if (restore_decoders(&context) != ACS_STATUS_PASS)
+      return ACS_STATUS_FAIL;
     return (status == ACS_STATUS_SKIP) ? ACS_STATUS_SKIP : ACS_STATUS_FAIL;
   }
 
@@ -711,7 +643,7 @@ exercise_root_port(const CXL_COMPONENT_TABLE *table,
   if (read_from_root(cfg_va + rmecda_cap_base + RMECDA_CTL1_OFFSET,
                      &rmecda_ctl1_original) != ACS_STATUS_PASS)
   {
-    restore_decoders(&context);
+    (void)restore_decoders(&context);
     return ACS_STATUS_FAIL;
   }
 
@@ -719,12 +651,13 @@ exercise_root_port(const CXL_COMPONENT_TABLE *table,
   status = val_spdm_session_open(endpoint->bdf, &ctx, &session_id);
   if (status == ACS_STATUS_SKIP)
   {
-    restore_decoders(&context);
+    if (restore_decoders(&context) != ACS_STATUS_PASS)
+      return ACS_STATUS_FAIL;
     return ACS_STATUS_SKIP;
   }
   if (status != ACS_STATUS_PASS)
   {
-    restore_decoders(&context);
+    (void)restore_decoders(&context);
     return ACS_STATUS_FAIL;
   }
   session_active = 1u;
@@ -733,7 +666,7 @@ exercise_root_port(const CXL_COMPONENT_TABLE *table,
   status = val_spdm_send_cxl_tsp_get_version(&ctx, session_id);
   if (status != ACS_STATUS_PASS)
   {
-    restore_decoders(&context);
+    (void)restore_decoders(&context);
     (void)val_spdm_session_close(&ctx, session_id);
     return ACS_STATUS_FAIL;
   }
@@ -742,13 +675,13 @@ exercise_root_port(const CXL_COMPONENT_TABLE *table,
   status = val_spdm_send_cxl_tsp_get_capabilities(&ctx, session_id, &capabilities);
   if (status == ACS_STATUS_SKIP)
   {
-    restore_decoders(&context);
+    status = restore_decoders(&context);
     (void)val_spdm_session_close(&ctx, session_id);
-    return ACS_STATUS_SKIP;
+    return (status == ACS_STATUS_PASS) ? ACS_STATUS_SKIP : ACS_STATUS_FAIL;
   }
   if (status != ACS_STATUS_PASS)
   {
-    restore_decoders(&context);
+    (void)restore_decoders(&context);
     (void)val_spdm_session_close(&ctx, session_id);
     return ACS_STATUS_FAIL;
   }
@@ -756,25 +689,25 @@ exercise_root_port(const CXL_COMPONENT_TABLE *table,
   if ((capabilities.memory_encryption_features_supported &
        CXL_TSP_MEMORY_ENCRYPTION_FEATURES_SUPPORT_ENCRYPTION) == 0u)
   {
-    restore_decoders(&context);
+    status = restore_decoders(&context);
     (void)val_spdm_session_close(&ctx, session_id);
-    return ACS_STATUS_SKIP;
+    return (status == ACS_STATUS_PASS) ? ACS_STATUS_SKIP : ACS_STATUS_FAIL;
   }
 
   if ((capabilities.memory_encryption_features_supported &
        CXL_TSP_MEMORY_ENCRYPTION_FEATURES_SUPPORT_CKID_BASED_ENCRYPTION) == 0u)
   {
-    restore_decoders(&context);
+    status = restore_decoders(&context);
     (void)val_spdm_session_close(&ctx, session_id);
-    return ACS_STATUS_SKIP;
+    return (status == ACS_STATUS_PASS) ? ACS_STATUS_SKIP : ACS_STATUS_FAIL;
   }
 
   requested_ckids = capabilities.number_of_ckids;
   if (requested_ckids == 0u)
   {
-    restore_decoders(&context);
+    status = restore_decoders(&context);
     (void)val_spdm_session_close(&ctx, session_id);
-    return ACS_STATUS_SKIP;
+    return (status == ACS_STATUS_PASS) ? ACS_STATUS_SKIP : ACS_STATUS_FAIL;
   }
 
   mecid_width = (uint32_t)VAL_EXTRACT_BITS(val_pe_reg_read(MECIDR_EL2), 0, 3) + 1u;
@@ -790,13 +723,24 @@ exercise_root_port(const CXL_COMPONENT_TABLE *table,
   status = val_cxl_enable_mem(endpoint->bdf);
   if (status != ACS_STATUS_PASS)
   {
-    restore_decoders(&context);
+    if (restore_decoders(&context) != ACS_STATUS_PASS)
+      status = ACS_STATUS_FAIL;
     (void)val_spdm_session_close(&ctx, session_id);
     return status;
   }
 
   feature_enable_mask = (uint16_t)(CXL_TSP_MEMORY_ENCRYPTION_FEATURES_ENABLE_ENCRYPTION |
                                    CXL_TSP_MEMORY_ENCRYPTION_FEATURES_ENABLE_CKID_BASED_ENCRYPTION);
+
+  /* Establish IDE before locking TSP and issuing protected CXL.mem traffic. */
+  status = val_cxl_ide_establish_link(root_index, endpoint_index, &ctx, session_id);
+  if (status != ACS_STATUS_PASS)
+  {
+    restore_decoders(&context);
+    (void)val_spdm_session_close(&ctx, session_id);
+    return (status == ACS_STATUS_SKIP) ? ACS_STATUS_SKIP : ACS_STATUS_FAIL;
+  }
+  ide_active = 1u;
 
   /* Configure and lock TSP with CKID-based encryption enabled. */
   status = val_cxl_tsp_configure_and_lock(root_index,
@@ -807,13 +751,15 @@ exercise_root_port(const CXL_COMPONENT_TABLE *table,
                                           feature_enable_mask);
   if (status == ACS_STATUS_SKIP)
   {
-    restore_decoders(&context);
+    (void)val_cxl_ide_disable_link(root_index, endpoint_index, &ctx, session_id);
+    status = restore_decoders(&context);
     (void)val_spdm_session_close(&ctx, session_id);
-    return ACS_STATUS_SKIP;
+    return (status == ACS_STATUS_PASS) ? ACS_STATUS_SKIP : ACS_STATUS_FAIL;
   }
   if (status != ACS_STATUS_PASS)
   {
-    restore_decoders(&context);
+    (void)val_cxl_ide_disable_link(root_index, endpoint_index, &ctx, session_id);
+    (void)restore_decoders(&context);
     (void)val_spdm_session_close(&ctx, session_id);
     return ACS_STATUS_FAIL;
   }
@@ -823,20 +769,32 @@ exercise_root_port(const CXL_COMPONENT_TABLE *table,
   /* Enable MEC so MECID programming affects CXL.mem transactions. */
   if (val_is_mec_supported() == 0u)
   {
+    (void)val_cxl_ide_disable_link(root_index, endpoint_index, &ctx, session_id);
     (void)val_spdm_session_close(&ctx, session_id);
     (void)val_cxl_unlock_tsp_best_effort(root_bdf, endpoint->bdf, &endpoint_cfg);
-    restore_decoders(&context);
+    if (restore_decoders(&context) != ACS_STATUS_PASS)
+      return ACS_STATUS_FAIL;
     return ACS_STATUS_SKIP;
   }
 
   if (val_rlm_enable_mec())
   {
+    (void)val_cxl_ide_disable_link(root_index, endpoint_index, &ctx, session_id);
     (void)val_spdm_session_close(&ctx, session_id);
     (void)val_cxl_unlock_tsp_best_effort(root_bdf, endpoint->bdf, &endpoint_cfg);
-    restore_decoders(&context);
+    (void)restore_decoders(&context);
     return ACS_STATUS_FAIL;
   }
   mec_enabled = 1u;
+
+  if (val_get_gpt_entry_el3(context.window_base, &original_gpi) ||
+      val_add_gpt_entry_el3(context.window_base, GPT_ANY))
+  {
+    val_print(ACS_PRINT_ERR, " RJXPZP: CXL.mem GPT setup failed", 0);
+    failures++;
+    goto cleanup;
+  }
+  gpt_modified = 1u;
 
   /* Iterate the PAS/MECID vectors and validate expected outcomes. */
   for (uint32_t index = 0; index < (sizeof(test_stimulus) / sizeof(test_stimulus[0])); ++index)
@@ -892,7 +850,6 @@ exercise_root_port(const CXL_COMPONENT_TABLE *table,
     if (program_rmecda_ctl1(root_bdf,
                             cfg_va,
                             rmecda_cap_base,
-                            rmecda_ctl1_original,
                             first_tee_ckid) != ACS_STATUS_PASS)
     {
       failures++;
@@ -943,7 +900,22 @@ exercise_root_port(const CXL_COMPONENT_TABLE *table,
     /* Build a pattern to write to the device memory range. */
     if (vector->expectation == EXPECT_SUCCESS)
     {
-      baseline = *mapped;
+      /* Read through the same EL3 PAS alias and MECID as the test access. */
+      shared_data->exception_expected = CLEAR;
+      val_cxl_aer_clear(root_bdf, aer_offset);
+      if (read_from_root((uint64_t)mapped, &baseline) != ACS_STATUS_PASS)
+      {
+        failures++;
+        continue;
+      }
+      if ((val_cxl_aer_read_uncorr(root_bdf, aer_offset, &aer_uncorr) !=
+           ACS_STATUS_PASS) || (aer_uncorr != 0u))
+      {
+        val_print(ACS_PRINT_ERR, " RJXPZP: baseline read failed for %a",
+                  (uint64_t)vector->name);
+        failures++;
+        continue;
+      }
       pattern = baseline ^ TEST_DATA_PATTERN;
       if (pattern == baseline)
         pattern ^= 0x1u;
@@ -1008,7 +980,22 @@ exercise_root_port(const CXL_COMPONENT_TABLE *table,
       shared_data->shared_data_access[0].addr = (uint64_t)mapped;
       shared_data->shared_data_access[0].data = baseline;
       shared_data->shared_data_access[0].access_type = WRITE_DATA;
-      (void)val_pe_access_mut_el3();
+      val_cxl_aer_clear(root_bdf, aer_offset);
+      status = val_pe_access_mut_el3();
+
+      if (status == ACS_STATUS_PASS)
+        status = read_from_root((uint64_t)mapped, &readback);
+
+      if (status == ACS_STATUS_PASS)
+        status = val_cxl_aer_read_uncorr(root_bdf, aer_offset, &aer_uncorr);
+
+      if ((status != ACS_STATUS_PASS) ||
+          (aer_uncorr != 0u) || (readback != baseline))
+      {
+        val_print(ACS_PRINT_ERR, " RJXPZP: baseline restore failed for %a",
+                  (uint64_t)vector->name);
+        failures++;
+      }
     }
     else
     {
@@ -1022,12 +1009,44 @@ exercise_root_port(const CXL_COMPONENT_TABLE *table,
       }
     }
   }
- /* Restore hardware state for the next test instance. */
-  (void)write_from_root(cfg_va + rmecda_cap_base + RMECDA_CTL1_OFFSET,
-                        rmecda_ctl1_original);
+cleanup:
+  if ((gpt_modified != 0u) &&
+      val_add_gpt_entry_el3(context.window_base, original_gpi))
+  {
+    val_print(ACS_PRINT_ERR, " RJXPZP: CXL.mem GPT restore failed", 0);
+    failures++;
+  }
+
+  /* Restore other fields without changing TDISP outside the common helpers. */
+  uint32_t ctl1_current;
+  if (read_from_root(cfg_va + rmecda_cap_base + RMECDA_CTL1_OFFSET,
+                     &ctl1_current) != ACS_STATUS_PASS ||
+      write_from_root(cfg_va + rmecda_cap_base + RMECDA_CTL1_OFFSET,
+                       (rmecda_ctl1_original & ~RMECDA_CTL1_TDISP_EN_MASK) |
+                       (ctl1_current & RMECDA_CTL1_TDISP_EN_MASK)) != ACS_STATUS_PASS)
+  {
+    val_print(ACS_PRINT_ERR, " RJXPZP: RMECDA_CTL1 restore failed", 0);
+    failures++;
+  }
+
+  status = (rmecda_ctl1_original & RMECDA_CTL1_TDISP_EN_MASK) ?
+           val_pcie_enable_tdisp(root_bdf) : val_pcie_disable_tdisp(root_bdf);
+  if (status)
+  {
+    val_print(ACS_PRINT_ERR, " RJXPZP: TDISP restore failed", 0);
+    failures++;
+  }
 
   if (mec_enabled != 0u)
+  {
+    (void)val_rlm_configure_mecid(0u);
     (void)val_rlm_disable_mec();
+  }
+
+  if ((ide_active != 0u) &&
+      (val_cxl_ide_disable_link(root_index, endpoint_index, &ctx, session_id) !=
+       ACS_STATUS_PASS))
+    failures++;
 
   if (session_active != 0u)
     (void)val_spdm_session_close(&ctx, session_id);
@@ -1035,7 +1054,8 @@ exercise_root_port(const CXL_COMPONENT_TABLE *table,
   if (tsp_locked != 0u)
     (void)val_cxl_unlock_tsp_best_effort(root_bdf, endpoint->bdf, &endpoint_cfg);
 
-  restore_decoders(&context);
+  if (restore_decoders(&context) != ACS_STATUS_PASS)
+    failures++;
 
   if (failures != 0u)
     return ACS_STATUS_FAIL;

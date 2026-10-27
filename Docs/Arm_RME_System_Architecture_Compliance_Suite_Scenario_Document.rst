@@ -732,7 +732,7 @@ Testcase checklist
     -
 
       1. Establish an IDE stream in the RP and set the TDISP_EN to 1.
-      2. Ensure the stream is in secure state.
+      2. Ensure the stream is in Secure state.
       3. Lock the corresponding Selective IDE register block in RMEDA_CTL2 register.
       4. Map the configuration address before writing as REALM PAS.
       5. Perform a DMA transaction with IDE-Tbit = 1.
@@ -755,20 +755,6 @@ Testcase checklist
       4. Check the same access permissions for RMEDA_CTL1 by attempting to toggle TDISP_EN from each PAS.
       5. Restore each register through Root PAS and verify its original value after every PAS write attempt, including after an access failure. Stop further protection checks for the port on failure.
       6. Restore the original TDISP_EN state through Root PAS and verify readback, including after a failed state change.
-
-  * -
-
-      `da_ide_state_rootport_error <../test_pool/da/da_ide_state_rootport_error.c>`_
-
-    -
-
-      RPJGJK: IDE stream must be transitioned to insecure state from secure state when RP has error.
-
-    -
-
-      1. Establish an IDE stream between the Exerciser EP and its RP.
-      2. Inject an error from the exerciser which reaches the RP.
-      3. The IDE stream should be transitioned to insecure state from secure state.
 
   * -
 
@@ -1103,7 +1089,7 @@ Testcase checklist
 
   * -
 
-      `cxl_rdhwnr_link_stream_lock <../test_pool/cxl/cxl_rdhwnr_link_stream_lock.c>`_
+      `cxl_rdhnwr_link_stream_lock <../test_pool/cxl/cxl_rdhnwr_link_stream_lock.c>`_
 
     -
 
@@ -1930,8 +1916,9 @@ Testcase checklist
     -
 
       1. Program HDM decoders and enable CXL.mem for a selected Type-3 endpoint and upstream root port.
-      2. Clear RMECDA_CTL1.LINK_STR_LOCK and attempt Realm PAS CXL.mem accesses.
-      3. Verify Realm writes do not modify memory, Realm reads log a Poisoned TLP and return poison/fixed data rather than the original memory value, and Non-secure accesses succeed.
+      2. Set RMECDA_CTL1.TDISP_EN, clear LINK_STR_LOCK, and verify both bits before attempting Realm PAS CXL.mem accesses.
+      3. Relock the link and verify through the original Realm PAS and MECID that the rejected Realm write did not modify memory. Unlock the link again, require the platform synchronous External Data Abort for the Realm read, and recover through the expected-fault handler; verify Non-secure accesses succeed.
+      4. This scenario uses the platform abort as the observation of read rejection; it does not inspect the protocol Poison field and does not require AER reporting.
 
   * -
 
@@ -2423,6 +2410,10 @@ availability.
         RVCRRM: An RME-DA Root Port must support IDE key refresh operations in compliance with [13].
 
         RFSFST: The RP IDE logic must be able to detect that an IDE key set requires a refresh and perform one or more of the following: Assert a dedicated interrupt that will be delivered to a Trusted subsystem. Transition the corresponding IDE Stream to Insecure state.
+
+        RPJGJK: If a Root Port encounters an internal uncorrectable data integrity error, it must either poison the affected TLPs or transition the associated IDE Streams to Insecure state.
+
+        RPJGJK requires platform-specific paper analysis. ACS cannot assume that production Root Ports provide an internal error injection interface. An ERR_FATAL message injected by an endpoint does not exercise this rule.
 
         RBWFTS: RMSD ensures that Selective IDE Streams are configured such that different IDE Streams are assigned with RID ranges and address ranges that are not overlapping.
 

@@ -195,7 +195,7 @@
 #define CXL_HDM_DECODER_IW_MASK           0xFu
 #define CXL_HDM_COMMIT_BIT                (1u << 9)
 #define CXL_HDM_COMMITTED_BIT             (1u << 10)
-#define CXL_HDM_COMMIT_TIMEOUT_MS         20u
+#define CXL_HDM_COMMIT_TIMEOUT_US         20000u
 #define CXL_HDM_DPA_SKIP_LOW_MASK          0xF0000000u
 
 #define CXL_BI_DECODER_CAP_OFFSET      0x00
@@ -239,6 +239,8 @@
 #define CXL_IDE_CAP_LOPT_CAPABLE                (1u << 23)
 #define CXL_IDE_STATUS_FIELD_MASK               0xFu
 #define CXL_IDE_STATUS_TX_SHIFT                 4u
+#define CXL_IDE_STATE_ACTIVE_CONTAINMENT        0x1u
+#define CXL_IDE_STATE_ACTIVE_SKID               0x2u
 #define CXL_IDE_STATE_INSECURE                  0x4u
 
 #endif /* __RME_ACS_CXL_SPEC_H__ */

@@ -36,22 +36,14 @@
 
 #define DECODER_SLOT 0u
 
-#define PCIE_LNKCAP_OFFSET 0x0Cu
-#define PCIE_LNKCAP_PN_SHIFT 24u
-#define PCIE_LNKCAP_PN_MASK 0xFFu
 
 typedef struct {
   uint32_t host_index;
   uint32_t endpoint_index;
   uint64_t window_base;
   uint64_t window_size;
-  uint64_t host_decoder_base_orig;
-  uint64_t host_decoder_size_orig;
-  uint64_t endpoint_decoder_base_orig;
-  uint64_t endpoint_decoder_size_orig;
-  uint32_t host_target_low_orig;
-  uint32_t host_target_high_orig;
-  uint32_t host_target_valid;
+  CXL_DECODER_STATE host_decoder;
+  CXL_DECODER_STATE endpoint_decoder;
 } RBYTYV_CONTEXT;
 
 static uint32_t
@@ -153,99 +145,21 @@ compare_buffers_el3(uint64_t src_va, uint64_t dst_va, uint32_t size)
 }
 
 static uint32_t
-program_host_target_list(uint32_t bdf,
-                         uint64_t comp_base,
-                         uint32_t decoder_index,
-                         RBYTYV_CONTEXT *context)
-{
-  uint32_t pcie_cap_offset;
-  uint32_t lnkcap;
-  uint32_t port_id;
-  uint64_t hdm_cap_base;
-  uint32_t target_low;
-  uint32_t target_high;
-
-  if (context == NULL)
-    return ACS_STATUS_ERR;
-
-  if (val_pcie_find_capability(bdf,
-                               PCIE_CAP,
-                               CID_PCIECS,
-                               &pcie_cap_offset) != 0u)
-    return ACS_STATUS_ERR;
-
-  if (val_pcie_read_cfg(bdf, pcie_cap_offset + PCIE_LNKCAP_OFFSET, &lnkcap) != 0u)
-    return ACS_STATUS_ERR;
-
-  port_id = (lnkcap >> PCIE_LNKCAP_PN_SHIFT) & PCIE_LNKCAP_PN_MASK;
-
-  if (val_cxl_find_capability(comp_base, CXL_CAPID_HDM_DECODER, &hdm_cap_base)
-      != ACS_STATUS_PASS)
-    return ACS_STATUS_ERR;
-
-  target_low = val_mmio_read(hdm_cap_base +
-                             CXL_HDM_DECODER_TARGET_LOW(decoder_index));
-  target_high = val_mmio_read(hdm_cap_base +
-                              CXL_HDM_DECODER_TARGET_HIGH(decoder_index));
-  context->host_target_low_orig = target_low;
-  context->host_target_high_orig = target_high;
-  context->host_target_valid = 1u;
-
-  val_mmio_write(hdm_cap_base + CXL_HDM_DECODER_TARGET_LOW(decoder_index),
-                 port_id);
-  val_mmio_write(hdm_cap_base + CXL_HDM_DECODER_TARGET_HIGH(decoder_index),
-                 0u);
-
-  return ACS_STATUS_PASS;
-}
-
-static void
-restore_host_target_list(const RBYTYV_CONTEXT *context)
-{
-  uint64_t comp_base;
-  uint64_t cap_base;
-
-  if ((context == NULL) || (context->host_target_valid == 0u))
-    return;
-
-  comp_base = val_cxl_get_info(CXL_INFO_COMPONENT_BASE, context->host_index);
-  if (comp_base == 0u)
-    return;
-
-  if (val_cxl_find_capability(comp_base, CXL_CAPID_HDM_DECODER, &cap_base)
-      != ACS_STATUS_PASS)
-    return;
-
-  val_mmio_write(cap_base + CXL_HDM_DECODER_TARGET_LOW(DECODER_SLOT),
-                 context->host_target_low_orig);
-  val_mmio_write(cap_base + CXL_HDM_DECODER_TARGET_HIGH(DECODER_SLOT),
-                 context->host_target_high_orig);
-}
-
-static void
-restore_decoders(const RBYTYV_CONTEXT *context)
+prepare_decoders(uint32_t bdf, RBYTYV_CONTEXT *context)
 {
   if (context == NULL)
-    return;
+    return ACS_STATUS_ERR;
 
-  if (context->host_index != CXL_COMPONENT_INVALID_INDEX)
-  {
-    if (context->host_decoder_size_orig != 0u)
-    {
-      (void)val_cxl_program_host_decoder(context->host_index,
-                                         DECODER_SLOT,
-                                         context->host_decoder_base_orig,
-                                         context->host_decoder_size_orig);
-    }
-    restore_host_target_list(context);
-  }
+  return val_cxl_prepare_decoders(context->host_index, context->endpoint_index,
+                                  DECODER_SLOT, bdf, &context->host_decoder,
+                                  &context->endpoint_decoder);
+}
 
-  if ((context->endpoint_index != CXL_COMPONENT_INVALID_INDEX) &&
-      (context->endpoint_decoder_size_orig != 0u))
-    (void)val_cxl_program_component_decoder(context->endpoint_index,
-                                            DECODER_SLOT,
-                                            context->endpoint_decoder_base_orig,
-                                            context->endpoint_decoder_size_orig);
+static uint32_t
+restore_decoders(RBYTYV_CONTEXT *context)
+{
+  /* Restore both complete snapshots, including initially inactive decoders. */
+  return val_cxl_restore_decoders(&context->host_decoder, &context->endpoint_decoder);
 }
 
 static uint32_t
@@ -490,16 +404,6 @@ check_device_to_host_dma(uint32_t endpoint_bdf,
   }
   smmu_rlm_mapped = 1u;
 
-  /* Configure translated addressing for DMA transactions. */
-  if (val_exerciser_set_param_by_bdf(CFG_TXN_ATTRIBUTES,
-                                     TXN_ADDR_TYPE,
-                                     AT_TRANSLATED,
-                                     endpoint_bdf))
-  {
-    result = ACS_STATUS_SKIP;
-    goto cleanup;
-  }
-
   /* Program a DMA to non-secure memory as a positive control. */
   val_memory_set(buffer_src, length, 0xAB);
   val_memory_set(buffer_dst, length, 0x0);
@@ -649,16 +553,24 @@ cleanup:
   }
 
   if (smmu_rlm_mapped != 0u)
-    smmu_rlm_mapped = 0u;
-  if (pgt_rlm_created != 0u)
+  {
+    if (val_smmu_rlm_unmap_el3(&master))
+      result = ACS_STATUS_ERR;
+    else
+      smmu_rlm_mapped = 0u;
+  }
+  if (pgt_rlm_created != 0u && smmu_rlm_mapped == 0u)
     val_rlm_pgt_destroy(&pgt_desc_rlm);
   if (smmu_ns_mapped != 0u)
+  {
+    val_smmu_unmap(master);
     smmu_ns_mapped = 0u;
+  }
   if (pgt_ns_created != 0u)
     val_pgt_destroy(pgt_desc_ns);
   if (master.smmu_index != ACS_INVALID_INDEX)
     val_smmu_disable(master.smmu_index);
-  if (buffer_valid != 0u)
+  if (buffer_valid != 0u && smmu_rlm_mapped == 0u)
     val_memory_free_pages(buffer_va, 2);
 
   return result;
@@ -767,14 +679,11 @@ verify_root_port(const CXL_COMPONENT_TABLE *table,
   context.host_index = host_index;
   context.endpoint_index = endpoint_index;
 
-  status = program_host_target_list(root_port->bdf,
-                                    host_comp_base,
-                                    DECODER_SLOT,
-                                    &context);
+  status = prepare_decoders(root_port->bdf, &context);
   if (status != ACS_STATUS_PASS)
   {
     val_print(ACS_PRINT_ERR, " RBYTYV: Target list program failed", 0);
-    return ACS_STATUS_FAIL;
+    return (status == ACS_STATUS_SKIP) ? ACS_STATUS_SKIP : ACS_STATUS_FAIL;
   }
   restore_required = 1u;
 
@@ -788,28 +697,9 @@ verify_root_port(const CXL_COMPONENT_TABLE *table,
     goto cleanup;
   }
 
-  if (val_cxl_get_decoder(context.host_index,
-                          DECODER_SLOT,
-                          &context.host_decoder_base_orig,
-                          &context.host_decoder_size_orig) != 0u)
-  {
-    context.host_decoder_base_orig = 0u;
-    context.host_decoder_size_orig = 0u;
-  }
-
-  if (val_cxl_get_component_decoder(context.endpoint_index,
-                                    DECODER_SLOT,
-                                    &context.endpoint_decoder_base_orig,
-                                    &context.endpoint_decoder_size_orig) != 0u)
-  {
-    context.endpoint_decoder_base_orig = 0u;
-    context.endpoint_decoder_size_orig = 0u;
-  }
-
-  status = val_cxl_program_host_decoder(context.host_index,
-                                        DECODER_SLOT,
-                                        context.window_base,
-                                        context.window_size);
+  status = val_cxl_program_saved_decoder(&context.host_decoder,
+                                         context.window_base,
+                                         context.window_size);
   if (status != ACS_STATUS_PASS)
   {
     val_print(ACS_PRINT_ERR, " RBYTYV: Host decoder program failed", 0);
@@ -817,10 +707,9 @@ verify_root_port(const CXL_COMPONENT_TABLE *table,
     goto cleanup;
   }
 
-  status = val_cxl_program_component_decoder(context.endpoint_index,
-                                             DECODER_SLOT,
-                                             context.window_base,
-                                             context.window_size);
+  status = val_cxl_program_saved_decoder(&context.endpoint_decoder,
+                                         context.window_base,
+                                         context.window_size);
   if (status != ACS_STATUS_PASS)
   {
     val_print(ACS_PRINT_ERR, " RBYTYV: Endpoint decoder program failed", 0);
@@ -878,7 +767,7 @@ verify_root_port(const CXL_COMPONENT_TABLE *table,
   if (page_size != 0u)
   {
     status = check_device_to_host_dma(endpoint->bdf, (uint32_t)page_size);
-    if (status == ACS_STATUS_FAIL)
+    if ((status == ACS_STATUS_FAIL) || (status == ACS_STATUS_ERR))
     {
       val_print(ACS_PRINT_ERR, " RBYTYV: Device-to-host reject failed", 0);
       result = ACS_STATUS_FAIL;
@@ -889,8 +778,8 @@ verify_root_port(const CXL_COMPONENT_TABLE *table,
   result = ACS_STATUS_PASS;
 
 cleanup:
-  if (restore_required != 0u)
-    restore_decoders(&context);
+  if ((restore_required != 0u) && (restore_decoders(&context) != ACS_STATUS_PASS))
+    result = ACS_STATUS_FAIL;
 
   return result;
 }

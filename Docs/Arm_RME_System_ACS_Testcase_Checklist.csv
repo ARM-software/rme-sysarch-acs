@@ -112,7 +112,7 @@ Sl No,Rule ID,Rule Description,Coverage,Notes,Exerciser PAL APIs Used
 111,RLMFSV,TDISP-enabled Root Port debug features are disabled unless explicitly authorized.,Not covered,Root Port debug functionality is implementation-defined.,
 112,RGSTJC,Security-affecting RP reset or state loss transitions hosted IDE streams to Insecure.,da_rmsd_write_detect_property,,
 113,RMJNLW,Requests that are autonomously initiated by the RP over its host interface are tagged with PAS == Non-secure.,da_autonomous_rootport_request_ns_pas,PCIe exerciser VIP required,"pal_exerciser_set_param (ERROR_INJECT_TYPE); pal_exerciser_ops (INJECT_ERROR)"
-114,RPJGJK,Root Ports poison affected TLPs or transition IDE streams to Insecure on integrity errors.,da_ide_state_rootport_error,PCIe exerciser VIP required,"pal_exerciser_set_param (ERROR_INJECT_TYPE); pal_exerciser_ops (INJECT_ERROR)"
+114,RPJGJK,Root Ports poison affected TLPs or transition associated IDE streams to Insecure on internal uncorrectable data integrity errors.,Not covered,Out of ACS scope; requires paper analysis.,
 115,RMJSFF,"An RME system must not include an SMMU that supports the XT extensions, unless all RPs either support the XT extensions or override the XT-bit to 0 for incoming requests.",Planned,Planned for the next release: correlate SMMU XT support with every Root Port's XT support or incoming XT override behavior.,TBD
 116,RJXRNG,TDISP XT-capable Root Ports set XT-bit behavior according to XT enablement and traffic type.,Planned,"Planned for the next release: validate request, message and completion XT/T behavior under XT enablement.",TBD
 117,RGBVTS,"As a completer of memory requests, a TDISP-compliant RCiEP extracts the request IDE T-bit from the request PAS.","da_ide_tbit_0_for_root_request, da_outgoing_realm_rqst_ide_tbit_1",,
@@ -128,7 +128,7 @@ Sl No,Rule ID,Rule Description,Coverage,Notes,Exerciser PAL APIs Used
 127,RNYCLL,"When CDA TDISP is disabled, Realm device/host memory requests are rejected.",cxl_rnycll_tdisp_disable_reject,CHI-C2C exerciser VIP required,"pal_exerciser_set_param (CFG_TXN_ATTRIBUTES, EXERCISER_SEC_SID, DMA_ATTRIBUTES, EXERCISER_CXL_CMD_OP, EXERCISER_CXL_CMD_ADDR); pal_exerciser_get_param (EXERCISER_CXL_CMD_DATA0); pal_exerciser_ops (START_DMA, CXL_CMD_START)"
 128,RWPGJB,The RMECDA_CTL registers are RMSD write-protect by hardware default.,cxl_rwpgjb_rmsd_write_protect_property,Checks RMECDA_CTL1 and RMECDA_CTL2 only; requires PCIe IDE capability. Root/Realm writes are permitted and Secure/Non-secure writes are blocked.,None
 129,RPLYKV,All host ports in a system that supports Coherent RME-DA implement the RME-CDA DVSEC.,cxl_rplykv_rdfwkw_rme_cda_dvsec,,
-130,RDHNWR,Coherent Link IDE lock state controls register protection and stream lock state.,cxl_rdhwnr_link_stream_lock,,
+130,RDHNWR,Coherent Link IDE lock state controls register protection and stream lock state.,cxl_rdhnwr_link_stream_lock,,
 131,RWYVCQ,Unlocked coherent link streams reject Realm host-to-device requests.,cxl_rwyvcq_link_unlock_reject,,
 132,RGTVGZ,"With CDA TDISP enabled, Realm device-to-host requests are permitted only on locked active links or equivalent safe paths.",cxl_rgtvgz_tdisp_enable_link_gate,CHI-C2C exerciser VIP required,"pal_exerciser_set_param (EXERCISER_SEC_SID, DMA_ATTRIBUTES); pal_exerciser_ops (START_DMA)"
 133,RXQHNG,Locked CDA host ports reject out-of-range or invalid Requester IDs.,cxl_rxqhng_rid_range_reject,CHI-C2C exerciser VIP required,"pal_exerciser_set_param (CFG_TXN_ATTRIBUTES, DMA_ATTRIBUTES); pal_exerciser_ops (START_DMA)"

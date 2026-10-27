@@ -400,7 +400,8 @@ pal_exerciser_get_param (
           *Value1 = pal_mmio_read(Base + MSICTL);
           return pal_mmio_read(Base + MSICTL) | MASK_BIT;
       case ATS_RES_ATTRIBUTES:
-          *Value1 = pal_mmio_read64(Base + ATS_ADDR);
+          *Value1 = (UINT64)pal_mmio_read(Base + ATS_ADDR);
+          *Value1 |= (UINT64)pal_mmio_read(Base + ATS_ADDR + 4) << 32;
           if (Value2 != NULL)
               *Value2 = pal_mmio_read(Base + ATS_REPLY);
           return 0;
@@ -520,7 +521,7 @@ pal_exerciser_ops (
   UINT64 Base;
   UINT64 Ecam;
   UINT32 CapabilityOffset = 0;
-  UINT32 data;
+  UINT32 data, poll;
 
   /*
    * Resolving BAR0 reads endpoint configuration space. During STOP those
@@ -612,7 +613,13 @@ pal_exerciser_ops (
         pal_mmio_write(Base + ATSCTL,
                        (pal_mmio_read(Base + ATSCTL) & ATS_REQUEST_ATTR_REG_MASK) |
                        ATS_TRIGGER);
-        return !(pal_mmio_read(Base + ATSCTL) & ATS_STATUS);
+        /* Status is valid only after the translation is no longer in flight. */
+        for (poll = 0; poll < EXERCISER_ATS_POLL_LIMIT; ++poll) {
+            data = pal_mmio_read(Base + ATSCTL);
+            if (!(data & ATS_IN_FLIGHT))
+                return !(data & ATS_STATUS);
+        }
+        return 1;
 
     case ATS_INV_CACHE:
         pal_mmio_write(Base + ATSCTL,

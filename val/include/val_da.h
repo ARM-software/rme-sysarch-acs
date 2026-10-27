@@ -67,7 +67,8 @@ val_ide_program_rid_base_limit_valid(uint32_t bdf, uint32_t str_cnt,
                                      uint32_t base, uint32_t limit, uint32_t valid);
 
 uint32_t
-val_ide_program_stream_id(uint32_t bdf, uint32_t str_cnt, uint32_t stream_id);
+val_ide_program_stream_id(uint32_t bdf, uint32_t str_cnt,
+                          uint32_t stream_id, uint32_t default_stream);
 
 uint32_t
 val_ide_set_sel_stream(uint32_t bdf, uint32_t str_cnt, uint32_t enable);
@@ -91,6 +92,8 @@ val_register_get_num_entries(void);
 
 uint32_t
 val_intercnt_sec_prpty_check(uint64_t *register_entry_info);
+
+#define VAL_INTERCONNECT_RESTORE_FAILED 2u
 
 uint32_t
 val_rmsd_write_protect_check(uint64_t pa,
@@ -122,7 +125,6 @@ uint32_t da_p2p_btw_2_tdisp_devices_entry(uint32_t num_pe);
 uint32_t da_outgoing_request_with_ide_tbit_entry(uint32_t num_pe);
 uint32_t da_incoming_request_ide_sec_locked_entry(uint32_t num_pe);
 uint32_t da_ctl_regs_rmsd_write_protect_property_entry(uint32_t num_pe);
-uint32_t da_ide_state_rootport_error_entry(uint32_t num_pe);
 uint32_t da_ide_state_tdisp_disable_entry(uint32_t num_pe);
 uint32_t da_selective_ide_register_property_entry(uint32_t num_pe);
 uint32_t da_rootport_tdisp_disabled_entry(uint32_t num_pe);

@@ -31,11 +31,9 @@
 
 #define DECODER_SLOT        0u
 #define ALIGNMENT_MASK      ((1ULL << 28) - 1ULL)
-#define AER_POISONED_TLP    (1u << 12)
-#define RWYVCQ_POISON_FIXED_VALUE 0xFFFFFFFFu
-#define PCIE_LNKCAP_OFFSET  0x0Cu
-#define PCIE_LNKCAP_PN_SHIFT 24u
-#define PCIE_LNKCAP_PN_MASK  0xFFu
+#define REALM_BASELINE      0x5A5A5A5Au
+#define TDISP_EN_MASK       (1u << 0)
+#define LINK_STR_LOCK_MASK  (1u << 1)
 
 typedef struct {
   uint32_t host_index;
@@ -44,13 +42,8 @@ typedef struct {
   uint32_t root_index;
   uint32_t endpoint_index;
   uint32_t endpoint_bdf;
-  uint64_t host_decoder_base_orig;
-  uint64_t host_decoder_size_orig;
-  uint64_t endpoint_decoder_base_orig;
-  uint64_t endpoint_decoder_size_orig;
-  uint32_t host_target_low_orig;
-  uint32_t host_target_high_orig;
-  uint32_t host_target_valid;
+  CXL_DECODER_STATE host_decoder;
+  CXL_DECODER_STATE endpoint_decoder;
 } CONTEXT;
 
 /* Wrapper for Root/EL3 accesses to config space. */
@@ -208,100 +201,6 @@ map_window_alias(uint64_t phys,
 }
 
 static void
-restore_decoders(const CONTEXT *context)
-{
-  if (context == NULL)
-    return;
-
-  if ((context->host_index != CXL_COMPONENT_INVALID_INDEX) &&
-      (context->host_decoder_size_orig != 0u))
-    (void)val_cxl_program_host_decoder(context->host_index,
-                                       DECODER_SLOT,
-                                       context->host_decoder_base_orig,
-                                       context->host_decoder_size_orig);
-  if ((context->host_index != CXL_COMPONENT_INVALID_INDEX) &&
-      (context->host_target_valid != 0u))
-  {
-    uint64_t host_comp_base = val_cxl_get_info(CXL_INFO_COMPONENT_BASE,
-                                               context->host_index);
-    uint64_t cap_base;
-
-    if ((host_comp_base != 0u) &&
-        (val_cxl_find_capability(host_comp_base,
-                                 CXL_CAPID_HDM_DECODER,
-                                 &cap_base) == ACS_STATUS_PASS))
-    {
-      val_mmio_write(cap_base +
-                     CXL_HDM_DECODER_TARGET_LOW(DECODER_SLOT),
-                     context->host_target_low_orig);
-      val_mmio_write(cap_base +
-                     CXL_HDM_DECODER_TARGET_HIGH(DECODER_SLOT),
-                     context->host_target_high_orig);
-    }
-  }
-
-  if ((context->endpoint_index != CXL_COMPONENT_INVALID_INDEX) &&
-      (context->endpoint_decoder_size_orig != 0u))
-    (void)val_cxl_program_component_decoder(context->endpoint_index,
-                                            DECODER_SLOT,
-                                            context->endpoint_decoder_base_orig,
-                                            context->endpoint_decoder_size_orig);
-}
-
-static uint32_t
-program_host_target_list(uint32_t bdf,
-                         uint64_t comp_base,
-                         uint32_t decoder_index,
-                         CONTEXT *context)
-{
-  uint32_t pcie_cap_offset;
-  uint32_t lnkcap;
-  uint32_t port_id;
-  uint64_t hdm_cap_base;
-  uint32_t target_low;
-  uint32_t target_high;
-
-  if (context == NULL)
-    return ACS_STATUS_ERR;
-
-  if (val_pcie_find_capability(bdf, PCIE_CAP, CID_PCIECS, &pcie_cap_offset) != 0u)
-  {
-    val_print(ACS_PRINT_ERR, " RWYVCQ: PCIe cap not found", 0);
-    return ACS_STATUS_ERR;
-  }
-
-  if (val_pcie_read_cfg(bdf, pcie_cap_offset + PCIE_LNKCAP_OFFSET, &lnkcap) != 0u)
-  {
-    val_print(ACS_PRINT_ERR, " RWYVCQ: LNKCAP read failed", 0);
-    return ACS_STATUS_ERR;
-  }
-
-  port_id = (lnkcap >> PCIE_LNKCAP_PN_SHIFT) & PCIE_LNKCAP_PN_MASK;
-
-  if (val_cxl_find_capability(comp_base, CXL_CAPID_HDM_DECODER, &hdm_cap_base)
-      != ACS_STATUS_PASS)
-  {
-    val_print(ACS_PRINT_ERR, " RWYVCQ: Host HDM cap missing", 0);
-    return ACS_STATUS_ERR;
-  }
-
-  target_low = val_mmio_read(hdm_cap_base +
-                             CXL_HDM_DECODER_TARGET_LOW(decoder_index));
-  target_high = val_mmio_read(hdm_cap_base +
-                              CXL_HDM_DECODER_TARGET_HIGH(decoder_index));
-  context->host_target_low_orig = target_low;
-  context->host_target_high_orig = target_high;
-  context->host_target_valid = 1u;
-
-  val_mmio_write(hdm_cap_base + CXL_HDM_DECODER_TARGET_LOW(decoder_index),
-                 port_id);
-  val_mmio_write(hdm_cap_base + CXL_HDM_DECODER_TARGET_HIGH(decoder_index),
-                 0u);
-
-  return ACS_STATUS_PASS;
-}
-
-static void
 payload(void)
 {
   uint32_t pe_index = val_pe_get_index_mpid(val_pe_get_mpid());
@@ -315,17 +214,14 @@ payload(void)
   uint64_t tg;
   uint32_t rmecda_cap_base = 0;
   uint32_t rmecda_ctl1_original = 0;
+  uint32_t rmecda_ctl1_saved = 0u;
   uint32_t rmecda_ctl1_unlocked = 0;
   volatile uint64_t *realm_ptr = NULL;
   volatile uint64_t *ns_ptr = NULL;
-  volatile uint32_t *ns_ptr32 = NULL;
-  uint32_t baseline_value = 0;
-  uint32_t realm_pattern = 0;
+  uint32_t realm_observed_value = 0;
+  uint32_t realm_pattern = ~REALM_BASELINE;
   uint32_t control_pattern = 0;
-  uint32_t aer_offset = 0;
-  uint32_t aer_uncorr = 0;
   uint32_t control_readback = 0;
-  uint32_t readback_value = 0;
   uint64_t endpoint_base = 0u;
   uint64_t endpoint_size = 0u;
 
@@ -345,7 +241,7 @@ payload(void)
     return;
   }
 
-  /* locate RMECDA DVSEC and AER capability on the root port. */
+  /* Locate RMECDA DVSEC on the root port. */
   root_bdf =
     (uint32_t)val_cxl_get_component_info(CXL_COMPONENT_INFO_BDF_INDEX,
                                          context.root_index);
@@ -366,34 +262,15 @@ payload(void)
     return;
   }
 
-  if (val_pcie_find_capability(root_bdf,
-                               PCIE_ECAP,
-                               ECID_AER,
-                               &aer_offset) != PCIE_SUCCESS)
+  /* Snapshot both decoders and program the target list while the host is inactive. */
+  status = val_cxl_prepare_decoders(context.host_index, context.endpoint_index,
+                                     DECODER_SLOT, root_bdf, &context.host_decoder,
+                                     &context.endpoint_decoder);
+  if (status != ACS_STATUS_PASS)
   {
-    val_print(ACS_PRINT_TEST,
-              " RWYVCQ: AER capability absent on RP 0x%x", root_bdf);
-    val_set_status(pe_index, "SKIP", 03);
+    val_print(ACS_PRINT_TEST, " RWYVCQ: decoder snapshot unavailable or locked", 0);
+    val_set_status(pe_index, (status == ACS_STATUS_SKIP) ? "SKIP" : "FAIL", 03);
     return;
-  }
-
-  /* Capture current decoder state for cleanup. */
-  if (val_cxl_get_decoder(context.host_index,
-                          DECODER_SLOT,
-                          &context.host_decoder_base_orig,
-                          &context.host_decoder_size_orig) != 0u)
-  {
-    context.host_decoder_base_orig = 0u;
-    context.host_decoder_size_orig = 0u;
-  }
-
-  if (val_cxl_get_component_decoder(context.endpoint_index,
-                                    DECODER_SLOT,
-                                    &context.endpoint_decoder_base_orig,
-                                    &context.endpoint_decoder_size_orig) != 0u)
-  {
-    context.endpoint_decoder_base_orig = 0u;
-    context.endpoint_decoder_size_orig = 0u;
   }
 
   /* Enable CXL.mem before programming HDM decoders. */
@@ -405,16 +282,15 @@ payload(void)
   }
 
   /* Program host decoder to target the chosen CFMWS window. */
-  status = val_cxl_program_host_decoder(context.host_index,
-                                        DECODER_SLOT,
-                                        context.window_base,
-                                        context.window_size);
+  status = val_cxl_program_saved_decoder(&context.host_decoder,
+                                         context.window_base,
+                                         context.window_size);
   if (status == ACS_STATUS_SKIP)
   {
     val_print(ACS_PRINT_TEST,
               " RWYVCQ: host decoder programming skipped", 0);
     val_set_status(pe_index, "SKIP", 04);
-    return;
+    goto restore;
   }
   if (status != ACS_STATUS_PASS)
   {
@@ -422,19 +298,10 @@ payload(void)
     goto restore;
   }
 
-  /* Program the host target list to include the root port. */
-  if (program_host_target_list(root_bdf,
-                               val_cxl_get_info(CXL_INFO_COMPONENT_BASE,
-                                                context.host_index),
-                               DECODER_SLOT,
-                               &context) != ACS_STATUS_PASS)
-  {
-    val_set_status(pe_index, "FAIL", 03);
-    goto restore;
-  }
-
-  endpoint_base = context.endpoint_decoder_base_orig;
-  endpoint_size = context.endpoint_decoder_size_orig;
+  endpoint_base = ((uint64_t)context.endpoint_decoder.reg[1] << 32) |
+                  (context.endpoint_decoder.reg[0] & 0xF0000000u);
+  endpoint_size = ((uint64_t)context.endpoint_decoder.reg[3] << 32) |
+                  (context.endpoint_decoder.reg[2] & 0xF0000000u);
   if (endpoint_size == 0u)
     endpoint_size = context.window_size;
 
@@ -443,10 +310,9 @@ payload(void)
   if (endpoint_size == 0u)
     endpoint_size = context.window_size;
 
-  status = val_cxl_program_component_decoder(context.endpoint_index,
-                                             DECODER_SLOT,
-                                             endpoint_base,
-                                             endpoint_size);
+  status = val_cxl_program_saved_decoder(&context.endpoint_decoder,
+                                         endpoint_base,
+                                         endpoint_size);
   if (status == ACS_STATUS_SKIP)
   {
     val_print(ACS_PRINT_TEST,
@@ -493,6 +359,8 @@ payload(void)
     goto restore;
   }
 
+  rmecda_ctl1_saved = 1u;
+
   if (map_window_alias(context.window_base,
                               REALM_PAS,
                               &realm_ptr) != ACS_STATUS_PASS)
@@ -509,14 +377,38 @@ payload(void)
     goto restore;
   }
 
-  /* Unlock the link in RMECDA_CTL2 and confirm the control bit clears. */
-  ns_ptr32 = (volatile uint32_t *)ns_ptr;
-  baseline_value = *ns_ptr32;
-  realm_pattern = baseline_value ^ 0xA5A5A5A5UL;
-  if (realm_pattern == baseline_value)
-    realm_pattern ^= 0x1U;
+  /* Permit Realm accesses while establishing a known encryption context. */
+  if (write_from_root(cfg_va + rmecda_cap_base + RMECDA_CTL1_OFFSET,
+                      rmecda_ctl1_original | TDISP_EN_MASK | LINK_STR_LOCK_MASK) !=
+      ACS_STATUS_PASS)
+  {
+    val_set_status(pe_index, "FAIL", 10);
+    goto restore;
+  }
 
-  rmecda_ctl1_unlocked = rmecda_ctl1_original & ~(1u << 1);
+  if (read_from_root(cfg_va + rmecda_cap_base + RMECDA_CTL1_OFFSET,
+                     &control_readback) != ACS_STATUS_PASS ||
+      ((control_readback & (TDISP_EN_MASK | LINK_STR_LOCK_MASK)) !=
+       (TDISP_EN_MASK | LINK_STR_LOCK_MASK)))
+  {
+    val_set_status(pe_index, "FAIL", 10);
+    goto restore;
+  }
+
+  /* Use the same Realm PAS and MECID for initialization and the rejected write.
+   * This prevents earlier tests' encryption contexts from affecting the check.
+   */
+  if (write_from_root((uint64_t)realm_ptr, REALM_BASELINE) != ACS_STATUS_PASS ||
+      read_from_root((uint64_t)realm_ptr, &control_readback) != ACS_STATUS_PASS ||
+      control_readback != REALM_BASELINE)
+  {
+    val_print(ACS_PRINT_ERR, " RWYVCQ: Realm baseline initialization failed", 0);
+    val_set_status(pe_index, "FAIL", 10);
+    goto restore;
+  }
+
+  /* Enable TDISP and unlock the link to isolate RWYVCQ from RNYCLL. */
+  rmecda_ctl1_unlocked = (rmecda_ctl1_original | TDISP_EN_MASK) & ~LINK_STR_LOCK_MASK;
   if (write_from_root(cfg_va + rmecda_cap_base + RMECDA_CTL1_OFFSET,
                       rmecda_ctl1_unlocked) != ACS_STATUS_PASS)
   {
@@ -526,13 +418,11 @@ payload(void)
 
   if (read_from_root(cfg_va + rmecda_cap_base + RMECDA_CTL1_OFFSET,
                      &control_readback) != ACS_STATUS_PASS ||
-      ((control_readback & (1u << 1)) != 0u))
+      ((control_readback & (TDISP_EN_MASK | LINK_STR_LOCK_MASK)) != TDISP_EN_MASK))
   {
     val_set_status(pe_index, "FAIL", 11);
     goto restore;
   }
-
-  val_cxl_aer_clear(root_bdf, aer_offset);
 
   shared_data->exception_expected = CLEAR;
   shared_data->num_access = 1;
@@ -546,64 +436,76 @@ payload(void)
     goto restore;
   }
 
-  if (*ns_ptr32 != baseline_value)
+  /* Reopen the Realm path to verify data using its original PAS and MECID. */
+  if (write_from_root(cfg_va + rmecda_cap_base + RMECDA_CTL1_OFFSET,
+                      rmecda_ctl1_unlocked | LINK_STR_LOCK_MASK) != ACS_STATUS_PASS)
   {
-    val_print(ACS_PRINT_ERR,
-              " RWYVCQ: Realm write propagated (value 0x%x)",
-              *ns_ptr32);
     val_set_status(pe_index, "FAIL", 13);
     goto restore;
   }
 
-  /* Attempt Realm read and confirm Poisoned TLP logged. */
-  shared_data->exception_expected = CLEAR;
-  shared_data->num_access = 1;
-  shared_data->shared_data_access[0].addr = (uint64_t)realm_ptr;
-  shared_data->shared_data_access[0].access_type = READ_DATA;
+  if (read_from_root(cfg_va + rmecda_cap_base + RMECDA_CTL1_OFFSET,
+                     &control_readback) != ACS_STATUS_PASS ||
+      ((control_readback & (TDISP_EN_MASK | LINK_STR_LOCK_MASK)) !=
+       (TDISP_EN_MASK | LINK_STR_LOCK_MASK)))
+  {
+    val_set_status(pe_index, "FAIL", 13);
+    goto restore;
+  }
 
-  if (val_pe_access_mut_el3())
+  if (read_from_root((uint64_t)realm_ptr, &realm_observed_value) != ACS_STATUS_PASS)
+  {
+    val_set_status(pe_index, "FAIL", 13);
+    goto restore;
+  }
+
+  if (realm_observed_value != REALM_BASELINE)
+  {
+    val_print(ACS_PRINT_ERR,
+              " RWYVCQ: Realm write propagated (value 0x%x)",
+              realm_observed_value);
+    val_set_status(pe_index, "FAIL", 13);
+    goto restore;
+  }
+
+  /* Unlock again for the rejected read and Non-secure control accesses. */
+  if (write_from_root(cfg_va + rmecda_cap_base + RMECDA_CTL1_OFFSET,
+                      rmecda_ctl1_unlocked) != ACS_STATUS_PASS)
   {
     val_set_status(pe_index, "FAIL", 14);
     goto restore;
   }
-  readback_value = (uint32_t)shared_data->shared_data_access[0].data;
 
-  val_cxl_aer_read_uncorr(root_bdf,
-                          aer_offset,
-                          &aer_uncorr);
-  if ((aer_uncorr & AER_POISONED_TLP) == 0u)
+  if (read_from_root(cfg_va + rmecda_cap_base + RMECDA_CTL1_OFFSET,
+                     &control_readback) != ACS_STATUS_PASS ||
+      ((control_readback & (TDISP_EN_MASK | LINK_STR_LOCK_MASK)) != TDISP_EN_MASK))
   {
-    val_print(ACS_PRINT_ERR,
-              " RWYVCQ: Poisoned TLP not logged (uncorr 0x%llx)",
-              (uint64_t)aer_uncorr);
-    val_set_status(pe_index, "FAIL", 15);
+    val_set_status(pe_index, "FAIL", 14);
     goto restore;
   }
 
-  if (readback_value == RWYVCQ_POISON_FIXED_VALUE)
+  /* Observe the rejected read through the platform's synchronous external abort. */
+  shared_data->access_mut = CLEAR;
+  shared_data->exception_generated = CLEAR;
+  shared_data->exception_expected = SET;
+  shared_data->esr_value = SEA_ESR_READ;
+  shared_data->num_access = 1;
+  shared_data->shared_data_access[0].addr = (uint64_t)realm_ptr;
+  shared_data->shared_data_access[0].access_type = READ_DATA;
+
+  status = val_pe_access_mut_el3();
+  shared_data->exception_expected = CLEAR;
+  shared_data->esr_value = 0u;
+  if (status || shared_data->exception_generated != SET)
   {
-    val_print(ACS_PRINT_DEBUG,
-              " RWYVCQ: Realm read returned fixed poison data 0x%x",
-              readback_value);
-  }
-  else if (readback_value != baseline_value)
-  {
-    val_print(ACS_PRINT_INFO,
-              " RWYVCQ: Realm read returned non-original poison data 0x%x",
-              readback_value);
-  }
-  else
-  {
-    val_print(ACS_PRINT_ERR,
-              " RWYVCQ: Realm read returned clean data 0x%x",
-              readback_value);
-    val_set_status(pe_index, "FAIL", 16);
+    shared_data->exception_generated = CLEAR;
+    val_print(ACS_PRINT_ERR, " RWYVCQ: expected external read abort not observed", 0);
+    val_set_status(pe_index, "FAIL", 14);
     goto restore;
   }
+  shared_data->exception_generated = CLEAR;
 
-  val_cxl_aer_clear(root_bdf, aer_offset);
-
-  control_pattern = baseline_value ^ 0x5A5A5A5AUL;
+  control_pattern = REALM_BASELINE ^ 0x33333333u;
   shared_data->exception_expected = CLEAR;
   shared_data->num_access = 2;
   shared_data->shared_data_access[0].addr = (uint64_t)ns_ptr;
@@ -627,24 +529,25 @@ payload(void)
     goto restore;
   }
 
-  val_cxl_aer_read_uncorr(root_bdf,
-                          aer_offset,
-                          &aer_uncorr);
-  if (aer_uncorr != 0u)
-  {
-    val_print(ACS_PRINT_ERR,
-              " RWYVCQ: Unexpected AER errors after NS traffic (0x%llx)",
-              (uint64_t)aer_uncorr);
-    val_set_status(pe_index, "FAIL", 18);
-    goto restore;
-  }
-
   result = ACS_STATUS_PASS;
 
 restore:
-  (void)write_from_root(cfg_va + rmecda_cap_base + RMECDA_CTL1_OFFSET,
-                        rmecda_ctl1_original);
-  restore_decoders(&context);
+  if (rmecda_ctl1_saved != 0u &&
+      write_from_root(cfg_va + rmecda_cap_base + RMECDA_CTL1_OFFSET,
+                       rmecda_ctl1_original) != ACS_STATUS_PASS)
+  {
+    val_print(ACS_PRINT_ERR, " RWYVCQ: failed to restore RMECDA_CTL1", 0);
+    val_set_status(pe_index, "FAIL", 18);
+    result = ACS_STATUS_FAIL;
+  }
+  /* Each restore disables the decoder before touching its configuration. */
+  status = val_cxl_restore_decoders(&context.host_decoder, &context.endpoint_decoder);
+  if (status != ACS_STATUS_PASS)
+  {
+    val_print(ACS_PRINT_ERR, " RWYVCQ: failed to restore decoder state", 0);
+    val_set_status(pe_index, "FAIL", 19);
+    result = ACS_STATUS_FAIL;
+  }
 
   if (result == ACS_STATUS_PASS)
     val_set_status(pe_index, "PASS", 01);

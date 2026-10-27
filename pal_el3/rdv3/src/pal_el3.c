@@ -17,21 +17,6 @@
 
 #include "pal_el3.h"
 
-#define CXL_RP_IDE_KM_BAR0_OFFSET        0x20000ULL
-#define CXL_RP_IDE_KM_REG_SIGNATURE      0x000
-#define CXL_RP_IDE_KM_REG_CONTROL        0x004
-#define CXL_RP_IDE_KM_REG_STREAM_SLOT    0x008
-#define CXL_RP_IDE_KM_REG_STATE          0x00C
-#define CXL_RP_IDE_KM_REG_RX_KEY_BASE    0x100
-#define CXL_RP_IDE_KM_REG_TX_KEY_BASE    0x140
-
-#define CXL_RP_IDE_KM_SIGNATURE_VALUE      0x4D4B4549u
-#define CXL_RP_IDE_KM_CTRL_KEY_PROG        (1u << 0)
-#define CXL_RP_IDE_KM_CTRL_K_SET_GO        (1u << 1)
-#define CXL_RP_IDE_KM_CTRL_K_SET_STOP      (1u << 2)
-#define CXL_RP_IDE_KM_STATE_KEY_PROGRAMMED (1u << 0)
-#define CXL_RP_IDE_KM_STATE_ACTIVE         (1u << 1)
-
 /**
  * @brief Attempt to disable Non-secure encryption in a platform-specific manner.
  *
@@ -54,12 +39,15 @@ uint32_t pal_el3_disable_ns_encryption(void)
  * @param enable  Non-zero to enable, zero to disable.
  *
  * Partner must implement IMPLEMNTATION_DEFINED register programming to control legacy TZ.
+ * @return 0 after programming the requested state, PAL_EL3_NOT_IMPLEMENTED if the
+ *         operation is unimplemented, or another nonzero value on failure.
  */
-void pal_el3_prog_legacy_tz(int enable)
+uint32_t pal_el3_prog_legacy_tz(int enable)
 {
   //Partner shall implement their own IMPLEMNTATION_DEFINED
   //register for enabling the LEGACY_TZ_EN feature
-  return;
+  (void)enable;
+  return PAL_EL3_NOT_IMPLEMENTED;
 }
 
 /**
@@ -68,96 +56,38 @@ void pal_el3_prog_legacy_tz(int enable)
  * @param enable  Non-zero to set Active mode, zero for Inactive.
  *
  * Partner must implement IMPLEMNTATION_DEFINED method to change PAS filter mode.
+ * @return 0 after the requested mode is established, PAL_EL3_NOT_IMPLEMENTED if the
+ *         operation is unimplemented, or another nonzero value on failure.
  */
-void pal_el3_pas_filter_active_mode(int enable)
+uint32_t pal_el3_pas_filter_active_mode(int enable)
 {
   //Partner shall implement their own IMPLEMNTATION_DEFINED
   //way for changing the Active mode of pas filter
-  return;
+  (void)enable;
+  return PAL_EL3_NOT_IMPLEMENTED;
 }
 
-uint32_t
-pal_cxl_root_port_ide_program_and_enable(uint64_t bar0_base,
-                                         uint8_t stream_id,
-                                         uint8_t key_slot,
-                                         const CXL_IDE_KEY_BUFFER *rx_key,
-                                         const CXL_IDE_KEY_BUFFER *tx_key)
+/**
+ * @brief Verify that a captured exception is an inactive PAS filter read denial.
+ *
+ * @param esr      ESR_EL3 captured by the ACS exception handler.
+ * @param far      FAR_EL3 captured by the ACS exception handler.
+ * @param address  Untagged virtual address of the load being tested.
+ *
+ * Implement the platform's documented denial-syndrome checks. Accept only a
+ * synchronous read denial with a valid FAR matching address. Reject GPF,
+ * translation and permission faults, and unrelated errors. If the syndrome
+ * alone cannot identify the PAS filter as the source, also check the platform's
+ * filter error status. Do not accept an arbitrary Data Abort as a denial.
+ *
+ * This hook only verifies the exception; ACS EL3 code performs recovery.
+ * @return true for a verified denial; false for an unexpected or unverifiable
+ *         exception, including when this hook is not implemented.
+ */
+bool pal_el3_pas_filter_check_exception(uint64_t esr, uint64_t far, uint64_t address)
 {
-  uint64_t ide_km_base;
-  uint32_t state;
-  uint32_t idx;
-
-  if ((bar0_base == 0u) || (rx_key == 0) || (tx_key == 0))
-    return 1;
-
-  ide_km_base = (bar0_base & ~0xFULL) + CXL_RP_IDE_KM_BAR0_OFFSET;
-  if (*(volatile uint32_t *)(uintptr_t)(ide_km_base + CXL_RP_IDE_KM_REG_SIGNATURE) !=
-      CXL_RP_IDE_KM_SIGNATURE_VALUE)
-    return 1;
-
-  *(volatile uint32_t *)(uintptr_t)(ide_km_base + CXL_RP_IDE_KM_REG_STREAM_SLOT) =
-      (uint32_t)stream_id | ((uint32_t)key_slot << 8);
-
-  for (idx = 0; idx < 8u; idx++) {
-    *(volatile uint32_t *)(uintptr_t)(ide_km_base + CXL_RP_IDE_KM_REG_RX_KEY_BASE +
-                                      (idx * sizeof(uint32_t))) = rx_key->key[idx];
-  }
-
-  for (idx = 0; idx < 8u; idx++) {
-    *(volatile uint32_t *)(uintptr_t)(ide_km_base + CXL_RP_IDE_KM_REG_TX_KEY_BASE +
-                                      (idx * sizeof(uint32_t))) = tx_key->key[idx];
-  }
-
-  *(volatile uint32_t *)(uintptr_t)(ide_km_base + CXL_RP_IDE_KM_REG_CONTROL) =
-      CXL_RP_IDE_KM_CTRL_KEY_PROG;
-  state = *(volatile uint32_t *)(uintptr_t)(ide_km_base + CXL_RP_IDE_KM_REG_STATE);
-  if ((state & CXL_RP_IDE_KM_STATE_KEY_PROGRAMMED) == 0u)
-    return 1;
-
-  *(volatile uint32_t *)(uintptr_t)(ide_km_base + CXL_RP_IDE_KM_REG_CONTROL) =
-      CXL_RP_IDE_KM_CTRL_K_SET_GO;
-  state = *(volatile uint32_t *)(uintptr_t)(ide_km_base + CXL_RP_IDE_KM_REG_STATE);
-  if ((state & CXL_RP_IDE_KM_STATE_ACTIVE) == 0u)
-    return 1;
-
-  return 0;
-}
-
-uint32_t
-pal_cxl_root_port_ide_disable(uint64_t bar0_base,
-                              uint8_t stream_id,
-                              uint8_t key_slot)
-{
-  uint64_t ide_km_base;
-  uint32_t state;
-
-  (void)stream_id;
-  (void)key_slot;
-
-  if (bar0_base == 0u)
-    return 1;
-
-  ide_km_base = (bar0_base & ~0xFULL) + CXL_RP_IDE_KM_BAR0_OFFSET;
-  if (*(volatile uint32_t *)(uintptr_t)(ide_km_base + CXL_RP_IDE_KM_REG_SIGNATURE) !=
-      CXL_RP_IDE_KM_SIGNATURE_VALUE)
-    return 1;
-
-  *(volatile uint32_t *)(uintptr_t)(ide_km_base + CXL_RP_IDE_KM_REG_CONTROL) =
-      CXL_RP_IDE_KM_CTRL_K_SET_STOP;
-  state = *(volatile uint32_t *)(uintptr_t)(ide_km_base + CXL_RP_IDE_KM_REG_STATE);
-  if ((state & CXL_RP_IDE_KM_STATE_ACTIVE) != 0u)
-    return 1;
-
-  return 0;
-}
-
-uint32_t
-pal_cxl_root_port_ide_get_km_base(uint64_t bar0_base,
-                                  uint64_t *ide_km_base)
-{
-  if ((bar0_base == 0u) || (ide_km_base == 0))
-    return 1;
-
-  *ide_km_base = (bar0_base & ~0xFULL) + CXL_RP_IDE_KM_BAR0_OFFSET;
-  return 0;
+  (void)esr;
+  (void)far;
+  (void)address;
+  return false;
 }

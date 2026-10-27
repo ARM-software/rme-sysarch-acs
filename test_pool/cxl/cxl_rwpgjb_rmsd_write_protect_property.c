@@ -29,9 +29,8 @@
 #define TEST_DESC "Check RMECDA_CTL registers are RMSD write-protect      "
 #define TEST_RULE "RWPGJB"
 
-#define WRITE_DATA_CTL1 0x1
-#define WRITE_DATA_CTL1_REV 0x0
-#define WRITE_DATA_CTL2 0xFFFFFFFF
+#define TDISP_EN_MASK 0x1u
+#define ALL_STREAM_LOCKS_MASK 0xFFFFFFFFu
 
 static
 void
@@ -43,7 +42,7 @@ payload()
   uint64_t component_count;
   uint32_t bdf;
   uint32_t rmecda_cap_base, ide_cap_base;
-  uint32_t num_sel_ide_stream_supp;
+  uint32_t num_sel_ide_stream_supp, lock_mask;
   uint32_t test_skip = 1;
   uint32_t test_fails = 0;
 
@@ -86,48 +85,52 @@ payload()
           continue;
       }
 
-      val_pcie_read_cfg(bdf, rmecda_cap_base + RMECDA_CTL1_OFFSET, &reg_ctl1);
-      val_pcie_read_cfg(bdf, rmecda_cap_base + RMECDA_CTL2_OFFSET, &reg_ctl2);
-      /* TODO: RMECDA_CTL3/4 govern C2C host ports; add coverage once C2C support added. */
-
-      if (reg_ctl1 == WRITE_DATA_CTL1)
-          write_val = WRITE_DATA_CTL1_REV;
-      else
-          write_val = WRITE_DATA_CTL1;
+      if (val_pcie_read_cfg(bdf, rmecda_cap_base + RMECDA_CTL1_OFFSET, &reg_ctl1) !=
+              PCIE_SUCCESS || reg_ctl1 == PCIE_UNKNOWN_RESPONSE ||
+          val_pcie_read_cfg(bdf, rmecda_cap_base + RMECDA_CTL2_OFFSET, &reg_ctl2) !=
+              PCIE_SUCCESS ||
+          val_pcie_read_cfg(bdf, ide_cap_base + IDE_CAP_REG, &reg_value) != PCIE_SUCCESS ||
+          reg_value == PCIE_UNKNOWN_RESPONSE)
+      {
+          val_print(ACS_PRINT_ERR, " Unable to read RMECDA/IDE registers, BDF 0x%x", bdf);
+          test_fails++;
+          continue;
+      }
+      /* RMECDA_CTL3/4 are reserved for CXL ports. */
 
       uint64_t cfg_addr = val_pcie_get_bdf_config_addr(bdf);
 
-      val_pcie_write_cfg(bdf, rmecda_cap_base + RMECDA_CTL1_OFFSET, WRITE_DATA_CTL1);
-      if (val_rmsd_write_protect_check(cfg_addr + rmecda_cap_base + RMECDA_CTL1_OFFSET,
-                                       write_val,
-                                       reg_ctl1))
+      if (!cfg_addr || (cfg_addr & (PCIE_CFG_SIZE - 1u)))
       {
-        val_print(ACS_PRINT_ERR, " RMSD fail for RMECDA_CTL1 of RP-BDF, 0x%x", bdf);
-        test_fails++;
+          val_print(ACS_PRINT_ERR, " Invalid configuration address for BDF 0x%x", bdf);
+          test_fails++;
+          continue;
       }
 
-      val_pcie_read_cfg(bdf, ide_cap_base + IDE_CAP_REG, &reg_value);
+      /* Toggle TDISP_EN without changing the other CTL1 fields. */
+      write_val = reg_ctl1 ^ TDISP_EN_MASK;
+      if (val_rmsd_write_protect_check_masked(
+              cfg_addr + rmecda_cap_base + RMECDA_CTL1_OFFSET,
+              write_val, reg_ctl1, TDISP_EN_MASK))
+      {
+          val_print(ACS_PRINT_ERR, " RMSD fail for RMECDA_CTL1 of RP-BDF, 0x%x", bdf);
+          test_fails++;
+          continue;
+      }
 
       num_sel_ide_stream_supp = (reg_value & NUM_SEL_STR_MASK) >> NUM_SEL_STR_SHIFT;
       num_sel_ide_stream_supp += 1;
 
       if (num_sel_ide_stream_supp < 32)
-      {
-          write_val = SEL_STR_LOCK_VALID_MASK(num_sel_ide_stream_supp) & SEL_STR_LOCK_VALID_MAX;
+          lock_mask = SEL_STR_LOCK_VALID_MASK(num_sel_ide_stream_supp);
+      else
+          lock_mask = ALL_STREAM_LOCKS_MASK;
 
-          if (reg_ctl2 == write_val)
-              write_val = ~write_val & SEL_STR_LOCK_VALID_MASK(num_sel_ide_stream_supp);
-
-      } else {
-          write_val = WRITE_DATA_CTL2;
-      }
-
-      if (reg_ctl2 == write_val)
-          write_val = ~write_val;
-
-      if (val_rmsd_write_protect_check(cfg_addr + rmecda_cap_base + RMECDA_CTL2_OFFSET,
-                                       write_val,
-                                       reg_ctl2))
+      /* Exercise every implemented lock bit and preserve reserved bits. */
+      write_val = reg_ctl2 ^ lock_mask;
+      if (val_rmsd_write_protect_check_masked(
+              cfg_addr + rmecda_cap_base + RMECDA_CTL2_OFFSET,
+              write_val, reg_ctl2, lock_mask))
       {
         val_print(ACS_PRINT_ERR, " RMSD fail for RMECDA_CTL2 of RP-BDF, 0x%x", bdf);
         test_fails++;

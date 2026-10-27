@@ -227,7 +227,7 @@ void val_el3_access_mut(void)
     switch (type)
     {
         case READ_DATA:
-          data = *(volatile uint32_t *) shared_data->shared_data_access[acc_cnt].addr;
+          data = val_el3_mmio_read(shared_data->shared_data_access[acc_cnt].addr);
           VERBOSE("The data returned from the address, 0x%lx is 0x%x\n",
                shared_data->shared_data_access[acc_cnt].addr, (uint32_t)data);
           shared_data->shared_data_access[acc_cnt].data = data;
@@ -235,9 +235,9 @@ void val_el3_access_mut(void)
         case WRITE_DATA:
           data = shared_data->shared_data_access[acc_cnt].data;
           *(volatile uint32_t *)shared_data->shared_data_access[acc_cnt].addr = data;
-          VERBOSE("Data stored in VA, 0x%lx is 0x%x\n",
+          VERBOSE("Data requested for VA, 0x%lx is 0x%x\n",
                 shared_data->shared_data_access[acc_cnt].addr,
-                *(uint32_t *)shared_data->shared_data_access[acc_cnt].addr);
+                (uint32_t)data);
           break;
         case READ_DATA_BYTE:
           data = *(volatile uint8_t *)shared_data->shared_data_access[acc_cnt].addr;
@@ -249,9 +249,9 @@ void val_el3_access_mut(void)
           data = shared_data->shared_data_access[acc_cnt].data;
           *(volatile uint8_t *)shared_data->shared_data_access[acc_cnt].addr =
               (uint8_t)data;
-          VERBOSE("Data stored in VA, 0x%lx is 0x%x\n",
+          VERBOSE("Data requested for VA, 0x%lx is 0x%x\n",
                 shared_data->shared_data_access[acc_cnt].addr,
-                *(uint8_t *)shared_data->shared_data_access[acc_cnt].addr);
+                (uint8_t)data);
           break;
         default:
           ERROR("INVALID TYPE OF ACCESS");

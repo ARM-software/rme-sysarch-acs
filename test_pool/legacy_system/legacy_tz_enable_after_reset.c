@@ -47,11 +47,18 @@ payload()
 {
 
   uint64_t rme_impl_smmu, rme_impl_pe;
-  uint32_t num_smmu, smmu_index;
+  uint32_t num_smmu, smmu_index, status;
   uint32_t index = val_pe_get_index_mpid(val_pe_get_mpid());
 
   //Enable the Legacy_TZ_EN tie-off in the system
-  if (val_prog_legacy_tz(SET))
+  status = val_prog_legacy_tz(SET);
+  if (status == NOT_IMPLEMENTED)
+  {
+    val_print(ACS_PRINT_ERR, " LEGACY_TZ_EN programming API is not implemented", 0);
+    val_set_status(index, "FAIL", 03);
+    return;
+  }
+  if (status)
   {
     val_print(ACS_PRINT_ERR, "\n  Programming LEGACY_TZ_EN failed", 0);
     val_set_status(index, "FAIL", 01);

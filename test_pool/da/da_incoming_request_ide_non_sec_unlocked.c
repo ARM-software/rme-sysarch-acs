@@ -45,6 +45,8 @@ payload(void)
   uint32_t pe_index;
   uint32_t instance, num_exercisers;
   uint32_t bdf, rp_bdf, da_cap_base;
+  uint32_t status, stream_id;
+  const uint32_t count = 1;
   uint32_t dma_len, test_data_blk_size;
   void *dram_buf_in_virt, *dram_buf_in_virt2;
   uint32_t test_fail = 0, test_skip = 1;
@@ -76,8 +78,6 @@ payload(void)
       if (val_pcie_get_rootport(bdf, &rp_bdf))
           continue;
 
-      test_skip = 0;
-
       /* Check for DA Capability */
       if (val_pcie_find_da_capability(rp_bdf, &da_cap_base) != PCIE_SUCCESS)
       {
@@ -95,16 +95,36 @@ payload(void)
           continue;
       }
 
-      /* Transition the device to TDISP RUN state without establishing a stream */
+      dram_buf_in_virt = NULL;
+
+      /* Satisfy LOCK_INTERFACE prerequisites, but keep the RP stream Unlocked. */
+      if (val_ide_set_sel_stream_lock(rp_bdf, count, 0))
+      {
+          val_print(ACS_PRINT_ERR, " Failed to clear stream lock for RP: 0x%x", rp_bdf);
+          test_fail++;
+          goto instance_cleanup;
+      }
+      stream_id = val_generate_stream_id();
+      status = val_pcie_ide_establish(bdf, rp_bdf, count, stream_id,
+                                      PCIE_CREATE_BDF_PACKED(bdf));
+      if (status == ACS_STATUS_SKIP)
+          goto instance_cleanup;
+      if (status != ACS_STATUS_PASS)
+      {
+          val_print(ACS_PRINT_ERR, " Failed to establish PCIe IDE for BDF: 0x%x", bdf);
+          test_fail++;
+          goto instance_cleanup;
+      }
+
+      /* A Secure but Unlocked RP stream does not satisfy RKZBHV. */
       if (val_device_lock(bdf))
       {
           val_print(ACS_PRINT_ERR, " Failed to lock the device: 0x%lx", bdf);
           test_fail++;
-          /* Disable TDISP before moving to next instance */
-          if (val_pcie_disable_tdisp(rp_bdf))
-          test_fail++;
-          continue;
+          goto instance_cleanup;
       }
+
+      test_skip = 0;
 
       /* Create a buffer of size TEST_DMA_SIZE in DRAM */
       dram_buf_in_virt = val_memory_alloc_pages(TEST_DATA_NUM_PAGES);
@@ -168,10 +188,10 @@ instance_cleanup:
           test_fail++;
   }
 
-  if (test_skip)
-      val_set_status(pe_index, "SKIP", 01);
-  else if (test_fail)
+  if (test_fail)
       val_set_status(pe_index, "FAIL", 01);
+  else if (test_skip)
+      val_set_status(pe_index, "SKIP", 01);
   else
       val_set_status(pe_index, "PASS", 01);
 

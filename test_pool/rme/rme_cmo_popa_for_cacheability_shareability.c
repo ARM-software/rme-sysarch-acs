@@ -18,8 +18,6 @@
 #include "val/include/val.h"
 #include "val/include/val_pe.h"
 #include "val/include/val_common.h"
-#include "val/include/val_memory.h"
-#include "val/include/val_pgt.h"
 #include "val/include/val_test_entry.h"
 #include "val/include/val_interface.h"
 #include "val/include/val_el32.h"
@@ -31,9 +29,9 @@
 
 /*
  *  @brief  The test validates that coherent interconnect supports CMO to PoPA.
- * 1. Mark PA as ALL_ACCESS and initialise it  with INIT_DATA
+ * 1. Mark PA as ALL_ACCESS
  * 2. VA_NS and VA_S are mapped to the PA with Non-Secure and Secure access PAS respectively
- *    as Non-Cacheable.
+ *    as Non-Cacheable. Initialize through VA_NS and complete an NS CMO to PoPA.
  * 3. Access VA_NS and VA_S returns rd_data_ns and rd_data_s respectively.
  * 4. Store wt_data_s in VA_S and then issue CMO to PoPA for PA with secure and non-secure PASs.
  * 5. Access VA_NS and expect a data, ns_data_popa, that is different from rd_data_ns.
@@ -45,9 +43,6 @@ void payload(void)
   uint32_t index = val_pe_get_index_mpid(val_pe_get_mpid());
   uint64_t rd_data_s, rd_data_ns, wt_data_s, ns_data_popa, PA;
   uint64_t VA_S, VA_NS, size, attr_ns, attr_sec;
-  memory_region_descriptor_t mem_desc_array[2], *mem_desc;
-  pgt_descriptor_t pgt_desc;
-  uint64_t ttbr;
 
   size = val_get_min_tg();
   PA = val_get_free_pa(size, size);
@@ -59,46 +54,6 @@ void payload(void)
       val_set_status(index, "FAIL", 01);
       return;
   }
-
-  /* Get translation attributes via TCR and translation table base via TTBR */
-    if (val_pe_reg_read_tcr(0 /*for TTBR0*/,
-                            &pgt_desc.tcr)) {
-      val_print(ACS_PRINT_ERR, " TCR read failure", 0);
-      val_set_status(index, "FAIL", 02);
-      return;
-    }
-
-  if (val_pe_reg_read_ttbr(0 /*for TTBR0*/,
-                             &ttbr)) {
-      val_print(ACS_PRINT_ERR, " TTBR0 read failure", 0);
-      val_set_status(index, "FAIL", 03);
-      return;
-    }
-
-  val_memory_set(mem_desc_array, sizeof(mem_desc_array), 0);
-  mem_desc = &mem_desc_array[0];
-
-  pgt_desc.pgt_base = (ttbr & AARCH64_TTBR_ADDR_MASK);
-  pgt_desc.mair = val_pe_reg_read(MAIR_ELx);
-  pgt_desc.stage = PGT_STAGE1;
-
-  pgt_desc.ias = 48;
-  pgt_desc.oas = 48;
-  mem_desc->virtual_address = PA;
-  mem_desc->physical_address = PA;
-  mem_desc->length = size;
-  mem_desc->attributes |= (PGT_STAGE1_AP_RW);
-
-  if (val_pgt_create(mem_desc, &pgt_desc)) {
-        val_print(ACS_PRINT_ERR,
-                      " Unable to create page table with given attributes", 0);
-      val_set_status(index, "FAIL", 04);
-      return;
-  }
-
-  /*PA is initialized with the initial DATA*/
-  val_print(ACS_PRINT_TEST, " Initializing PA 0x%lx of GPI_ANY with INIT_DATA", PA);
-  *(uint64_t *)PA = (uint64_t) INIT_DATA;
 
   /* Map the PA with VA_Secure and VA_Non-Secure with Non-Cacheable attribute */
   attr_sec = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(OUTER_SHAREABLE)
@@ -115,6 +70,24 @@ void payload(void)
   if (val_add_mmu_entry_el3(VA_NS/* VA2 */, PA, attr_ns)) {
       val_print(ACS_PRINT_ERR, " Failed to add MMU entry for VA_NS 0x%lx", VA_NS);
       val_set_status(index, "FAIL", 06);
+      return;
+  }
+
+  /* Initialize through the NS alias, then remove dirty NS state before the Secure write. */
+  val_print(ACS_PRINT_TEST, " Initializing PA through NS PAS with data 0x%lx", INIT_DATA);
+  shared_data->num_access = 1;
+  shared_data->shared_data_access[0].addr = VA_NS;
+  shared_data->shared_data_access[0].data = INIT_DATA;
+  shared_data->shared_data_access[0].access_type = WRITE_DATA;
+  if (val_pe_access_mut_el3()) {
+      val_print(ACS_PRINT_ERR, " Failed to initialize VA_NS = 0x%lx", VA_NS);
+      val_set_status(index, "FAIL", 12);
+      return;
+  }
+
+  if (val_data_cache_ops_by_pa_el3(PA, NONSECURE_PAS)) {
+      val_print(ACS_PRINT_ERR, " Failed to issue initialization CMO for PA 0x%lx", PA);
+      val_set_status(index, "FAIL", 13);
       return;
   }
 

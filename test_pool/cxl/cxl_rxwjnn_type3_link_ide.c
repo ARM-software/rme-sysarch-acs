@@ -18,6 +18,7 @@
 #include "val/include/val.h"
 #include "val/include/val_interface.h"
 #include "val/include/val_cxl.h"
+#include "val/include/val_cxl_spec.h"
 #include "val/include/val_pcie.h"
 
 #define TEST_NAME "cxl_rxwjnn_type3_link_ide"
@@ -50,7 +51,8 @@ payload(void)
     uint32_t rp_bdf = 0u;
     uint32_t exposed = 0u;
     uint32_t rp_status;
-    uint64_t comp_base;
+    uint32_t root_index = CXL_COMPONENT_INVALID_INDEX;
+    uint32_t ide_capability;
 
     if (component->device_type != CXL_DEVICE_TYPE_TYPE3)
       continue;
@@ -88,14 +90,43 @@ payload(void)
 
     exposed_links++;
 
-    /* If the link is exposed, Check that the rootport supports CXL IDE*/
-    comp_base = val_cxl_get_component_info(CXL_COMPONENT_INFO_COMPONENT_BASE, idx);
-    if (val_cxl_find_capability(comp_base, CXL_CAPID_IDE, NULL) != ACS_STATUS_PASS)
+    /* Exposed links require IDE support at both the device and Root Port.
+       A capability header alone does not establish IDE support. */
+    if ((val_cxl_ide_get_capability(idx, &ide_capability) != ACS_STATUS_PASS) ||
+        (ide_capability == PCIE_UNKNOWN_RESPONSE) ||
+        ((ide_capability & CXL_IDE_CAP_CAPABLE) == 0u))
     {
-      val_print(ACS_PRINT_INFO,
-                " Root Port 0x%x missing CXL IDE capability - skip",
-                (uint64_t)rp_bdf);
+      val_print(ACS_PRINT_ERR,
+                " Type-3 device 0x%x does not advertise CXL IDE support",
+                component->bdf);
+      failures++;
+    }
+
+    for (uint32_t root = 0; root < comp_tbl->num_entries; ++root)
+    {
+      if ((comp_tbl->component[root].bdf == rp_bdf) &&
+          (comp_tbl->component[root].role == CXL_COMPONENT_ROLE_ROOT_PORT))
+      {
+        root_index = root;
+        break;
+      }
+    }
+
+    if (root_index == CXL_COMPONENT_INVALID_INDEX)
+    {
+      val_print(ACS_PRINT_ERR,
+                " Root Port 0x%x missing from CXL component table", rp_bdf);
+      failures++;
       continue;
+    }
+
+    if ((val_cxl_ide_get_capability(root_index, &ide_capability) != ACS_STATUS_PASS) ||
+        (ide_capability == PCIE_UNKNOWN_RESPONSE) ||
+        ((ide_capability & CXL_IDE_CAP_CAPABLE) == 0u))
+    {
+      val_print(ACS_PRINT_ERR,
+                " Root Port 0x%x does not advertise CXL IDE support", rp_bdf);
+      failures++;
     }
   }
 

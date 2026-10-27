@@ -181,9 +181,9 @@ MODULE_TEST_DISPATCHER_s g_module_test_table[MODULE_SENTINEL] = {
         .entry_fn = cxl_rcnslj_type3_no_tsp_entry,
         .test_text = "cxl_rcnslj_type3_no_tsp",
       },
-      [CXL_ENTRY_CXL_RDHWNR_LINK_STREAM_LOCK_ENTRY] = {
-        .entry_fn = cxl_rdhwnr_link_stream_lock_entry,
-        .test_text = "cxl_rdhwnr_link_stream_lock",
+      [CXL_ENTRY_CXL_RDHNWR_LINK_STREAM_LOCK_ENTRY] = {
+        .entry_fn = cxl_rdhnwr_link_stream_lock_entry,
+        .test_text = "cxl_rdhnwr_link_stream_lock",
       },
       [CXL_ENTRY_CXL_RFDVZC_TDISP_DISABLE_ENTRY] = {
         .entry_fn = cxl_rfdvzc_tdisp_disable_entry,
@@ -289,10 +289,6 @@ MODULE_TEST_DISPATCHER_s g_module_test_table[MODULE_SENTINEL] = {
       [DA_ENTRY_DA_DVSEC_REGISTER_CONFIG_ENTRY] = {
         .entry_fn = da_dvsec_register_config_entry,
         .test_text = "da_dvsec_register_config",
-      },
-      [DA_ENTRY_DA_IDE_STATE_ROOTPORT_ERROR_ENTRY] = {
-        .entry_fn = da_ide_state_rootport_error_entry,
-        .test_text = "da_ide_state_rootport_error",
       },
       [DA_ENTRY_DA_IDE_STATE_TDISP_DISABLE_ENTRY] = {
         .entry_fn = da_ide_state_tdisp_disable_entry,
@@ -1064,7 +1060,7 @@ void val_set_test_data(uint32_t index, uint64_t addr, uint64_t test_data)
 {
   volatile VAL_SHARED_MEM_t *mem;
 
-  if (index > val_pe_get_num())
+  if (index >= val_pe_get_num())
   {
     val_print(ACS_PRINT_ERR, " Incorrect PE index = %d", index);
     return;
@@ -1096,7 +1092,7 @@ void val_get_test_data(uint32_t index, uint64_t *data0, uint64_t *data1)
 
   volatile VAL_SHARED_MEM_t *mem;
 
-  if (index > val_pe_get_num())
+  if (index >= val_pe_get_num())
   {
     val_print(ACS_PRINT_ERR, " Incorrect PE index = %d", index);
     return;
@@ -1432,13 +1428,13 @@ uint64_t val_get_free_va(uint64_t size)
     if (val_pe_reg_read_tcr(0 /*for TTBR0*/, &pgt_desc.tcr))
     {
       val_print(ACS_PRINT_ERR, " TCR read failure", 0);
-      return 1;
+      return 0;
     }
 
     if (val_pe_reg_read_ttbr(0 /*for TTBR0*/, &ttbr))
     {
       val_print(ACS_PRINT_ERR, " TTBR0 read failure", 0);
-      return 1;
+      return 0;
     }
 
     val_memory_set(mem_desc_array, sizeof(mem_desc_array), 0);
@@ -1458,13 +1454,13 @@ uint64_t val_get_free_va(uint64_t size)
     if (val_pgt_create(mem_desc, &pgt_desc))
     {
       val_print(ACS_PRINT_ERR, " Unable to create page table with given attributes", 0);
-      return 1;
+      return 0;
     }
   }
   if (!Aarch64VaIsMappedForWrite((void *)free_mem_var_va))
   {
     val_print(ACS_PRINT_ERR, "The VA is still not mapped for write", 0);
-    return 1;
+    return 0;
   }
   mem_base = free_mem_var_va;
   free_mem_var_va += size;

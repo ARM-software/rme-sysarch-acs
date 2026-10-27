@@ -15,6 +15,9 @@
  * limitations under the License.
  **/
 
+#ifndef VAL_EL32_H
+#define VAL_EL32_H
+
 /* Defines related to User SMC Call services */
 #define RME_INSTALL_HANDLER       0x1
 #define RME_ADD_GPT_ENTRY         0x2
@@ -37,7 +40,7 @@
 #define MEC_SERVICE               0x13
 #define RME_CMO_POE               0x14
 #define RME_GET_SHARED_MEM        0x15
-#define EL3_IDE_KM                0x16
+#define EL3_CXL_IDE_KM            0x16
 #define EL3_PCIE_IDE_KM           0x17
 #define SMMU_ROOT_CONTROL        0x18
 
@@ -46,6 +49,7 @@
 #define SMMU_ROOT_CR0_WRITE       3
 #define SMMU_ROOT_ACCESSEN        (1U << 0)
 #define SMMU_ROOT_GPCEN           (1U << 1)
+#define RME_GET_GPT_ENTRY         0x19
 
 /* General Defines used by tests */
 #define INIT_DATA            0x11
@@ -53,19 +57,25 @@
 #define RANDOM_DATA_2        0x77
 #define RANDOM_DATA_3        0x55
 #define RANDOM_DATA_4        0x33
+/* ESR selector for an expected synchronous external read abort at EL3. */
+#define SEA_ESR_READ         0x96000010ULL
 #define READ_DATA            0
 #define WRITE_DATA           1
 #define READ_DATA_BYTE       2
 #define WRITE_DATA_BYTE      3
+#define READ_DATA_GPF        4
+#define WRITE_DATA_GPF       5
 #define CLEAN_AND_INVALIDATE 0x1
 #define CLEAN                0x2
 #define INVALIDATE           0x3
 #define CLEAN_AND_INVALIDATE_SET_WAY 0x4
 #define SET                  1
 #define CLEAR                0
-#define IDE_ENABLE           1
-#define IDE_DISABLE          2
-#define IDE_GET_BASE         3
+/* Operation-specific value in generic_flag for the inactive PAS-filter probe. */
+#define PAS_FILTER_INACTIVE_PROBE 2
+#define IDE_CXL_KEY_PROG     8
+#define IDE_CXL_KEY_GO       9
+#define IDE_CXL_KEY_STOP     10
 #define IDE_PCIE_KEY_PROG    5
 #define IDE_PCIE_KEY_GO      6
 #define IDE_PCIE_KEY_STOP    7
@@ -212,3 +222,5 @@ typedef enum {
 } RME_ACS_REGS_MSD;
 
 #endif
+
+#endif /* VAL_EL32_H */

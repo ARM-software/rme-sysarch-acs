@@ -3002,193 +3002,301 @@ uint32_t val_pcie_write_detect_bitfield_check(uint32_t bdf, uint64_t *bitfield_e
   return 0;
 }
 
+static uint32_t
+pcie_rp_pas_access(uint64_t addr, uint32_t access_type, uint32_t *data)
+{
+  shared_data->num_access = 1;
+  shared_data->shared_data_access[0].addr = addr;
+  shared_data->shared_data_access[0].access_type = access_type;
+  shared_data->shared_data_access[0].data = (access_type == WRITE_DATA) ? *data : 0u;
+  if (val_pe_access_mut_el3())
+      return 1u;
+  if (access_type == READ_DATA)
+      *data = (uint32_t)shared_data->shared_data_access[0].data;
+  return 0u;
+}
+
+static uint32_t
+pcie_rp_root_write_check(uint64_t root_addr, uint32_t request, uint32_t expected)
+{
+  uint32_t readback = 0u;
+
+  if (pcie_rp_pas_access(root_addr, WRITE_DATA, &request) ||
+      pcie_rp_pas_access(root_addr, READ_DATA, &readback))
+      return 1u;
+  if (readback != expected)
+  {
+      val_print(ACS_PRINT_ERR, " Root expected 0x%x", expected);
+      val_print(ACS_PRINT_ERR, " Root read returned 0x%x", readback);
+      return 1u;
+  }
+  return 0u;
+}
+
+static uint32_t
+pcie_rp_prepare_stimulus(uint64_t root_addr, uint32_t original,
+                         uint32_t *baseline_request, uint32_t *baseline,
+                         uint32_t *attempt_request, uint32_t *attempt,
+                         uint32_t write_mask)
+{
+  /*
+   * Preserve every bit outside the platform-provided writable mask. Try
+   * several values within that mask because a register can normalize a legal
+   * field value. Retain effective Root readbacks for the PAS checks.
+   */
+  const uint32_t patterns[] = {
+    TEST_DATA_1, TEST_DATA_2, ~original, 0x55555555u, 0xaaaaaaaau
+  };
+  uint32_t requests[sizeof(patterns) / sizeof(patterns[0])];
+  uint32_t effective[sizeof(patterns) / sizeof(patterns[0])];
+  uint32_t count = (uint32_t)(sizeof(patterns) / sizeof(patterns[0]));
+
+  for (uint32_t index = 0u; index < count; ++index)
+  {
+      uint32_t request = (original & ~write_mask) |
+                         (patterns[index] & write_mask);
+
+      requests[index] = request;
+      if (pcie_rp_pas_access(root_addr, WRITE_DATA, &request) ||
+          pcie_rp_pas_access(root_addr, READ_DATA, &effective[index]))
+          return 1u;
+  }
+
+  for (uint32_t base_index = 0u; base_index < count; ++base_index)
+  {
+      /* Zero and all-ones can also be blocked-read responses. */
+      if (effective[base_index] == 0u || effective[base_index] == 0xffffffffu)
+          continue;
+
+      for (uint32_t attempt_index = 0u; attempt_index < count; ++attempt_index)
+      {
+          /* The unauthorized write must change a configured writable bit. */
+          if (((effective[attempt_index] ^ effective[base_index]) &
+               write_mask) == 0u)
+              continue;
+
+          *baseline_request = requests[base_index];
+          *baseline = effective[base_index];
+          *attempt_request = requests[attempt_index];
+          *attempt = effective[attempt_index];
+
+          /* Leave the register at the selected value before PAS testing. */
+          if (pcie_rp_root_write_check(root_addr, *baseline_request, *baseline))
+              return 1u;
+          return 0u;
+      }
+  }
+
+  return 1u;
+}
+
 uint32_t val_pcie_rp_sec_prpty_check(uint64_t *register_entry_info)
 {
-  REGISTER_INFO_TABLE *register_entry;
-  uint32_t bdf;
-  uint64_t tg;
-  uint64_t reg_pa_page;
-  uint64_t pgt_attr_el3;
-  uint32_t rd_data = 0;
-  uint32_t data_rt, data_ns, org_data;
-  uint32_t ret = 0;
-  uint32_t tdisp_enabled = 0;
-  uint32_t restore_required = 0;
+  static const uint64_t pas_list[] = {ROOT_PAS, NONSECURE_PAS, SECURE_PAS, REALM_PAS};
+  REGISTER_INFO_TABLE *register_entry = (REGISTER_INFO_TABLE *)register_entry_info;
+  uint64_t pas_addr[4], tg, reg_pa_page, reg_offset, pgt_attr_el3, original_gpi;
+  uint32_t bdf, org_data = 0u, baseline_request, baseline;
+  uint32_t attempt_request, attempt, write_mask, readback;
+  uint32_t ret = 0u;
+  uint32_t tdisp_enabled = 0u;
+  uint32_t restore_required = 0u;
+  uint32_t gpt_modified = 0u;
 
-  register_entry = (REGISTER_INFO_TABLE *)register_entry_info;
-
+  if (register_entry == NULL)
+      return 1u;
   if (register_entry->type != PCIE_RP)
-      return 0;
+      return 0u;
+  if (register_entry->property != RMSD_WRITE_PROTECT &&
+      register_entry->property != RMSD_FULL_PROTECT)
+      return 1u;
+  write_mask = register_entry->write_mask;
+  if (!write_mask)
+  {
+      val_print(ACS_PRINT_ERR, " Writable mask is not configured for address: 0x%llx",
+                register_entry->address);
+      return 1u;
+  }
 
   bdf = register_entry->bdf;
-
-  val_print(ACS_PRINT_DEBUG, " Bdf: 0x%x", register_entry->bdf);
-  val_print(ACS_PRINT_DEBUG, " Address: 0x%x", register_entry->bdf);
+  val_print(ACS_PRINT_DEBUG, " Bdf: 0x%x", bdf);
+  val_print(ACS_PRINT_DEBUG, " Address: 0x%llx", register_entry->address);
   val_print(ACS_PRINT_DEBUG, " Property: %d", register_entry->property);
 
-  data_rt = TEST_DATA_1;
-  data_ns = TEST_DATA_2;
-
-  /* Enable TDISP_EN */
   if (val_pcie_enable_tdisp(bdf))
   {
       val_print(ACS_PRINT_INFO, " TDISP_EN not enabled for BDF: 0x%x ", bdf);
-      return 1;
+      return 1u;
   }
-  tdisp_enabled = 1;
+  tdisp_enabled = 1u;
 
-  /*
-   * Map the target register page into EL3 before MUT access.
-   * CXL IDE_KM addresses are MMIO and must be EL3-mapped explicitly.
-   */
   tg = val_get_min_tg();
-  reg_pa_page = register_entry->address & ~(tg - 1u);
-  if (val_add_gpt_entry_el3(reg_pa_page, GPT_ANY))
+  if (!tg || (tg & (tg - 1u)) || (register_entry->address & 3u))
   {
-      val_print(ACS_PRINT_ERR, " EL3 GPT mapping failed for reg page: 0x%llx", reg_pa_page);
-      ret = 1;
+      ret = 1u;
       goto cleanup;
+  }
+  reg_pa_page = register_entry->address & ~(tg - 1u);
+  reg_offset = register_entry->address - reg_pa_page;
+  pgt_attr_el3 = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(OUTER_SHAREABLE) |
+                             GET_ATTR_INDEX(DEV_MEM_nGnRnE) | PGT_ENTRY_AP_RW);
+
+  /* ILGWNF requires the RP filter itself to enforce these properties. */
+  if (val_get_gpt_entry_el3(reg_pa_page, &original_gpi) ||
+      val_add_gpt_entry_el3(reg_pa_page, GPT_ANY))
+  {
+      ret = 1u;
+      goto cleanup;
+  }
+  gpt_modified = 1u;
+  for (uint32_t index = 0u; index < 4u; ++index)
+  {
+      uint64_t va = val_get_free_va(tg);
+
+      if (!va || (va & (tg - 1u)) ||
+          val_add_mmu_entry_el3(va, reg_pa_page,
+                            pgt_attr_el3 | LOWER_ATTRS(PAS_ATTR(pas_list[index]))))
+      {
+          ret = 1u;
+          goto cleanup;
+      }
+      pas_addr[index] = va + reg_offset;
   }
 
-  pgt_attr_el3 = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(OUTER_SHAREABLE) |
-                             GET_ATTR_INDEX(DEV_MEM_nGnRnE) | PGT_ENTRY_AP_RW |
-                             PAS_ATTR(ROOT_PAS));
-  if (val_add_mmu_entry_el3(reg_pa_page, reg_pa_page, pgt_attr_el3))
+  if (pcie_rp_pas_access(pas_addr[0], READ_DATA, &org_data))
   {
-      val_print(ACS_PRINT_ERR, " EL3 MMU mapping failed for reg page: 0x%llx", reg_pa_page);
-      ret = 1;
+      ret = 1u;
       goto cleanup;
   }
+  restore_required = 1u;
+
+  if (pcie_rp_prepare_stimulus(pas_addr[0], org_data,
+                               &baseline_request, &baseline,
+                               &attempt_request, &attempt, write_mask))
+  {
+      val_print(ACS_PRINT_ERR, " No safe distinguishable stimulus for BDF: 0x%x", bdf);
+      ret = 1u;
+      goto cleanup;
+  }
+  val_print(ACS_PRINT_TEST, " Root baseline 0x%x", baseline);
+  val_print(ACS_PRINT_TEST, " Configured writable mask 0x%x", write_mask);
 
   switch (register_entry->property)
   {
-      case RMSD_WRITE_PROTECT:
-          /* Store the original data */
-          org_data = val_mmio_read(register_entry->address);
-
-          /* Write data from Root */
-          shared_data->num_access = 1;
-          shared_data->shared_data_access[0].addr = register_entry->address;
-          shared_data->shared_data_access[0].access_type = WRITE_DATA;
-          shared_data->shared_data_access[0].data = data_rt;
-          restore_required = 1;
-          if (val_pe_access_mut_el3())
+    case RMSD_WRITE_PROTECT:
+      /* Reads are permitted through every PAS. */
+      for (uint32_t index = 1u; index < 4u; ++index)
+      {
+          if (pcie_rp_pas_access(pas_addr[index], READ_DATA, &readback) ||
+              readback != baseline)
           {
-            val_print(ACS_PRINT_ERR, " MUT access failed for 0x%llx", register_entry->address);
-            ret = 1;
-            goto cleanup;
-          }
-
-          /* Read the address from the NS */
-          rd_data = val_mmio_read(register_entry->address);
-
-          /* Fail if the NS read is not successfull */
-          if (rd_data != data_rt)
-          {
-              val_print(ACS_PRINT_ERR, " Read is not succesfull from NS for bdf: 0x%x", bdf);
-              ret = 1;
+              val_print(ACS_PRINT_ERR, " Read failed for PAS: 0x%llx", pas_list[index]);
+              ret = 1u;
               goto cleanup;
           }
+      }
 
-          /* Write data from NS */
-          val_mmio_write(register_entry->address, data_ns);
-          rd_data = val_mmio_read(register_entry->address);
+      /* Realm writes are permitted and must have the same effect as Root writes. */
+      readback = attempt_request;
+      if (pcie_rp_pas_access(pas_addr[3], WRITE_DATA, &readback) ||
+          pcie_rp_pas_access(pas_addr[0], READ_DATA, &readback) ||
+          readback != attempt)
+      {
+          val_print(ACS_PRINT_ERR, " Realm write failed for BDF: 0x%x", bdf);
+          ret = 1u;
+          goto cleanup;
+      }
+      if (pcie_rp_root_write_check(pas_addr[0], baseline_request, baseline))
+      {
+          ret = 1u;
+          goto cleanup;
+      }
 
-          /* Fail if the NS write is successfull */
-          if (rd_data != data_rt)
+      /* Non-secure and Secure writes must be ignored by the RP filter. */
+      for (uint32_t index = 1u; index <= 2u; ++index)
+      {
+          readback = attempt_request;
+          if (pcie_rp_pas_access(pas_addr[index], WRITE_DATA, &readback) ||
+              pcie_rp_pas_access(pas_addr[0], READ_DATA, &readback) ||
+              readback != baseline)
           {
-              val_print(ACS_PRINT_ERR, " Write is successful from NS for bdf: 0x%x", bdf);
-              ret = 1;
+              val_print(ACS_PRINT_ERR, " Write accepted for PAS: 0x%llx", pas_list[index]);
+              ret = 1u;
               goto cleanup;
           }
+      }
+      break;
 
-          rd_data = 0;
-          break;
     case RMSD_FULL_PROTECT:
-          /* Store the original data */
-          shared_data->num_access = 1;
-          shared_data->shared_data_access[0].addr = register_entry->address;
-          shared_data->shared_data_access[0].access_type = READ_DATA;
-          if (val_pe_access_mut_el3())
-          {
-            val_print(ACS_PRINT_ERR, " MUT access failed for 0x%llx", register_entry->address);
-            ret = 1;
-            goto cleanup;
-          }
-          org_data = shared_data->shared_data_access[0].data;
+      /* Realm reads and writes are permitted. */
+      if (pcie_rp_pas_access(pas_addr[3], READ_DATA, &readback) ||
+          readback != baseline)
+      {
+          val_print(ACS_PRINT_ERR, " Realm read failed for BDF: 0x%x", bdf);
+          ret = 1u;
+          goto cleanup;
+      }
+      readback = attempt_request;
+      if (pcie_rp_pas_access(pas_addr[3], WRITE_DATA, &readback) ||
+          pcie_rp_pas_access(pas_addr[0], READ_DATA, &readback) ||
+          readback != attempt)
+      {
+          val_print(ACS_PRINT_ERR, " Realm write failed for BDF: 0x%x", bdf);
+          ret = 1u;
+          goto cleanup;
+      }
+      if (pcie_rp_root_write_check(pas_addr[0], baseline_request, baseline))
+      {
+          ret = 1u;
+          goto cleanup;
+      }
 
-          /* Write the data_rt from ROOT */
-          shared_data->num_access = 1;
-          shared_data->shared_data_access[0].addr = register_entry->address;
-          shared_data->shared_data_access[0].access_type = WRITE_DATA;
-          shared_data->shared_data_access[0].data = data_rt;
-          restore_required = 1;
-          if (val_pe_access_mut_el3())
+      /* Non-secure and Secure reads and writes must be blocked by the RP filter. */
+      for (uint32_t index = 1u; index <= 2u; ++index)
+      {
+          if (pcie_rp_pas_access(pas_addr[index], READ_DATA, &readback) ||
+              readback == baseline)
           {
-            val_print(ACS_PRINT_ERR, " MUT access failed for 0x%llx", register_entry->address);
-            ret = 1;
-            goto cleanup;
-          }
-
-          /* Read the data from NS */
-          rd_data = val_mmio_read(register_entry->address);
-
-          /* Fail if the NS read is successfull */
-          if (rd_data == data_rt)
-          {
-              val_print(ACS_PRINT_ERR, " Read is succesfull from NS for bdf: 0x%x", bdf);
-              ret = 1;
+              val_print(ACS_PRINT_ERR, " Read exposed data for PAS: 0x%llx", pas_list[index]);
+              ret = 1u;
               goto cleanup;
           }
 
-          /* Write the data_ns from NS */
-          val_mmio_write(register_entry->address, data_ns);
-
-          /* Read back through Root PAS to verify the NS write was blocked. */
-          shared_data->num_access = 1;
-          shared_data->shared_data_access[0].addr = register_entry->address;
-          shared_data->shared_data_access[0].access_type = READ_DATA;
-          if (val_pe_access_mut_el3())
+          readback = attempt_request;
+          if (pcie_rp_pas_access(pas_addr[index], WRITE_DATA, &readback) ||
+              pcie_rp_pas_access(pas_addr[0], READ_DATA, &readback) ||
+              readback != baseline)
           {
-            val_print(ACS_PRINT_ERR, " MUT access failed for 0x%llx", register_entry->address);
-            ret = 1;
-            goto cleanup;
-          }
-          rd_data = shared_data->shared_data_access[0].data;
-
-          /* Fail if the NS write changed the Root-visible value. */
-          if (rd_data != data_rt)
-          {
-              val_print(ACS_PRINT_ERR, " Write is successful from NS for bdf: 0x%x", bdf);
-              ret = 1;
+              val_print(ACS_PRINT_ERR, " Write accepted for PAS: 0x%llx", pas_list[index]);
+              ret = 1u;
               goto cleanup;
           }
-
-          rd_data = 0;
-          break;
+      }
+      break;
 
     default:
-      val_print(ACS_PRINT_ERR, " Invalid Security Property: %d", register_entry->property);
-      ret = 1;
-      goto cleanup;
+      ret = 1u;
+      break;
   }
 
 cleanup:
   if (restore_required)
   {
-      shared_data->num_access = 1;
-      shared_data->shared_data_access[0].addr = register_entry->address;
-      shared_data->shared_data_access[0].access_type = WRITE_DATA;
-      shared_data->shared_data_access[0].data = org_data;
-      if (val_pe_access_mut_el3())
+      if (pcie_rp_root_write_check(pas_addr[0], org_data, org_data))
       {
           val_print(ACS_PRINT_ERR, " Failed to restore register 0x%llx", register_entry->address);
-          ret = 1;
+          ret = 1u;
       }
   }
 
+  if (gpt_modified &&
+      val_add_gpt_entry_el3(reg_pa_page, original_gpi))
+  {
+      val_print(ACS_PRINT_ERR, " Failed to restore GPT for page 0x%llx", reg_pa_page);
+      ret = 1u;
+  }
+
   if (tdisp_enabled)
-    (void)val_pcie_disable_tdisp(bdf);
+      (void)val_pcie_disable_tdisp(bdf);
 
   return ret;
 }

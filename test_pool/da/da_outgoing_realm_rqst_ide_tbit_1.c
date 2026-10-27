@@ -46,7 +46,7 @@ payload(void)
   static uint32_t tbl_index;
   uint32_t bdf, rp_bdf;
   uint32_t da_cap_base;
-  uint64_t bar_base, bar_size;
+  uint64_t bar_base, bar_size, original_gpi;
   uint32_t bar_index;
   uint32_t pgt_attr_el3;
   uint32_t data;
@@ -56,6 +56,7 @@ payload(void)
   uint32_t stream_id;
   uint32_t count, dp_type, status;
   uint32_t tdisp_enabled, address_configured, rp_lock_attempted;
+  uint32_t gpt_modified;
 
   tbl_index = 0;
   pe_index = val_pe_get_index_mpid(val_pe_get_mpid());
@@ -77,6 +78,7 @@ payload(void)
           tdisp_enabled = 0;
           address_configured = 0;
           rp_lock_attempted = 0;
+          gpt_modified = 0;
 
           /* Get the BAR of the Endpoint */
           val_pcie_get_mmio_bar(bdf, &bar_base);
@@ -112,6 +114,16 @@ payload(void)
               goto ide_cleanup;
           }
           tdisp_enabled = 1;
+
+          /* Allow Realm access to the BAR granule and preserve its original GPI. */
+          if (val_get_gpt_entry_el3(bar_base, &original_gpi) ||
+              val_add_gpt_entry_el3(bar_base, GPT_REALM))
+          {
+              val_print(ACS_PRINT_ERR, " Unable to configure BAR GPT permission: 0x%lx", bar_base);
+              test_fail++;
+              goto ide_cleanup;
+          }
+          gpt_modified = 1;
 
           /* Map the Bar address to realm PAS */
           va = val_get_free_va(val_get_min_tg());
@@ -228,6 +240,11 @@ ide_cleanup:
               if (val_pcie_disable_tdisp(rp_bdf))
                   test_fail++;
               tdisp_enabled = 0;
+          }
+          if (gpt_modified && val_add_gpt_entry_el3(bar_base, original_gpi))
+          {
+              val_print(ACS_PRINT_ERR, " Unable to restore BAR GPT permission: 0x%lx", bar_base);
+              test_fail++;
           }
       }
   }

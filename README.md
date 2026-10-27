@@ -177,9 +177,11 @@ Module selection notes:
 - Build ACS with `ENABLE_SPDM=1` to enable running those tests.
 - A DOE/SPDM-capable device or emulation environment is required; otherwise the dependent
   tests report `SKIP`.
-- When `ENABLE_SPDM=1` is set, apply
-  `tools/patches/aemfvp-a/spdm-emu/0001-fix-ignore-request-only-key_sub_stream-bits-in-CXL-I.patch`
-  in `ext/spdm-emu`.
+- When `ENABLE_SPDM=1` is set, apply the patches in
+  `tools/patches/aemfvp-a/spdm-emu/` to `ext/spdm-emu` in numeric order.
+  Patch 0001 fixes CXL IDE-KM ACK validation; patch 0002 expands the PCIe
+  IDE-KM QUERY receive buffer. These dependency fixes are maintained as
+  ACS-managed patches until they are merged upstream and the submodule is updated.
 - Tests that do not depend on SPDM are unaffected when `ENABLE_SPDM` is not enabled.
 
 Runtime platform configuration (UEFI)

@@ -53,8 +53,7 @@
 #define ACS_STATUS_SKIP   0x10000000
 #define ACS_STATUS_PASS   0x0
 #define ACS_INVALID_INDEX 0xFFFFFFFF
-
-#define NOT_IMPLEMENTED 0x4B1D /* Feature or API not imeplemented */
+#define NOT_IMPLEMENTED   0x4B1D
 
 #define VAL_EXTRACT_BITS(data, start, end) \
   (((uint64_t)(data) >> (start)) & \
@@ -118,14 +117,17 @@ uint32_t val_data_cache_ops_by_va_el3(uint64_t address, uint32_t type);
 uint32_t val_memory_set_el3(void *buf, uint32_t size, uint8_t value);
 uint32_t val_add_mmu_entry_el3(uint64_t VA, uint64_t PA, uint64_t attr);
 uint32_t val_add_gpt_entry_el3(uint64_t PA, uint64_t gpi);
+uint32_t val_get_gpt_entry_el3(uint64_t PA, uint64_t *gpi);
 uint32_t val_pe_access_mut_el3(void);
 uint32_t val_data_cache_ops_by_pa_el3(uint64_t PA, uint64_t acc_pas);
 uint32_t val_rme_install_handler_el3(void);
 uint32_t val_disable_ns_encryption(void);
 uint32_t val_read_pe_regs_bfr_low_pwr_el3(void);
 uint32_t val_cmpr_pe_regs_aftr_low_pwr_el3(void);
+/* Return the PAL status: 0 on success, NOT_IMPLEMENTED, or another nonzero error. */
 uint32_t val_prog_legacy_tz(int enable);
 uint32_t val_wd_set_ws0_el3(uint64_t VA_RT_WDOG, uint32_t timeout, uint64_t counter_freq);
+/* Return the PAL status: 0 on success, NOT_IMPLEMENTED, or another nonzero error. */
 uint32_t val_pas_filter_active_mode_el3(int enable);
 uint32_t val_smmu_access_disable(uint64_t smmu_base);
 uint32_t val_smmu_access_enable(uint64_t smmu_base);
@@ -140,7 +142,7 @@ uint32_t val_smmu_rlm_map_el3(smmu_master_attributes_t *smmu_attr, pgt_descripto
 uint32_t val_smmu_rlm_unmap_el3(smmu_master_attributes_t *smmu_attr);
 uint32_t val_smmu_gpt_invalidate_el3(smmu_master_attributes_t *smmu_attr);
 void val_register_create_info_table(uint64_t *register_info_table);
-uint32_t val_dpt_add_entry(uint64_t translated_addr, uint64_t smmu_index_and_access);
+uint32_t val_dpt_add_entry(uint64_t translated_addr, uint64_t smmu_info);
 uint32_t val_dpt_invalidate_all(uint64_t smmu_index);
 uint32_t val_rlm_pgt_create(memory_region_descriptor_t *mem_desc, pgt_descriptor_t *pgt_desc);
 uint32_t val_rlm_pgt_destroy(pgt_descriptor_t *pgt_desc);
@@ -153,16 +155,14 @@ uint32_t val_cmo_to_poe(uint64_t PA);
 uint32_t val_rlm_configure_mecid(uint32_t mecid);
 uint32_t val_smmu_rlm_configure_mecid(smmu_master_attributes_t *smmu_attr, uint32_t mecid);
 void val_map_shared_mem_el3(uint64_t shared_addr);
-uint32_t val_cxl_root_port_ide_program_and_enable_el3(uint64_t bar0_base,
+uint32_t val_cxl_root_port_ide_program_el3(uint32_t rp_bdf,
                                                        uint8_t stream_id,
                                                        uint8_t key_slot,
                                                        const CXL_IDE_KEY_BUFFER *rx_key,
                                                        const CXL_IDE_KEY_BUFFER *tx_key);
-uint32_t val_cxl_root_port_ide_disable_el3(uint64_t bar0_base,
-                                            uint8_t stream_id,
-                                            uint8_t key_slot);
-uint32_t val_cxl_root_port_ide_get_base_el3(uint64_t bar0_base,
-                                             uint64_t *ide_km_base);
+uint32_t val_cxl_root_port_ide_go_el3(uint32_t rp_bdf, uint8_t stream_id, uint8_t key_slot,
+                                      uint8_t mode);
+uint32_t val_cxl_root_port_ide_stop_el3(uint32_t rp_bdf, uint8_t stream_id, uint8_t key_slot);
 
 /* PCIe VAL APIs */
 void val_pcie_create_info_table(uint64_t *pcie_info_table);

@@ -59,6 +59,8 @@
         .globl val_el3_tlbi_alle3is
         .globl val_el3_isb
         .globl val_el3_acs_str
+        .globl val_el3_acs_str32
+        .globl val_el3_acs_ldr32
         .globl val_el3_acs_ldr_pas_filter
         .globl val_el3_write_mair_el3
         .globl val_el3_read_mair_el3
@@ -142,6 +144,61 @@ val_el3_acs_str:
        ldr    x2, [x0, #0x10]
        msr    elr_el3, x1
        msr    spsr_el3, x2
+       isb
+       eret
+
+/**
+ * @brief Perform one fault-safe 32-bit store and return from the originating SMC.
+ * @param1 Virtual address on which the data is stored.
+ * @param2 32-bit data to store.
+ * @return None
+ */
+val_el3_acs_str32:
+       msr    spsel, #0
+       ldp    x10,  x11,  [sp],#0x10
+       ldp    x6,  x7,  [sp],#0x10
+       ldp    x4,  x5,  [sp],#0x10
+       ldp    x2,  x3,  [sp],#0x10
+       ldp    x8,  x9,  [sp],#0x10
+       msr    spsel, #1
+       mov    sp, x11
+       msr    sp_el0, x10
+
+       str    w1, [x0]
+       dsb    sy
+       ldr    x0, =PLAT_SHARED_ADDRESS
+       str    xzr, [x0, #0x18]
+       ldr    x1, [x0, #0x8]
+       ldr    x2, [x0, #0x10]
+       msr    elr_el3, x1
+       msr    spsr_el3, x2
+       isb
+       eret
+
+/**
+ * @brief Perform one fault-safe 32-bit load and return from the originating SMC.
+ * @param1 Virtual address from which the data is loaded.
+ * @return None
+ */
+val_el3_acs_ldr32:
+       msr    spsel, #0
+       ldp    x10,  x11,  [sp],#0x10
+       ldp    x6,  x7,  [sp],#0x10
+       ldp    x4,  x5,  [sp],#0x10
+       ldp    x2,  x3,  [sp],#0x10
+       ldp    x8,  x9,  [sp],#0x10
+       msr    spsel, #1
+       mov    sp, x11
+       msr    sp_el0, x10
+
+       ldr    w1, [x0]
+       dsb    sy
+       ldr    x0, =PLAT_SHARED_ADDRESS
+       str    xzr, [x0, #0x18]
+       ldr    x2, [x0, #0x8]
+       ldr    x3, [x0, #0x10]
+       msr    elr_el3, x2
+       msr    spsr_el3, x3
        isb
        eret
 
@@ -465,9 +522,37 @@ val_el3_mmio_write:
 
 // MMIO Read (32-bit)
 val_el3_mmio_read:
-    dsb ld             // Data Synchronization Barrier before read
-    ldr w0, [x0]       // Load 32-bit value from address (x0) into w0
-    dsb ld             // Ensure read is completed
+    // The ACK handler returns with ERET, bypassing the C handler epilogue.
+    // Preserve registers it does not restore before resuming this read.
+    stp x8, x9, [sp, #-192]!
+    stp x10, x11, [sp, #16]
+    stp x12, x13, [sp, #32]
+    stp x14, x15, [sp, #48]
+    stp x16, x17, [sp, #64]
+    stp x18, x19, [sp, #80]
+    stp x20, x21, [sp, #96]
+    stp x22, x23, [sp, #112]
+    stp x24, x25, [sp, #128]
+    stp x26, x27, [sp, #144]
+    stp x28, x29, [sp, #160]
+    stp x30, xzr, [sp, #176]
+    dsb ld
+.globl val_el3_mmio_read_load
+val_el3_mmio_read_load:
+    ldr w0, [x0]       // x0 is ignored after an expected abort
+    dsb ld
+    ldp x30, xzr, [sp, #176]
+    ldp x28, x29, [sp, #160]
+    ldp x26, x27, [sp, #144]
+    ldp x24, x25, [sp, #128]
+    ldp x22, x23, [sp, #112]
+    ldp x20, x21, [sp, #96]
+    ldp x18, x19, [sp, #80]
+    ldp x16, x17, [sp, #64]
+    ldp x14, x15, [sp, #48]
+    ldp x12, x13, [sp, #32]
+    ldp x10, x11, [sp, #16]
+    ldp x8, x9, [sp], #192
     ret
 
 // MMIO Write (64-bit)

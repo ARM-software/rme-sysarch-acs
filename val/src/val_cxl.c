@@ -32,6 +32,8 @@
 #define CXL_HDM_ALIGNMENT_MASK      ((1ULL << CXL_HDM_ALIGNMENT_SHIFT) - 1ULL)
 #define CXL_HDM_ERROR_BIT           (1u << 11)
 #define CXL_HDM_TARGET_PORT_ID_MASK 0xFFu
+#define CXL_HDM_LOCK_ON_COMMIT_BIT  (1u << 8)
+#define CXL_HDM_CONTROL_WORD        4u
 
 static CXL_INFO_TABLE *g_cxl_info_table;
 static CXL_COMPONENT_TABLE *g_cxl_component_table;
@@ -467,28 +469,23 @@ val_cxl_free_component_table(void)
 /**
   @brief   Request EL3 to program IDE keys on a root port and report status.
 
-  BAR0 is derived from the root port BDF in NS world. Key buffers are mapped to
-  EL3 as NS memory, then EL3 service programs IDE_KM through EL3 PAL.
+  Key buffers are mapped to EL3. EL3 discovers and maps Root Port registers
+  through PAL before programming IDE keys.
 
   @param  rp_bdf    Bus/Device/Function tuple of the CXL root port.
-  @param  stream_id IDE stream identifier that should be armed.
-  @param  key_slot  Key slot index to populate with the provided keys.
+  @param  selector Stream and paired key bank to program.
   @param  rx_key    Pointer to the RX key material for the stream.
   @param  tx_key    Pointer to the TX key material for the stream.
 
   @retval ACS_STATUS_PASS PAL reported successful IDE programming.
-  @retval ACS_STATUS_FAIL PAL returned 0 indicating IDE was not configured.
+  @retval ACS_STATUS_FAIL Mapping or PAL programming failed.
 **/
 uint32_t
-val_cxl_root_port_ide_program_and_enable(uint32_t rp_bdf,
-                                         uint8_t stream_id,
-                                         uint8_t key_slot,
+val_cxl_rp_ide_key_program(uint32_t rp_bdf,
+                             const CXL_IDE_SELECTOR *selector,
                                          const CXL_IDE_KEY_BUFFER *rx_key,
                                          const CXL_IDE_KEY_BUFFER *tx_key)
 {
-  uint64_t bar0_base;
-  uint64_t ide_km_base;
-  uint64_t ide_km_pgt_attr_el3;
   uint64_t tg;
   uint64_t key_pgt_attr_el3;
   uint64_t rx_key_va_page;
@@ -501,35 +498,8 @@ val_cxl_root_port_ide_program_and_enable(uint32_t rp_bdf,
   uint64_t tx_key_end_pa_page;
   uint32_t el3_status;
 
-  if ((rx_key == NULL) || (tx_key == NULL))
+  if ((selector == NULL) || (rx_key == NULL) || (tx_key == NULL))
     return ACS_STATUS_FAIL;
-
-  val_pcie_get_mmio_bar(rp_bdf, &bar0_base);
-  if (bar0_base == 0u)
-    return ACS_STATUS_FAIL;
-  val_print(ACS_PRINT_DEBUG, " CXL IDE_KM RP BDF: 0x%x", rp_bdf);
-  val_print(ACS_PRINT_DEBUG, " CXL IDE_KM BAR0 base: 0x%llx", bar0_base);
-
-  if (val_cxl_root_port_ide_get_base_el3(bar0_base, &ide_km_base))
-    return ACS_STATUS_FAIL;
-  val_print(ACS_PRINT_DEBUG, " CXL IDE_KM base: 0x%llx", ide_km_base);
-
-  if (val_add_gpt_entry_el3(ide_km_base, GPT_ANY))
-  {
-    val_print(ACS_PRINT_ERR, " EL3 IDE_KM GPT mapping failed for BDF 0x%x", rp_bdf);
-    return ACS_STATUS_FAIL;
-  }
-
-  ide_km_pgt_attr_el3 = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(OUTER_SHAREABLE) |
-                                    GET_ATTR_INDEX(DEV_MEM_nGnRnE) | PGT_ENTRY_AP_RW |
-                                    PAS_ATTR(ROOT_PAS));
-
-  /* IDE_KM register space is 4KB. Single EL3 mapping is sufficient. */
-  if (val_add_mmu_entry_el3(ide_km_base, ide_km_base, ide_km_pgt_attr_el3))
-  {
-    val_print(ACS_PRINT_ERR, " EL3 IDE_KM MMU mapping failed for BDF 0x%x", rp_bdf);
-    return ACS_STATUS_FAIL;
-  }
 
   tg = val_get_min_tg();
   key_pgt_attr_el3 = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(OUTER_SHAREABLE) |
@@ -580,9 +550,9 @@ val_cxl_root_port_ide_program_and_enable(uint32_t rp_bdf,
     return ACS_STATUS_FAIL;
   }
 
-  el3_status = val_cxl_root_port_ide_program_and_enable_el3(bar0_base,
-                                                             stream_id,
-                                                             key_slot,
+  el3_status = val_cxl_root_port_ide_program_el3(rp_bdf,
+                                                    selector->stream_id,
+                                                    selector->key_slot,
                                                              rx_key,
                                                              tx_key);
 
@@ -591,6 +561,33 @@ val_cxl_root_port_ide_program_and_enable(uint32_t rp_bdf,
   }
 
   return ACS_STATUS_FAIL;
+}
+
+/** Activate the paired RP bank after key programming. */
+uint32_t
+val_cxl_rp_ide_key_go(uint32_t rp_bdf, const CXL_IDE_SELECTOR *selector,
+                        uint8_t mode)
+{
+  uint32_t status;
+
+  if ((selector == NULL) || (mode > CXL_IDE_MODE_CONTAINMENT))
+    return ACS_STATUS_FAIL;
+
+  status = val_cxl_root_port_ide_go_el3(rp_bdf, selector->stream_id, selector->key_slot, mode);
+  return status == 0u ? ACS_STATUS_PASS : ACS_STATUS_FAIL;
+}
+
+/** Stop the paired RP bank. */
+uint32_t
+val_cxl_rp_ide_key_stop(uint32_t rp_bdf, const CXL_IDE_SELECTOR *selector)
+{
+  uint32_t status;
+
+  if (selector == NULL)
+    return ACS_STATUS_FAIL;
+
+  status = val_cxl_root_port_ide_stop_el3(rp_bdf, selector->stream_id, selector->key_slot);
+  return status == 0u ? ACS_STATUS_PASS : ACS_STATUS_FAIL;
 }
 
 uint32_t
@@ -603,10 +600,8 @@ val_cxl_ide_disable_link(uint32_t root_index,
   const CXL_COMPONENT_ENTRY *root_port;
   const CXL_COMPONENT_ENTRY *endpoint;
   uint32_t status;
-  uint32_t el3_status;
-  uint64_t bar0_base;
-  uint64_t ide_km_base;
-  uint64_t ide_km_pgt_attr_el3;
+  uint32_t stop_status = ACS_STATUS_PASS;
+  const CXL_IDE_SELECTOR selector = {0u, 0u};
   uint32_t endpoint_ide_status;
   uint32_t root_ide_status;
   uint32_t rx_state;
@@ -626,8 +621,8 @@ val_cxl_ide_disable_link(uint32_t root_index,
                                                   CXL_IDE_KM_KEY_DIRECTION_RX |
                                                   CXL_IDE_KM_KEY_SUB_STREAM_CXL,
                                                   0u);
-  if (status != ACS_STATUS_PASS)
-    return status;
+  if ((status != ACS_STATUS_PASS) && (stop_status == ACS_STATUS_PASS))
+    stop_status = status;
 
   status = val_spdm_send_cxl_ide_km_key_set_stop(context,
                                                   session_id,
@@ -635,35 +630,15 @@ val_cxl_ide_disable_link(uint32_t root_index,
                                                   CXL_IDE_KM_KEY_DIRECTION_TX |
                                                   CXL_IDE_KM_KEY_SUB_STREAM_CXL,
                                                   0u);
-  if (status != ACS_STATUS_PASS)
-    return status;
+  if ((status != ACS_STATUS_PASS) && (stop_status == ACS_STATUS_PASS))
+    stop_status = status;
 
-  val_pcie_get_mmio_bar(root_port->bdf, &bar0_base);
-  if (bar0_base == 0u)
-    return ACS_STATUS_FAIL;
-  val_print(ACS_PRINT_DEBUG, " CXL IDE_KM RP BDF: 0x%x", root_port->bdf);
-  val_print(ACS_PRINT_DEBUG, " CXL IDE_KM BAR0 base: 0x%llx", bar0_base);
+  status = val_cxl_rp_ide_key_stop(root_port->bdf, &selector);
+  if ((status != ACS_STATUS_PASS) && (stop_status == ACS_STATUS_PASS))
+    stop_status = status;
 
-  if (val_cxl_root_port_ide_get_base_el3(bar0_base, &ide_km_base))
-    return ACS_STATUS_FAIL;
-  val_print(ACS_PRINT_DEBUG, " CXL IDE_KM base: 0x%llx", ide_km_base);
-
-  if (val_add_gpt_entry_el3(ide_km_base, GPT_ANY))
-    return ACS_STATUS_FAIL;
-
-  ide_km_pgt_attr_el3 = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(OUTER_SHAREABLE) |
-                                    GET_ATTR_INDEX(DEV_MEM_nGnRnE) | PGT_ENTRY_AP_RW |
-                                    PAS_ATTR(ROOT_PAS));
-
-  if (val_add_mmu_entry_el3(ide_km_base, ide_km_base, ide_km_pgt_attr_el3))
-  {
-    val_print(ACS_PRINT_ERR, " EL3 IDE_KM MMU mapping failed for BDF 0x%x", root_port->bdf);
-    return ACS_STATUS_FAIL;
-  }
-
-  el3_status = val_cxl_root_port_ide_disable_el3(bar0_base, 0u, 0u);
-  if (el3_status != 0u)
-    return ACS_STATUS_FAIL;
+  if (stop_status != ACS_STATUS_PASS)
+    return stop_status;
 
   status = val_cxl_ide_get_status(endpoint_index, &endpoint_ide_status);
   if (status == ACS_STATUS_SKIP)
@@ -1370,6 +1345,7 @@ val_cxl_ide_establish_link(uint32_t root_index,
                            uint32_t session_id)
 {
   const uint32_t stream_id = 0u;
+  const CXL_IDE_SELECTOR selector = {0u, 0u};
   const CXL_COMPONENT_ENTRY *root_port;
   const CXL_COMPONENT_ENTRY *endpoint;
   uint32_t endpoint_bdf;
@@ -1380,14 +1356,17 @@ val_cxl_ide_establish_link(uint32_t root_index,
   cxl_ide_km_query_resp_t query_info;
   uint8_t kp_ack_status;
   uint8_t iv_type;
-  uint8_t key_mode_flag = CXL_IDE_KM_KEY_MODE_SKID;
+  const uint8_t key_mode_flag = CXL_IDE_KM_KEY_MODE_CONTAINMENT;
   uint32_t endpoint_ide_status;
   uint32_t endpoint_err_status;
   uint32_t root_ide_status;
   uint32_t root_err_status;
+  uint32_t rx_state;
+  uint32_t tx_state;
   uint32_t endpoint_ide_regs[CXL_IDE_KM_IDE_CAP_REG_BLOCK_MAX_COUNT];
   uint32_t endpoint_ide_reg_count = CXL_IDE_KM_IDE_CAP_REG_BLOCK_MAX_COUNT;
   uint32_t endpoint_capability = 0u;
+  uint32_t root_capability;
 
   if ((context == NULL) || (session_id == 0u))
     return ACS_STATUS_ERR;
@@ -1425,14 +1404,18 @@ val_cxl_ide_establish_link(uint32_t root_index,
 
   val_memory_set(&rx_key, sizeof(rx_key), 0);
   val_memory_set(&tx_key, sizeof(tx_key), 0);
+  rx_key.iv[0] = tx_key.iv[0] = 0x80000000u;
+  rx_key.iv[2] = tx_key.iv[2] = 1u;
 
-  if ((caps & CXL_IDE_KM_QUERY_RESP_KEY_GEN_CAP) != 0u) {
+  /* GET_KEY supplies the endpoint's locally generated TX key and/or IV. */
+  if ((caps & (CXL_IDE_KM_QUERY_RESP_KEY_GEN_CAP |
+               CXL_IDE_KM_QUERY_RESP_IV_GEN_CAP)) != 0u) {
     status = val_spdm_send_cxl_ide_km_get_key(context,
                                               session_id,
                                               (uint8_t)stream_id,
                                               CXL_IDE_KM_KEY_SUB_STREAM_CXL,
                                               0,
-                                              &rx_key);
+                                              &tx_key);
     if (status != ACS_STATUS_PASS) {
       val_print(ACS_PRINT_ERR,
                 " IDE_KM GET_KEY failed (status 0x%x)",
@@ -1440,32 +1423,29 @@ val_cxl_ide_establish_link(uint32_t root_index,
       val_print(ACS_PRINT_ERR, " EP BDF 0x%x", (uint64_t)endpoint_bdf);
       return status;
     }
+  }
 
-    tx_key = rx_key;
-  } else {
-    status = val_spdm_get_random(sizeof(rx_key.key),
-                                 (uint8_t *)rx_key.key);
+  if ((caps & CXL_IDE_KM_QUERY_RESP_KEY_GEN_CAP) == 0u) {
+    status = val_spdm_get_random(sizeof(tx_key.key), (uint8_t *)tx_key.key);
     if (status != ACS_STATUS_PASS) {
-      val_print(ACS_PRINT_ERR, " RNG failure for IDE key (EP BDF 0x%x)",
+      val_print(ACS_PRINT_ERR, " RNG failure for IDE TX key (EP BDF 0x%x)",
                 (uint64_t)endpoint_bdf);
       return status;
     }
+  }
 
-    rx_key.iv[0] = 0x80000000u;
-    rx_key.iv[1] = 0u;
-    rx_key.iv[2] = 1u;
-
-    status = val_spdm_get_random(sizeof(tx_key.key),
-                                 (uint8_t *)tx_key.key);
-    if (status != ACS_STATUS_PASS) {
-      val_print(ACS_PRINT_ERR, " RNG failure for IDE key (EP BDF 0x%x)",
-                (uint64_t)endpoint_bdf);
-      return status;
-    }
-
+  if ((caps & CXL_IDE_KM_QUERY_RESP_IV_GEN_CAP) == 0u) {
     tx_key.iv[0] = 0x80000000u;
     tx_key.iv[1] = 0u;
     tx_key.iv[2] = 1u;
+  }
+
+  /* EP RX / RP TX uses an independent key, never the endpoint's TX key. */
+  status = val_spdm_get_random(sizeof(rx_key.key), (uint8_t *)rx_key.key);
+  if (status != ACS_STATUS_PASS) {
+    val_print(ACS_PRINT_ERR, " RNG failure for IDE RX key (EP BDF 0x%x)",
+              (uint64_t)endpoint_bdf);
+    return status;
   }
 
   iv_type = ((caps & CXL_IDE_KM_QUERY_RESP_IV_GEN_CAP) == 0u) ?
@@ -1487,13 +1467,17 @@ val_cxl_ide_establish_link(uint32_t root_index,
     endpoint_capability = endpoint_ide_regs[capability_index];
   }
 
-  if ((endpoint_capability & CXL_IDE_CAP_MODE_CONTAINMENT) != 0u)
-    key_mode_flag = CXL_IDE_KM_KEY_MODE_CONTAINMENT;
+  status = val_cxl_ide_get_capability(root_index, &root_capability);
+  if (status != ACS_STATUS_PASS)
+    return status;
 
-  if (key_mode_flag == CXL_IDE_KM_KEY_MODE_CONTAINMENT)
-    val_print(ACS_PRINT_DEBUG, " Using IDE key mode containment", 0);
-  else
-    val_print(ACS_PRINT_DEBUG, " Using IDE key mode SKID", 0);
+  /* Containment is mandatory for CXL IDE-capable ports. */
+  if (((endpoint_capability & CXL_IDE_CAP_MODE_CONTAINMENT) == 0u) ||
+      ((root_capability & CXL_IDE_CAP_MODE_CONTAINMENT) == 0u)) {
+    val_print(ACS_PRINT_ERR, " CXL IDE Containment not supported at both ports", 0);
+    return ACS_STATUS_FAIL;
+  }
+  val_print(ACS_PRINT_DEBUG, " Using IDE key mode containment", 0);
 
   status = val_spdm_send_cxl_ide_km_key_prog(context,
                                              session_id,
@@ -1533,17 +1517,16 @@ val_cxl_ide_establish_link(uint32_t root_index,
     return (status == ACS_STATUS_PASS) ? ACS_STATUS_FAIL : status;
   }
 
-  status = val_cxl_root_port_ide_program_and_enable(root_port->bdf,
-                                                     (uint8_t)stream_id,
-                                                     0,
-                                                     /* EP TX feeds RP RX; EP RX consumes RP TX. */
-                                                     (const CXL_IDE_KEY_BUFFER *)&tx_key,
-                                                     (const CXL_IDE_KEY_BUFFER *)&rx_key);
+  /* Install RP keys and ready RX before endpoint TX can send IDE.START. */
+  status = val_cxl_rp_ide_key_program(root_port->bdf,
+                                      &selector,
+                                      /* EP TX feeds RP RX; EP RX consumes RP TX. */
+                                      (const CXL_IDE_KEY_BUFFER *)&tx_key,
+                                      (const CXL_IDE_KEY_BUFFER *)&rx_key);
   if (status != ACS_STATUS_PASS) {
-    val_print(ACS_PRINT_ERR,
-              " RP IDE_KM programming failed (RP BDF 0x%x)",
+    val_print(ACS_PRINT_ERR, " RP IDE_KM programming failed (RP BDF 0x%x)",
               (uint64_t)root_port->bdf);
-    return status;
+    goto cleanup;
   }
 
   status = val_spdm_send_cxl_ide_km_key_set_go(context,
@@ -1556,7 +1539,7 @@ val_cxl_ide_establish_link(uint32_t root_index,
   if (status != ACS_STATUS_PASS) {
     val_print(ACS_PRINT_ERR, " IDE_KM KEY_SET_GO RX failed (0x%x)", (uint64_t)status);
     val_print(ACS_PRINT_ERR, " EP BDF 0x%x", (uint64_t)endpoint_bdf);
-    return status;
+    goto cleanup;
   }
 
   status = val_spdm_send_cxl_ide_km_key_set_go(context,
@@ -1569,21 +1552,31 @@ val_cxl_ide_establish_link(uint32_t root_index,
   if (status != ACS_STATUS_PASS) {
     val_print(ACS_PRINT_ERR, " IDE_KM KEY_SET_GO TX failed (0x%x)", (uint64_t)status);
     val_print(ACS_PRINT_ERR, " EP BDF 0x%x", (uint64_t)endpoint_bdf);
-    return status;
+    goto cleanup;
+  }
+
+  /* Both endpoint receivers/transmitters are armed before RP transmits IDE.START. */
+  status = val_cxl_rp_ide_key_go(root_port->bdf, &selector,
+                                  CXL_IDE_MODE_CONTAINMENT);
+  if (status != ACS_STATUS_PASS) {
+    val_print(ACS_PRINT_ERR,
+              " RP IDE_KM START failed (RP BDF 0x%x)",
+              (uint64_t)root_port->bdf);
+    goto cleanup;
   }
 
   status = val_cxl_ide_get_status(endpoint_index, &endpoint_ide_status);
   if (status == ACS_STATUS_SKIP) {
     val_print(ACS_PRINT_DEBUG,
-              " Endpoint lacks IDE capability - skipping status check (BDF 0x%x)",
+              " Endpoint lacks IDE capability - cannot verify establishment (BDF 0x%x)",
               (uint64_t)endpoint_bdf);
-    return ACS_STATUS_PASS;
+    goto cleanup;
   }
   if (status != ACS_STATUS_PASS) {
     val_print(ACS_PRINT_ERR,
               " IDE status read failed for endpoint BDF 0x%x",
               (uint64_t)endpoint_bdf);
-    return status;
+    goto cleanup;
   }
   val_print(ACS_PRINT_DEBUG,
             " Endpoint IDE status 0x%x",
@@ -1592,33 +1585,47 @@ val_cxl_ide_establish_link(uint32_t root_index,
             " EP BDF 0x%x",
             (uint64_t)endpoint_bdf);
 
+  rx_state = endpoint_ide_status & CXL_IDE_STATUS_FIELD_MASK;
+  tx_state = (endpoint_ide_status >> CXL_IDE_STATUS_TX_SHIFT) & CXL_IDE_STATUS_FIELD_MASK;
+  if (((rx_state != CXL_IDE_STATE_ACTIVE_CONTAINMENT) &&
+       (rx_state != CXL_IDE_STATE_ACTIVE_SKID)) ||
+      ((tx_state != CXL_IDE_STATE_ACTIVE_CONTAINMENT) &&
+       (tx_state != CXL_IDE_STATE_ACTIVE_SKID))) {
+    val_print(ACS_PRINT_ERR, " Endpoint IDE not active (status 0x%x)",
+              (uint64_t)endpoint_ide_status);
+    val_print(ACS_PRINT_ERR, " BDF 0x%x", (uint64_t)endpoint_bdf);
+    status = ACS_STATUS_FAIL;
+    goto cleanup;
+  }
+
   status = val_cxl_ide_get_error_status(endpoint_index, &endpoint_err_status);
   if (status != ACS_STATUS_PASS) {
     val_print(ACS_PRINT_ERR,
               " IDE error status read failed for endpoint BDF 0x%x",
               (uint64_t)endpoint_bdf);
-    return status;
+    goto cleanup;
   }
   if (endpoint_err_status != 0u) {
     val_print(ACS_PRINT_ERR,
               " Endpoint IDE error status non-zero (0x%x)",
               (uint64_t)endpoint_err_status);
     val_print(ACS_PRINT_ERR, " EP BDF 0x%x", (uint64_t)endpoint_bdf);
-    return ACS_STATUS_FAIL;
+    status = ACS_STATUS_FAIL;
+    goto cleanup;
   }
 
   status = val_cxl_ide_get_status(root_index, &root_ide_status);
   if (status == ACS_STATUS_SKIP) {
     val_print(ACS_PRINT_DEBUG,
-              " Root port lacks IDE capability - skipping status check (BDF 0x%x)",
+              " Root port lacks IDE capability - cannot verify establishment (BDF 0x%x)",
               (uint64_t)root_port->bdf);
-    return ACS_STATUS_PASS;
+    goto cleanup;
   }
   if (status != ACS_STATUS_PASS) {
     val_print(ACS_PRINT_ERR,
               " IDE status read failed for root port BDF 0x%x",
               (uint64_t)root_port->bdf);
-    return status;
+    goto cleanup;
   }
   val_print(ACS_PRINT_DEBUG,
             " Root port IDE status 0x%x",
@@ -1627,22 +1634,44 @@ val_cxl_ide_establish_link(uint32_t root_index,
             " RP BDF 0x%x",
             (uint64_t)root_port->bdf);
 
+  rx_state = root_ide_status & CXL_IDE_STATUS_FIELD_MASK;
+  tx_state = (root_ide_status >> CXL_IDE_STATUS_TX_SHIFT) & CXL_IDE_STATUS_FIELD_MASK;
+  if (((rx_state != CXL_IDE_STATE_ACTIVE_CONTAINMENT) &&
+       (rx_state != CXL_IDE_STATE_ACTIVE_SKID)) ||
+      ((tx_state != CXL_IDE_STATE_ACTIVE_CONTAINMENT) &&
+       (tx_state != CXL_IDE_STATE_ACTIVE_SKID))) {
+    val_print(ACS_PRINT_ERR, " Root port IDE not active (status 0x%x)",
+              (uint64_t)root_ide_status);
+    val_print(ACS_PRINT_ERR, " BDF 0x%x", (uint64_t)root_port->bdf);
+    status = ACS_STATUS_FAIL;
+    goto cleanup;
+  }
+
   status = val_cxl_ide_get_error_status(root_index, &root_err_status);
   if (status != ACS_STATUS_PASS) {
     val_print(ACS_PRINT_ERR,
               " IDE error status read failed for root port BDF 0x%x",
               (uint64_t)root_port->bdf);
-    return status;
+    goto cleanup;
   }
   if (root_err_status != 0u) {
     val_print(ACS_PRINT_ERR,
               " Root port IDE error status non-zero (0x%x)",
               (uint64_t)root_err_status);
     val_print(ACS_PRINT_ERR, " RP BDF 0x%x", (uint64_t)root_port->bdf);
-    return ACS_STATUS_FAIL;
+    status = ACS_STATUS_FAIL;
+    goto cleanup;
   }
 
   return ACS_STATUS_PASS;
+
+cleanup:
+  /* PROGRAM/GO may have changed hardware even when the operation failed. */
+  if (val_cxl_ide_disable_link(root_index, endpoint_index, context, session_id) !=
+      ACS_STATUS_PASS)
+    val_print(ACS_PRINT_WARN, " CXL IDE cleanup failed (RP BDF 0x%x)",
+              (uint64_t)root_port->bdf);
+  return status;
 }
 #else
 uint32_t
@@ -2173,7 +2202,7 @@ val_cxl_program_decoder_common(uint64_t cap_base,
   if ((ctrl & CXL_HDM_COMMIT_BIT) != 0u) {
     uint32_t cleared = ctrl & ~CXL_HDM_COMMIT_BIT;
     val_mmio_write(ctrl_addr, cleared);
-    for (attempt = 0; attempt < CXL_HDM_COMMIT_TIMEOUT_MS; ++attempt) {
+    for (attempt = 0; attempt < CXL_HDM_COMMIT_TIMEOUT_US; ++attempt) {
       uint32_t status = val_mmio_read(ctrl_addr);
       if ((status & CXL_HDM_COMMITTED_BIT) == 0u)
         break;
@@ -2218,7 +2247,7 @@ val_cxl_program_decoder_common(uint64_t cap_base,
   ctrl |= CXL_HDM_COMMIT_BIT;
   val_mmio_write(ctrl_addr, ctrl);
 
-  for (attempt = 0; attempt < CXL_HDM_COMMIT_TIMEOUT_MS; ++attempt) {
+  for (attempt = 0; attempt < CXL_HDM_COMMIT_TIMEOUT_US; ++attempt) {
     uint32_t status = val_mmio_read(ctrl_addr);
 
     if ((status & CXL_HDM_ERROR_BIT) != 0u) {
@@ -3708,6 +3737,191 @@ val_cxl_get_cfmws(uint32_t index,
   return 0;
 }
 
+/* Snapshot before changing any decoder state, including an unused zero-size slot. */
+uint32_t
+val_cxl_save_decoder(uint64_t component_base, uint32_t decoder_index,
+                     CXL_DECODER_STATE *saved)
+{
+  uint32_t control;
+  uint32_t cap_reg;
+  uint32_t decoder_count;
+
+  if ((saved == NULL) || (decoder_index >= CXL_MAX_DECODER_SLOTS))
+    return ACS_STATUS_ERR;
+
+  val_memory_set(saved, sizeof(*saved), 0);
+  saved->decoder_index = decoder_index;
+  if (val_cxl_find_capability(component_base, CXL_CAPID_HDM_DECODER,
+                               &saved->cap_base) != ACS_STATUS_PASS)
+    return ACS_STATUS_ERR;
+
+  cap_reg = val_mmio_read(saved->cap_base + CXL_HDM_CAP_REG_OFFSET);
+  decoder_count = val_cxl_decode_hdm_count(
+      (cap_reg >> CXL_HDM_DECODER_COUNT_SHIFT) & CXL_HDM_DECODER_COUNT_MASK);
+  if (decoder_index >= decoder_count)
+    return ACS_STATUS_ERR;
+
+  for (uint32_t index = 0; index < CXL_HDM_DECODER_STATE_WORDS; ++index)
+    saved->reg[index] = val_mmio_read(saved->cap_base +
+                                     CXL_HDM_DECODER_BASE_LOW(saved->decoder_index) + index * 4u);
+
+  control = saved->reg[CXL_HDM_CONTROL_WORD];
+  /* A locked or unsettled decoder cannot be borrowed and restored by this test. */
+  if ((control & (CXL_HDM_LOCK_ON_COMMIT_BIT | CXL_HDM_ERROR_BIT)) != 0u ||
+      (((control & CXL_HDM_COMMIT_BIT) != 0u) !=
+       ((control & CXL_HDM_COMMITTED_BIT) != 0u)))
+    return ACS_STATUS_SKIP;
+
+  saved->valid = 1u;
+  return ACS_STATUS_PASS;
+}
+
+uint32_t
+val_cxl_disable_decoder(CXL_DECODER_STATE *saved)
+{
+  uint64_t address;
+  uint32_t control;
+
+  if ((saved == NULL) || (saved->valid == 0u))
+    return ACS_STATUS_ERR;
+
+  address = saved->cap_base + CXL_HDM_DECODER_CTRL(saved->decoder_index);
+  control = val_mmio_read(address);
+
+  /* ACS owns this window; drain its synchronous accesses before reprogramming. */
+  __asm__ volatile("dsb sy" ::: "memory");
+  if ((control & CXL_HDM_LOCK_ON_COMMIT_BIT) != 0u)
+    return ACS_STATUS_ERR;
+  saved->changed = 1u;
+  val_mmio_write(address, control & ~(CXL_HDM_COMMIT_BIT |
+                                      CXL_HDM_COMMITTED_BIT | CXL_HDM_ERROR_BIT));
+  for (uint32_t attempt = 0; attempt < CXL_HDM_COMMIT_TIMEOUT_US; ++attempt)
+  {
+    control = val_mmio_read(address);
+    if ((control & (CXL_HDM_COMMIT_BIT | CXL_HDM_COMMITTED_BIT)) == 0u)
+      return ACS_STATUS_PASS;
+    (void)val_time_delay_ms(1);
+  }
+
+  val_print(ACS_PRINT_ERR, " CXL_HDM: decoder did not become inactive at 0x%llx", address);
+  return ACS_STATUS_ERR;
+}
+
+/* Restore all configuration DWORDs, then restore the original commit state. */
+uint32_t
+val_cxl_restore_decoder(CXL_DECODER_STATE *saved)
+{
+  uint64_t base;
+  uint64_t control_addr;
+  uint32_t control;
+  uint32_t readback;
+  uint32_t active;
+
+  if (saved == NULL)
+    return ACS_STATUS_ERR;
+  if (saved->changed == 0u)
+    return ACS_STATUS_PASS;
+  if (val_cxl_disable_decoder(saved) != ACS_STATUS_PASS)
+    return ACS_STATUS_ERR;
+
+  base = saved->cap_base + CXL_HDM_DECODER_BASE_LOW(saved->decoder_index);
+  control_addr = saved->cap_base + CXL_HDM_DECODER_CTRL(saved->decoder_index);
+  control = saved->reg[CXL_HDM_CONTROL_WORD] &
+            ~(CXL_HDM_COMMIT_BIT | CXL_HDM_COMMITTED_BIT | CXL_HDM_ERROR_BIT);
+  val_mmio_write(control_addr, control);
+  for (uint32_t index = 0; index < CXL_HDM_DECODER_STATE_WORDS; ++index)
+  {
+    if (index == CXL_HDM_CONTROL_WORD)
+      continue;
+    val_mmio_write(base + index * 4u, saved->reg[index]);
+    if (val_mmio_read(base + index * 4u) != saved->reg[index])
+      return ACS_STATUS_ERR;
+  }
+
+  active = saved->reg[CXL_HDM_CONTROL_WORD] & CXL_HDM_COMMIT_BIT;
+  val_mmio_write(control_addr, control | active);
+  for (uint32_t attempt = 0; attempt < CXL_HDM_COMMIT_TIMEOUT_US; ++attempt)
+  {
+    readback = val_mmio_read(control_addr);
+    if ((readback & CXL_HDM_ERROR_BIT) != 0u)
+      return ACS_STATUS_ERR;
+    if (((readback & CXL_HDM_COMMITTED_BIT) != 0u) == (active != 0u))
+    {
+      if ((readback & ~(CXL_HDM_COMMITTED_BIT | CXL_HDM_ERROR_BIT)) != (control | active))
+        return ACS_STATUS_ERR;
+      saved->changed = 0u;
+      return ACS_STATUS_PASS;
+    }
+    (void)val_time_delay_ms(1);
+  }
+
+  return ACS_STATUS_ERR;
+}
+
+/* Borrow both decoders before changing routing; callers own and quiesce the window. */
+uint32_t
+val_cxl_prepare_decoders(uint32_t host_index, uint32_t endpoint_index,
+                         uint32_t decoder_index, uint32_t root_bdf,
+                         CXL_DECODER_STATE *host, CXL_DECODER_STATE *endpoint)
+{
+  uint32_t port_id;
+  uint32_t status;
+  uint64_t target;
+
+  status = val_cxl_save_decoder(val_cxl_get_info(CXL_INFO_COMPONENT_BASE, host_index),
+                                 decoder_index, host);
+  if (status != ACS_STATUS_PASS)
+    return status;
+  status = val_cxl_save_decoder(
+      val_cxl_get_component_info(CXL_COMPONENT_INFO_COMPONENT_BASE, endpoint_index),
+      decoder_index, endpoint);
+  if (status != ACS_STATUS_PASS)
+    return status;
+  if (val_pcie_get_root_port_id(root_bdf, &port_id) != PCIE_SUCCESS)
+    return ACS_STATUS_ERR;
+
+  status = val_cxl_disable_decoder(host);
+  if (status == ACS_STATUS_PASS)
+  {
+    target = host->cap_base + CXL_HDM_DECODER_TARGET_LOW(decoder_index);
+    val_mmio_write(target, port_id);
+    val_mmio_write(target + 4u, 0u);
+    if ((val_mmio_read(target) == port_id) && (val_mmio_read(target + 4u) == 0u))
+      return ACS_STATUS_PASS;
+  }
+
+  /* A failed setup must not strand a decoder on a caller's early return. */
+  if (val_cxl_restore_decoder(host) != ACS_STATUS_PASS)
+    val_print(ACS_PRINT_ERR, " CXL_HDM: failed to restore host after setup error", 0);
+  return ACS_STATUS_ERR;
+}
+
+/* Program a previously saved decoder; retain its snapshot for every failure path. */
+uint32_t
+val_cxl_program_saved_decoder(CXL_DECODER_STATE *saved, uint64_t base, uint64_t size)
+{
+  if ((saved == NULL) || (saved->valid == 0u))
+    return ACS_STATUS_ERR;
+  if (val_cxl_disable_decoder(saved) != ACS_STATUS_PASS)
+    return ACS_STATUS_ERR;
+
+  /* Preserve the target registers configured during decoder setup. */
+  return val_cxl_program_decoder_common(saved->cap_base, saved->decoder_index,
+                                         base, size, 0u, 0u, 0u);
+}
+
+/* Attempt both restores even when one fails. */
+uint32_t
+val_cxl_restore_decoders(CXL_DECODER_STATE *host, CXL_DECODER_STATE *endpoint)
+{
+  uint32_t host_status = val_cxl_restore_decoder(host);
+  uint32_t endpoint_status = val_cxl_restore_decoder(endpoint);
+
+  if ((host_status != ACS_STATUS_PASS) || (endpoint_status != ACS_STATUS_PASS))
+    val_print(ACS_PRINT_WARN, " CXL_HDM: decoder restoration failed; reset before next test", 0);
+  return ACS_STATUS_PASS;
+}
+
 /**
   @brief   Program an HDM decoder for a host bridge CHBCR window.
 
@@ -3981,7 +4195,7 @@ val_cxl_disable_component_decoder(uint32_t component_index,
   ctrl = val_mmio_read(ctrl_addr);
   val_mmio_write(ctrl_addr, ctrl & ~CXL_HDM_COMMIT_BIT);
 
-  for (attempt = 0u; attempt < CXL_HDM_COMMIT_TIMEOUT_MS; ++attempt)
+  for (attempt = 0u; attempt < CXL_HDM_COMMIT_TIMEOUT_US; ++attempt)
   {
     if ((val_mmio_read(ctrl_addr) & CXL_HDM_COMMITTED_BIT) == 0u)
       break;
@@ -4011,9 +4225,10 @@ val_rme_cxl_execute_tests(uint32_t num_pe)
 {
   uint32_t status = ACS_STATUS_SKIP;
   uint64_t num_smmus = val_smmu_get_info(SMMU_NUM_CTRL, 0);
+  uint64_t smmu_base_arr_size, smmu_base_arr_pages;
   uint64_t *smmu_base_arr = NULL;
   uint64_t pgt_attr_el3;
-  uint32_t smmu_cnt;
+  uint32_t smmu_cnt, page_size;
 
   g_curr_module = 1 << CXL_MODULE_ID;
 
@@ -4025,7 +4240,25 @@ val_rme_cxl_execute_tests(uint32_t num_pe)
 
   if (!g_rl_smmu_init)
   {
-    smmu_base_arr = val_memory_alloc_pages(1);
+    page_size = val_memory_page_size();
+    if (page_size == 0)
+    {
+      val_print(ACS_PRINT_ERR, " Invalid page size for smmu_base_arr allocation", 0);
+      return ACS_STATUS_ERR;
+    }
+
+    smmu_base_arr_size = num_smmus * sizeof(*smmu_base_arr);
+    smmu_base_arr_pages = smmu_base_arr_size / page_size;
+    if ((smmu_base_arr_size % page_size) != 0)
+      smmu_base_arr_pages++;
+
+    if (smmu_base_arr_pages > (~(uint32_t)0) / page_size)
+    {
+      val_print(ACS_PRINT_ERR, " smmu_base_arr allocation is too large", 0);
+      return ACS_STATUS_ERR;
+    }
+
+    smmu_base_arr = val_memory_alloc_pages((uint32_t)smmu_base_arr_pages);
     if (smmu_base_arr == NULL)
     {
       val_print(ACS_PRINT_ERR, " Failed to allocate smmu_base_arr", 0);
@@ -4042,23 +4275,28 @@ val_rme_cxl_execute_tests(uint32_t num_pe)
     /* Map the pointer in EL3 as NS access PAS so that EL3 can access it. */
     pgt_attr_el3 = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(OUTER_SHAREABLE) |
                                PGT_ENTRY_AP_RW | PAS_ATTR(NONSECURE_PAS));
-    if (val_add_mmu_entry_el3((uint64_t)(smmu_base_arr),
-                              (uint64_t)val_memory_virt_to_phys(smmu_base_arr),
-                              pgt_attr_el3))
+    for (uint64_t offset = 0; offset < smmu_base_arr_size; offset += PAGE_SIZE_4K)
     {
-      val_print(ACS_PRINT_ERR, " MMU mapping failed for smmu_base_arr", 0);
-      val_memory_free_pages(smmu_base_arr, 1);
-      return ACS_STATUS_ERR;
+      void *page = (uint8_t *)smmu_base_arr + offset;
+
+      if (val_add_mmu_entry_el3((uint64_t)page,
+                                (uint64_t)val_memory_virt_to_phys(page),
+                                pgt_attr_el3))
+      {
+        val_print(ACS_PRINT_ERR, " MMU mapping failed for smmu_base_arr", 0);
+        val_memory_free_pages(smmu_base_arr, (uint32_t)smmu_base_arr_pages);
+        return ACS_STATUS_ERR;
+      }
     }
     if (val_rlm_smmu_init(num_smmus, smmu_base_arr))
     {
       val_print(ACS_PRINT_ERR, " SMMU REALM INIT failed", 0);
-      val_memory_free_pages(smmu_base_arr, 1);
+      val_memory_free_pages(smmu_base_arr, (uint32_t)smmu_base_arr_pages);
       return ACS_STATUS_ERR;
     }
 
     g_rl_smmu_init = 1;
-    val_memory_free_pages(smmu_base_arr, 1);
+    val_memory_free_pages(smmu_base_arr, (uint32_t)smmu_base_arr_pages);
   }
 
   val_print(ACS_PRINT_ALWAYS, "\n\n*******************************************************\n", 0);

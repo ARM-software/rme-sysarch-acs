@@ -205,6 +205,63 @@ check_hdm_decoder_rmsd(const CXL_COMPONENT_ENTRY *component)
   return ACS_STATUS_PASS;
 }
 
+/* Open the Realm management path while checking endpoint register protection.
+ * Otherwise RNYCLL/RWYVCQ can reject the access before it reaches the register.
+ * The original host-port state is restored even when a check fails.
+ */
+static uint32_t
+check_hdm_with_permitted_path(const CXL_COMPONENT_ENTRY *component)
+{
+  uint32_t rp_bdf;
+  uint32_t cda_offset;
+  uint64_t cfg;
+  uint64_t tg = val_get_min_tg();
+  uint64_t va;
+  uint64_t attr;
+  uint32_t original;
+  uint32_t status;
+
+  /* Without RME-CDA, use the platform-authorized Realm access path. */
+  if ((val_cxl_find_upstream_root_port(component->bdf, &rp_bdf) != ACS_STATUS_PASS) ||
+      (val_pcie_find_cda_capability(rp_bdf, &cda_offset) != PCIE_SUCCESS))
+    return check_hdm_decoder_rmsd(component);
+
+  cfg = val_pcie_get_bdf_config_addr(rp_bdf);
+  if ((cfg == 0u) || (tg == 0u))
+    return ACS_STATUS_FAIL;
+  va = val_get_free_va(tg);
+  attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(OUTER_SHAREABLE) |
+                    GET_ATTR_INDEX(DEV_MEM_nGnRnE) | PGT_ENTRY_AP_RW | PAS_ATTR(ROOT_PAS));
+  if ((va == 0u) || val_add_mmu_entry_el3(va, cfg & ~(tg - 1u), attr))
+    return ACS_STATUS_FAIL;
+  /* Preserve the function's offset within the EL3 translation granule. */
+  va += cfg & (tg - 1u);
+
+  shared_data->num_access = 1;
+  shared_data->shared_data_access[0].addr = va + cda_offset + RMECDA_CTL1_OFFSET;
+  shared_data->shared_data_access[0].access_type = READ_DATA;
+  if (val_pe_access_mut_el3())
+    return ACS_STATUS_FAIL;
+  original = shared_data->shared_data_access[0].data;
+  shared_data->shared_data_access[0].access_type = WRITE_DATA;
+  shared_data->shared_data_access[0].data = original | 0x3u; /* TDISP_EN, LINK_STR_LOCK */
+  status = val_pe_access_mut_el3();
+  shared_data->shared_data_access[0].access_type = READ_DATA;
+  if (status || val_pe_access_mut_el3() ||
+      ((shared_data->shared_data_access[0].data & 0x3u) != 0x3u))
+    status = ACS_STATUS_FAIL;
+  else
+    status = check_hdm_decoder_rmsd(component);
+
+  shared_data->num_access = 1;
+  shared_data->shared_data_access[0].addr = va + cda_offset + RMECDA_CTL1_OFFSET;
+  shared_data->shared_data_access[0].access_type = WRITE_DATA;
+  shared_data->shared_data_access[0].data = original;
+  if (val_pe_access_mut_el3())
+    status = ACS_STATUS_FAIL;
+  return status;
+}
+
 static void
 attempt_spdm_session(uint32_t bdf)
 {
@@ -319,7 +376,7 @@ payload(void)
     }
 
     /* Step 5: Verify HDM decoder registers are RMSD write-protected. */
-    status = check_hdm_decoder_rmsd(component);
+    status = check_hdm_with_permitted_path(component);
     if (status != ACS_STATUS_PASS)
     {
       failures++;

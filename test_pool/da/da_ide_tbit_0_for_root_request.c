@@ -126,7 +126,7 @@ payload(void)
               val_print(ACS_PRINT_ERR,
                 " Failed to add MMU entry for Bar address: 0x%lx", bar_base);
               test_fail++;
-              continue;
+              goto cleanup_tdisp;
           }
 
           data = 0;
@@ -143,7 +143,7 @@ payload(void)
           {
               val_print(ACS_PRINT_ERR, " Failed to access Bar address: 0x%lx", bar_base);
               test_fail++;
-              continue;
+              goto cleanup_tdisp;
           }
           data = shared_data->shared_data_access[1].data;
 
@@ -151,6 +151,13 @@ payload(void)
           if (data != TEST_DATA)
           {
               val_print(ACS_PRINT_ERR, " Request rejected by RP BDF: %x", rp_bdf);
+              test_fail++;
+          }
+
+cleanup_tdisp:
+          if (val_pcie_disable_tdisp(rp_bdf))
+          {
+              val_print(ACS_PRINT_ERR, " Unable to clear tdisp_en for BDF: 0x%x", rp_bdf);
               test_fail++;
           }
       }

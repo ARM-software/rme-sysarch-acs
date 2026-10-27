@@ -523,7 +523,7 @@ This command runs only the RME module and skips RME test mec_effect_of_popa_cmo.
      - Platform-specific
      - Platform-specific
 
-Note: Platform-specific means the partner must provide their implementation for that PAL API.
+Note: Platform-specific means the partner must provide their implementation for that PAL API
 
 For DMA, ATS request attributes and response normalization, ATC-backed DMA,
 CXL/CDA command address domains, and exerciser transaction records, see the
@@ -622,8 +622,11 @@ requirements are met.
 - When Non-secure EL2 executes 'smc' with SMC FID, 0xC7000030, EL3 Firmware is expected to branch to
   plat_arm_acs_smc_handler function which is predefined in ACK.
 - To generate binary file for EL3 code, follow the build steps in README of val_el3.
-- 2MB memory must be flat mapped in EL3-MMU with Root access PAS and GPI as ROOT/ALL_ACCESS, which
-  is used for MMU tables in EL3.
+- Reserve a region starting at ``PLAT_FREE_MEM_START`` with size ``PLAT_FREE_MEM_SIZE``
+  for EL3 MMU and runtime GPT tables. Flat-map the region in EL3-MMU with Root access
+  PAS and GPI as ROOT/ALL_ACCESS. Define both macros in the EL3 platform configuration
+  to match the reserved and mapped region (2 MiB on FVP and RD-V3). This region is
+  independent of the SMMU pool sized by ``PLAT_MEMORY_POOL_SIZE``.
 - 2MB Free memory which is used as PA in tests.
 - Memory region starting at ``PLAT_FREE_MEM_SMMU``, flat-mapped as Realm PAS, with
   ``PLAT_MEMORY_POOL_SIZE`` chosen based on ``PLATFORM_OVERRIDE_SMMU_STRTAB_BITS`` plus space
@@ -761,9 +764,48 @@ NS scratch-page data before and after a disable attempt; it does not directly
 read back the encryption control state.
 
 
+PAS filter inactive-mode test porting
+-------------------------------------
+
+The ``rme_pas_filter_in_inactive_mode`` test requires platform implementations
+of both EL3 PAL hooks below when ``IS_PAS_FILTER_MODE_PROGRAMMABLE`` is set.
+Provide the protected regions through the PAS filter region table; the test
+uses ``num_of_regn_pas_filter`` and skips when that count is zero.
+
+``uint32_t pal_el3_pas_filter_active_mode(int enable)``
+    Set Active mode for a nonzero argument and Inactive mode for zero. Return
+    0 only after the requested mode is established. Return
+    ``PAL_EL3_NOT_IMPLEMENTED`` for an unimplemented operation, or another
+    nonzero status on failure. The same API supports restoring Active mode.
+    An advertised programmable mode with an unimplemented hook fails the test.
+
+``bool pal_el3_pas_filter_check_exception(uint64_t esr, uint64_t far, uint64_t address)``
+    Verify the exception captured for an inactive-mode read. The arguments are
+    the captured ``ESR_EL3``, captured ``FAR_EL3``, and the untagged probe virtual
+    address. Return ``true`` only when the platform's documented error response
+    identifies a synchronous read denial by the inactive PAS filter, with a
+    valid fault address matching the probe. Check exception class, read/write
+    direction, fault status and fault-address validity as applicable to that
+    response. Check platform filter error status too if needed to distinguish
+    the denial from another error with the same syndrome. GPF, translation,
+    permission and unrelated faults must not pass this check. Return ``false``
+    when verification is unsupported or unsuccessful. The default FVP and RDV3
+    implementations return ``false``; this boolean hook does not return
+    ``PAL_EL3_NOT_IMPLEMENTED``.
+
+This is an exception-only test path: a completed load fails the test, and each
+region requires a fresh exception accepted by the PAL hook. The test sets GPT
+to ``GPT_ANY`` before probing so a GPT denial is not mistaken for PAS filtering.
+The verification hook does not install an exception handler or perform exception
+return; recovery belongs to ACS EL3 code. Platforms that only stall requests or
+report asynchronous errors are not covered by this synchronous-denial path.
+Do not copy an ESR value from another platform without validating its meaning
+against the target platform's documented behavior.
+
+
 License
 =======
 
 RME System ACS is distributed under Apache v2.0 License.
 
-*Copyright (c) 2023-2025, Arm Limited and Contributors. All rights reserved.*
+*Copyright (c) 2023-2026, Arm Limited and Contributors. All rights reserved.*

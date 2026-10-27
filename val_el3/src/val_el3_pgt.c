@@ -18,6 +18,7 @@
 #include <val_el3_debug.h>
 #include <val_el3_pgt.h>
 #include <val_el3_memory.h>
+#include <stdint.h>
 
 #define get_min(a, b) (((a) < (b))?(a):(b))
 
@@ -34,6 +35,30 @@
 #define GPT_GPI_MASK       0xfull
 
 uint64_t free_pa = PLAT_FREE_MEM_START;
+
+/* EL3 translation tables and runtime GPT tables use the same Root pool. */
+static uint64_t val_el3_alloc_table_storage(uint64_t size, uint64_t alignment)
+{
+    const uint64_t pool_end = PLAT_FREE_MEM_START + PLAT_FREE_MEM_SIZE;
+    uint64_t aligned;
+
+    if (size == 0 || alignment == 0 || (alignment & (alignment - 1)) != 0 ||
+        free_pa < PLAT_FREE_MEM_START || free_pa > pool_end ||
+        free_pa > UINT64_MAX - (alignment - 1)) {
+        ERROR("Invalid EL3 table allocation request or pool cursor\n");
+        return 0;
+    }
+
+    aligned = (free_pa + alignment - 1) & ~(alignment - 1);
+    if (aligned > pool_end || size > pool_end - aligned) {
+        ERROR("EL3 table pool exhausted: size=0x%lx alignment=0x%lx\n",
+              size, alignment);
+        return 0;
+    }
+
+    free_pa = aligned + size;
+    return aligned;
+}
 
 /**
   @brief Return the descriptor output-address mask for the configured translation granule.
@@ -150,6 +175,28 @@ static uint64_t val_el3_create_gpt_l1_entry(uint64_t gpi)
     return desc;
 }
 
+/* Preserve every GPI while removing contiguity before changing one granule. */
+static void val_el3_split_gpt_contiguous(uint64_t *l1_table, uint64_t index,
+                                         uint8_t p)
+{
+    const uint8_t contig_size_log2[] = {0, 21, 25, 29};
+    uint64_t descriptor = l1_table[index];
+    uint32_t size_log2 = contig_size_log2[(descriptor >> 8) & 0x3];
+    uint32_t entry_count = 1u << (size_log2 - p - 4);
+    uint64_t first = index & ~((uint64_t)entry_count - 1);
+    uint64_t granules = val_el3_create_gpt_l1_entry((descriptor >> 4) & GPT_GPI_MASK);
+    uint32_t i;
+
+    /* A level 1 Granules descriptor holds sixteen individual GPIs. */
+    for (i = 0; i < entry_count; i++)
+        l1_table[first + i] = granules;
+
+    val_el3_clean_pgt_table(&l1_table[first], entry_count);
+    val_el3_mem_barrier();
+    /* Cached contiguous information can cover the entire original range. */
+    val_el3_tlbi_paallos();
+}
+
 static uint64_t *val_el3_split_gpt_l0_block(uint64_t *l0_entry, uint8_t l0gptsz,
                                             uint8_t p)
 {
@@ -165,13 +212,15 @@ static uint64_t *val_el3_split_gpt_l0_block(uint64_t *l0_entry, uint8_t l0gptsz,
         return NULL;
     }
 
-    free_pa = (free_pa + table_size - 1) & ~(table_size - 1);
-    l1_table_pa = free_pa;
-    free_pa += table_size;
+    l1_table_pa = val_el3_alloc_table_storage(table_size, table_size);
+    if (l1_table_pa == 0)
+        return NULL;
     l1_table = (uint64_t *)l1_table_pa;
 
-    if (((val_el3_at_s1e3w((uint64_t)l1_table)) & 0x1) == 0x1)
-        val_el3_add_mmu_entry((uint64_t)l1_table, (uint64_t)l1_table, ROOT_PAS);
+    if (((val_el3_at_s1e3w((uint64_t)l1_table)) & 0x1) == 0x1 &&
+        val_el3_add_mmu_entry((uint64_t)l1_table, (uint64_t)l1_table,
+                              ROOT_PAS) != 0)
+        return NULL;
 
     for (i = 0; i < entry_count; i++)
         l1_table[i] = val_el3_create_gpt_l1_entry(old_gpi);
@@ -296,9 +345,9 @@ uint64_t get_block_size(uint32_t level)
            1. Caller       -  Test Suite
   @param   arg0 - Physical Address needed to be mapped into the GPT table
   @param   arg1 - GPI encoding required for the corresponding Physical Address
-  @return  None
+  @return  0 on success, 1 if the PA exceeds PPS or mapping fails
 **/
-void val_el3_add_gpt_entry(uint64_t arg0, uint64_t arg1)
+uint32_t val_el3_add_gpt_entry(uint64_t arg0, uint64_t arg1)
 {
     gpt_descriptor_t gpt_desc;
     uint64_t PA = arg0;
@@ -327,8 +376,12 @@ void val_el3_add_gpt_entry(uint64_t arg0, uint64_t arg1)
         /* Get GPTBR */
     base = val_el3_read_gptbr_el3();
     INFO("GPT_base = 0x%lx\n", base);
+    if (gpt_desc.gpccr.pgs >= 3 || gpt_desc.gpccr.pps >= 7)
+        return 1;
     p = pgs[gpt_desc.gpccr.pgs];
     pps = pps_[gpt_desc.gpccr.pps];
+    if (PA >= (1ull << pps))
+        return 1;
     l0gptsz = gpt_desc.gpccr.l0gptsz + 30;
     l0_idx_width = (pps > l0gptsz) ? (pps - l0gptsz) : 0;
     /* The level 0 GPT is aligned in memory to the greater of:
@@ -356,13 +409,16 @@ void val_el3_add_gpt_entry(uint64_t arg0, uint64_t arg1)
         gpt_desc.gpt_base = *l0_entry & (((0x1ull << 40) - 1) << 12);
         VERBOSE("val_pe_gpt_map_add: gpt_desc.gpt_base at L0 = %lx     \n", gpt_desc.gpt_base);
 
-    } else {
+    } else if (IS_GPT_ENTRY_BLOCK(*l0_entry)) {
         /* Block_descriptor[63:8] = RES0 */
         VERBOSE("The Block Descriptor\n");
         gpt_desc.gpt_base = (uint64_t)val_el3_split_gpt_l0_block(l0_entry, l0gptsz, p);
         if (gpt_desc.gpt_base == 0)
-            return;
+            return 1;
         VERBOSE("val_pe_gpt_map_add: l0 block split to table = %lx     \n", gpt_desc.gpt_base);
+    } else {
+        ERROR("Invalid L0 GPT descriptor at PA 0x%lx\n", PA);
+        return 1;
     }
 
         /*              Level 1 GPT walk        */
@@ -375,38 +431,74 @@ void val_el3_add_gpt_entry(uint64_t arg0, uint64_t arg1)
     VERBOSE("val_pe_gpt_map_add: l1_entry address = %lx     \n", (uint64_t)l1_entry);
     if (IS_GPT_ENTRY_CONTIG(*l1_entry))
     {
-        /* Contiguous_descriptor[63:10] = RES0 */
-        VERBOSE("The Contiguous Descriptor\n");
-        *l1_entry = val_el3_modify_gpt_gpi(*l1_entry, PA, 1, p, gpi);
-        val_el3_cln_and_invldt_cache(l1_entry);
-        gpt_desc.size = p;
-        gpt_desc.level = 1;
-        //Contiguous_descriptor_entry[9:8] = Contiguous Region Size
-        if (((*l1_entry >> 8) & 0x3) == 0x1)
-            /* [9:8] = 0b01, then the GPT range is 2MB(21 bits) */
-            gpt_desc.contig_size = 21;
-        else if (((*l1_entry >> 8) & ((0x1u << 2) - 1)) == 0x2)
-            /* [9:8] = 0b10, then the GPT range is 32MB(25 bits) */
-            gpt_desc.contig_size = 25;
-        else
-            /* [9:8] = 0b11, then the GPT range is 512MB(29 bits) */
-            gpt_desc.contig_size = 29;
-    } else {
-        VERBOSE("The Granule Descriptor\n");
-        *l1_entry = val_el3_modify_gpt_gpi(*l1_entry, PA, 1, p, gpi);
-        val_el3_cln_and_invldt_cache(l1_entry);
-        gpt_desc.size = p;
-        gpt_desc.contig_size = gpt_desc.size;                       //No Contiguity
-        gpt_desc.level = 1;
+        if (((*l1_entry >> 8) & 0x3) == 0)
+        {
+            ERROR("Invalid GPT contiguous region size\n");
+            return 1u;
+        }
+        val_el3_split_gpt_contiguous(gpt_entry_base_1, index_1, p);
     }
+
+    *l1_entry = val_el3_modify_gpt_gpi(*l1_entry, PA, 1, p, gpi);
+    val_el3_cln_and_invldt_cache(l1_entry);
+    gpt_desc.size = p;
+    gpt_desc.contig_size = p;
+    gpt_desc.level = 1;
     gpt_desc.pa = PA;
     VERBOSE("val_pe_gpt_map_add: l1 entry after gpi modification = %lx     \n", *l1_entry);
     VERBOSE("val_pe_gpt_map_add: level  = %u     \n", gpt_desc.level);
     VERBOSE("val_pe_gpt_map_add: size  = %u     \n", gpt_desc.size);
     VERBOSE("val_pe_gpt_map_add: contiguous size  = %u     \n", gpt_desc.contig_size);
     VERBOSE("val_pe_gpt_map_add: PA  = %lx     \n", gpt_desc.pa);
-    return;
+    return 0;
 
+}
+
+uint32_t val_el3_get_gpt_gpi(uint64_t pa, uint64_t *gpi)
+{
+    uint64_t gpccr, gptbr, gpt_base, index, entry;
+    uint64_t *table;
+    uint8_t p, pps, l0gptsz, l0_idx_width, align;
+    static const uint8_t pgs[] = {12, 16, 14};
+    static const uint8_t pps_bits[] = {32, 36, 40, 42, 44, 48, 52};
+
+    if (gpi == NULL)
+        return 1u;
+
+    gpccr = val_el3_read_gpccr_el3();
+    p = (uint8_t)((gpccr & RME_ACS_GPCCR_PGS_MASK) >> RME_ACS_GPCCR_PGS_SHIFT);
+    pps = (uint8_t)((gpccr & RME_ACS_GPCCR_PPS_MASK) >> RME_ACS_GPCCR_PPS_SHIFT);
+    if (p > 2u || pps > 6u)
+        return 1u;
+
+    p = pgs[p];
+    pps = pps_bits[pps];
+    l0gptsz = (uint8_t)(((gpccr & RME_ACS_GPCCR_L0GPTSZ_MASK) >>
+                         RME_ACS_GPCCR_L0GPTSZ_SHIFT) + 30u);
+    l0_idx_width = (pps > l0gptsz) ? (uint8_t)(pps - l0gptsz) : 0u;
+    align = (uint8_t)get_max(l0_idx_width + 3u, 12u);
+    gptbr = val_el3_read_gptbr_el3();
+    gpt_base = (gptbr << 12) & ~((1ull << align) - 1ull);
+
+    table = (uint64_t *)gpt_base;
+    index = val_el3_get_gpt_index(pa, 0, l0gptsz, pps, p);
+    entry = table[index];
+    if (IS_GPT_ENTRY_TABLE(entry)) {
+        gpt_base = entry & (((1ull << 40) - 1ull) << 12);
+        table = (uint64_t *)gpt_base;
+        index = val_el3_get_gpt_index(pa, 1, l0gptsz, pps, p);
+        entry = table[index];
+        if (IS_GPT_ENTRY_CONTIG(entry))
+            *gpi = (entry >> 4) & GPT_GPI_MASK;
+        else
+            *gpi = (entry >> (4u * ((pa >> p) & 0xfull))) & GPT_GPI_MASK;
+    } else if (IS_GPT_ENTRY_BLOCK(entry)) {
+        *gpi = (entry >> 4) & GPT_GPI_MASK;
+    } else {
+        return 1u;
+    }
+
+    return val_el3_is_gpi_valid(*gpi) ? 0u : 1u;
 }
 
 /**
@@ -614,12 +706,15 @@ uint32_t val_el3_add_mmu_entry(uint64_t arg0, uint64_t arg1, uint64_t arg2)
             replace_block_desc = (old_desc != 0) &&
                                  IS_PGT_ENTRY_BLOCK(old_desc) &&
                                  ((old_desc & 0xf) != 0xf);
-            tt_base_phys = free_pa;
-            free_pa = free_pa + page_size;
+            tt_base_phys = val_el3_alloc_table_storage(page_size, page_size);
+            if (tt_base_phys == 0)
+                return 1;
             tt_base_virt = (uint64_t *)tt_base_phys;
-            if (((val_el3_at_s1e3w((uint64_t)tt_base_virt)) & 0x1) == 0x1)
+            if (((val_el3_at_s1e3w((uint64_t)tt_base_virt)) & 0x1) == 0x1 &&
                 val_el3_add_mmu_entry((uint64_t)tt_base_virt,
-                                      (uint64_t)tt_base_virt, NONSECURE_PAS);
+                                      (uint64_t)tt_base_virt,
+                                      NONSECURE_PAS) != 0)
+                return 1;
 
             num_entries = page_size / sizeof(uint64_t);
             if (replace_block_desc)

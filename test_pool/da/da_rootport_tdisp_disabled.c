@@ -51,8 +51,8 @@ payload(void)
   uint64_t Bar_Base;
   uint64_t rp_data, va;
   uint32_t test_fail = 0, test_skip = 1;
-  uint32_t locked;
-  uint32_t locked_rp;
+  uint32_t status, stream_id;
+  const uint32_t count = 1;
   uint32_t dsf_bdf;
   uint32_t page_size = val_memory_page_size();
   uint32_t tbl_index;
@@ -105,13 +105,22 @@ payload(void)
           continue;
       }
 
-      test_skip = 0;
-      locked = 0;
-
-      /* Disable RMEDA_CTL1.TDISP_EN*/
+      /* Disable TDISP before IDE setup to avoid a later Insecure transition. */
       if (val_pcie_disable_tdisp(rp_bdf))
       {
-          val_print(ACS_PRINT_ERR, " Unable to unset tdisp_en for BDF: 0x%x", rp_bdf);
+          val_print(ACS_PRINT_ERR, " Failed to disable TDISP for RP: 0x%x", rp_bdf);
+          test_fail++;
+          goto cleanup_unlock;
+      }
+
+      stream_id = val_generate_stream_id();
+      status = val_pcie_ide_establish(e_bdf, rp_bdf, count, stream_id,
+                                      PCIE_CREATE_BDF_PACKED(e_bdf));
+      if (status == ACS_STATUS_SKIP)
+          goto cleanup_unlock;
+      if (status != ACS_STATUS_PASS)
+      {
+          val_print(ACS_PRINT_ERR, " Failed to establish PCIe IDE for BDF: 0x%x", e_bdf);
           test_fail++;
           goto cleanup_unlock;
       }
@@ -122,7 +131,7 @@ payload(void)
           test_fail++;
           goto cleanup_unlock;
       }
-      locked = 1;
+      test_skip = 0;
 
       if (val_exerciser_set_param(DMA_ATTRIBUTES, (uint64_t)dram_buf_in_virt, dma_len, instance)) {
           test_fail++;
@@ -153,12 +162,10 @@ payload(void)
       }
 
 cleanup_unlock:
-      if (locked) {
-          if (val_device_unlock(e_bdf)) {
-              val_print(ACS_PRINT_ERR,
-                        " Failed to unlock the device: 0x%lx", e_bdf);
-              test_fail++;
-          }
+      /* Also release IDE/session state when setup did not reach TDISP RUN. */
+      if (val_device_unlock(e_bdf)) {
+          val_print(ACS_PRINT_ERR, " Failed to unlock the device: 0x%lx", e_bdf);
+          test_fail++;
       }
 
       val_memory_set(dram_buf_in_virt, dma_len * 2, 0);
@@ -192,22 +199,33 @@ cleanup_unlock:
           if (val_pcie_get_downstream_function(rp_bdf, &dsf_bdf))
               continue;
 
-          locked_rp = 0;
+          /* Disable TDISP before establishing the default IDE stream. */
+          if (val_pcie_disable_tdisp(rp_bdf))
+          {
+              val_print(ACS_PRINT_ERR, " Failed to disable TDISP for RP: 0x%x", rp_bdf);
+              test_fail++;
+              goto cleanup_unlock_rp;
+          }
+          stream_id = val_generate_stream_id();
+          status = val_pcie_ide_establish(dsf_bdf, rp_bdf, count, stream_id,
+                                          PCIE_CREATE_BDF_PACKED(dsf_bdf));
+          if (status == ACS_STATUS_SKIP)
+              goto cleanup_unlock_rp;
+          if (status != ACS_STATUS_PASS)
+          {
+              val_print(ACS_PRINT_ERR, " Failed to establish PCIe IDE for BDF: 0x%x", dsf_bdf);
+              test_fail++;
+              goto cleanup_unlock_rp;
+          }
+
           if (val_device_lock(dsf_bdf))
           {
               val_print(ACS_PRINT_ERR,
                         " Failed to lock the device: 0x%lx", dsf_bdf);
               test_fail++;
-              continue;
-          }
-          locked_rp = 1;
-
-          if (val_pcie_disable_tdisp(rp_bdf))
-          {
-              val_print(ACS_PRINT_ERR, " Failed to disable TDISP for BDF: 0x%x", rp_bdf);
-              test_fail++;
               goto cleanup_unlock_rp;
           }
+
           /* Exercise downstream traffic, rather than RP-local registers. */
           val_pcie_get_mmio_bar(dsf_bdf, &Bar_Base);
 
@@ -245,12 +263,9 @@ cleanup_unlock:
           }
 
 cleanup_unlock_rp:
-          if (locked_rp) {
-              if (val_device_unlock(dsf_bdf)) {
-                  val_print(ACS_PRINT_ERR,
-                            " Failed to unlock the device: 0x%lx", dsf_bdf);
-                  test_fail++;
-              }
+          if (val_device_unlock(dsf_bdf)) {
+              val_print(ACS_PRINT_ERR, " Failed to unlock the device: 0x%lx", dsf_bdf);
+              test_fail++;
           }
       }
   }

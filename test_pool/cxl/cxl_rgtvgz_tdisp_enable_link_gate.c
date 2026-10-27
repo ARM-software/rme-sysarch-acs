@@ -34,7 +34,6 @@
 #define TEST_NAME "cxl_rgtvgz_tdisp_enable_link_gate"
 #define TEST_DESC "TDISP/IDE gating for Realm device-to-host requests"
 #define TEST_RULE "RGTVGZ"
-
 #define RMECDA_CTL1_TDISP_EN_MASK 0x1u
 #define RMECDA_CTL1_LINK_STR_LOCK_MASK (1u << 1)
 #define RMECDA_CTL3_RID_LIMIT_SHIFT 8u
@@ -178,19 +177,103 @@ map_el3_data_structure(uint64_t va, uint32_t size, uint32_t pas)
 }
 
 static uint32_t
+map_dma_buffers_el3(uint8_t *buffer_va,
+                    uint64_t buffer_pa,
+                    uint32_t length,
+                    uint32_t pas)
+{
+  uint32_t attr;
+
+  if ((buffer_va == NULL) || (buffer_pa == 0u))
+    return ACS_STATUS_ERR;
+
+  attr = LOWER_ATTRS(PGT_ENTRY_ACCESS |
+                     SHAREABLE_ATTR(OUTER_SHAREABLE) |
+                     GET_ATTR_INDEX(DEV_MEM_nGnRnE) |
+                     PGT_ENTRY_AP_RW |
+                     PAS_ATTR(pas));
+
+  if (val_add_mmu_entry_el3((uint64_t)buffer_va, buffer_pa, attr))
+    return ACS_STATUS_ERR;
+
+  if (val_add_mmu_entry_el3((uint64_t)(buffer_va + length),
+                            buffer_pa + length,
+                            attr))
+    return ACS_STATUS_ERR;
+
+  return ACS_STATUS_PASS;
+}
+
+static uint32_t
+prepare_dma_buffers_el3(uint8_t *buffer_src,
+                        uint8_t *buffer_dst,
+                        uint32_t length)
+{
+  if ((buffer_src == NULL) || (buffer_dst == NULL))
+    return ACS_STATUS_ERR;
+
+  if (val_memory_set_el3(buffer_src, length, 0xABu))
+    return ACS_STATUS_ERR;
+
+  if (val_memory_set_el3(buffer_dst, length, 0x0u))
+    return ACS_STATUS_ERR;
+
+  return ACS_STATUS_PASS;
+}
+
+static uint32_t
+compare_dma_buffers_el3(uint8_t *buffer_src,
+                        uint8_t *buffer_dst,
+                        uint32_t length)
+{
+  uint64_t src_data;
+  uint64_t dst_data;
+
+  shared_data->num_access = 1;
+  shared_data->shared_data_access[0].access_type = READ_DATA;
+
+  while (length > 0u)
+  {
+    shared_data->shared_data_access[0].addr = (uint64_t)buffer_src;
+    if (val_pe_access_mut_el3())
+      return ACS_STATUS_ERR;
+    src_data = shared_data->shared_data_access[0].data;
+
+    shared_data->shared_data_access[0].addr = (uint64_t)buffer_dst;
+    if (val_pe_access_mut_el3())
+      return ACS_STATUS_ERR;
+    dst_data = shared_data->shared_data_access[0].data;
+
+    if ((uint32_t)src_data != (uint32_t)dst_data)
+      return 1u;
+
+    buffer_src += sizeof(uint32_t);
+    buffer_dst += sizeof(uint32_t);
+    length -= sizeof(uint32_t);
+  }
+
+  return 0u;
+}
+
+static uint32_t
 run_realm_dma_roundtrip(uint32_t endpoint_bdf,
                         uint8_t *buffer_src,
                         uint8_t *buffer_dst,
+                        uint64_t buffer_src_pa,
+                        uint64_t buffer_dst_pa,
                         uint32_t length,
                         uint32_t expect_reject)
 {
+  uint32_t compare_status;
   uint32_t status;
 
-  /* Prepare source/destination buffers for one DMA round trip check. */
-  val_memory_set(buffer_src, length, 0xAB);
-  val_memory_set(buffer_dst, length, 0x0);
-  val_pe_cache_clean_invalidate_range((uint64_t)buffer_src, length);
-  val_pe_cache_clean_invalidate_range((uint64_t)buffer_dst, length);
+  if (prepare_dma_buffers_el3(buffer_src, buffer_dst, length) != ACS_STATUS_PASS)
+    return ACS_STATUS_ERR;
+
+  val_print(ACS_PRINT_DEBUG, "  RGTVGZ: Cleaning source PA 0x%llx", buffer_src_pa);
+  (void)val_data_cache_ops_by_va_el3((uint64_t)buffer_src, CLEAN_AND_INVALIDATE);
+  val_print(ACS_PRINT_DEBUG, "  RGTVGZ: Cleaning destination PA 0x%llx", buffer_dst_pa);
+  (void)val_data_cache_ops_by_va_el3((uint64_t)buffer_dst, CLEAN_AND_INVALIDATE);
 
   if (val_exerciser_set_param_by_bdf(EXERCISER_SEC_SID,
                                      SEC_SID_REALM,
@@ -199,12 +282,13 @@ run_realm_dma_roundtrip(uint32_t endpoint_bdf,
     return ACS_STATUS_ERR;
 
   status = val_exerciser_set_param_by_bdf(DMA_ATTRIBUTES,
-                                          (uint64_t)buffer_src,
+                                          buffer_src_pa,
                                           length,
                                           endpoint_bdf);
   if (status != 0u)
     return ACS_STATUS_ERR;
 
+  val_print(ACS_PRINT_DEBUG, "  RGTVGZ: Starting DMA read PA 0x%llx", buffer_src_pa);
   status = val_exerciser_ops_by_bdf(START_DMA, EDMA_TO_DEVICE, endpoint_bdf);
   if (!val_exerciser_dma_status_valid(status) ||
       (!expect_reject && status != EXERCISER_DMA_SUCCESS)) {
@@ -212,28 +296,28 @@ run_realm_dma_roundtrip(uint32_t endpoint_bdf,
   }
 
   status = val_exerciser_set_param_by_bdf(DMA_ATTRIBUTES,
-                                          (uint64_t)buffer_dst,
+                                          buffer_dst_pa,
                                           length,
                                           endpoint_bdf);
   if (status != 0u)
     return ACS_STATUS_ERR;
 
+  val_print(ACS_PRINT_DEBUG, "  RGTVGZ: Starting DMA write PA 0x%llx", buffer_dst_pa);
   status = val_exerciser_ops_by_bdf(START_DMA, EDMA_FROM_DEVICE, endpoint_bdf);
   if (!val_exerciser_dma_status_valid(status) ||
       (!expect_reject && status != EXERCISER_DMA_SUCCESS)) {
       return ACS_STATUS_ERR;
   }
 
-  val_pe_cache_invalidate_range((uint64_t)buffer_src, length);
-  val_pe_cache_invalidate_range((uint64_t)buffer_dst, length);
+  (void)val_data_cache_ops_by_va_el3((uint64_t)buffer_dst, INVALIDATE);
+  compare_status = compare_dma_buffers_el3(buffer_src, buffer_dst, length);
+  if (compare_status == ACS_STATUS_ERR)
+    return ACS_STATUS_ERR;
 
-  status = (val_memory_compare(buffer_src, buffer_dst, length) == 0u) ? 0u : 1u;
-  if ((expect_reject == 0u) && (status != 0u))
-    return ACS_STATUS_FAIL;
-  if ((expect_reject != 0u) && (status == 0u))
-    return ACS_STATUS_FAIL;
+  if (expect_reject != 0u)
+    return (compare_status != 0u) ? ACS_STATUS_PASS : ACS_STATUS_FAIL;
 
-  return ACS_STATUS_PASS;
+  return (compare_status == 0u) ? ACS_STATUS_PASS : ACS_STATUS_FAIL;
 }
 
 static uint32_t
@@ -355,7 +439,8 @@ init_rmecda_context(const CXL_COMPONENT_ENTRY *root_port,
 }
 
 static uint32_t
-program_ctl1_mode(const RGTVGZ_CONTEXT *context,
+program_ctl1_mode(uint32_t root_bdf,
+                  const RGTVGZ_CONTEXT *context,
                   uint32_t tdisp_en,
                   uint32_t link_str_lock)
 {
@@ -363,16 +448,24 @@ program_ctl1_mode(const RGTVGZ_CONTEXT *context,
   uint32_t readback;
   uint32_t expected_bits = 0u;
   uint32_t checked_bits;
+  uint32_t status;
 
   if (context == NULL)
     return ACS_STATUS_ERR;
 
-  rmecda_ctl1 = context->rmecda_ctl1_orig &
-                ~(RMECDA_CTL1_TDISP_EN_MASK |
-                  RMECDA_CTL1_LINK_STR_LOCK_MASK);
+  status = tdisp_en ? val_pcie_enable_tdisp(root_bdf) : val_pcie_disable_tdisp(root_bdf);
+  if (status ||
+      read_from_root(context->rmecda_cfg_va + context->rmecda_cap_base +
+                     RMECDA_CTL1_OFFSET, &rmecda_ctl1) != ACS_STATUS_PASS)
+  {
+    val_print(ACS_PRINT_ERR, "  RGTVGZ: TDISP state setup failed", 0);
+    return ACS_STATUS_FAIL;
+  }
+
+  /* Preserve the TDISP state established by the common helper */
+  rmecda_ctl1 &= ~RMECDA_CTL1_LINK_STR_LOCK_MASK;
   if (tdisp_en != 0u)
   {
-    rmecda_ctl1 |= RMECDA_CTL1_TDISP_EN_MASK;
     expected_bits |= RMECDA_CTL1_TDISP_EN_MASK;
   }
 
@@ -530,6 +623,7 @@ verify_root_port(const CXL_COMPONENT_TABLE *table,
   uint32_t ide_supported = 0u;
   uint32_t session_id = 0u;
   uint32_t session_active = 0u;
+  uint32_t ide_cleanup_required = 0u;
   uint16_t endpoint_rid;
   val_spdm_context_t spdm_ctx;
   smmu_master_attributes_t master;
@@ -618,6 +712,8 @@ verify_root_port(const CXL_COMPONENT_TABLE *table,
     goto cleanup;
   }
 
+  ide_cleanup_required = 1u;
+
   /* Read IDE status and require active state for this case. */
   status = is_ide_link_active(root_index, &ide_active, &ide_supported);
   if (status != ACS_STATUS_PASS)
@@ -647,7 +743,8 @@ verify_root_port(const CXL_COMPONENT_TABLE *table,
     goto cleanup;
   }
 
-  buffer_va = val_memory_alloc_pages(2);
+  /* DMA requires owned physical pages, not backing inferred from a VA alias. */
+  buffer_va = (uint8_t *)val_memory_alloc_pages(2);
   if (buffer_va == NULL)
   {
     result = ACS_STATUS_SKIP;
@@ -786,6 +883,7 @@ verify_root_port(const CXL_COMPONENT_TABLE *table,
 
   val_pe_reg_write(VTTBR, pgt_desc_rlm.pgt_base);
   master.stage2 = 1;
+
   if (val_smmu_rlm_map_el3(&master, &pgt_desc_rlm))
   {
     val_print(ACS_PRINT_ERR, "  RGTVGZ: Realm SMMU map failed", 0);
@@ -794,12 +892,12 @@ verify_root_port(const CXL_COMPONENT_TABLE *table,
   }
   smmu_rlm_mapped = 1u;
 
-  if (val_add_gpt_entry_el3(buffer_pa, GPT_ANY))
+  if (val_add_gpt_entry_el3(buffer_pa, GPT_REALM))
   {
     result = ACS_STATUS_ERR;
     goto cleanup;
   }
-  if (val_add_gpt_entry_el3(buffer_pa + page_size, GPT_ANY))
+  if (val_add_gpt_entry_el3(buffer_pa + page_size, GPT_REALM))
   {
     result = ACS_STATUS_ERR;
     goto cleanup;
@@ -812,11 +910,21 @@ verify_root_port(const CXL_COMPONENT_TABLE *table,
     goto cleanup;
   }
 
+  if (map_dma_buffers_el3(buffer_va,
+                          buffer_pa,
+                          (uint32_t)page_size,
+                          REALM_PAS) != ACS_STATUS_PASS)
+  {
+    val_print(ACS_PRINT_ERR, "  RGTVGZ: Realm EL3 buffer map failed", 0);
+    result = ACS_STATUS_ERR;
+    goto cleanup;
+  }
+
   /*
    * Case 1: TDISP_EN=1, LINK_STR_LOCK=1 and IDE active -> request permitted.
    * The payload should propagate, so source and destination buffers must match.
    */
-  status = program_ctl1_mode(&context, 1u, 1u);
+  status = program_ctl1_mode(root_port->bdf, &context, 1u, 1u);
   if (status != ACS_STATUS_PASS)
   {
     val_print(ACS_PRINT_ERR, "  RGTVGZ: RMECDA_CTL1 setup failed", 0);
@@ -827,6 +935,8 @@ verify_root_port(const CXL_COMPONENT_TABLE *table,
   status = run_realm_dma_roundtrip(endpoint_bdf,
                                    buffer_src,
                                    buffer_dst,
+                                   buffer_pa,
+                                   buffer_pa + page_size,
                                    (uint32_t)page_size,
                                    0u);
   if (status != ACS_STATUS_PASS)
@@ -844,6 +954,7 @@ verify_root_port(const CXL_COMPONENT_TABLE *table,
                                     context.endpoint_index,
                                     &spdm_ctx,
                                     session_id);
+  ide_cleanup_required = 0u; /* The deliberate STOP attempted all directions. */
   if (status == ACS_STATUS_SKIP)
   {
     val_print(ACS_PRINT_INFO, "  RGTVGZ: KEY_SET_STOP unsupported", 0);
@@ -860,6 +971,8 @@ verify_root_port(const CXL_COMPONENT_TABLE *table,
   status = run_realm_dma_roundtrip(endpoint_bdf,
                                    buffer_src,
                                    buffer_dst,
+                                   buffer_pa,
+                                   buffer_pa + page_size,
                                    (uint32_t)page_size,
                                    1u);
   if (status != ACS_STATUS_PASS)
@@ -870,7 +983,7 @@ verify_root_port(const CXL_COMPONENT_TABLE *table,
   }
 
   /* Case 3: TDISP_EN=1, LINK_STR_LOCK=0 -> request rejected. */
-  status = program_ctl1_mode(&context, 1u, 0u);
+  status = program_ctl1_mode(root_port->bdf, &context, 1u, 0u);
   if (status != ACS_STATUS_PASS)
   {
     val_print(ACS_PRINT_ERR, "  RGTVGZ: LINK_STR_LOCK clear failed", 0);
@@ -881,6 +994,8 @@ verify_root_port(const CXL_COMPONENT_TABLE *table,
   status = run_realm_dma_roundtrip(endpoint_bdf,
                                    buffer_src,
                                    buffer_dst,
+                                   buffer_pa,
+                                   buffer_pa + page_size,
                                    (uint32_t)page_size,
                                    1u);
   if (status != ACS_STATUS_PASS)
@@ -891,7 +1006,7 @@ verify_root_port(const CXL_COMPONENT_TABLE *table,
   }
 
   /* Case 4: TDISP_EN=0 -> request rejected as per RNYCLL fallback path. */
-  status = program_ctl1_mode(&context, 0u, 1u);
+  status = program_ctl1_mode(root_port->bdf, &context, 0u, 1u);
   if (status != ACS_STATUS_PASS)
   {
     val_print(ACS_PRINT_ERR, "  RGTVGZ: TDISP_EN clear failed", 0);
@@ -902,6 +1017,8 @@ verify_root_port(const CXL_COMPONENT_TABLE *table,
   status = run_realm_dma_roundtrip(endpoint_bdf,
                                    buffer_src,
                                    buffer_dst,
+                                   buffer_pa,
+                                   buffer_pa + page_size,
                                    (uint32_t)page_size,
                                    1u);
   if (status != ACS_STATUS_PASS)
@@ -929,21 +1046,58 @@ cleanup:
   }
 
   if (smmu_rlm_mapped != 0u)
-    smmu_rlm_mapped = 0u;
-  if (pgt_rlm_created != 0u)
+  {
+    if (val_smmu_rlm_unmap_el3(&master))
+      result = ACS_STATUS_ERR;
+    else
+      smmu_rlm_mapped = 0u;
+  }
+  if (pgt_rlm_created != 0u && smmu_rlm_mapped == 0u)
     val_rlm_pgt_destroy(&pgt_desc_rlm);
   if (master.smmu_index != ACS_INVALID_INDEX)
     val_smmu_disable(master.smmu_index);
+
   if (buffer_valid != 0u)
+  {
+    /* Restore Non-secure access before returning the allocation to the PAL. */
+    if (map_dma_buffers_el3(buffer_va, buffer_pa, (uint32_t)page_size,
+                            NONSECURE_PAS) != ACS_STATUS_PASS)
+      result = ACS_STATUS_ERR;
+  }
+  if (buffer_va != NULL && smmu_rlm_mapped == 0u)
     val_memory_free_pages(buffer_va, 2);
 
+  if ((ide_cleanup_required != 0u) &&
+      (val_cxl_ide_disable_link(root_index, endpoint_index, &spdm_ctx, session_id) !=
+       ACS_STATUS_PASS))
+    val_print(ACS_PRINT_WARN, "  RGTVGZ: IDE cleanup failed", 0);
   if (session_active != 0u)
     (void)val_spdm_session_close(&spdm_ctx, session_id);
 
   if ((context.rmecda_ctl1_valid != 0u) && (context.rmecda_cfg_va != 0u))
-    (void)write_from_root(context.rmecda_cfg_va + context.rmecda_cap_base +
-                          RMECDA_CTL1_OFFSET,
-                          context.rmecda_ctl1_orig);
+  {
+    uint32_t ctl1_current;
+
+    /* Restore other fields without changing TDISP outside the common helpers. */
+    if (read_from_root(context.rmecda_cfg_va + context.rmecda_cap_base +
+                       RMECDA_CTL1_OFFSET, &ctl1_current) != ACS_STATUS_PASS ||
+        write_from_root(context.rmecda_cfg_va + context.rmecda_cap_base +
+                         RMECDA_CTL1_OFFSET,
+                         (context.rmecda_ctl1_orig & ~RMECDA_CTL1_TDISP_EN_MASK) |
+                         (ctl1_current & RMECDA_CTL1_TDISP_EN_MASK)) != ACS_STATUS_PASS)
+    {
+      val_print(ACS_PRINT_ERR, "  RGTVGZ: RMECDA_CTL1 restore failed", 0);
+      result = ACS_STATUS_FAIL;
+    }
+
+    status = (context.rmecda_ctl1_orig & RMECDA_CTL1_TDISP_EN_MASK) ?
+             val_pcie_enable_tdisp(root_port->bdf) : val_pcie_disable_tdisp(root_port->bdf);
+    if (status)
+    {
+      val_print(ACS_PRINT_ERR, "  RGTVGZ: TDISP restore failed", 0);
+      result = ACS_STATUS_FAIL;
+    }
+  }
   if ((context.rmecda_ctl3_valid != 0u) && (context.rmecda_cfg_va != 0u))
     (void)write_from_root(context.rmecda_cfg_va + context.rmecda_cap_base +
                           RMECDA_CTL3_OFFSET,

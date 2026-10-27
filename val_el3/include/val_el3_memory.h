@@ -78,6 +78,8 @@ void val_el3_mmio_write64(uintptr_t addr, uint64_t val);
 void val_el3_mem_barrier(void);
 void val_el3_cmo_cipae(uint64_t PA);
 void val_el3_acs_str(uint64_t *address, uint64_t data);
+void val_el3_acs_str32(uint32_t *address, uint32_t data);
+void val_el3_acs_ldr32(uint32_t *address);
 void val_el3_tlbi_vae3(uint64_t VA);
 void val_el3_tlbi_alle3is(void);
 void val_el3_isb(void);

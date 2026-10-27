@@ -20,6 +20,7 @@
 #include "include/val_pe.h"
 #include "include/val_interface.h"
 #include "include/val_el32.h"
+#include "include/val_pcie.h"
 
 /**
  *  @brief  This API is used to set the given memory with the required data
@@ -109,22 +110,28 @@ val_map_shared_mem_el3(uint64_t shared_addr)
 }
 
 uint32_t
-val_cxl_root_port_ide_program_and_enable_el3(uint64_t bar0_base,
+val_cxl_root_port_ide_program_el3(uint32_t rp_bdf,
                                               uint8_t stream_id,
                                               uint8_t key_slot,
                                               const CXL_IDE_KEY_BUFFER *rx_key,
                                               const CXL_IDE_KEY_BUFFER *tx_key)
 {
+  uint64_t config = val_pcie_get_bdf_config_addr(rp_bdf);
+
+  if (config == 0u)
+    return 1u;
+
   if ((rx_key == NULL) || (tx_key == NULL))
     return 1;
 
-  shared_data->arg0 = IDE_ENABLE;
-  shared_data->arg2 = bar0_base;
+  shared_data->arg0 = IDE_CXL_KEY_PROG;
+  shared_data->arg1 = PCIE_CREATE_BDF_PACKED(rp_bdf);
+  shared_data->arg2 = config - (shared_data->arg1 << 12);
   shared_data->arg3 = stream_id;
   shared_data->arg4 = key_slot;
   shared_data->arg5 = (uint64_t)rx_key;
   shared_data->arg6 = (uint64_t)tx_key;
-  UserCallSMC(ARM_ACS_SMC_FID, EL3_IDE_KM, 0, 0, 0);
+  UserCallSMC(ARM_ACS_SMC_FID, EL3_CXL_IDE_KM, 0, 0, 0);
   if (val_pe_get_index_mpid(val_pe_get_mpid()) != 0)
       return shared_data->status_code ? 1 : 0;
   if (shared_data->status_code != 0) {
@@ -138,17 +145,45 @@ val_cxl_root_port_ide_program_and_enable_el3(uint64_t bar0_base,
 }
 
 uint32_t
-val_cxl_root_port_ide_disable_el3(uint64_t bar0_base,
+val_cxl_root_port_ide_go_el3(uint32_t rp_bdf, uint8_t stream_id, uint8_t key_slot,
+                                      uint8_t mode)
+{
+  uint64_t config = val_pcie_get_bdf_config_addr(rp_bdf);
+
+  if (config == 0u)
+    return 1u;
+
+  shared_data->arg0 = IDE_CXL_KEY_GO;
+  shared_data->arg1 = PCIE_CREATE_BDF_PACKED(rp_bdf);
+  shared_data->arg2 = config - (shared_data->arg1 << 12);
+  shared_data->arg3 = stream_id;
+  shared_data->arg4 = key_slot;
+  shared_data->arg5 = mode;
+  shared_data->arg6 = 0u;
+  UserCallSMC(ARM_ACS_SMC_FID, EL3_CXL_IDE_KM, 0, 0, 0);
+  if (shared_data->status_code != 0u)
+    val_print(ACS_PRINT_ERR, " EL3: IDE_KM GO failed", 0);
+  return shared_data->status_code ? 1u : 0u;
+}
+
+uint32_t
+val_cxl_root_port_ide_stop_el3(uint32_t rp_bdf,
                                    uint8_t stream_id,
                                    uint8_t key_slot)
 {
-  shared_data->arg0 = IDE_DISABLE;
-  shared_data->arg2 = bar0_base;
+  uint64_t config = val_pcie_get_bdf_config_addr(rp_bdf);
+
+  if (config == 0u)
+    return 1u;
+
+  shared_data->arg0 = IDE_CXL_KEY_STOP;
+  shared_data->arg1 = PCIE_CREATE_BDF_PACKED(rp_bdf);
+  shared_data->arg2 = config - (shared_data->arg1 << 12);
   shared_data->arg3 = stream_id;
   shared_data->arg4 = key_slot;
   shared_data->arg5 = 0;
   shared_data->arg6 = 0;
-  UserCallSMC(ARM_ACS_SMC_FID, EL3_IDE_KM, 0, 0, 0);
+  UserCallSMC(ARM_ACS_SMC_FID, EL3_CXL_IDE_KM, 0, 0, 0);
   if (val_pe_get_index_mpid(val_pe_get_mpid()) != 0)
       return shared_data->status_code ? 1 : 0;
   if (shared_data->status_code != 0) {
@@ -159,31 +194,6 @@ val_cxl_root_port_ide_disable_el3(uint64_t bar0_base,
     val_print(ACS_PRINT_INFO, " EL3: IDE_KM disable successful", 0);
     return 0;
   }
-}
-
-uint32_t
-val_cxl_root_port_ide_get_base_el3(uint64_t bar0_base,
-                                    uint64_t *ide_km_base)
-{
-  if (ide_km_base == NULL)
-    return 1;
-
-  shared_data->arg0 = IDE_GET_BASE;
-  shared_data->arg2 = bar0_base;
-  shared_data->arg3 = 0;
-  shared_data->arg4 = 0;
-  shared_data->arg5 = 0;
-  shared_data->arg6 = 0;
-  UserCallSMC(ARM_ACS_SMC_FID, EL3_IDE_KM, 0, 0, 0);
-  if (val_pe_get_index_mpid(val_pe_get_mpid()) != 0)
-      return shared_data->status_code ? 1 : 0;
-  if (shared_data->status_code != 0) {
-    val_print(ACS_PRINT_ERR, shared_data->error_msg, 0);
-    return 1;
-  }
-
-  *ide_km_base = shared_data->arg2;
-  return 0;
 }
 
 /**
@@ -208,6 +218,21 @@ val_add_gpt_entry_el3(uint64_t PA, uint64_t gpi)
     val_print(ACS_PRINT_INFO, " EL3: GPT Entry added successfully", 0);
     return 0;
   }
+}
+
+uint32_t
+val_get_gpt_entry_el3(uint64_t PA, uint64_t *gpi)
+{
+  if (gpi == NULL)
+      return 1u;
+
+  shared_data->arg0 = 0u;
+  UserCallSMC(ARM_ACS_SMC_FID, RME_GET_GPT_ENTRY, PA, 0, 0);
+  if (shared_data->status_code != 0u)
+      return 1u;
+
+  *gpi = shared_data->arg0;
+  return 0u;
 }
 
 /**
@@ -343,25 +368,14 @@ val_cmpr_pe_regs_aftr_low_pwr_el3(void)
 }
 
 /**
- *  @brief  This API is called to enable/disable the legacy tie-off input in EL3.
- *          Returns 1 on error, 0 on success.
- *  @return 1 on error, 0 on success
+ *  @brief  Enable/disable the legacy tie-off input in EL3.
+ *  @return 0 on success, NOT_IMPLEMENTED if unimplemented, or another nonzero error.
 **/
 uint32_t
 val_prog_legacy_tz(int enable)
 {
-  (void) enable;
-  UserCallSMC(ARM_ACS_SMC_FID, LEGACY_TZ_ENABLE, SET, 0, 0);
-  if (val_pe_get_index_mpid(val_pe_get_mpid()) != 0)
-      return shared_data->status_code ? 1 : 0;
-  if (shared_data->status_code != 0) {
-    val_print(ACS_PRINT_ERR, shared_data->error_msg, 0);
-    return 1;
-  }
-  else {
-    val_print(ACS_PRINT_INFO, " EL3: Legacy TZ service completed", 0);
-    return 0;
-  }
+  UserCallSMC(ARM_ACS_SMC_FID, LEGACY_TZ_ENABLE, enable, 0, 0);
+  return shared_data->status_code;
 }
 
 /**
@@ -386,23 +400,13 @@ val_wd_set_ws0_el3(uint64_t VA_RT_WDOG, uint32_t timeout, uint64_t counter_freq)
 }
 
 /**
- *  @brief  This API is called to enable/disable the Active mode of PAS filter in EL3.
- *          Returns 1 on error, 0 on success.
- *  @return 1 on error, 0 on success
+ *  @brief  Enable/disable the Active mode of PAS filter in EL3.
+ *  @return 0 on success, NOT_IMPLEMENTED if unimplemented, or another nonzero error.
 **/
 uint32_t val_pas_filter_active_mode_el3(int enable)
 {
   UserCallSMC(ARM_ACS_SMC_FID, PAS_FILTER_SERVICE, enable, 0, 0);
-  if (val_pe_get_index_mpid(val_pe_get_mpid()) != 0)
-      return shared_data->status_code ? 1 : 0;
-  if (shared_data->status_code != 0) {
-    val_print(ACS_PRINT_ERR, shared_data->error_msg, 0);
-    return 1;
-  }
-  else {
-    val_print(ACS_PRINT_INFO, " EL3: PAS Filter service completed", 0);
-    return 0;
-  }
+  return shared_data->status_code;
 }
 
 /** Read the acknowledged Root control value for later restoration. */
@@ -625,10 +629,10 @@ uint32_t val_smmu_gpt_invalidate_el3(smmu_master_attributes_t *smmu_attr)
  *          Returns 1 on error, 0 on success.
  *  @return 1 on error, 0 on success
  */
-uint32_t val_dpt_add_entry(uint64_t translated_addr, uint64_t smmu_index_and_access)
+uint32_t val_dpt_add_entry(uint64_t translated_addr, uint64_t smmu_info)
 {
   UserCallSMC(ARM_ACS_SMC_FID, SMMU_CONFIG_SERVICE, SMMU_RLM_ADD_DPT_ENTRY,
-             translated_addr, smmu_index_and_access);
+             translated_addr, smmu_info);
   if (val_pe_get_index_mpid(val_pe_get_mpid()) != 0)
       return shared_data->status_code ? 1 : 0;
   if (shared_data->status_code != 0) {

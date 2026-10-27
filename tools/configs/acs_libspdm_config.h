@@ -42,7 +42,7 @@
 #define LIBSPDM_SM2_DSA_P256_SUPPORT              0
 #define LIBSPDM_EDDSA_ED25519_SUPPORT             0
 #define LIBSPDM_EDDSA_ED448_SUPPORT               0
-#define LIBSPDM_FFDHE_2048_SUPPORT                0
+#define LIBSPDM_FFDHE_2048_SUPPORT                1
 #define LIBSPDM_FFDHE_3072_SUPPORT                0
 #define LIBSPDM_FFDHE_4096_SUPPORT                0
 #define LIBSPDM_ECDHE_P256_SUPPORT                1

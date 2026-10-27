@@ -409,7 +409,8 @@ uint32_t pal_exerciser_get_param(EXERCISER_PARAM_TYPE Type, uint64_t *Value1, ui
           *Value1 = pal_mmio_read(Base + MSICTL);
           return pal_mmio_read(Base + MSICTL) | MASK_BIT;
       case ATS_RES_ATTRIBUTES:
-          *Value1 = pal_mmio_read64(Base + ATS_ADDR);
+          *Value1 = (uint64_t)pal_mmio_read(Base + ATS_ADDR);
+          *Value1 |= (uint64_t)pal_mmio_read(Base + ATS_ADDR + 4) << 32;
           if (Value2 != NULL)
               *Value2 = pal_mmio_read(Base + ATS_REPLY);
           return 0;
@@ -466,7 +467,7 @@ uint32_t pal_exerciser_ops(EXERCISER_OPS Ops, uint64_t Param, uint32_t Bdf)
   uint64_t Base;
   uint64_t Ecam;
   uint32_t CapabilityOffset;
-  uint32_t data;
+  uint32_t data, poll;
   Base = pal_exerciser_get_ecsr_base(Bdf,0);
   Ecam = pal_exerciser_get_ecam(Bdf);
   switch(Ops){
@@ -555,7 +556,13 @@ uint32_t pal_exerciser_ops(EXERCISER_OPS Ops, uint64_t Param, uint32_t Bdf)
         pal_mmio_write(Base + ATSCTL,
                        (pal_mmio_read(Base + ATSCTL) & ATS_REQUEST_ATTR_REG_MASK) |
                        ATS_TRIGGER);
-        return !(pal_mmio_read(Base + ATSCTL) & ATS_STATUS);
+        /* Status is valid only after the translation is no longer in flight. */
+        for (poll = 0; poll < EXERCISER_ATS_POLL_LIMIT; ++poll) {
+            data = pal_mmio_read(Base + ATSCTL);
+            if (!(data & ATS_IN_FLIGHT))
+                return !(data & ATS_STATUS);
+        }
+        return 1;
 
     case ATS_INV_CACHE:
         pal_mmio_write(Base + ATSCTL,
