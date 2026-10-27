@@ -203,8 +203,6 @@ payload(void)
         if (!failed)
             failed = val_smmu_disable(smmu_index);
         if (!failed)
-            failed = val_smmu_write_gbpa(smmu_base, gbpa & ~SMMUv3_GBPA_ABORT);
-        if (!failed)
             failed = val_smmu_root_cr0_write(smmu_base, root_control | SMMU_ROOT_ACCESSEN);
         if (!failed)
             failed = verify_smmu_reset_dma_blocking(buffer, (uint64_t)physical, instance,
@@ -226,14 +224,15 @@ payload(void)
 
         /* Keep access blocked while restoring translation and Root control state. */
         restore_failed = val_smmu_access_disable(smmu_base);
-        if (val_smmu_write_gbpa(smmu_base, gbpa))
-            restore_failed = 1;
         if (ns_control & SMMUv3_CR0_SMMUEN) {
             if (val_smmu_enable(smmu_index))
                 restore_failed = 1;
         } else if (val_smmu_disable(smmu_index)) {
             restore_failed = 1;
         }
+        /* Restore GBPA after val_smmu_disable(), which clears ABORT for bypass. */
+        if (val_smmu_write_gbpa(smmu_base, gbpa))
+            restore_failed = 1;
         if (!restore_failed && val_smmu_root_cr0_write(smmu_base, root_control))
             restore_failed = 1;
         if (restore_failed) {
