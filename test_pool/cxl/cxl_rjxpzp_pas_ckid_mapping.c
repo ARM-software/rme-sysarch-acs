@@ -40,7 +40,6 @@
 #define DECODER_SLOT 0u
 #define TEST_DATA_PATTERN 0xA5A5A5A5u
 #define RJXPZP_CKID_MAX 0x2000u
-#define RJXPZP_CKID_BITMAP_SIZE (RJXPZP_CKID_MAX / 8u)
 
 #define RMECDA_CTL1_TDISP_EN_MASK 0x1u
 #define RMECDA_CTL1_LINK_STR_LOCK_MASK (1u << 1)
@@ -389,57 +388,35 @@ derive_ckid(uint32_t pas,
 }
 
 static uint32_t
-set_target_ckid_specific_key(val_spdm_context_t *context,
+set_target_ckid_random_key(val_spdm_context_t *context,
                              uint32_t session_id,
-                             uint32_t ckid)
+                             uint32_t ckid,
+                             uint8_t ckid_type)
 {
-  /* Bind a CKID-specific key via the CXL-TSP vendor-defined request. */
-  cxl_tsp_set_target_ckid_specific_key_req_t request;
-  cxl_tsp_set_target_ckid_specific_key_rsp_t response;
-  size_t response_size;
+  cxl_tsp_set_target_ckid_random_key_req_t request;
+  cxl_tsp_set_target_ckid_random_key_rsp_t response;
+  size_t response_size = sizeof(response);
   libspdm_return_t status;
 
-  if ((context == NULL) || (context->spdm_context == NULL))
-    return ACS_STATUS_ERR;
-
+  /* Leave entropy validity flags clear as the target supplies its own entropy. */
   val_memory_set(&request, sizeof(request), 0);
-  val_memory_set(&response, sizeof(response), 0);
-
   request.header.tsp_version = CXL_TSP_MESSAGE_VERSION;
-  request.header.op_code = CXL_TSP_OPCODE_SET_TARGET_CKID_SPECIFIC_KEY;
+  request.header.op_code = CXL_TSP_OPCODE_SET_TARGET_CKID_RANDOM_KEY;
   request.ckid = ckid;
-  request.ckid_type = CXL_TSP_SET_CKID_SPECIFIC_KEY_CKID_TYPE_OS_CKID;
-  request.validity_flags = (uint8_t)(CXL_TSP_KEY_VALIDITY_FLAGS_DATA_ENC_KEY |
-                                    CXL_TSP_KEY_VALIDITY_FLAGS_TWEAK_KEY);
-
-  if (val_spdm_get_random(sizeof(request.data_encryption_key),
-                          request.data_encryption_key) != ACS_STATUS_PASS)
-    return ACS_STATUS_ERR;
-
-  if (val_spdm_get_random(sizeof(request.tweak_key),
-                          request.tweak_key) != ACS_STATUS_PASS)
-    return ACS_STATUS_ERR;
-
-  response_size = sizeof(response);
+  request.attributes = ckid_type;
+  val_memory_set(&response, sizeof(response), 0);
   status = cxl_tsp_send_receive_data(context->spdm_context,
                                      &session_id,
                                      &request,
                                      sizeof(request),
                                      &response,
                                      &response_size);
-  if (LIBSPDM_STATUS_IS_ERROR(status))
+  if (LIBSPDM_STATUS_IS_ERROR(status) || (response_size != sizeof(response)) ||
+      (response.header.tsp_version != CXL_TSP_MESSAGE_VERSION) ||
+      (response.header.op_code != CXL_TSP_OPCODE_SET_TARGET_CKID_RANDOM_KEY_RSP))
   {
-    val_print(ACS_PRINT_ERR,
-              " RJXPZP: SET_TARGET_CKID_SPECIFIC_KEY failed (0x%x)",
+    val_print(ACS_PRINT_ERR, " RJXPZP: SET_TARGET_CKID_RANDOM_KEY failed (0x%x)",
               (uint64_t)status);
-    return ACS_STATUS_ERR;
-  }
-
-  if (response.header.op_code != CXL_TSP_OPCODE_SET_TARGET_CKID_SPECIFIC_KEY_RSP)
-  {
-    val_print(ACS_PRINT_ERR,
-              " RJXPZP: CKID key response opcode 0x%x",
-              (uint64_t)response.header.op_code);
     return ACS_STATUS_ERR;
   }
 
@@ -447,32 +424,115 @@ set_target_ckid_specific_key(val_spdm_context_t *context,
 }
 
 static uint32_t
-is_ckid_programmed(const uint8_t *bitmap, uint32_t ckid)
+clear_target_ckid_key(val_spdm_context_t *context,
+                      uint32_t session_id,
+                      uint32_t ckid)
 {
-  uint32_t byte_index;
-  uint32_t bit_index;
+  cxl_tsp_clear_target_ckid_key_req_t request;
+  cxl_tsp_clear_target_ckid_key_rsp_t response;
+  size_t response_size = sizeof(response);
+  libspdm_return_t status;
 
-  if ((bitmap == NULL) || (ckid >= RJXPZP_CKID_MAX))
-    return 0u;
+  val_memory_set(&request, sizeof(request), 0);
+  val_memory_set(&response, sizeof(response), 0);
+  request.header.tsp_version = CXL_TSP_MESSAGE_VERSION;
+  request.header.op_code = CXL_TSP_OPCODE_CLEAR_TARGET_CKID_KEY;
+  request.ckid = ckid;
 
-  byte_index = ckid / 8u;
-  bit_index = ckid % 8u;
+  status = cxl_tsp_send_receive_data(context->spdm_context,
+                                     &session_id,
+                                     &request,
+                                     sizeof(request),
+                                     &response,
+                                     &response_size);
+  if (LIBSPDM_STATUS_IS_ERROR(status) || (response_size != sizeof(response)) ||
+      (response.header.tsp_version != CXL_TSP_MESSAGE_VERSION) ||
+      (response.header.op_code != CXL_TSP_OPCODE_CLEAR_TARGET_CKID_KEY_RSP))
+  {
+    val_print(ACS_PRINT_ERR, " RJXPZP: CLEAR_TARGET_CKID_KEY failed (0x%x)",
+              (uint64_t)status);
+    return ACS_STATUS_ERR;
+  }
 
-  return (bitmap[byte_index] >> bit_index) & 0x1u;
+  return ACS_STATUS_PASS;
 }
 
-static void
-mark_ckid_programmed(uint8_t *bitmap, uint32_t ckid)
+/* Both CKIDs use TVM keys. Only the Realm MECID changes between reads.
+ * This checks encryption isolation, rather than exact CKID or TEE values.
+ */
+static uint32_t
+check_realm_mecid_isolation(val_spdm_context_t *context,
+                            uint32_t session_id,
+                            uint64_t address,
+                            uint32_t mecid,
+                            uint32_t alternate_mecid,
+                            uint32_t alternate_ckid)
 {
-  uint32_t byte_index;
-  uint32_t bit_index;
+  uint32_t baseline;
+  uint32_t pattern;
+  uint32_t readback;
+  uint32_t result = ACS_STATUS_PASS;
 
-  if ((bitmap == NULL) || (ckid >= RJXPZP_CKID_MAX))
-    return;
+  /* Keep the original TVM key installed and ask the target for a second key. */
+  if (set_target_ckid_random_key(context, session_id, alternate_ckid,
+          CXL_TSP_SET_CKID_RANDOM_KEY_ATTRIBUTES_CKID_TYPE_TVM_CKID) != ACS_STATUS_PASS)
+    return ACS_STATUS_FAIL;
 
-  byte_index = ckid / 8u;
-  bit_index = ckid % 8u;
-  bitmap[byte_index] |= (uint8_t)(1u << bit_index);
+  /* Save the word through the original Realm MECID before modifying it. */
+  if (read_from_root(address, &baseline) != ACS_STATUS_PASS)
+  {
+    result = ACS_STATUS_FAIL;
+    goto clear_key;
+  }
+
+  /* Write and verify the pattern using the original key. */
+  pattern = baseline ^ TEST_DATA_PATTERN;
+  if ((write_from_root(address, pattern) != ACS_STATUS_PASS) ||
+      (read_from_root(address, &readback) != ACS_STATUS_PASS) ||
+      (readback != pattern))
+  {
+    result = ACS_STATUS_FAIL;
+    goto restore_memory;
+  }
+
+  /* Read without writing through the alternate MECID: its key must not
+   * recover the original plaintext.
+   */
+  if (val_rlm_configure_mecid(alternate_mecid))
+    result = ACS_STATUS_FAIL;
+  else if (read_from_root(address, &readback) != ACS_STATUS_PASS)
+    result = ACS_STATUS_FAIL;
+  else if (readback == pattern)
+  {
+    val_print(ACS_PRINT_ERR, " RJXPZP: different Realm MECID recovered plaintext", 0);
+    result = ACS_STATUS_FAIL;
+  }
+
+  /* Restore the original MECID before any further writes. Stop the caller's
+   * test accesses if this fails, to avoid restoring data through the wrong key.
+   */
+  if (val_rlm_configure_mecid(mecid))
+  {
+    (void)clear_target_ckid_key(context, session_id, alternate_ckid);
+    return ACS_STATUS_ERR;
+  }
+
+  /* The alternate read must leave the original plaintext recoverable. */
+  if ((read_from_root(address, &readback) != ACS_STATUS_PASS) ||
+      (readback != pattern))
+    result = ACS_STATUS_FAIL;
+
+restore_memory:
+  if ((write_from_root(address, baseline) != ACS_STATUS_PASS) ||
+      (read_from_root(address, &readback) != ACS_STATUS_PASS) ||
+      (readback != baseline))
+    result = ACS_STATUS_FAIL;
+
+clear_key:
+  if (clear_target_ckid_key(context, session_id, alternate_ckid) != ACS_STATUS_PASS)
+    result = ACS_STATUS_FAIL;
+
+  return result;
 }
 
 static uint32_t
@@ -485,7 +545,6 @@ exercise_root_port(const CXL_COMPONENT_TABLE *table,
   CONTEXT context;
   uint32_t root_bdf;
   uint32_t rmecda_cap_base = 0u;
-  uint32_t aer_offset = 0u;
   uint32_t rmecda_ctl1_original = 0u;
   uint32_t status;
   uint32_t endpoint_index = CXL_COMPONENT_INVALID_INDEX;
@@ -506,7 +565,7 @@ exercise_root_port(const CXL_COMPONENT_TABLE *table,
   uint32_t mecid_max;
   uint64_t mecid_max64;
   uint16_t feature_enable_mask;
-  static uint8_t programmed_ckid[RJXPZP_CKID_BITMAP_SIZE];
+  uint32_t active_ckid = RJXPZP_CKID_MAX;
   uint64_t cfg_addr;
   uint64_t cfg_va = 0u;
   uint64_t tg;
@@ -515,7 +574,6 @@ exercise_root_port(const CXL_COMPONENT_TABLE *table,
   uint32_t attr;
 
   val_memory_set(&context, sizeof(context), 0);
-  val_memory_set(programmed_ckid, sizeof(programmed_ckid), 0);
   context.host_index = CXL_COMPONENT_INVALID_INDEX;
   context.root_index = root_index;
   context.endpoint_index = CXL_COMPONENT_INVALID_INDEX;
@@ -532,20 +590,9 @@ exercise_root_port(const CXL_COMPONENT_TABLE *table,
   if (root_bdf == 0u)
     return ACS_STATUS_ERR;
 
-  /* Ensure the root port exposes the RME-CDA DVSEC and AER capability. */
+  /* Ensure the root port exposes the RME-CDA DVSEC. */
   if (val_pcie_find_cda_capability(root_bdf, &rmecda_cap_base) != PCIE_SUCCESS)
     return ACS_STATUS_SKIP;
-
-  if (val_pcie_find_capability(root_bdf,
-                               PCIE_ECAP,
-                               ECID_AER,
-                               &aer_offset) != PCIE_SUCCESS)
-  {
-    val_print(ACS_PRINT_TEST,
-              " RJXPZP: AER capability absent on RP 0x%x",
-              root_bdf);
-    return ACS_STATUS_SKIP;
-  }
 
   /* Find a downstream Type-3 endpoint for CXL.mem testing. */
   status = val_cxl_find_downstream_endpoint(root_index, &endpoint_index);
@@ -805,11 +852,10 @@ exercise_root_port(const CXL_COMPONENT_TABLE *table,
     uint32_t mecid;
     uint32_t ckid = 0u;
     uint8_t derived_ue = 0u;
-    uint32_t aer_uncorr = 0u;
     uint32_t baseline = 0u;
     uint32_t pattern = 0u;
     uint32_t readback;
-    uint32_t key_status;
+    uint8_t ckid_type;
     uint32_t ckid_valid = 0u;
     uint32_t skip_case = 0u;
 
@@ -880,19 +926,25 @@ exercise_root_port(const CXL_COMPONENT_TABLE *table,
       continue;
     }
 
-    /* Bind CKID keys before issuing CXL.mem traffic. */
-    if (ckid_valid != 0u)
+    /* Install the expected OSCKID or TVMCKID key for this PAS. */
+    if (vector->expectation == EXPECT_SUCCESS)
     {
-      if (is_ckid_programmed(programmed_ckid, ckid) == 0u)
+      if ((active_ckid != RJXPZP_CKID_MAX) &&
+          (clear_target_ckid_key(&ctx, session_id, active_ckid) != ACS_STATUS_PASS))
       {
-        key_status = set_target_ckid_specific_key(&ctx, session_id, ckid);
-        if (key_status != ACS_STATUS_PASS)
-        {
-          failures++;
-          continue;
-        }
-        mark_ckid_programmed(programmed_ckid, ckid);
+        failures++;
+        break;
       }
+      active_ckid = RJXPZP_CKID_MAX;
+      ckid_type = (vector->pas == NONSECURE_PAS) ?
+          CXL_TSP_SET_CKID_RANDOM_KEY_ATTRIBUTES_CKID_TYPE_OS_CKID :
+          CXL_TSP_SET_CKID_RANDOM_KEY_ATTRIBUTES_CKID_TYPE_TVM_CKID;
+      if (set_target_ckid_random_key(&ctx, session_id, ckid, ckid_type) != ACS_STATUS_PASS)
+      {
+        failures++;
+        break;
+      }
+      active_ckid = ckid;
     }
 
     executed++;
@@ -902,22 +954,13 @@ exercise_root_port(const CXL_COMPONENT_TABLE *table,
     {
       /* Read through the same EL3 PAS alias and MECID as the test access. */
       shared_data->exception_expected = CLEAR;
-      val_cxl_aer_clear(root_bdf, aer_offset);
       if (read_from_root((uint64_t)mapped, &baseline) != ACS_STATUS_PASS)
       {
         failures++;
         continue;
       }
-      if ((val_cxl_aer_read_uncorr(root_bdf, aer_offset, &aer_uncorr) !=
-           ACS_STATUS_PASS) || (aer_uncorr != 0u))
-      {
-        val_print(ACS_PRINT_ERR, " RJXPZP: baseline read failed for %a",
-                  (uint64_t)vector->name);
-        failures++;
-        continue;
-      }
       pattern = baseline ^ TEST_DATA_PATTERN;
-      if (pattern == baseline)
+      if ((pattern == baseline) || (pattern == 0xFFFFFFFFu))
         pattern ^= 0x1u;
     }
     else
@@ -927,14 +970,42 @@ exercise_root_port(const CXL_COMPONENT_TABLE *table,
         pattern = TEST_DATA_PATTERN;
     }
 
-    val_cxl_aer_clear(root_bdf, aer_offset);
-    status = val_cxl_aer_read_uncorr(root_bdf, aer_offset, &aer_uncorr);
-    if ((status != ACS_STATUS_PASS) || (aer_uncorr != 0u))
+    if (vector->expectation == EXPECT_UE)
     {
-      val_print(ACS_PRINT_ERR, " RJXPZP: AER not clear for %a",
-                (uint64_t)vector->name);
-      val_print(ACS_PRINT_ERR, " RJXPZP: AER 0x%x", (uint64_t)aer_uncorr);
-      failures++;
+      /* Rejected writes complete without an in-band error. Probe separately so
+       * a write fault cannot be mistaken for the expected read abort.
+       */
+      shared_data->exception_expected = CLEAR;
+      if (write_from_root((uint64_t)mapped, pattern) != ACS_STATUS_PASS)
+      {
+        val_print(ACS_PRINT_ERR, " RJXPZP: rejected write did not complete for %a",
+                  (uint64_t)vector->name);
+        failures++;
+        continue;
+      }
+
+      /* SBSA CXL_08/CXL_09: consuming the rejected read's poison raises SEA.
+       * The EL3 handler validates the syndrome, load instruction and address.
+       * No particular Root Port AER status is required for this rejection.
+       */
+      shared_data->access_mut = CLEAR;
+      shared_data->exception_generated = CLEAR;
+      shared_data->exception_expected = SET;
+      shared_data->esr_value = SEA_ESR_READ;
+      shared_data->num_access = 1;
+      shared_data->shared_data_access[0].addr = (uint64_t)mapped;
+      shared_data->shared_data_access[0].access_type = READ_DATA;
+
+      status = val_pe_access_mut_el3();
+      shared_data->exception_expected = CLEAR;
+      shared_data->esr_value = 0u;
+      if ((status != ACS_STATUS_PASS) || (shared_data->exception_generated != SET))
+      {
+        val_print(ACS_PRINT_ERR, " RJXPZP: expected external read abort not observed for %a",
+                  (uint64_t)vector->name);
+        failures++;
+      }
+      shared_data->exception_generated = CLEAR;
       continue;
     }
 
@@ -954,25 +1025,38 @@ exercise_root_port(const CXL_COMPONENT_TABLE *table,
     }
 
     readback = (uint32_t)shared_data->shared_data_access[1].data;
-    status = val_cxl_aer_read_uncorr(root_bdf, aer_offset, &aer_uncorr);
-    if (status != ACS_STATUS_PASS)
-    {
-      val_print(ACS_PRINT_ERR,
-                " RJXPZP: Failed to read AER for %a",
-                (uint64_t)vector->name);
-      failures++;
-      continue;
-    }
-
     /* Validate the observed behavior against expectation. */
     if (vector->expectation == EXPECT_SUCCESS)
     {
-      if ((aer_uncorr != 0u) || (readback != pattern))
+      if (readback != pattern)
       {
         val_print(ACS_PRINT_ERR, " RJXPZP: %a failed", (uint64_t)vector->name);
-        val_print(ACS_PRINT_ERR, " RJXPZP: AER 0x%x", (uint64_t)aer_uncorr);
         val_print(ACS_PRINT_ERR, " RJXPZP: Read 0x%x", (uint64_t)readback);
         failures++;
+      }
+
+      else if (vector->pas == REALM_PAS)
+      {
+        uint32_t alternate_mecid = (mecid == 0u) ? 1u : 0u;
+        uint32_t alternate_ckid = first_tee_ckid + alternate_mecid;
+
+        if ((alternate_mecid <= mecid_max) && (alternate_ckid < requested_ckids) &&
+            (alternate_ckid < RJXPZP_CKID_MAX))
+        {
+          status = check_realm_mecid_isolation(&ctx, session_id,
+                                               (uint64_t)mapped, mecid,
+                                               alternate_mecid, alternate_ckid);
+          if (status != ACS_STATUS_PASS)
+          {
+            val_print(ACS_PRINT_ERR, " RJXPZP: Realm MECID isolation failed for %a",
+                      (uint64_t)vector->name);
+            failures++;
+            if (status == ACS_STATUS_ERR)
+              break;
+          }
+        }
+        else
+          val_print(ACS_PRINT_DEBUG, " RJXPZP: insufficient CKIDs for isolation probe", 0);
       }
 
       /* Restore the original value for successful accesses. */
@@ -980,34 +1064,19 @@ exercise_root_port(const CXL_COMPONENT_TABLE *table,
       shared_data->shared_data_access[0].addr = (uint64_t)mapped;
       shared_data->shared_data_access[0].data = baseline;
       shared_data->shared_data_access[0].access_type = WRITE_DATA;
-      val_cxl_aer_clear(root_bdf, aer_offset);
       status = val_pe_access_mut_el3();
 
       if (status == ACS_STATUS_PASS)
         status = read_from_root((uint64_t)mapped, &readback);
 
-      if (status == ACS_STATUS_PASS)
-        status = val_cxl_aer_read_uncorr(root_bdf, aer_offset, &aer_uncorr);
-
-      if ((status != ACS_STATUS_PASS) ||
-          (aer_uncorr != 0u) || (readback != baseline))
+      if ((status != ACS_STATUS_PASS) || (readback != baseline))
       {
         val_print(ACS_PRINT_ERR, " RJXPZP: baseline restore failed for %a",
                   (uint64_t)vector->name);
         failures++;
       }
     }
-    else
-    {
-      if (aer_uncorr == 0u)
-      {
-        val_print(ACS_PRINT_ERR,
-                  " RJXPZP: %a did not report an uncorrectable error",
-                  (uint64_t)vector->name);
-        val_print(ACS_PRINT_ERR, " RJXPZP: Read 0x%x", (uint64_t)readback);
-        failures++;
-      }
-    }
+
   }
 cleanup:
   if ((gpt_modified != 0u) &&
