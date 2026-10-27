@@ -1760,7 +1760,9 @@ val_cxl_tsp_configure_and_lock(uint32_t root_index,
                             CXL_TSP_MEMORY_ENCRYPTION_FEATURES_ENABLE_CKID_BASED_ENCRYPTION |
                             CXL_TSP_MEMORY_ENCRYPTION_FEATURES_ENABLE_CKID_BASED_REQUIRED);
     else
-      effective_features = CXL_TSP_MEMORY_ENCRYPTION_FEATURES_ENABLE_ENCRYPTION;
+      /* CKID encryption does not require a programmed CKID range. */
+      effective_features = (uint16_t)(feature_enable_mask &
+                            ~CXL_TSP_MEMORY_ENCRYPTION_FEATURES_ENABLE_CKID_BASED_REQUIRED);
   }
   else
   {
@@ -1794,7 +1796,7 @@ val_cxl_tsp_configure_and_lock(uint32_t root_index,
   config.configuration_features_enable = 0u;
   config.ckid_base = 0u;
   if ((effective_features &
-       CXL_TSP_MEMORY_ENCRYPTION_FEATURES_ENABLE_CKID_BASED_ENCRYPTION) != 0u)
+       CXL_TSP_MEMORY_ENCRYPTION_FEATURES_ENABLE_CKID_BASED_REQUIRED) != 0u)
     config.number_of_ckids = requested_ckids;
   else
     config.number_of_ckids = 0u;
@@ -1852,7 +1854,7 @@ val_cxl_tsp_configure_and_lock(uint32_t root_index,
     }
 
     if ((effective_features &
-         CXL_TSP_MEMORY_ENCRYPTION_FEATURES_ENABLE_CKID_BASED_ENCRYPTION) != 0u)
+         CXL_TSP_MEMORY_ENCRYPTION_FEATURES_ENABLE_CKID_BASED_REQUIRED) != 0u)
     {
       if (current_cfg.ckid_base != config.ckid_base) {
         val_print(ACS_PRINT_ERR,
