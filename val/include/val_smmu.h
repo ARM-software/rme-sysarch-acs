@@ -50,6 +50,7 @@ val_smmu_write_gbpa(uint64_t smmu_base, uint32_t value);
 uint32_t
 val_smmu_enable(uint32_t smmu_index);
 
+/* Disable Non-secure translations and clear GBPA.ABORT. Quiesce DMA before calling. */
 uint32_t
 val_smmu_disable(uint32_t smmu_index);
 
@@ -59,7 +60,7 @@ val_smmu_init(void);
 void
 val_smmu_stop(void);
 
-uint64_t
+uint32_t
 val_smmu_map(smmu_master_attributes_t master,
              pgt_descriptor_t pgt_desc
              );
