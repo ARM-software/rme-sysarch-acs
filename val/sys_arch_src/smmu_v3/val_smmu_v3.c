@@ -15,6 +15,7 @@
  * limitations under the License.
  **/
 #include "val_smmu_v3.h"
+#include "include/val_smmu.h"
 
 #define MAX_LOG2_CMD_QUEUE_SIZE 8U
 
@@ -711,7 +712,7 @@ static int smmu_reset(smmu_dev_t *smmu)
 uint32_t smmu_set_state(uint32_t smmu_index, uint32_t en)
 {
     smmu_dev_t *smmu;
-    uint32_t cr0_val;
+    uint32_t cr0_val, gbpa_val;
     int ret;
 
     if (smmu_index >= g_num_smmus)
@@ -725,6 +726,15 @@ uint32_t smmu_set_state(uint32_t smmu_index, uint32_t en)
     {
         val_print(ACS_PRINT_ERR, " smmu_set_state: smmu unsupported     ", 0);
         return 1;
+    }
+
+    /* Complete the bypass update before disabling translation to avoid aborting traffic. */
+    if (!en) {
+        if (val_smmu_read_gbpa(smmu->base, &gbpa_val) ||
+            val_smmu_write_gbpa(smmu->base, gbpa_val & ~SMMUv3_GBPA_ABORT)) {
+            val_print(ACS_PRINT_ERR, " smmu_set_state: failed to enable SMMU bypass     ", 0);
+            return 1;
+        }
     }
 
     cr0_val = val_mmio_read(smmu->base + SMMU_CR0_OFFSET);
@@ -745,7 +755,8 @@ uint32_t smmu_set_state(uint32_t smmu_index, uint32_t en)
 }
 
 /**
-  @brief Disable SMMU translations
+  @brief Disable Non-secure SMMU translations and allow bypass traffic.
+         The caller must quiesce DMA before changing bypass attributes.
   @param smmu_index - Index of SMMU in global SMMU table.
   @return status
 **/
