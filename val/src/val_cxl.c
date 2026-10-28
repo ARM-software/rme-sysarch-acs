@@ -2949,11 +2949,119 @@ val_cxl_enable_cache(uint32_t bdf)
 }
 
 /**
+  @brief   Issue CXL Reset and wait for completion.
+
+  @param  bdf  PCIe identifier of the endpoint to reset.
+
+  @return ACS_STATUS_SKIP when CXL Reset is not supported.
+          ACS_STATUS_PASS only after CXL Reset completes without errors.
+          ACS_STATUS_FAIL on reset error or timeout.
+          ACS_STATUS_ERR on invalid capability data or config access failures.
+**/
+static uint32_t
+val_cxl_reset_endpoint(uint32_t bdf)
+{
+  static const uint32_t timeout_ms[] = {10u, 100u, 1000u, 10000u, 100000u};
+  uint32_t dvsec_offset;
+  uint32_t reg;
+  uint32_t capability;
+  uint32_t dvsec_len;
+  uint32_t timeout_index;
+  uint32_t elapsed_ms;
+  uint32_t delay_ms;
+
+  if (val_pcie_find_vendor_dvsec(bdf, CXL_DVSEC_VENDOR_ID,
+                                 CXL_DVSEC_ID_DEVICE, &dvsec_offset) != PCIE_SUCCESS)
+    return ACS_STATUS_SKIP;
+
+  if (val_pcie_read_cfg(bdf, dvsec_offset + CXL_DVSEC_HDR1_OFFSET, &reg) ||
+      (reg == PCIE_UNKNOWN_RESPONSE)) {
+    val_print(ACS_PRINT_ERR, " CXL: Reset capability header read failed for EP 0x%x", bdf);
+    return ACS_STATUS_ERR;
+  }
+
+  /* CXL Reset was introduced in Device DVSEC revision 1 (CXL 2.0). */
+  if (((reg >> CXL_DVSEC_HDR1_REV_SHIFT) & CXL_DVSEC_HDR1_REV_MASK) == 0u)
+    return ACS_STATUS_SKIP;
+
+  dvsec_len = (reg >> CXL_DVSEC_HDR1_LEN_SHIFT) & CXL_DVSEC_HDR1_LEN_MASK;
+  if ((dvsec_len < CXL_DVSEC_CTRL2_OFFSET + sizeof(uint32_t)) ||
+      (dvsec_len > PCIE_CFG_SIZE - dvsec_offset)) {
+    val_print(ACS_PRINT_ERR, " CXL: Invalid reset capability length for EP 0x%x", bdf);
+    return ACS_STATUS_ERR;
+  }
+
+  if (val_pcie_read_cfg(bdf, dvsec_offset + CXL_DVSEC_HDR2_OFFSET, &reg) ||
+      (reg == PCIE_UNKNOWN_RESPONSE)) {
+    val_print(ACS_PRINT_ERR, " CXL: Reset capability read failed for EP 0x%x", bdf);
+    return ACS_STATUS_ERR;
+  }
+
+  capability = (reg >> CXL_DVSEC_CXL_CAPABILITY_SHIFT) & CXL_DVSEC_CXL_CAPABILITY_MASK;
+  if ((capability & CXL_DVSEC_CXL_CAP_RESET_CAPABLE) == 0u)
+    return ACS_STATUS_SKIP;
+
+  timeout_index = (capability >> CXL_DVSEC_CXL_CAP_RESET_TIMEOUT_SHIFT) &
+                 CXL_DVSEC_CXL_CAP_RESET_TIMEOUT_MASK;
+  if (timeout_index >= sizeof(timeout_ms) / sizeof(timeout_ms[0])) {
+    val_print(ACS_PRINT_ERR, " CXL: Reserved reset timeout for EP 0x%x", bdf);
+    return ACS_STATUS_ERR;
+  }
+
+  if (val_pcie_read_cfg(bdf, dvsec_offset + CXL_DVSEC_CTRL2_OFFSET, &reg) ||
+      (reg == PCIE_UNKNOWN_RESPONSE)) {
+    val_print(ACS_PRINT_ERR, " CXL: Reset control read failed for EP 0x%x", bdf);
+    return ACS_STATUS_ERR;
+  }
+
+  val_print(ACS_PRINT_DEBUG, " CXL: Initiating CXL Reset for EP 0x%x", bdf);
+  /* Preserve Control2; write zero to the adjacent Status2 RW1C fields. */
+  val_pcie_write_cfg(bdf, dvsec_offset + CXL_DVSEC_CTRL2_OFFSET,
+                    (reg & CXL_DVSEC_CTRL2_MASK) | CXL_DVSEC_CTRL2_INITIATE_RESET);
+
+  /* Config access is undefined for 100 ms, even for shorter advertised timeouts. */
+  (void)val_time_delay_ms(100000u);
+  elapsed_ms = 100u;
+
+  for (;;) {
+    /* Only Status2 may be polled until reset completes; Initiate reads as zero. */
+    if (val_pcie_read_cfg(bdf, dvsec_offset + CXL_DVSEC_CTRL2_OFFSET, &reg) ||
+        (reg == PCIE_UNKNOWN_RESPONSE)) {
+      val_print(ACS_PRINT_ERR, " CXL: Reset status read failed for EP 0x%x", bdf);
+      return ACS_STATUS_ERR;
+    }
+
+    reg >>= CXL_DVSEC_STATUS2_SHIFT;
+    if ((reg & CXL_DVSEC_STATUS2_RESET_ERROR) != 0u) {
+      val_print(ACS_PRINT_ERR, " CXL: Reset reported an error for EP 0x%x", bdf);
+      return ACS_STATUS_FAIL;
+    }
+
+    if ((reg & CXL_DVSEC_STATUS2_RESET_COMPLETE) != 0u)
+      return ACS_STATUS_PASS;
+
+    if (elapsed_ms >= timeout_ms[timeout_index])
+      break;
+
+    delay_ms = timeout_ms[timeout_index] - elapsed_ms;
+    if (delay_ms > 10u)
+      delay_ms = 10u;
+
+    (void)val_time_delay_ms((uint64_t)delay_ms * 1000u);
+    elapsed_ms += delay_ms;
+  }
+
+  val_print(ACS_PRINT_ERR, " CXL: Reset timed out for EP 0x%x", bdf);
+  return ACS_STATUS_FAIL;
+}
+
+/**
   @brief   Best-effort reset to clear CXL TSP configuration lock state.
 
-  The helper resets the endpoint (preferring FLR, falling back to Secondary Bus
-  Reset) and restores PCIe configuration (BARs + command bits) so subsequent
-  tests can continue to access device MMIO.
+  Prefer CXL Reset and wait for completion before restoring PCIe configuration
+  (BARs + command bits). When CXL Reset is unsupported, use the PCIe reset path
+  (FLR, then Secondary Bus Reset). A failed CXL Reset is reported without
+   issuing another reset or restoring config.
 
   @param  rp_bdf       Root port BDF used for Secondary Bus Reset fallback.
   @param  endpoint_bdf Endpoint BDF to reset and restore.
@@ -2961,8 +3069,8 @@ val_cxl_enable_cache(uint32_t bdf)
                        invalid, the helper snapshots config space before resetting.
 
   @return ACS_STATUS_PASS on success.
-          ACS_STATUS_FAIL when config space does not respond after reset.
-          ACS_STATUS_ERR on failures to snapshot or trigger the reset.
+          ACS_STATUS_FAIL on reset error, timeout, or an unresponsive endpoint.
+          ACS_STATUS_ERR on invalid capability data or config access failures.
 **/
 uint32_t
 val_cxl_unlock_tsp_best_effort(uint32_t rp_bdf,
@@ -2975,12 +3083,20 @@ val_cxl_unlock_tsp_best_effort(uint32_t rp_bdf,
 
   if ((restore_cfg == NULL) || (restore_cfg->valid == 0u)) {
     status = val_pcie_save_endpoint_cfg(endpoint_bdf, &snapshot);
+
     if (status != ACS_STATUS_PASS)
       return ACS_STATUS_ERR;
+
     restore_cfg = &snapshot;
   }
 
-  status = val_pcie_reset_endpoint(rp_bdf, endpoint_bdf);
+  status = val_cxl_reset_endpoint(endpoint_bdf);
+  if (status == ACS_STATUS_SKIP) {
+    val_print(ACS_PRINT_DEBUG, " CXL: Reset unsupported; using FLR/SBR for EP 0x%x",
+              endpoint_bdf);
+    status = val_pcie_reset_endpoint(rp_bdf, endpoint_bdf);
+  }
+
   if (status != ACS_STATUS_PASS)
     return status;
 
