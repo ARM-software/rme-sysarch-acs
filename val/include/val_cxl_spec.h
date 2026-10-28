@@ -133,10 +133,21 @@
 #define CXL_DVSEC_CXL_CAP_CACHE_CAPABLE (1u << 0)
 #define CXL_DVSEC_CXL_CAP_IO_CAPABLE    (1u << 1)
 #define CXL_DVSEC_CXL_CAP_MEM_CAPABLE   (1u << 2)
+#define CXL_DVSEC_CXL_CAP_RESET_CAPABLE (1u << 7)
+#define CXL_DVSEC_CXL_CAP_RESET_TIMEOUT_SHIFT 8u
+#define CXL_DVSEC_CXL_CAP_RESET_TIMEOUT_MASK  0x7u
 
 /* ---- CXL DVSEC Device Control ---- */
 #define CXL_DVSEC_CTRL_OFFSET           0x0C
 #define CXL_DVSEC_MEM_ENABLE            (1u << 2)
+
+/* Control2 and Status2 share a DWORD; Status2 occupies its upper half. */
+#define CXL_DVSEC_CTRL2_OFFSET          0x10u
+#define CXL_DVSEC_CTRL2_MASK            0xFFFFu
+#define CXL_DVSEC_CTRL2_INITIATE_RESET  (1u << 2)
+#define CXL_DVSEC_STATUS2_SHIFT         16u
+#define CXL_DVSEC_STATUS2_RESET_COMPLETE (1u << 1)
+#define CXL_DVSEC_STATUS2_RESET_ERROR    (1u << 2)
 
 /* ---- Arm RME-CDA DVSEC register layout ---- */
 #define RMECDA_ECH_OFFSET               0x0u
