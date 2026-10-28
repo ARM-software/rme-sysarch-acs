@@ -193,8 +193,8 @@ el3_store_check_gpf(uint64_t va, uint32_t expect_gpf)
 {
   uint32_t status;
   uint32_t gpf_seen;
-  uint32_t fault_seen;
 
+  val_memory_clear_el3_access_state();
   shared_data->pas_filter_flag = CLEAR;
   shared_data->exception_generated = CLEAR;
   shared_data->access_mut = SET;
@@ -203,26 +203,15 @@ el3_store_check_gpf(uint64_t va, uint32_t expect_gpf)
 
   status = val_pe_access_mut_el3();
   if (status != 0u)
-    return ACS_STATUS_ERR;
-
-  fault_seen = (shared_data->exception_expected == CLEAR);
-  gpf_seen = (shared_data->exception_generated == SET);
-
-  if (!fault_seen)
   {
-    /* No fault occurred. Clear the expectation explicitly for subsequent accesses. */
-    shared_data->exception_expected = CLEAR;
-    shared_data->exception_generated = CLEAR;
-    return expect_gpf ? ACS_STATUS_FAIL : ACS_STATUS_PASS;
+    val_memory_clear_el3_access_state();
+    return ACS_STATUS_ERR;
   }
 
-  shared_data->exception_generated = CLEAR;
+  gpf_seen = (shared_data->exception_generated == SET);
+  val_memory_clear_el3_access_state();
 
-  if (gpf_seen)
-    return expect_gpf ? ACS_STATUS_PASS : ACS_STATUS_FAIL;
-
-  /* A fault occurred but it was not classified as a GPF by the EL3 handler. */
-  return ACS_STATUS_SKIP;
+  return (gpf_seen == expect_gpf) ? ACS_STATUS_PASS : ACS_STATUS_FAIL;
 }
 
 static void

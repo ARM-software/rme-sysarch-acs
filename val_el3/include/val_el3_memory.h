@@ -31,6 +31,7 @@
 #define SHARED_OFFSET_ESR_VAL (PLAT_SHARED_ADDRESS + 0x30)
 #define SHARED_OFFSET_ARG0    (PLAT_SHARED_ADDRESS + 0x38)
 #define SHARED_OFFSET_ARG1    (PLAT_SHARED_ADDRESS + 0x40)
+#define SHARED_OFFSET_ARG2    (PLAT_SHARED_ADDRESS + 0x48)
 #define ACS_EL3_STACK (PLAT_SHARED_ADDRESS + SIZE_4KB - 0x100)
 #define ACS_EL3_HANDLER_SAVED_POINTER (PLAT_SHARED_ADDRESS + 0x800)
 
@@ -67,6 +68,7 @@ void *val_el3_memory_calloc(size_t num, size_t size, size_t alignment);
 void val_el3_cmo_cipapa(uint64_t PA);
 void val_el3_tlbi_paallos(void);
 void val_el3_cln_and_invldt_cache(uint64_t *desc_addr);
+void val_el3_clean_invalidate_pe_cache(void);
 void val_el3_clean_cache(uint64_t *address);
 void val_el3_invalidate_cache(uint64_t *address);
 void val_el3_mmio_write(uintptr_t addr, uint32_t val);
@@ -83,7 +85,7 @@ void val_el3_tlbi_alle3is(void);
 void val_el3_isb(void);
 void val_el3_map_shared_mem(uint64_t shared_addr);
 void val_el3_access_mut(void);
-void val_el3_acs_ldr_pas_filter(uint64_t *address, uint64_t data);
+void val_el3_acs_ldr_pas_filter(uint64_t *address, uint64_t *data);
 
 #endif /* __ASSEMBLER__ */
 

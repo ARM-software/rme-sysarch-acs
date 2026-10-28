@@ -285,6 +285,47 @@ uint64_t val_pcie_get_bdf_config_addr(uint32_t bdf)
 
 }
 
+/**
+  @brief  Map a PCIe function's config space so EL3 can access it as Root.
+
+  @param  bdf         Segment/Bus/Dev/Func in PCIE_CREATE_BDF format.
+  @param  cfg_va_out  Output pointer that receives the Root-accessible VA.
+
+  @return ACS_STATUS_PASS on success, ACS_STATUS_ERR on failure.
+**/
+uint32_t
+val_pcie_map_root_config(uint32_t bdf, uint64_t *cfg_va_out)
+{
+  uint64_t cfg_addr;
+  uint64_t cfg_va;
+  uint64_t tg;
+  uint32_t attr;
+
+  if (cfg_va_out == NULL)
+    return ACS_STATUS_ERR;
+
+  *cfg_va_out = 0u;
+  tg = val_get_min_tg();
+  cfg_addr = val_pcie_get_bdf_config_addr(bdf);
+  if ((tg == 0u) || (cfg_addr == 0u))
+    return ACS_STATUS_ERR;
+
+  cfg_va = val_get_free_va(tg);
+  if (cfg_va == 0u)
+    return ACS_STATUS_ERR;
+
+  attr = LOWER_ATTRS(PGT_ENTRY_ACCESS |
+                     SHAREABLE_ATTR(OUTER_SHAREABLE) |
+                     GET_ATTR_INDEX(DEV_MEM_nGnRnE) |
+                     PGT_ENTRY_AP_RW |
+                     PAS_ATTR(ROOT_PAS));
+  if (val_add_mmu_entry_el3(cfg_va, cfg_addr, attr))
+    return ACS_STATUS_ERR;
+
+  *cfg_va_out = cfg_va;
+  return ACS_STATUS_PASS;
+}
+
 
 /**
   @brief  This API performs the PCI enumeration
@@ -1286,6 +1327,50 @@ val_pcie_enable_bme(uint32_t bdf)
 }
 
 /**
+  @brief  Enable Address Translation Cache in the ATS extended capability.
+  @param  bdf            Segment/Bus/Dev/Func in PCIE_CREATE_BDF format
+  @param  ats_cap_base   Optional output for ATS capability offset
+  @param  ats_ctrl_orig  Optional output for the original ATS control value
+  @return ACS_STATUS_PASS if enabled, ACS_STATUS_SKIP if ATS is absent,
+          else error/failure
+**/
+uint32_t
+val_pcie_enable_ats(uint32_t bdf,
+                    uint32_t *ats_cap_base,
+                    uint32_t *ats_ctrl_orig)
+{
+  uint32_t cap_base;
+  uint32_t ctrl;
+  uint32_t status;
+
+  status = val_pcie_find_capability(bdf, PCIE_ECAP, ECID_ATS, &cap_base);
+  if (status == PCIE_CAP_NOT_FOUND)
+    return ACS_STATUS_SKIP;
+
+  if (status != PCIE_SUCCESS)
+    return ACS_STATUS_ERR;
+
+  if (val_pcie_read_cfg(bdf, cap_base + ATS_CTRL, &ctrl) != PCIE_SUCCESS)
+    return ACS_STATUS_ERR;
+
+  if (ats_cap_base != NULL)
+    *ats_cap_base = cap_base;
+
+  if (ats_ctrl_orig != NULL)
+    *ats_ctrl_orig = ctrl;
+
+  val_pcie_write_cfg(bdf, cap_base + ATS_CTRL, ctrl | ATS_CACHING_EN);
+
+  if (val_pcie_read_cfg(bdf, cap_base + ATS_CTRL, &ctrl) != PCIE_SUCCESS)
+    return ACS_STATUS_ERR;
+
+  if ((ctrl & ATS_CACHING_EN) == 0u)
+    return ACS_STATUS_FAIL;
+
+  return ACS_STATUS_PASS;
+}
+
+/**
   @brief  Disables BAR memory space access by clearring memory space enable bit
           in the command register. When MSE bit is clear, all received memory
           space accesses are caused to be handled as Unsupported Requests.
@@ -2182,6 +2267,36 @@ val_pcie_get_downstream_function(uint32_t bdf, uint32_t *dsf_bdf)
   /* Return failure */
   return 1;
 
+}
+
+/**
+  @brief  Check whether a candidate BDF is in a bridge/root-port downstream
+          bus window.
+
+  @param  root_bdf         Bridge/root-port BDF used for segment matching.
+  @param  secondary_bus    Secondary bus number of the downstream window.
+  @param  subordinate_bus  Subordinate bus number of the downstream window.
+  @param  candidate_bdf    BDF to test.
+
+  @return 1 if candidate_bdf is in the same segment and downstream bus range,
+          otherwise 0.
+**/
+uint32_t
+val_pcie_is_downstream_bdf(uint32_t root_bdf,
+                           uint32_t secondary_bus,
+                           uint32_t subordinate_bus,
+                           uint32_t candidate_bdf)
+{
+  uint32_t candidate_bus;
+
+  if (PCIE_EXTRACT_BDF_SEG(candidate_bdf) != PCIE_EXTRACT_BDF_SEG(root_bdf))
+    return 0u;
+
+  candidate_bus = PCIE_EXTRACT_BDF_BUS(candidate_bdf);
+  if ((candidate_bus < secondary_bus) || (candidate_bus > subordinate_bus))
+    return 0u;
+
+  return 1u;
 }
 
 /**

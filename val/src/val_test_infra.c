@@ -72,6 +72,14 @@ MODULE_TEST_DISPATCHER_s g_module_test_table[MODULE_SENTINEL] = {
   [CDA_MODULE_ID] = {
     .module_id = CDA_MODULE_ID,
     .entry = {
+      [CDA_ENTRY_CDA_RYDSYL_D2H_SEC_SID_RID_ENTRY] = {
+        .entry_fn = cda_rydsyl_d2h_sec_sid_rid_entry,
+        .test_text = "cda_rydsyl_d2h_sec_sid_rid",
+      },
+      [CDA_ENTRY_CDA_RDMSPT_RID_RANGE_CHECK_ENTRY] = {
+        .entry_fn = cda_rdmspt_rid_range_check_entry,
+        .test_text = "cda_rdmspt_rid_range_check",
+      },
       [CDA_ENTRY_CDA_RJZQCP_RESET_TRANSITION_ENTRY] = {
         .entry_fn = cda_rjzqcp_reset_transition_entry,
         .test_text = "cda_rjzqcp_reset_transition",
@@ -79,6 +87,82 @@ MODULE_TEST_DISPATCHER_s g_module_test_table[MODULE_SENTINEL] = {
       [CDA_ENTRY_CDA_RKRCWK_HOST_SIDE_GPC_ENTRY] = {
         .entry_fn = cda_rkrcwk_host_side_gpc_entry,
         .test_text = "cda_rkrcwk_host_side_gpc",
+      },
+      [CDA_ENTRY_CDA_RQRMSC_DCM_ATS_DEPENDENCY_ENTRY] = {
+        .entry_fn = cda_rqrmsc_dcm_ats_dependency_entry,
+        .test_text = "cda_rqrmsc_dcm_ats_dependency",
+      },
+      [CDA_ENTRY_CDA_RWWBPM_INTERNAL_DCM_RUN_GATE_ENTRY] = {
+        .entry_fn = cda_rwwbpm_internal_dcm_run_gate_entry,
+        .test_text = "cda_rwwbpm_internal_dcm_run_gate",
+      },
+      [CDA_ENTRY_CDA_RSHRMN_COHERENT_LINK_TOPOLOGY_ENTRY] = {
+        .entry_fn = cda_rshrmn_coherent_link_topology_entry,
+        .test_text = "cda_rshrmn_coherent_link_topology",
+      },
+      [CDA_ENTRY_CDA_RQWNBN_ERROR_POISON_RESPONSE_ENTRY] = {
+        .entry_fn = cda_rqwnbn_error_poison_response_entry,
+        .test_text = "cda_rqwnbn_error_poison_response",
+      },
+      [CDA_ENTRY_CDA_RHTTNB_DIRTY_SNOOP_BLOCKED_ENTRY] = {
+        .entry_fn = cda_rhttnb_dirty_snoop_blocked_entry,
+        .test_text = "cda_rhttnb_dirty_snoop_blocked",
+      },
+      [CDA_ENTRY_CDA_RLMFLX_CONFIG_UNLOCKED_INVALIDATE_ENTRY] = {
+        .entry_fn = cda_rlmflx_config_unlocked_invalidate_entry,
+        .test_text = "cda_rlmflx_config_unlocked_invalidate",
+      },
+      [CDA_ENTRY_CDA_RWFYLW_DEV_PROP_LOCK_ENTRY] = {
+        .entry_fn = cda_rwfylw_dev_prop_lock_entry,
+        .test_text = "cda_rwfylw_dev_prop_lock",
+      },
+      [CDA_ENTRY_CDA_RFRFJG_TDI_SNOOP_ACCESS_ENTRY] = {
+        .entry_fn = cda_rfrfjg_tdi_snoop_access_entry,
+        .test_text = "cda_rfrfjg_tdi_snoop_access",
+      },
+      [CDA_ENTRY_CDA_RVHZCR_EXTERNAL_PAS_CHECK_ENTRY] = {
+        .entry_fn = cda_rvhzcr_external_pas_check_entry,
+        .test_text = "cda_rvhzcr_external_pas_check",
+      },
+      [CDA_ENTRY_CDA_RYJVJR_ATS_TE_PAS_ENTRY] = {
+        .entry_fn = cda_ryjvjr_ats_te_pas_entry,
+        .test_text = "cda_ryjvjr_ats_te_pas",
+      },
+      [CDA_ENTRY_CDA_RSHSXK_D2H_GPC_DPT_ENTRY] = {
+        .entry_fn = cda_rshsxk_d2h_gpc_dpt_entry,
+        .test_text = "cda_rshsxk_d2h_gpc_dpt",
+      },
+      [CDA_ENTRY_CDA_RJSYPS_D2H_SNP_RANGE_ENTRY] = {
+        .entry_fn = cda_rjsyps_d2h_snp_range_entry,
+        .test_text = "cda_rjsyps_d2h_snp_range",
+      },
+      [CDA_ENTRY_CDA_RNSMGT_DEPENDENT_COVERAGE_ENTRY] = {
+        .entry_fn = cda_rnsmgt_dependent_coverage_entry,
+        .test_text = "cda_rnsmgt_dependent_coverage",
+      },
+      [CDA_ENTRY_CDA_RSTQHS_UNKNOWN_SNOOP_FILTER_ENTRY] = {
+        .entry_fn = cda_rstqhs_unknown_snoop_filter_entry,
+        .test_text = "cda_rstqhs_unknown_snoop_filter",
+      },
+      [CDA_ENTRY_CDA_RVPKVF_TDI_STATE_INDEPENDENT_ENTRY] = {
+        .entry_fn = cda_rvpkvf_tdi_state_independent_entry,
+        .test_text = "cda_rvpkvf_tdi_state_independent",
+      },
+      [CDA_ENTRY_CDA_RHDXTM_DCM_SCRUB_ENTRY] = {
+        .entry_fn = cda_rhdxtm_dcm_scrub_entry,
+        .test_text = "cda_rhdxtm_dcm_scrub",
+      },
+      [CDA_ENTRY_CDA_RDRVTK_D2H_MECID_ENTRY] = {
+        .entry_fn = cda_rdrvtk_d2h_mecid_entry,
+        .test_text = "cda_rdrvtk_d2h_mecid",
+      },
+      [CDA_ENTRY_CDA_RNVWMC_DEVICE_INTERFACE_SUPPORT_ENTRY] = {
+        .entry_fn = cda_rnvwmc_device_interface_support_entry,
+        .test_text = "cda_rnvwmc_device_interface_support",
+      },
+      [CDA_ENTRY_CDA_RFZBMW_EXTERNAL_DCM_IDE_GATE_ENTRY] = {
+        .entry_fn = cda_rfzbmw_external_dcm_ide_gate_entry,
+        .test_text = "cda_rfzbmw_external_dcm_ide_gate",
       },
     },
   },
@@ -566,6 +650,22 @@ val_test_is_selected(char8_t *test_text)
 }
 
 uint32_t
+val_get_module_test_result(MODULE_ID_e module_id, int entry_id)
+{
+  MODULE_TEST_ENTRY_s *entry;
+
+  if (((int)module_id < 0) || (module_id >= MODULE_SENTINEL) || (entry_id < 0) ||
+      (entry_id >= MAX_TEST_ENTRY))
+    return ACS_STATUS_ERR;
+
+  entry = &g_module_test_table[module_id].entry[entry_id];
+  if ((entry->entry_fn == NULL) || (entry->executed == 0u))
+    return ACS_STATUS_SKIP;
+
+  return entry->result;
+}
+
+uint32_t
 val_execute_module_tests(MODULE_ID_e module_id,
                          int start_enum,
                          int end_enum,
@@ -573,17 +673,27 @@ val_execute_module_tests(MODULE_ID_e module_id,
                          uint32_t status)
 {
   int i;
+  uint32_t entry_status;
+  MODULE_TEST_ENTRY_s *entry;
 
   for (i = start_enum + 1; i < end_enum; i++)
   {
-    if (g_module_test_table[module_id].entry[i].entry_fn == NULL) {
+    entry = &g_module_test_table[module_id].entry[i];
+    entry->result = ACS_STATUS_SKIP;
+    entry->executed = 0u;
+
+    if (entry->entry_fn == NULL) {
         status |= ACS_STATUS_SKIP;
         continue;
     }
 
-    if (!val_test_is_selected(g_module_test_table[module_id].entry[i].test_text))
+    if (!val_test_is_selected(entry->test_text))
         continue;
-    status |= g_module_test_table[module_id].entry[i].entry_fn(num_pe);
+
+    entry_status = entry->entry_fn(num_pe);
+    entry->result = entry_status;
+    entry->executed = 1u;
+    status |= entry_status;
   }
 
   return status;
@@ -1087,12 +1197,12 @@ uint32_t val_check_for_error(uint32_t num_pe)
   {
     status = val_get_status(my_index);
     val_report_status(my_index, status);
-    if (val_memory_compare(status, "PASS", val_strnlen(status)) == 0)
+    if (IS_TEST_PASS(status) || IS_TEST_PASS_PARTIAL(status))
     {
       g_rme_tests_pass++;
       return ACS_STATUS_PASS;
     }
-    if (val_memory_compare(status, "SKIP", val_strnlen(status)) == 0)
+    if (IS_TEST_SKIP(status))
       return ACS_STATUS_SKIP;
 
     g_rme_tests_fail++;
@@ -1102,8 +1212,7 @@ uint32_t val_check_for_error(uint32_t num_pe)
   for (i = 0; i < num_pe; i++)
   {
     status = val_get_status(i);
-    if ((val_memory_compare(status, "FAIL", val_strnlen(status)) == 0)
-        || (val_memory_compare(status, "SKIP", val_strnlen(status)) == 0))
+    if (IS_TEST_FAIL(status) || IS_TEST_SKIP(status))
     {
       val_report_status(i, status);
       error_flag += 1;
@@ -1114,12 +1223,12 @@ uint32_t val_check_for_error(uint32_t num_pe)
   if (!error_flag)
     val_report_status(my_index, status);
 
-  if (val_memory_compare(status, "PASS", val_strnlen(status)) == 0)
+  if (IS_TEST_PASS(status) || IS_TEST_PASS_PARTIAL(status))
   {
     g_rme_tests_pass++;
     return ACS_STATUS_PASS;
   }
-  if (val_memory_compare(status, "SKIP", val_strnlen(status)) == 0)
+  if (IS_TEST_SKIP(status))
     return ACS_STATUS_SKIP;
 
   g_rme_tests_fail++;

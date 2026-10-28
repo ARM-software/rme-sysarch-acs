@@ -696,8 +696,18 @@ typedef enum {
     EXERCISER_CXL_CMD_OP = 0x11,
     EXERCISER_CXL_CMD_ADDR = 0x12,
     EXERCISER_CXL_CMD_DATA0 = 0x13,
-    EXERCISER_SEC_SID = 0x14
+    EXERCISER_SEC_SID = 0x15,
+    EXERCISER_ATS_REQUEST_ATTRIBUTES = 0x16,
+    TRANSACTION_RECORD = 0x17
 } EXERCISER_PARAM_TYPE;
+
+/* Release the SEC_SID override and restore the exerciser's default selection. */
+#define EXERCISER_SEC_SID_DEFAULT 0xFFFFFFFFu
+
+#define EXERCISER_TXN_ATTR_READ              (1u << 1)
+#define EXERCISER_TXN_ATTR_CONFIG            (1u << 2)
+#define EXERCISER_TXN_ATTR_CACHE_MAINTENANCE (1u << 3)
+#define EXERCISER_TXN_ATTR_SNOOP             (1u << 4)
 
 typedef enum {
     EXERCISER_RESET = 0x1,
@@ -726,9 +736,31 @@ typedef enum {
     DMA_WAIT            = 0x11
 } EXERCISER_OPS;
 
-#define CXL_CMD_OP_BACKDOOR_READ64  0x1u
-#define CXL_CMD_OP_BACKDOOR_WRITE64 0x2u
-#define CXL_CMD_OP_BISNP            0x3u
+#define CXL_CMD_OP_BACKDOOR_READ64           0x1u
+#define CXL_CMD_OP_BACKDOOR_WRITE64          0x2u
+#define CXL_CMD_OP_BISNP                     0x3u
+#define CXL_CMD_OP_DCM_CACHE_DIRTY           0x4u
+#define CXL_CMD_OP_DCM_SET_REALM_ASSIGNMENT  0x6u
+#define CXL_CMD_OP_DCM_CACHE_WRITEBACK       0x8u
+/* data[15:0] selects the response MECID; data[16] enables the override. */
+#define CXL_CMD_OP_SNOOP_RESPONSE_MECID      0x9u
+#define CXL_SNOOP_RESPONSE_MECID_VALID       (1u << 16)
+#define CXL_SNOOP_RESULT_VALID                (1u << 0)
+#define CXL_SNOOP_RESULT_EMITTED              (1u << 1)
+#define CXL_SNOOP_RESULT_BLOCKED              (1u << 2)
+/* Normalized PAL observations, not architectural host-port register bits. */
+#define CXL_SNOOP_RESULT_HOST_ACCEPTED         (1u << 3)
+#define CXL_SNOOP_RESULT_HOST_REJECTED         (1u << 4)
+
+uint32_t pal_cda_tdi_snoop_attempt(uint32_t bdf, uint64_t target_hpa,
+                                   uint32_t pas_realm, uint32_t *result);
+#define PAL_CDA_SNOOP_SUCCESS     0u
+#define PAL_CDA_SNOOP_UNSUPPORTED 1u
+#define PAL_CDA_SNOOP_ERROR       2u
+uint32_t pal_cda_host_snoop_prepare(uint32_t root_bdf, uint32_t endpoint_bdf,
+                                    uint64_t permitted_hpa, uint64_t unknown_hpa);
+uint32_t pal_cda_host_snoop_trigger(uint32_t endpoint_bdf, uint64_t target_hpa);
+uint32_t pal_cda_host_snoop_restore(uint32_t endpoint_bdf);
 
 /* LibC functions declaration */
 

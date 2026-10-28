@@ -39,6 +39,7 @@
         .globl val_el3_branch_asm
         .globl val_el3_tlbi_paallos
         .globl val_el3_cln_and_invldt_cache
+        .globl val_el3_clean_invalidate_pe_cache
         .globl val_el3_clean_cache
         .globl val_el3_invalidate_cache
         .globl val_el3_at_s1e3w
@@ -230,8 +231,19 @@ val_el3_acs_ldr_pas_filter:
        mov    sp, x11
        msr    sp_el0, x10
 
+       /* Preserve the result pointer across a nested data-abort handler. */
+       ldr    x10, =SHARED_OFFSET_ARG2
+       str    x1, [x10]
        ldr    x1, [x0]
        dsb    sy
+       /* A recovered fault clears exception_expected and produces no data. */
+       ldr    x10, =SHARED_OFFSET_EXC_EXP
+       ldr    x10, [x10]
+       cbz    x10, 1f
+       ldr    x10, =SHARED_OFFSET_ARG2
+       ldr    x10, [x10]
+       str    x1, [x10]
+1:
        ldr    x0, =PLAT_SHARED_ADDRESS
        str    xzr, [x0, #0x18]
        ldr    x2, [x0, #0x8]
@@ -458,6 +470,20 @@ val_el3_cln_and_invldt_cache:
        dc civac, x0; // x0 contains VA which is updated
        dsb    sy
        isb
+       ret
+
+// TF-A supplies the geometry-aware set/way walk, including FEAT_CCIDX support.
+val_el3_clean_invalidate_pe_cache:
+       stp    x29, x30, [sp, #-32]!
+       mrs    x9, csselr_el1
+       str    x9, [sp, #16]
+       dsb    sy
+       mov    x0, #1             // TF-A DCCISW operation selector
+       bl     dcsw_op_all
+       ldr    x9, [sp, #16]
+       msr    csselr_el1, x9
+       isb
+       ldp    x29, x30, [sp], #32
        ret
 
 // Clean data cache by address to Point of Coherency.

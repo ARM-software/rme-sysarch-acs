@@ -1,3 +1,17 @@
+v26.10_RME_C.a.1
+
+Release Highlights:
+* Updated Issue C.a CDA support to Beta quality; CXL remains EAC.
+* Promoted TDISP VDM support from Beta to EAC.
+Test Updates:
+* Expanded the CDA suite to 23 tests covering coherent-device assignment, DCM protection, ATS, snoops, and MECID handling.
+* Added dependent coverage reporting for RNSMGT using RSHSXK and RJSYPS results.
+Infrastructure and Documentation:
+* Added shared VAL helpers and PAL interfaces for CDA stimulus, setup, and observation.
+* Updated CDA scenarios and the rule-to-test checklist.
+* Converted the validation methodology to RST and updated platform porting documentation.
+
+
 vC.a_CXL.EAC_TDISP.BETA_26.07
 
 Test Updates:

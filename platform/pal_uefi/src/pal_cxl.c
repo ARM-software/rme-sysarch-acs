@@ -48,11 +48,37 @@
 UINT64 pal_get_cedt_ptr(void);
 UINT64 RmeCfgGetU64(CONST CHAR16* Key, UINT64 DefaultVal);
 
+static UINT64
+pal_cxl_default_rp_not_subject_to_host_gpc_bdf(UINT32 idx)
+{
+  switch (idx)
+  {
+  case 0u: return CXL_RP_NOT_SUBJECT_TO_HOST_GPC_0_BDF_CT;
+  default: return ~0ULL;
+  }
+}
+
+static UINT64
+pal_cxl_default_chi_c2c_supported_bdf(UINT32 idx)
+{
+  switch (idx)
+  {
+  case 0u: return CXL_CHI_C2C_SUPPORTED_0_BDF_CT;
+  case 1u: return CXL_CHI_C2C_SUPPORTED_1_BDF_CT;
+  case 2u: return CXL_CHI_C2C_SUPPORTED_2_BDF_CT;
+  case 3u: return CXL_CHI_C2C_SUPPORTED_3_BDF_CT;
+  case 4u: return CXL_CHI_C2C_SUPPORTED_4_BDF_CT;
+  case 5u: return CXL_CHI_C2C_SUPPORTED_5_BDF_CT;
+  default: return ~0ULL;
+  }
+}
+
 UINT32
 pal_cxl_rp_is_not_subject_to_host_gpc(UINT32 rp_bdf)
 {
   UINT32 count
-      = (UINT32)RmeCfgGetU64(L"CXL_RP_NOT_SUBJECT_TO_HOST_GPC_CNT", 0u);
+      = (UINT32)RmeCfgGetU64(L"CXL_RP_NOT_SUBJECT_TO_HOST_GPC_CNT",
+                             CXL_RP_NOT_SUBJECT_TO_HOST_GPC_CNT_CT);
 
   /* Cap the loop to prevent untrusted config blobs from stalling execution. */
   if (count > 256u)
@@ -66,7 +92,8 @@ pal_cxl_rp_is_not_subject_to_host_gpc(UINT32 rp_bdf)
                   L"CXL_RP_NOT_SUBJECT_TO_HOST_GPC_%u_BDF",
                   idx);
 
-    UINT64 cfg_bdf = RmeCfgGetU64(key, ~0ULL);
+    UINT64 cfg_bdf =
+        RmeCfgGetU64(key, pal_cxl_default_rp_not_subject_to_host_gpc_bdf(idx));
     if ((UINT32)cfg_bdf == rp_bdf)
       return 1u;
   }
@@ -103,7 +130,8 @@ UINT32
 pal_cxl_is_chi_c2c_supported(UINT32 bdf)
 {
   UINT32 count
-      = (UINT32)RmeCfgGetU64(L"CXL_CHI_C2C_SUPPORTED_CNT", 0u);
+      = (UINT32)RmeCfgGetU64(L"CXL_CHI_C2C_SUPPORTED_CNT",
+                             CXL_CHI_C2C_SUPPORTED_CNT_CT);
 
   /* Cap the loop to prevent untrusted config blobs from stalling execution. */
   if (count > 256u)
@@ -117,7 +145,8 @@ pal_cxl_is_chi_c2c_supported(UINT32 bdf)
                   L"CXL_CHI_C2C_SUPPORTED_%u_BDF",
                   idx);
 
-    UINT64 cfg_bdf = RmeCfgGetU64(key, ~0ULL);
+    UINT64 cfg_bdf =
+        RmeCfgGetU64(key, pal_cxl_default_chi_c2c_supported_bdf(idx));
     if ((UINT32)cfg_bdf == bdf)
       return 1u;
   }

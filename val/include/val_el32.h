@@ -68,6 +68,7 @@
 #define CLEAN_AND_INVALIDATE 0x1
 #define CLEAN                0x2
 #define INVALIDATE           0x3
+#define CLEAN_AND_INVALIDATE_SET_WAY 0x4
 #define SET                  1
 #define CLEAR                0
 /* Operation-specific value in generic_flag for the inactive PAS-filter probe. */
@@ -98,6 +99,7 @@
 #define ENABLE_MEC   0x1
 #define CONFIG_MECID 0x2
 #define DISABLE_MEC  0x3
+#define GET_MEC_STATE 0x4
 
 /* Defines related to PGT attrinutes of an address */
 #define MAIR_REG_VAL_EL3 0x00000000004400ff

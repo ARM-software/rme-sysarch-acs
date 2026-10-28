@@ -49,6 +49,11 @@ val_report_status(uint32_t index, char8_t *state)
   }
 
   else
+    if (val_memory_compare("PASS_PARTIAL", state, sizeof("PASS_PARTIAL")) == 0) {
+      val_print(ACS_PRINT_ALWAYS, "\nResult: PASSED PARTIAL \n", 0);
+    }
+
+  else
     if (val_memory_compare("FAIL", state, sizeof("FAIL")) == 0) {
         val_print(ACS_PRINT_ALWAYS, " Checkpoint -- %2d", (uint64_t)pe_mem->checkpoint);
         val_print(ACS_PRINT_ALWAYS, "\nResult: FAIL \n", 0);

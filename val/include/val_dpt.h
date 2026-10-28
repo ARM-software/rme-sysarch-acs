@@ -21,6 +21,8 @@
 #define DPT_NO_ACCESS_ENTRY        0
 #define DPT_READ_ONLY_ACCESS_ENTRY 1
 #define DPT_RDWR_ACCESS_ENTRY      17
+/* DPT AC=01 selects Non-secure output PA space for a Realm DPT entry. */
+#define DPT_RDWR_NS_ACCESS_ENTRY   (DPT_RDWR_ACCESS_ENTRY | (1u << 2))
 
 uint32_t
 dpt_system_resource_valid_without_dpti_entry(uint32_t num_pe);

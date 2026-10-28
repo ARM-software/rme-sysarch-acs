@@ -192,6 +192,16 @@ uint32_t pal_exerciser_set_param(EXERCISER_PARAM_TYPE Type, uint64_t Value1, uin
                 }
                 pal_mmio_write(Base + DMACTL1, Data);
                 return 0;
+            case TXN_ATC_ENTRY:
+                Data = pal_mmio_read(Base + DMACTL1);
+                if (Value2 == ATC_ENTRY_ENABLE)
+                    Data |= DMA_USE_ATC_ENTRY_MASK;
+                else if (Value2 == ATC_ENTRY_DISABLE)
+                    Data &= ~DMA_USE_ATC_ENTRY_MASK;
+                else
+                    return 1;
+                pal_mmio_write(Base + DMACTL1, Data);
+                return 0;
             default:
                 return 1;
           }
@@ -249,8 +259,21 @@ uint32_t pal_exerciser_set_param(EXERCISER_PARAM_TYPE Type, uint64_t Value1, uin
         return 0;
 
       case EXERCISER_SEC_SID:
-        pal_mmio_write(Base + SEC_SID_VALUE_REG,
-                       (uint32_t)(Value1 & SEC_SID_VALUE_REG_MASK) | SEC_SID_VALUE_REG_VALID);
+        /* Setting Non-secure and releasing the override are distinct operations. */
+        Data = (Value1 == EXERCISER_SEC_SID_DEFAULT) ? 0u :
+               ((uint32_t)(Value1 & SEC_SID_VALUE_REG_MASK) | SEC_SID_VALUE_REG_VALID);
+        pal_mmio_write(Base + SEC_SID_VALUE_REG, Data);
+        return 0;
+
+      case EXERCISER_ATS_REQUEST_ATTRIBUTES:
+        if ((Value1 & ~(ATS_REQUEST_ATTR_T | ATS_REQUEST_ATTR_XT)) != 0u)
+            return 1;
+        Data = pal_mmio_read(Base + ATSCTL) & ~ATS_REQUEST_ATTR_REG_MASK;
+        if ((Value1 & ATS_REQUEST_ATTR_T) != 0u)
+            Data |= ATS_REQUEST_T_MASK;
+        if ((Value1 & ATS_REQUEST_ATTR_XT) != 0u)
+            Data |= ATS_REQUEST_XT_MASK;
+        pal_mmio_write(Base + ATSCTL, Data);
         return 0;
 
       default:
@@ -358,6 +381,9 @@ uint32_t pal_exerciser_get_param(EXERCISER_PARAM_TYPE Type, uint64_t *Value1, ui
 {
   uint32_t Status;
   uint32_t Temp;
+  uint32_t tx_attr;
+  uint32_t addr_low;
+  uint32_t addr_high;
   uint64_t Base;
 
   Base = pal_exerciser_get_ecsr_base(Bdf,0);
@@ -385,10 +411,25 @@ uint32_t pal_exerciser_get_param(EXERCISER_PARAM_TYPE Type, uint64_t *Value1, ui
       case ATS_RES_ATTRIBUTES:
           *Value1 = (uint64_t)pal_mmio_read(Base + ATS_ADDR);
           *Value1 |= (uint64_t)pal_mmio_read(Base + ATS_ADDR + 4) << 32;
+          if (Value2 != NULL)
+              *Value2 = pal_mmio_read(Base + ATS_REPLY);
           return 0;
       case EXERCISER_CXL_CMD_DATA0:
           *Value1 = (uint64_t)pal_mmio_read(Base + CXL_CMD_DATA0_LO);
           *Value1 |= ((uint64_t)pal_mmio_read(Base + CXL_CMD_DATA0_HI)) << 32;
+          return 0;
+      case TRANSACTION_RECORD:
+          if ((Value1 == NULL) || (Value2 == NULL))
+              return 1;
+          tx_attr = pal_mmio_read(Base + TXN_TRACE);
+          if (tx_attr == TXN_INVALID)
+              return 1;
+          addr_low = pal_mmio_read(Base + TXN_TRACE);
+          addr_high = pal_mmio_read(Base + TXN_TRACE);
+          (void)pal_mmio_read(Base + TXN_TRACE);
+          (void)pal_mmio_read(Base + TXN_TRACE);
+          *Value1 = tx_attr;
+          *Value2 = addr_low | ((uint64_t)addr_high << 32);
           return 0;
       case EXERCISER_SEC_SID:
           *Value1 = (uint64_t)(pal_mmio_read(Base + SEC_SID_VALUE_REG) & SEC_SID_VALUE_REG_MASK);
@@ -502,9 +543,19 @@ uint32_t pal_exerciser_ops(EXERCISER_OPS Ops, uint64_t Param, uint32_t Bdf)
         pal_mmio_write(Base + DMACTL1, (pal_mmio_read(Base + DMACTL1)) & NO_SNOOP_STOP_MASK);//disabling the NO SNOOP
         return 0;
 
+    case START_TXN_MONITOR:
+        pal_mmio_write(Base + TXN_CTRL_BASE, TXN_START);
+        return 0;
+
+    case STOP_TXN_MONITOR:
+        pal_mmio_write(Base + TXN_CTRL_BASE, TXN_STOP);
+        return 0;
+
     case ATS_TXN_REQ:
         pal_mmio_write(Base + DMA_BUS_ADDR, Param);
-        pal_mmio_write(Base + ATSCTL, ATS_TRIGGER);
+        pal_mmio_write(Base + ATSCTL,
+                       (pal_mmio_read(Base + ATSCTL) & ATS_REQUEST_ATTR_REG_MASK) |
+                       ATS_TRIGGER);
         /* Status is valid only after the translation is no longer in flight. */
         for (poll = 0; poll < EXERCISER_ATS_POLL_LIMIT; ++poll) {
             data = pal_mmio_read(Base + ATSCTL);
@@ -514,7 +565,9 @@ uint32_t pal_exerciser_ops(EXERCISER_OPS Ops, uint64_t Param, uint32_t Bdf)
         return 1;
 
     case ATS_INV_CACHE:
-        pal_mmio_write(Base + ATSCTL, ATS_INV);
+        pal_mmio_write(Base + ATSCTL,
+                       (pal_mmio_read(Base + ATSCTL) & ATS_REQUEST_ATTR_REG_MASK) |
+                       ATS_INV);
         return 0;
 
     case CXL_CMD_START:
@@ -554,6 +607,7 @@ uint32_t pal_exerciser_ops(EXERCISER_OPS Ops, uint64_t Param, uint32_t Bdf)
                 return 1;
             }
         }
+        print(ACS_PRINT_DEBUG, " CXL_CMD_START timed out for BDF 0x%x", Bdf);
         return 1;
         }
 
@@ -570,6 +624,107 @@ uint32_t pal_exerciser_ops(EXERCISER_OPS Ops, uint64_t Param, uint32_t Bdf)
         return PCIE_CAP_NOT_FOUND;
   }
   return 1;
+}
+
+/**
+  @brief  Ask a TDI to originate an attributed BISnp request.
+
+  @param  Bdf        Exerciser endpoint BDF identifying the TDI.
+  @param  TargetHpa  Target host physical address.
+  @param  PasRealm   Nonzero to request Realm Access PAS.
+  @param  Result     Request result flags: VALID plus EMITTED or BLOCKED, and
+                     the observed host response when the request was emitted.
+
+  @return 0 when the platform returned a valid result, nonzero otherwise.
+**/
+uint32_t
+pal_cda_tdi_snoop_attempt(uint32_t Bdf, uint64_t TargetHpa,
+                          uint32_t PasRealm, uint32_t *Result)
+{
+    uint64_t raw_result = 0u;
+    uint32_t sec_sid;
+    uint32_t status;
+
+    if (Result == NULL)
+        return 1;
+    *Result = 0u;
+
+    sec_sid = (PasRealm != 0u) ? SEC_SID_VALUE_REG_MASK : 0u;
+    status = pal_exerciser_set_param(EXERCISER_SEC_SID,
+                                      sec_sid,
+                                      0u,
+                                      Bdf);
+    if (status == 0u)
+        status = pal_exerciser_set_param(EXERCISER_CXL_CMD_OP,
+                                         CXL_CMD_OP_BISNP,
+                                         0u,
+                                         Bdf);
+    if (status == 0u)
+        status = pal_exerciser_set_param(EXERCISER_CXL_CMD_ADDR,
+                                         TargetHpa,
+                                         0u,
+                                         Bdf);
+
+    /* Do not interpret data left by an earlier command as a snoop result. */
+    if (status == 0u)
+        status = pal_exerciser_set_param(EXERCISER_CXL_CMD_DATA0, 0u, 0u, Bdf);
+
+    if (status == 0u)
+        status = pal_exerciser_ops(CXL_CMD_START, 0u, Bdf);
+    if (status == 0u)
+        status = pal_exerciser_get_param(EXERCISER_CXL_CMD_DATA0,
+                                         &raw_result,
+                                         NULL,
+                                         Bdf);
+
+    (void)pal_exerciser_set_param(EXERCISER_SEC_SID, EXERCISER_SEC_SID_DEFAULT, 0u, Bdf);
+    if (status != 0u)
+        return 1;
+
+    /*
+     * A status-only BISnp command completes successfully after the upstream
+     * transaction succeeds. DATA0 is zero when no detailed result is supplied.
+     * Retain explicit observations when available. A command error alone cannot
+     * distinguish local blocking from host rejection and is not normalized here.
+     */
+    if (raw_result == 0u)
+        *Result = CXL_SNOOP_RESULT_VALID | CXL_SNOOP_RESULT_EMITTED |
+                  CXL_SNOOP_RESULT_HOST_ACCEPTED;
+    else
+        *Result = (uint32_t)raw_result;
+
+    return 0;
+}
+
+/*
+ * A platform port must establish and verify host snoop eligibility and supply
+ * a genuine snoop stimulus with snoop-specific endpoint monitoring. No such
+ * host setup is supplied by the default PAL; leave all state unchanged.
+ */
+uint32_t
+pal_cda_host_snoop_prepare(uint32_t RootBdf, uint32_t EndpointBdf,
+                            uint64_t PermittedHpa, uint64_t UnknownHpa)
+{
+    (void)RootBdf;
+    (void)EndpointBdf;
+    (void)PermittedHpa;
+    (void)UnknownHpa;
+    return PAL_CDA_SNOOP_UNSUPPORTED;
+}
+
+uint32_t
+pal_cda_host_snoop_trigger(uint32_t EndpointBdf, uint64_t TargetHpa)
+{
+    (void)EndpointBdf;
+    (void)TargetHpa;
+    return PAL_CDA_SNOOP_UNSUPPORTED;
+}
+
+uint32_t
+pal_cda_host_snoop_restore(uint32_t EndpointBdf)
+{
+    (void)EndpointBdf;
+    return PAL_CDA_SNOOP_SUCCESS;
 }
 
 /**

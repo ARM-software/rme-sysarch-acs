@@ -64,7 +64,7 @@
 #define CXL_RL_BAR_NUM(b)               ((b) & 0x7)
 #define CXL_RL_BAR_IS_64B(b)            (((b) >> 7) & 0x1)
 
-/* CXL.cachemem Primary range offset (per CXL 3.1 Table 8-21): BAR + 4KB */
+/* CXL.cachemem Primary range: 4KB from the Component Register Block base. */
 #ifndef CXL_CACHEMEM_PRIMARY_OFFSET
 #define CXL_CACHEMEM_PRIMARY_OFFSET     0x1000
 #endif
@@ -136,6 +136,7 @@
 
 /* ---- CXL DVSEC Device Control ---- */
 #define CXL_DVSEC_CTRL_OFFSET           0x0C
+#define CXL_DVSEC_CACHE_ENABLE          (1u << 0)
 #define CXL_DVSEC_MEM_ENABLE            (1u << 2)
 
 /* ---- Arm RME-CDA DVSEC register layout ---- */
@@ -188,9 +189,14 @@
 #define CXL_HDM_DECODER_CTRL(n)       (0x20 + (n) * CXL_HDM_DECODER_STRIDE)
 #define CXL_HDM_DECODER_TARGET_LOW(n) (0x24 + (n) * CXL_HDM_DECODER_STRIDE)
 #define CXL_HDM_DECODER_TARGET_HIGH(n) (0x28 + (n) * CXL_HDM_DECODER_STRIDE)
+#define CXL_HDM_DECODER_IG_SHIFT          0u
+#define CXL_HDM_DECODER_IG_MASK           0xFu
+#define CXL_HDM_DECODER_IW_SHIFT          4u
+#define CXL_HDM_DECODER_IW_MASK           0xFu
 #define CXL_HDM_COMMIT_BIT                (1u << 9)
 #define CXL_HDM_COMMITTED_BIT             (1u << 10)
 #define CXL_HDM_COMMIT_TIMEOUT_US         20000u
+#define CXL_HDM_DPA_SKIP_LOW_MASK          0xF0000000u
 
 #define CXL_BI_DECODER_CAP_OFFSET      0x00
 #define CXL_BI_DECODER_CTRL_OFFSET     0x04

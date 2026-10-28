@@ -58,6 +58,14 @@ typedef struct {
 #define PCI_TDISP_INTERFACE_STATE_CONFIG_UNLOCKED 0u
 #endif
 
+#ifndef PCI_TDISP_INTERFACE_STATE_CONFIG_LOCKED
+#define PCI_TDISP_INTERFACE_STATE_CONFIG_LOCKED 1u
+#endif
+
+#ifndef PCI_TDISP_INTERFACE_STATE_RUN
+#define PCI_TDISP_INTERFACE_STATE_RUN 2u
+#endif
+
 /* Common limits. */
 #define VAL_TDISP_ARM_VDM_MAX_RSP_SIZE 1024u
 
@@ -153,12 +161,19 @@ val_tdisp_vdm_get_dev_prop(val_spdm_context_t *context,
                            uint32_t *response_size);
 
 uint32_t
+val_tdisp_get_device_properties(uint32_t endpoint_bdf,
+                                uint32_t *properties_out);
+
+uint32_t
 val_tdisp_vdm_set_interface(val_spdm_context_t *context,
                             uint32_t session_id,
                             const pci_tdisp_interface_id_t *interface_id,
                             uint16_t pmecid,
                             uint8_t *response,
                             uint32_t *response_size);
+
+uint32_t
+val_tdisp_configure_pmecid(uint32_t endpoint_bdf, uint16_t pmecid);
 
 uint32_t
 val_tdisp_vdm_send_raw_request(val_spdm_context_t *context,
@@ -173,6 +188,43 @@ val_tdisp_get_interface_state(val_spdm_context_t *context,
                               uint32_t session_id,
                               const pci_tdisp_interface_id_t *interface_id,
                               uint8_t *tdi_state);
+
+uint32_t
+val_tdisp_stop_to_config_unlocked(val_spdm_context_t *spdm_ctx,
+                                  uint32_t session_id,
+                                  const pci_tdisp_interface_id_t *interface_id);
+
+uint32_t
+val_tdisp_lock_interface(uint32_t endpoint_bdf,
+                         uint64_t mmio_reporting_offset,
+                         val_spdm_context_t *spdm_ctx,
+                         uint32_t *session_id_out,
+                         pci_tdisp_interface_id_t *interface_id_out,
+                         uint8_t *start_nonce_out,
+                         uint8_t *interface_report,
+                         uint32_t *interface_report_size);
+
+uint32_t
+val_tdisp_start_locked_interface(val_spdm_context_t *spdm_ctx,
+                                 uint32_t session_id,
+                                 const pci_tdisp_interface_id_t *interface_id,
+                                 const uint8_t *start_nonce);
+
+uint32_t
+val_tdisp_establish_run(uint32_t endpoint_bdf,
+                        val_spdm_context_t *spdm_ctx,
+                        uint32_t *session_id_out,
+                        pci_tdisp_interface_id_t *interface_id_out);
+
+uint32_t
+val_tdisp_stop_if_needed(val_spdm_context_t *spdm_ctx,
+                         uint32_t session_id,
+                         const pci_tdisp_interface_id_t *interface_id,
+                         uint32_t tdi_in_error);
+
+uint32_t
+val_tdisp_close_session_to_error(val_spdm_context_t *spdm_ctx,
+                                 uint32_t session_id);
 
 uint32_t
 val_rme_tdisp_execute_tests(uint32_t num_pe);

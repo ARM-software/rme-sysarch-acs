@@ -76,6 +76,25 @@ typedef struct {
     uint32_t initialized;
 } EXERCISER_INFO_BLOCK;
 
+#define VAL_ATS_GLOBAL_MASK         (1u << 6)
+#define VAL_ATS_TE_MASK             (1u << 9)
+#define VAL_ATS_PERMISSION_MASK     0x3Fu
+#define VAL_ATS_REQUEST_T           (1u << 0)
+#define VAL_ATS_REQUEST_XT          (1u << 1)
+#define VAL_ATS_REQUEST_ATTR_MASK   (VAL_ATS_REQUEST_T | VAL_ATS_REQUEST_XT)
+
+typedef struct {
+    uint64_t translated_pa;
+    uint32_t response_attributes;
+    uint32_t completion_success;
+    uint32_t te;
+} VAL_ATS_TRANSLATION_RESULT;
+
+typedef struct {
+    uint32_t attributes;
+    uint64_t address;
+} VAL_EXERCISER_TRANSACTION_RECORD;
+
 typedef struct {
     uint32_t                num_exerciser;
     EXERCISER_INFO_BLOCK    e_info[MAX_EXERCISER_CARDS];
@@ -149,6 +168,24 @@ uint32_t val_exerciser_set_state(EXERCISER_STATE state, uint64_t *value, uint32_
 uint32_t val_exerciser_get_state(EXERCISER_STATE *state, uint32_t instance);
 uint32_t val_exerciser_ops(EXERCISER_OPS ops, uint64_t param, uint32_t instance);
 uint32_t val_exerciser_ops_by_bdf(EXERCISER_OPS ops, uint64_t param, uint32_t bdf);
+uint32_t val_exerciser_start_transaction_monitor_by_bdf(uint32_t bdf);
+uint32_t val_exerciser_stop_transaction_monitor_by_bdf(uint32_t bdf);
+uint32_t val_exerciser_get_transaction_record_by_bdf(
+                                uint32_t bdf,
+                                VAL_EXERCISER_TRANSACTION_RECORD *record);
+uint32_t val_exerciser_find_transaction_by_bdf(uint32_t bdf,
+                                                uint64_t address,
+                                                uint32_t required_attributes,
+                                                uint32_t *observed);
+uint32_t val_exerciser_ats_translate_by_bdf(uint32_t bdf,
+                                            uint64_t iova,
+                                            uint32_t length,
+                                            uint32_t request_attributes,
+                                            VAL_ATS_TRANSLATION_RESULT *result);
+uint32_t val_exerciser_dma_with_atc_by_bdf(uint32_t bdf,
+                                           uint64_t iova,
+                                           uint32_t length,
+                                           EXERCISER_DMA_ATTR direction);
 uint32_t val_exerciser_get_data(EXERCISER_DATA_TYPE type,
                                 exerciser_data_t *data, uint32_t instance);
 uint32_t val_exerciser_execute_tests(uint32_t level);
@@ -157,4 +194,15 @@ uint32_t val_cxl_exerciser_get_bdf(uint32_t instance);
 uint32_t val_cxl_exerciser_get_instance_by_bdf(uint32_t bdf, uint32_t *instance);
 uint32_t val_exerciser_init_by_bdf(uint32_t bdf);
 uint32_t val_get_exerciser_err_info(EXERCISER_ERROR_CODE type);
+uint32_t val_cxl_exerciser_execute_cmd(uint32_t bdf, uint32_t opcode,
+                                       uint64_t address, uint64_t data,
+                                       uint64_t *readback);
+uint32_t val_cxl_exerciser_set_snoop_response_mecid(uint32_t bdf,
+                                                     uint16_t mecid,
+                                                     uint32_t enable);
+/* Direct media backdoor operations take a device physical address (DPA). */
+uint32_t val_cxl_exerciser_backdoor_read64(uint32_t bdf, uint64_t dpa,
+                                  uint64_t *readback);
+uint32_t val_cxl_exerciser_backdoor_write64(uint32_t bdf, uint64_t dpa,
+                                   uint64_t data);
 #endif

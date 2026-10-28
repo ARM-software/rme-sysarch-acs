@@ -49,6 +49,8 @@ void val_el3_ack_handler(void)
 {
   uint64_t *elr_ptr;
   uint64_t *spsr_ptr;
+  uint64_t esr;
+  uint64_t far;
 
   elr_ptr = (uint64_t *) SHARED_OFFSET_ELR;
   spsr_ptr = (uint64_t *) SHARED_OFFSET_SPSR;
@@ -64,8 +66,8 @@ void val_el3_ack_handler(void)
      */
     if (shared_data->pas_filter_flag == SET &&
         shared_data->generic_flag == PAS_FILTER_INACTIVE_PROBE) {
-        uint64_t esr = val_el3_read_esr_el3();
-        uint64_t far = val_el3_read_far();
+        esr = val_el3_read_esr_el3();
+        far = val_el3_read_far();
 
         shared_data->esr_value = esr;
         shared_data->exception_generated =
@@ -80,7 +82,7 @@ void val_el3_ack_handler(void)
 
     /* A caller may arm a specific external read abort. Do not consume other faults. */
     if (shared_data->esr_value == SEA_ESR_READ) {
-        uint64_t esr = val_el3_read_esr_el3();
+        esr = val_el3_read_esr_el3();
         if (((esr >> 26) == 0x25u) && ((esr & 0x3fu) == 0x10u) &&
             ((esr & ((1u << 6) | (1u << 10))) == 0u) &&
             (val_el3_read_elr_el3() == (uint64_t)&val_el3_mmio_read_load) &&
@@ -95,13 +97,15 @@ void val_el3_ack_handler(void)
         return;
     }
     INFO("The Fault is encountered\n");
-
-    /* Other probes retain the existing GPF checks. Record a matching read/write
-     * GPF, then resume after the faulting instruction.
-     */
-    if (val_el3_read_esr_el3() == GPF_ESR_READ || val_el3_read_esr_el3() == GPF_ESR_WRITE) {
+    esr = val_el3_read_esr_el3();
+    far = val_el3_read_far();
+    INFO("Expected fault ESR_EL3 = 0x%lx\n", esr);
+    INFO("Expected fault FAR_EL3 = 0x%lx\n", far);
+    shared_data->esr_value = esr;
+    /* Protected probes report the raw fault for the caller to validate its syndrome. */
+    shared_data->exception_generated = SET;
+    if (esr == GPF_ESR_READ || esr == GPF_ESR_WRITE) {
         INFO("The GPF was expected, encountered and handled\n");
-        shared_data->exception_generated = SET;
         shared_data->exception_expected = CLEAR;
 
         VERBOSE("Saved elr = %lx\n", *(elr_ptr));
@@ -110,11 +114,8 @@ void val_el3_ack_handler(void)
         VERBOSE("Current spsr = %lx\n", val_el3_read_spsr_el3());
         val_el3_asm_eret();
     } else {
-        /* The syndrome does not match the expected GPF. Resume after the faulting
-         * instruction without setting exception_generated, so the test can check it.
-         */
-        VERBOSE("The fault is not GPF, ESR_EL3 = 0x%lx\n", val_el3_read_esr_el3());
-        VERBOSE("FAR_EL3 = 0x%lx\n", val_el3_read_far());
+        VERBOSE("The expected fault is not GPF, ESR_EL3 = 0x%lx\n", esr);
+        VERBOSE("FAR_EL3 = 0x%lx\n", far);
         VERBOSE("Saved elr = %lx\n", *(elr_ptr));
         VERBOSE("Saved spsr = %lx\n", *(spsr_ptr));
         VERBOSE("Current elr = %lx\n", val_el3_read_elr_el3());
@@ -144,7 +145,7 @@ void val_el3_ack_handler(void)
          */
         val_el3_set_daif();
         val_el3_acs_ldr_pas_filter((uint64_t *)shared_data->arg1,
-                        shared_data->shared_data_access[0].data);
+                        &shared_data->shared_data_access[0].data);
     } else if (shared_data->exception_expected == SET) {
         /* Issue the store probe with access_mut already CLEAR. If it faults,
          * re-entry selects expected-fault recovery rather than another access.

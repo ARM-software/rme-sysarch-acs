@@ -105,7 +105,7 @@ rme_acs_entry:
     * Set x19 = 0 for secondary cpu
     */
     adrp x18, g_primary_mpidr
-    add  x18, x18, :lo12:g_primary_mpidr    
+    add  x18, x18, :lo12:g_primary_mpidr
     ldr x0, [x18]
     mov   x2, #INVALID_MPIDR
     cmp   x2, x0
@@ -125,8 +125,10 @@ primary_cpu_entry:
      * This prevents re-use of stale data cache entries from
      * prior bootloader stages.
      */
-    adr x0, __TEXT_START__
-    adr x1, __TEXT_END__
+    adrp x0, __TEXT_START__
+    add  x0, x0, :lo12:__TEXT_START__
+    adrp x1, __TEXT_END__
+    add  x1, x1, :lo12:__TEXT_END__
     sub x1, x1, x0
     bl  val_inv_icache_range
 
@@ -151,7 +153,7 @@ primary_cpu_entry:
 
     /* Save the primary cpu mpidr */
     adrp x18, g_primary_mpidr
-    add  x18, x18, :lo12:g_primary_mpidr 
+    add  x18, x18, :lo12:g_primary_mpidr
     mrs x0, mpidr_el1
     str x0, [x18]
 

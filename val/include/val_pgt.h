@@ -1,5 +1,5 @@
 /** @file
- * Copyright (c) 2022, 2025, Arm Limited or its affiliates. All rights reserved.
+ * Copyright (c) 2022, 2026, Arm Limited or its affiliates. All rights reserved.
  * SPDX-License-Identifier : Apache-2.0
 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -42,6 +42,7 @@
 #define PGT_STAGE1_AP_RW (0x1ull << 6)
 #define PGT_STAGE2_AP_RO (0x1ull << 6)
 #define PGT_STAGE2_AP_RW (0x3ull << 6)
+#define PGT_STAGE2_RME_NS_MASK (0x1ull << 55)
 
 #define PGT_LEVEL_0   0
 #define PGT_LEVEL_1   1

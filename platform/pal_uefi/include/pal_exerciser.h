@@ -67,7 +67,9 @@
 
 #define PASID_VAL     0x020
 #define ATSCTL        0x024
+#define DMA_USE_ATC_ENTRY_MASK (1u << 9)
 #define ATS_ADDR      0x028
+#define ATS_REPLY     0x038
 #define TXN_TRACE     0x40
 #define TXN_CTRL_BASE 0x44
 #define SEC_SID_VALUE_REG 0x94
@@ -125,10 +127,6 @@
 #define CXL_CMD_CLEAR_ERR     (1u << 30)
 #define CXL_CMD_TRIGGER       (1u << 31)
 
-#define CXL_CMD_OP_BACKDOOR_READ64  0x1u
-#define CXL_CMD_OP_BACKDOOR_WRITE64 0x2u
-#define CXL_CMD_OP_BISNP            0x3u
-
 #define PCI_CAP_PTR_OFFSET 8
 #define PCIE_CAP_PTR_OFFSET 20
 
@@ -148,6 +146,11 @@
 #define ATS_INV        (1 << 5)
 #define ATS_IN_FLIGHT  (1ul << 6)
 #define ATS_STATUS     (1ul << 7)
+#define ATS_REQUEST_ATTR_T       (1u << 0)
+#define ATS_REQUEST_ATTR_XT      (1u << 1)
+#define ATS_REQUEST_T_MASK       (1u << 10)
+#define ATS_REQUEST_XT_MASK      (1u << 11)
+#define ATS_REQUEST_ATTR_REG_MASK (ATS_REQUEST_T_MASK | ATS_REQUEST_XT_MASK)
 #ifndef EXERCISER_ATS_POLL_LIMIT
 #define EXERCISER_ATS_POLL_LIMIT PLATFORM_OVERRIDE_TIMEOUT_LARGE
 #endif
@@ -199,14 +202,30 @@ typedef enum {
     EXERCISER_CXL_CMD_OP = 0x11,
     EXERCISER_CXL_CMD_ADDR = 0x12,
     EXERCISER_CXL_CMD_DATA0 = 0x13,
-    EXERCISER_SEC_SID = 0x14
+    EXERCISER_SEC_SID = 0x15,
+    EXERCISER_ATS_REQUEST_ATTRIBUTES = 0x16,
+    TRANSACTION_RECORD = 0x17
 } EXERCISER_PARAM_TYPE;
+
+/* Release the SEC_SID override and restore the exerciser's default selection. */
+#define EXERCISER_SEC_SID_DEFAULT 0xFFFFFFFFu
+
+#define EXERCISER_TXN_ATTR_READ              (1u << 1)
+#define EXERCISER_TXN_ATTR_CONFIG            (1u << 2)
+#define EXERCISER_TXN_ATTR_CACHE_MAINTENANCE (1u << 3)
+#define EXERCISER_TXN_ATTR_SNOOP             (1u << 4)
 
 typedef enum {
     TXN_REQ_ID     = 0x0,
     TXN_ADDR_TYPE  = 0x1,
     TXN_REQ_ID_VALID    = 0x2,
+    TXN_ATC_ENTRY       = 0x3,
 } EXERCISER_TXN_ATTR;
+
+typedef enum {
+    ATC_ENTRY_DISABLE = 0x0,
+    ATC_ENTRY_ENABLE  = 0x1
+} EXERCISER_TXN_ATC_ENTRY;
 
 typedef enum {
     AT_UNTRANSLATED = 0x0,
@@ -241,6 +260,22 @@ typedef enum {
     CXL_CMD_START        = 0x10,
     DMA_WAIT            = 0x11
 } EXERCISER_OPS;
+
+#define CXL_CMD_OP_BACKDOOR_READ64           0x1u
+#define CXL_CMD_OP_BACKDOOR_WRITE64          0x2u
+#define CXL_CMD_OP_BISNP                     0x3u
+#define CXL_CMD_OP_DCM_CACHE_DIRTY           0x4u
+#define CXL_CMD_OP_DCM_SET_REALM_ASSIGNMENT  0x6u
+#define CXL_CMD_OP_DCM_CACHE_WRITEBACK       0x8u
+/* data[15:0] selects the response MECID; data[16] enables the override. */
+#define CXL_CMD_OP_SNOOP_RESPONSE_MECID      0x9u
+#define CXL_SNOOP_RESPONSE_MECID_VALID       (1u << 16)
+#define CXL_SNOOP_RESULT_VALID                (1u << 0)
+#define CXL_SNOOP_RESULT_EMITTED              (1u << 1)
+#define CXL_SNOOP_RESULT_BLOCKED              (1u << 2)
+/* Normalized PAL observations, not architectural host-port register bits. */
+#define CXL_SNOOP_RESULT_HOST_ACCEPTED         (1u << 3)
+#define CXL_SNOOP_RESULT_HOST_REJECTED         (1u << 4)
 
 typedef enum {
     ACCESS_TYPE_RD = 0x0,
@@ -320,6 +355,7 @@ typedef enum {
 } EXERCISER_ERROR_CODE;
 
 UINT32 pal_mmio_read(UINT64 addr);
+UINT64 pal_mmio_read64(UINT64 addr);
 VOID pal_mmio_write(UINT64 addr, UINT32 data);
 VOID pal_mmio_write64(UINT64 addr, UINT64 data);
 UINT64 pal_pcie_get_mcfg_ecam();
@@ -331,6 +367,15 @@ UINT32 pal_exerciser_get_param(EXERCISER_PARAM_TYPE Type, UINT64 *Value1, UINT64
 UINT32 pal_exerciser_set_state(EXERCISER_STATE State, UINT64 *Value, UINT32 Bdf);
 UINT32 pal_exerciser_get_state(EXERCISER_STATE *State, UINT32 Bdf);
 UINT32 pal_exerciser_ops(EXERCISER_OPS Ops, UINT64 Param, UINT32 Bdf);
+UINT32 pal_cda_tdi_snoop_attempt(UINT32 Bdf, UINT64 TargetHpa,
+                                 UINT32 PasRealm, UINT32 *Result);
+#define PAL_CDA_SNOOP_SUCCESS     0u
+#define PAL_CDA_SNOOP_UNSUPPORTED 1u
+#define PAL_CDA_SNOOP_ERROR       2u
+UINT32 pal_cda_host_snoop_prepare(UINT32 RootBdf, UINT32 EndpointBdf,
+                                   UINT64 PermittedHpa, UINT64 UnknownHpa);
+UINT32 pal_cda_host_snoop_trigger(UINT32 EndpointBdf, UINT64 TargetHpa);
+UINT32 pal_cda_host_snoop_restore(UINT32 EndpointBdf);
 UINT32 pal_exerciser_get_data(EXERCISER_DATA_TYPE Type, exerciser_data_t *Data, UINT32 Bdf, UINT64 Ecam);
 
 #endif

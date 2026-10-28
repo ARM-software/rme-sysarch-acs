@@ -56,26 +56,6 @@ typedef struct {
 } RNYCLL_CONTEXT;
 
 static uint32_t
-find_component_index_by_bdf(const CXL_COMPONENT_TABLE *table,
-                            uint32_t bdf,
-                            uint32_t *index_out)
-{
-  if ((table == NULL) || (index_out == NULL))
-    return ACS_STATUS_ERR;
-
-  for (uint32_t idx = 0; idx < table->num_entries; ++idx)
-  {
-    if (table->component[idx].bdf == bdf)
-    {
-      *index_out = idx;
-      return ACS_STATUS_PASS;
-    }
-  }
-
-  return ACS_STATUS_FAIL;
-}
-
-static uint32_t
 find_downstream_chi_c2c_exerciser_endpoint(uint32_t root_bdf,
                                            uint32_t *endpoint_bdf_out)
 {
@@ -307,43 +287,9 @@ restore_decoders(RNYCLL_CONTEXT *context)
 }
 
 static uint32_t
-read_device_media(uint32_t endpoint_bdf,
-                   uint64_t phys,
-                   uint64_t *value_out)
-{
-  uint64_t readback = 0u;
-
-  if (value_out == NULL)
-    return ACS_STATUS_ERR;
-
-  if (val_exerciser_set_param_by_bdf(EXERCISER_CXL_CMD_OP,
-                                     CXL_CMD_OP_BACKDOOR_READ64,
-                                     0u,
-                                     endpoint_bdf))
-    return ACS_STATUS_FAIL;
-
-  if (val_exerciser_set_param_by_bdf(EXERCISER_CXL_CMD_ADDR,
-                                     phys,
-                                     0u,
-                                     endpoint_bdf))
-    return ACS_STATUS_FAIL;
-
-  if (val_exerciser_ops_by_bdf(CXL_CMD_START, 0u, endpoint_bdf))
-    return ACS_STATUS_FAIL;
-
-  if (val_exerciser_get_param_by_bdf(EXERCISER_CXL_CMD_DATA0,
-                                     &readback,
-                                     NULL,
-                                     endpoint_bdf))
-    return ACS_STATUS_FAIL;
-
-  *value_out = readback;
-  return ACS_STATUS_PASS;
-}
-
-static uint32_t
 access_cxl_mem(uint32_t root_bdf,
                uint32_t endpoint_bdf,
+               uint32_t endpoint_index,
                uint32_t aer_offset,
                uint64_t phys,
                uint32_t pas,
@@ -353,13 +299,17 @@ access_cxl_mem(uint32_t root_bdf,
   uint64_t baseline = 0u;
   uint32_t pattern = 0xA5A5A5A5U;
   uint64_t observed = 0u;
+  uint64_t dpa = 0u;
   uint32_t aer_uncorr = 0u;
 
   /* Map a single page of CXL.mem into the requested PAS. */
   if (map_window_alias(phys, pas, &mapped) != ACS_STATUS_PASS)
     return ACS_STATUS_ERR;
 
-  if (read_device_media(endpoint_bdf, phys, &baseline) != ACS_STATUS_PASS)
+  if (val_cxl_hpa_to_dpa(endpoint_index, phys, &dpa) != ACS_STATUS_PASS)
+    return ACS_STATUS_ERR;
+
+  if (val_cxl_exerciser_backdoor_read64(endpoint_bdf, dpa, &baseline) != ACS_STATUS_PASS)
     return ACS_STATUS_ERR;
 
   val_print(ACS_PRINT_DEBUG,
@@ -393,7 +343,7 @@ access_cxl_mem(uint32_t root_bdf,
   if (access_status)
     return ACS_STATUS_ERR;
 
-  if (read_device_media(endpoint_bdf, phys, &observed) != ACS_STATUS_PASS)
+  if (val_cxl_exerciser_backdoor_read64(endpoint_bdf, dpa, &observed) != ACS_STATUS_PASS)
     return ACS_STATUS_ERR;
 
   val_print(ACS_PRINT_DEBUG,
@@ -999,7 +949,7 @@ verify_root_port(const CXL_COMPONENT_TABLE *table,
   if (status != ACS_STATUS_PASS)
     return ACS_STATUS_SKIP;
 
-  status = find_component_index_by_bdf(table, endpoint_bdf, &endpoint_index);
+  status = val_cxl_find_component_index_by_bdf(endpoint_bdf, &endpoint_index);
   if (status != ACS_STATUS_PASS)
     return ACS_STATUS_SKIP;
 
@@ -1109,6 +1059,7 @@ verify_root_port(const CXL_COMPONENT_TABLE *table,
   /* Step 1: Verify non-secure host-to-device access succeeds. */
   status = access_cxl_mem(root_port->bdf,
                           endpoint->bdf,
+                          context.endpoint_index,
                           aer_offset,
                           context.window_base,
                           NONSECURE_PAS,
@@ -1123,6 +1074,7 @@ verify_root_port(const CXL_COMPONENT_TABLE *table,
   /* Step 2: Verify Realm host-to-device requests are rejected (PAS==Realm). */
   status = access_cxl_mem(root_port->bdf,
                           endpoint->bdf,
+                          context.endpoint_index,
                           aer_offset,
                           context.window_base,
                           REALM_PAS,
