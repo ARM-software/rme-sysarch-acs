@@ -49,6 +49,8 @@ bool acs_is_module_enabled(const char8_t *module_id);
 #define IS_TEST_END(status)        (val_memory_compare("END", status, sizeof("END")) == 0)
 #define IS_RESULT_PENDING(status)  (val_memory_compare("PENDING", status, sizeof("PENDING")) == 0)
 #define IS_TEST_PASS(status)       (val_memory_compare("PASS", status, sizeof("PASS")) == 0)
+#define IS_TEST_PASS_PARTIAL(status) \
+        (val_memory_compare("PASS_PARTIAL", status, sizeof("PASS_PARTIAL")) == 0)
 #define IS_TEST_FAIL(status)       (val_memory_compare("FAIL", status, sizeof("FAIL")) == 0)
 #define IS_TEST_SKIP(status)       (val_memory_compare("SKIP", status, sizeof("SKIP")) == 0)
 #define IS_TEST_FAIL_SKIP(status)  (IS_TEST_FAIL(status) || IS_TEST_SKIP(status))
@@ -113,8 +115,30 @@ typedef uint32_t (*test_entry_fn)(uint32_t num_pe);
 /* Enumerations of test entry functions per module (found under test_pool/) */
 typedef enum {
     CDA_MODULE_START = -1,
+    CDA_ENTRY_CDA_RYDSYL_D2H_SEC_SID_RID_ENTRY,
+    CDA_ENTRY_CDA_RDMSPT_RID_RANGE_CHECK_ENTRY,
     CDA_ENTRY_CDA_RJZQCP_RESET_TRANSITION_ENTRY,
     CDA_ENTRY_CDA_RKRCWK_HOST_SIDE_GPC_ENTRY,
+    CDA_ENTRY_CDA_RQRMSC_DCM_ATS_DEPENDENCY_ENTRY,
+    CDA_ENTRY_CDA_RWWBPM_INTERNAL_DCM_RUN_GATE_ENTRY,
+    CDA_ENTRY_CDA_RSHRMN_COHERENT_LINK_TOPOLOGY_ENTRY,
+    CDA_ENTRY_CDA_RQWNBN_ERROR_POISON_RESPONSE_ENTRY,
+    CDA_ENTRY_CDA_RHTTNB_DIRTY_SNOOP_BLOCKED_ENTRY,
+    CDA_ENTRY_CDA_RLMFLX_CONFIG_UNLOCKED_INVALIDATE_ENTRY,
+    CDA_ENTRY_CDA_RWFYLW_DEV_PROP_LOCK_ENTRY,
+    CDA_ENTRY_CDA_RFRFJG_TDI_SNOOP_ACCESS_ENTRY,
+    CDA_ENTRY_CDA_RVHZCR_EXTERNAL_PAS_CHECK_ENTRY,
+    CDA_ENTRY_CDA_RYJVJR_ATS_TE_PAS_ENTRY,
+    CDA_ENTRY_CDA_RSHSXK_D2H_GPC_DPT_ENTRY,
+    CDA_ENTRY_CDA_RJSYPS_D2H_SNP_RANGE_ENTRY,
+    CDA_ENTRY_CDA_RNSMGT_DEPENDENT_COVERAGE_ENTRY,
+    CDA_ENTRY_CDA_RSTQHS_UNKNOWN_SNOOP_FILTER_ENTRY,
+    CDA_ENTRY_CDA_RVPKVF_TDI_STATE_INDEPENDENT_ENTRY,
+    CDA_ENTRY_CDA_RHDXTM_DCM_SCRUB_ENTRY,
+    CDA_ENTRY_CDA_RDRVTK_D2H_MECID_ENTRY,
+    CDA_ENTRY_CDA_RNVWMC_DEVICE_INTERFACE_SUPPORT_ENTRY,
+    /* RFZBMW performs a terminal rejected access and must remain last. */
+    CDA_ENTRY_CDA_RFZBMW_EXTERNAL_DCM_IDE_GATE_ENTRY,
     CDA_MODULE_END,
 } CDA_TEST_ENTRY_e;
 
@@ -272,6 +296,8 @@ typedef enum {
 typedef struct {
     test_entry_fn entry_fn;
     char8_t      *test_text;
+    uint32_t      result;
+    uint32_t      executed;
 } MODULE_TEST_ENTRY_s;
 
 /* Aggregate test dispatch table sized to the sum of per-module entries */
@@ -287,6 +313,10 @@ extern uint32_t g_num_tests;
 /* Selection helper: returns non-zero if the test should be executed */
 int
 val_test_is_selected(char8_t *test_text);
+
+/* Return a completed entry result, or SKIP when the entry was not executed. */
+uint32_t
+val_get_module_test_result(MODULE_ID_e module_id, int entry_id);
 
 /* Execute a module's test entries using dispatcher table */
 uint32_t

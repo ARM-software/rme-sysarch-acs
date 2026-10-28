@@ -148,6 +148,7 @@ uint32_t val_rlm_pgt_create(memory_region_descriptor_t *mem_desc, pgt_descriptor
 uint32_t val_rlm_pgt_destroy(pgt_descriptor_t *pgt_desc);
 uint32_t val_rlm_enable_mec(void);
 uint32_t val_rlm_disable_mec(void);
+uint32_t val_rlm_get_mec_state(uint32_t *enabled_out);
 uint32_t val_smmu_rlm_check_mec_impl(uint64_t smmu_base);
 uint32_t val_smmu_rlm_get_mecidw(uint64_t smmu_base);
 uint32_t val_cmo_to_poe(uint64_t PA);

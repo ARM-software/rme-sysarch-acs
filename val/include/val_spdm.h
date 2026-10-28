@@ -159,6 +159,12 @@ uint32_t val_spdm_session_open(uint32_t bdf,
                                uint32_t *session_id);
 uint32_t val_spdm_start_session(val_spdm_context_t *context,
                                 uint32_t *session_id);
+/* Retrieve measurements over an established secure session, not an attestation verdict. */
+uint32_t val_spdm_get_measurements(val_spdm_context_t *context,
+                                    uint32_t session_id,
+                                    uint8_t *block_count,
+                                    uint32_t *record_size,
+                                    uint8_t *record);
 uint32_t val_spdm_stop_session(val_spdm_context_t *context,
                                uint32_t session_id);
 uint32_t val_spdm_session_close(val_spdm_context_t *context,

@@ -904,7 +904,7 @@ INTN EFIAPI ShellAppMainrme(IN UINTN Argc, IN CHAR16** Argv)
   g_rme_tests_fail        = 0;
 
   Print(L"\n\n RME Architecture Compliance Suite \n");
-  Print(L"    Version: Issue C.a ACS v0.6 ALPHA   \n");
+  Print(L"    Version: v26.10_RME_C.a.1 BETA   \n");
 
   Print(L"\n Starting tests for (Print level is %2d)\n\n", g_print_level);
   // Show effective selection from INI/CLI to aid debugging

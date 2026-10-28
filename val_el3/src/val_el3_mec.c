@@ -1,5 +1,5 @@
 /** @file
-  * Copyright (c) 2025, Arm Limited or its affiliates. All rights reserved.
+  * Copyright (c) 2025-2026, Arm Limited or its affiliates. All rights reserved.
   * SPDX-License-Identifier : Apache-2.0
 
   * Licensed under the Apache License, Version 2.0 (the "License");
@@ -158,6 +158,10 @@ void val_el3_mec_service(uint64_t arg0, uint64_t arg1, uint64_t arg2)
     case DISABLE_MEC:
       INFO("Disabling MEC\n");
       val_el3_disable_mec();
+      break;
+
+    case GET_MEC_STATE:
+      shared_data->shared_data_access[0].data = val_el3_is_mec_enabled();
       break;
 
     default:

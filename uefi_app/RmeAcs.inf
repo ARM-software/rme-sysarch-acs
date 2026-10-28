@@ -56,8 +56,29 @@
   ../test_pool/cxl/cxl_rcnslj_type3_no_tsp.c
   ../test_pool/cxl/cxl_rxqhng_rid_range_reject.c
   ../test_pool/cxl/cxl_rkjypb_cache_disable.c
+  ../test_pool/cda/cda_rwwbpm_internal_dcm_run_gate.c
   ../test_pool/cda/cda_rjzqcp_reset_transition.c
   ../test_pool/cda/cda_rkrcwk_host_side_gpc.c
+  ../test_pool/cda/cda_rshrmn_coherent_link_topology.c
+  ../test_pool/cda/cda_rqwnbn_error_poison_response.c
+  ../test_pool/cda/cda_rhttnb_dirty_snoop_blocked.c
+  ../test_pool/cda/cda_rlmflx_config_unlocked_invalidate.c
+  ../test_pool/cda/cda_rwfylw_dev_prop_lock.c
+  ../test_pool/cda/cda_rfzbmw_external_dcm_ide_gate.c
+  ../test_pool/cda/cda_rydsyl_d2h_sec_sid_rid.c
+  ../test_pool/cda/cda_rdmspt_rid_range_check.c
+  ../test_pool/cda/cda_rqrmsc_dcm_ats_dependency.c
+  ../test_pool/cda/cda_rfrfjg_tdi_snoop_access.c
+  ../test_pool/cda/cda_rvhzcr_external_pas_check.c
+  ../test_pool/cda/cda_ryjvjr_ats_te_pas.c
+  ../test_pool/cda/cda_rshsxk_d2h_gpc_dpt.c
+  ../test_pool/cda/cda_rjsyps_d2h_snp_range.c
+  ../test_pool/cda/cda_rnsmgt_dependent_coverage.c
+  ../test_pool/cda/cda_rstqhs_unknown_snoop_filter.c
+  ../test_pool/cda/cda_rvpkvf_tdi_state_independent.c
+  ../test_pool/cda/cda_rhdxtm_dcm_scrub.c
+  ../test_pool/cda/cda_rdrvtk_d2h_mecid.c
+  ../test_pool/cda/cda_rnvwmc_device_interface_support.c
   ../test_pool/da/da_attribute_rmeda_ctl_registers.c
   ../test_pool/da/da_autonomous_rootport_request_ns_pas.c
   ../test_pool/da/da_ctl_regs_rmsd_write_protect_property.c

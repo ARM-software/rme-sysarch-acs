@@ -105,7 +105,6 @@ typedef struct {
   uint32_t device_reg_length;
   uint32_t hdm_decoder_count;
   uint32_t chi_c2c_supported;
-  uint32_t chi_c2c_dvsec_offset;
 } CXL_COMPONENT_ENTRY;
 
 typedef struct {
@@ -126,8 +125,7 @@ typedef enum {
   CXL_COMPONENT_INFO_COMPONENT_BASE,
   CXL_COMPONENT_INFO_COMPONENT_LENGTH,
   CXL_COMPONENT_INFO_HDM_COUNT,
-  CXL_COMPONENT_INFO_CHI_C2C_SUPPORTED,
-  CXL_COMPONENT_INFO_CHI_C2C_DVSEC_OFFSET
+  CXL_COMPONENT_INFO_CHI_C2C_SUPPORTED
 } CXL_COMPONENT_INFO_e;
 
 
@@ -156,10 +154,17 @@ uint32_t val_cxl_get_decoder(uint32_t index,
                              uint32_t decoder_index,
                              uint64_t *base,
                              uint64_t *length);
+uint32_t val_cxl_get_host_decoder_target(uint32_t host_index,
+                                         uint32_t decoder_index,
+                                         uint32_t *target_low,
+                                         uint32_t *target_high);
 uint32_t val_cxl_get_component_decoder(uint32_t component_index,
                                        uint32_t decoder_index,
                                        uint64_t *base,
                                        uint64_t *length);
+uint32_t val_cxl_hpa_to_dpa(uint32_t component_index,
+                            uint64_t hpa,
+                            uint64_t *dpa);
 uint32_t val_cxl_get_cfmws_count(uint32_t index);
 uint32_t val_cxl_get_cfmws(uint32_t index,
                            uint32_t window_index,
@@ -196,14 +201,36 @@ uint32_t val_cxl_program_host_decoder(uint32_t host_index,
                                       uint32_t decoder_index,
                                       uint64_t base,
                                       uint64_t length);
+uint32_t val_cxl_program_host_decoder_target(uint32_t host_index,
+                                             uint32_t decoder_index,
+                                             uint64_t base,
+                                             uint64_t length,
+                                             uint32_t target_low,
+                                             uint32_t target_high);
+uint32_t val_cxl_restore_host_decoder(uint32_t host_index,
+                                      uint32_t decoder_index,
+                                      uint64_t base,
+                                      uint64_t length,
+                                      uint32_t target_valid,
+                                      uint32_t target_low,
+                                      uint32_t target_high);
+uint32_t val_cxl_program_host_decoder_for_root(uint32_t root_bdf,
+                                               uint32_t host_index,
+                                               uint32_t decoder_index,
+                                               uint64_t base,
+                                               uint64_t length);
 uint32_t val_cxl_program_component_decoder(uint32_t component_index,
                                            uint32_t decoder_index,
                                            uint64_t base,
                                            uint64_t length);
+uint32_t val_cxl_disable_component_decoder(uint32_t component_index,
+                                           uint32_t decoder_index);
 uint32_t val_cxl_create_component_table(void);
 void     val_cxl_free_component_table(void);
 CXL_COMPONENT_TABLE *
          val_cxl_component_table_ptr(void);
+uint32_t val_cxl_find_component_index_by_bdf(uint32_t bdf,
+                                             uint32_t *index_out);
 uint64_t val_cxl_get_component_info(CXL_COMPONENT_INFO_e type,
                                     uint32_t index);
 uint32_t val_cxl_find_component_register_base(uint32_t bdf,
@@ -302,6 +329,9 @@ uint32_t val_cxl_select_cfmws_window(uint32_t host_index,
                                      uint64_t *base,
                                      uint64_t *size);
 uint32_t val_cxl_enable_mem(uint32_t bdf);
+uint32_t val_cxl_get_cache_enable(uint32_t bdf, uint32_t *enable_out);
+uint32_t val_cxl_set_cache_enable(uint32_t bdf, uint32_t enable);
+uint32_t val_cxl_enable_cache(uint32_t bdf);
 uint32_t val_cxl_aer_clear(uint32_t bdf, uint32_t aer_offset);
 uint32_t val_cxl_aer_read_uncorr(uint32_t bdf,
                                  uint32_t aer_offset,

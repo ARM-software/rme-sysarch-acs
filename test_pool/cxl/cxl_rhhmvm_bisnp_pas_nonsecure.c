@@ -164,55 +164,6 @@ map_alias(uint64_t phys, uint32_t pas, uint32_t attr_index, volatile uint32_t **
 }
 
 static uint32_t
-read_device_media(uint32_t endpoint_bdf, uint64_t pa, uint64_t *readback)
-{
-  if (readback == NULL)
-    return ACS_STATUS_ERR;
-
-  /* Program a backdoor media read command on the exerciser. */
-  if (val_exerciser_set_param_by_bdf(EXERCISER_CXL_CMD_OP,
-                                     CXL_CMD_OP_BACKDOOR_READ64,
-                                     0u,
-                                     endpoint_bdf))
-    return ACS_STATUS_FAIL;
-
-  if (val_exerciser_set_param_by_bdf(EXERCISER_CXL_CMD_ADDR, pa, 0u, endpoint_bdf))
-    return ACS_STATUS_FAIL;
-
-  if (val_exerciser_ops_by_bdf(CXL_CMD_START, 0u, endpoint_bdf))
-    return ACS_STATUS_FAIL;
-
-  if (val_exerciser_get_param_by_bdf(EXERCISER_CXL_CMD_DATA0,
-                                     readback,
-                                     NULL,
-                                     endpoint_bdf))
-    return ACS_STATUS_FAIL;
-
-  return ACS_STATUS_PASS;
-}
-
-static uint32_t
-write_device_media(uint32_t endpoint_bdf, uint64_t pa, uint64_t value)
-{
-  if (val_exerciser_set_param_by_bdf(EXERCISER_CXL_CMD_OP,
-                                     CXL_CMD_OP_BACKDOOR_WRITE64,
-                                     0u,
-                                     endpoint_bdf))
-    return ACS_STATUS_SKIP;
-
-  if (val_exerciser_set_param_by_bdf(EXERCISER_CXL_CMD_ADDR, pa, 0u, endpoint_bdf))
-    return ACS_STATUS_FAIL;
-
-  if (val_exerciser_set_param_by_bdf(EXERCISER_CXL_CMD_DATA0, value, 0u, endpoint_bdf))
-    return ACS_STATUS_FAIL;
-
-  if (val_exerciser_ops_by_bdf(CXL_CMD_START, 0u, endpoint_bdf))
-    return ACS_STATUS_FAIL;
-
-  return ACS_STATUS_PASS;
-}
-
-static uint32_t
 issue_bisnp(uint32_t endpoint_bdf, uint64_t pa, uint32_t allow_reject)
 {
   (void)allow_reject;
@@ -278,6 +229,7 @@ exercise_bisnp_behavior(uint32_t root_bdf, RHHMVM_CONTEXT *context, uint32_t hos
   uint32_t result = ACS_STATUS_FAIL;
   uint64_t page_size;
   uint64_t pa_in;
+  uint64_t dpa;
   uint64_t host_readback = 0u;
   uint32_t status;
   uint32_t expected_host_value;
@@ -293,6 +245,8 @@ exercise_bisnp_behavior(uint32_t root_bdf, RHHMVM_CONTEXT *context, uint32_t hos
     return ACS_STATUS_SKIP;
 
   pa_in = (host_pas == REALM_PAS) ? context->window_base : (context->window_base + page_size);
+  if (val_cxl_hpa_to_dpa(context->endpoint_index, pa_in, &dpa) != ACS_STATUS_PASS)
+    return ACS_STATUS_ERR;
   expected_host_value = (host_pas == REALM_PAS) ? TEST_HOST_VALUE_V1 : TEST_DEVICE_VALUE_V2;
 
   if (host_pas == REALM_PAS)
@@ -328,16 +282,21 @@ exercise_bisnp_behavior(uint32_t root_bdf, RHHMVM_CONTEXT *context, uint32_t hos
   }
 
   /*
-   * Step 2: Modify PA through exerciser media backdoor write.
+   * Step 2: Translate the host location and modify its device media through
+   * the direct-DPA exerciser backdoor.
    */
-  status = write_device_media(context->exerciser_bdf, pa_in, TEST_DEVICE_VALUE_V2);
+  status = val_cxl_exerciser_backdoor_write64(context->exerciser_bdf,
+                                     dpa,
+                                     TEST_DEVICE_VALUE_V2);
   if (status != ACS_STATUS_PASS)
   {
     result = status;
     goto restore_gpt;
   }
 
-  status = read_device_media(context->exerciser_bdf, pa_in, &media_value);
+  status = val_cxl_exerciser_backdoor_read64(context->exerciser_bdf,
+                                    dpa,
+                                    &media_value);
   if (status != ACS_STATUS_PASS)
   {
     result = ACS_STATUS_FAIL;

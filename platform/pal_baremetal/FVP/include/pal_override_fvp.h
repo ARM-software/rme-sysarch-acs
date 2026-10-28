@@ -366,10 +366,12 @@
 #define PCI_MAX_DEVICE  31
 #define PASID_VAL       0x020
 #define ATSCTL          0x024
+#define DMA_USE_ATC_ENTRY_MASK (1u << 9)
 #define SEC_SID_VALUE_REG 0x94
 #define TXN_TRACE       0x40
 #define TXN_CTRL_BASE   0x44
 #define ATS_ADDR        0x028
+#define ATS_REPLY       0x038
 #define CXL_CMD_REG      0x80
 #define CXL_CMD_OP       CXL_CMD_REG
 #define CXL_CMD_ADDR_LO  0x84
@@ -448,6 +450,11 @@
 #define ATS_INV        (1 << 5)
 #define ATS_IN_FLIGHT  (1ul << 6)
 #define ATS_STATUS     (1ul << 7)
+#define ATS_REQUEST_ATTR_T       (1u << 0)
+#define ATS_REQUEST_ATTR_XT      (1u << 1)
+#define ATS_REQUEST_T_MASK       (1u << 10)
+#define ATS_REQUEST_XT_MASK      (1u << 11)
+#define ATS_REQUEST_ATTR_REG_MASK (ATS_REQUEST_T_MASK | ATS_REQUEST_XT_MASK)
 #ifndef EXERCISER_ATS_POLL_LIMIT
 #define EXERCISER_ATS_POLL_LIMIT PLATFORM_OVERRIDE_TIMEOUT_LARGE
 #endif
@@ -482,10 +489,11 @@
 #define PLATFORM_OVERRIDE_CXL_HB0_CFMWS0_LENGTH      0x20000000ULL
 #define PLATFORM_OVERRIDE_CXL_HB0_CFMWS1_BASE        0x0ULL
 #define PLATFORM_OVERRIDE_CXL_HB0_CFMWS1_LENGTH      0x0ULL
-#define PLATFORM_OVERRIDE_CXL_HB0_RP_COUNT           0x3
+#define PLATFORM_OVERRIDE_CXL_HB0_RP_COUNT           0x4
 #define PLATFORM_OVERRIDE_CXL_HB0_RP0_BDF            0x300
 #define PLATFORM_OVERRIDE_CXL_HB0_RP1_BDF            0x400
 #define PLATFORM_OVERRIDE_CXL_HB0_RP2_BDF            0x500
+#define PLATFORM_OVERRIDE_CXL_HB0_RP3_BDF            0x600
 
 /*
  * Root Ports not subject to host-side GPC (RKJYPB).
@@ -507,10 +515,14 @@
  * CXL components that support CHI-C2C.
  * Provide BDF values in PCIE_CREATE_BDF encoding (0xSSBBDDFF).
  */
-#define CXL_CHI_C2C_SUPPORTED_CNT 0x2
+#define CXL_CHI_C2C_SUPPORTED_CNT 0x6
 #define CXL_CHI_C2C_SUPPORTED_BDF_ENTRIES(_) \
   _(0x00000500)                              \
-  _(0x00050000)
+  _(0x00050000)                              \
+  _(0x00000600)                              \
+  _(0x00060000)                              \
+  _(0x00000700)                              \
+  _(0x00070000)
 
 #define GPC_PROTECTED_REGION_CNT 0x4
 

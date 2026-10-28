@@ -172,6 +172,7 @@ void     val_pcie_io_write_cfg(uint32_t bdf, uint32_t offset, uint32_t data);
 uint32_t val_pcie_read_cfg(uint32_t bdf, uint32_t offset, uint32_t *data);
 uint32_t val_get_msi_vectors(uint32_t bdf, PERIPHERAL_VECTOR_LIST **mvector);
 uint64_t val_pcie_get_bdf_config_addr(uint32_t bdf);
+uint32_t val_pcie_map_root_config(uint32_t bdf, uint64_t *cfg_va_out);
 
 uint32_t val_pcie_bar_mem_read(uint32_t bdf, uint64_t address, uint32_t *data);
 uint32_t val_pcie_bar_mem_write(uint32_t bdf, uint64_t address, uint32_t data);
@@ -202,6 +203,9 @@ uint32_t val_pcie_find_vendor_dvsec(uint32_t bdf,
                                     uint32_t *cid_offset);
 void val_pcie_disable_bme(uint32_t bdf);
 void val_pcie_enable_bme(uint32_t bdf);
+uint32_t val_pcie_enable_ats(uint32_t bdf,
+                             uint32_t *ats_cap_base,
+                             uint32_t *ats_ctrl_orig);
 void val_pcie_disable_msa(uint32_t bdf);
 void val_pcie_enable_msa(uint32_t bdf);
 uint32_t val_pcie_is_msa_enabled(uint32_t bdf);
@@ -218,6 +222,10 @@ uint32_t val_pcie_register_bitfields_check(uint64_t *bf_info_table,
 uint32_t val_pcie_function_header_type(uint32_t bdf);
 void val_pcie_get_mmio_bar(uint32_t bdf, uint64_t *base);
 uint32_t val_pcie_get_downstream_function(uint32_t bdf, uint32_t *dsf_bdf);
+uint32_t val_pcie_is_downstream_bdf(uint32_t root_bdf,
+                                    uint32_t secondary_bus,
+                                    uint32_t subordinate_bus,
+                                    uint32_t candidate_bdf);
 uint32_t val_pcie_get_rootport(uint32_t bdf, uint32_t *rp_bdf);
 uint32_t val_pcie_get_link_exposure(uint32_t bdf, uint32_t *exposed);
 uint8_t val_pcie_parent_is_rootport(uint32_t dsf_bdf, uint32_t *rp_bdf);

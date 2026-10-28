@@ -18,8 +18,11 @@
 #include "include/val.h"
 #include "include/val_exerciser.h"
 #include "include/val_cxl.h"
+#include "include/val_el32.h"
 #include "include/val_pcie.h"
 #include "include/val_smmu.h"
+
+#define VAL_EXERCISER_MAX_CAPTURE_RECORDS 32u
 
 EXERCISER_INFO_TABLE g_exerciser_info_table;
 CXL_EXERCISER_INFO_TABLE g_cxl_exerciser_info_table;
@@ -356,6 +359,265 @@ uint32_t
 val_exerciser_ops_by_bdf(EXERCISER_OPS ops, uint64_t param, uint32_t bdf)
 {
     return pal_exerciser_ops(ops, param, bdf);
+}
+
+/** Start a new exerciser transaction-monitor capture. */
+uint32_t
+val_exerciser_start_transaction_monitor_by_bdf(uint32_t bdf)
+{
+    return (val_exerciser_ops_by_bdf(START_TXN_MONITOR, 0u, bdf) == 0u) ?
+           ACS_STATUS_PASS : ACS_STATUS_SKIP;
+}
+
+/** Stop an exerciser transaction-monitor capture. */
+uint32_t
+val_exerciser_stop_transaction_monitor_by_bdf(uint32_t bdf)
+{
+    return (val_exerciser_ops_by_bdf(STOP_TXN_MONITOR, 0u, bdf) == 0u) ?
+           ACS_STATUS_PASS : ACS_STATUS_ERR;
+}
+
+/** Read and remove one complete entry from the exerciser transaction trace. */
+uint32_t
+val_exerciser_get_transaction_record_by_bdf(
+                                uint32_t bdf,
+                                VAL_EXERCISER_TRANSACTION_RECORD *record)
+{
+    uint64_t attributes;
+    uint64_t address;
+
+    if (record == NULL)
+        return ACS_STATUS_ERR;
+
+    attributes = 0u;
+    address = 0u;
+    if (val_exerciser_get_param_by_bdf(TRANSACTION_RECORD,
+                                       &attributes,
+                                       &address,
+                                       bdf) != 0u)
+        return ACS_STATUS_SKIP;
+
+    record->attributes = (uint32_t)attributes;
+    record->address = address;
+    return ACS_STATUS_PASS;
+}
+
+/** Drain a transaction capture and report a matching address and attributes. */
+uint32_t
+val_exerciser_find_transaction_by_bdf(uint32_t bdf,
+                                      uint64_t address,
+                                      uint32_t required_attributes,
+                                      uint32_t *observed)
+{
+    VAL_EXERCISER_TRANSACTION_RECORD record;
+
+    if (observed == NULL)
+        return ACS_STATUS_ERR;
+
+    *observed = 0u;
+    for (uint32_t index = 0u;
+         index < VAL_EXERCISER_MAX_CAPTURE_RECORDS;
+         ++index)
+    {
+        if (val_exerciser_get_transaction_record_by_bdf(bdf, &record)
+            != ACS_STATUS_PASS)
+            break;
+
+        val_print(ACS_PRINT_DEBUG,
+                  " Exerciser trace attributes 0x%x",
+                  (uint64_t)record.attributes);
+        val_print(ACS_PRINT_DEBUG,
+                  " Exerciser trace address 0x%llx",
+                  record.address);
+
+        if ((record.address == address) &&
+            ((record.attributes & required_attributes) == required_attributes))
+            *observed = 1u;
+    }
+
+    return ACS_STATUS_PASS;
+}
+
+/**
+  @brief Issue an ATS translation request and return the complete response.
+
+  @param bdf      Exerciser BDF
+  @param iova     Address to translate
+  @param length   Requested access length
+  @param request_attributes  ATS T/XT request attributes
+  @param result   Translation completion information
+
+  @return ACS_STATUS_PASS when the request was issued and its response read,
+          or ACS_STATUS_ERR when the exerciser interface could not be used.
+**/
+uint32_t
+val_exerciser_ats_translate_by_bdf(uint32_t bdf,
+                                   uint64_t iova,
+                                   uint32_t length,
+                                   uint32_t request_attributes,
+                                   VAL_ATS_TRANSLATION_RESULT *result)
+{
+    uint64_t response_attributes;
+    uint32_t request_status;
+
+    if ((iova == 0u) || (length == 0u) || (result == NULL) ||
+        ((request_attributes & ~VAL_ATS_REQUEST_ATTR_MASK) != 0u))
+        return ACS_STATUS_ERR;
+
+    val_memory_set(result, sizeof(*result), 0);
+
+    if (val_exerciser_set_param_by_bdf(EXERCISER_ATS_REQUEST_ATTRIBUTES,
+                                       request_attributes,
+                                       0u,
+                                       bdf) != 0u)
+        return ACS_STATUS_ERR;
+
+    if (val_exerciser_set_param_by_bdf(DMA_ATTRIBUTES,
+                                       iova,
+                                       length,
+                                       bdf) != 0u)
+        return ACS_STATUS_ERR;
+
+    (void)val_exerciser_ops_by_bdf(ATS_INV_CACHE, 0u, bdf);
+
+    request_status = val_exerciser_ops_by_bdf(ATS_TXN_REQ, iova, bdf);
+
+    response_attributes = 0u;
+    if (val_exerciser_get_param_by_bdf(ATS_RES_ATTRIBUTES,
+                                       &result->translated_pa,
+                                       &response_attributes,
+                                       bdf) != 0u)
+        return ACS_STATUS_ERR;
+
+    result->response_attributes = (uint32_t)response_attributes;
+    result->completion_success = (request_status == 0u) ? 1u : 0u;
+    result->te =
+        ((result->response_attributes & VAL_ATS_TE_MASK) != 0u) ? 1u : 0u;
+
+    return ACS_STATUS_PASS;
+}
+
+/**
+  @brief Perform DMA using a translation cached by an earlier ATS request.
+
+  The DMA address remains the original IOVA. The exerciser obtains the output
+  address and permissions from its ATC and emits a PCIe Translated request.
+
+  @param bdf        Exerciser BDF
+  @param iova       Original address used for the ATS request
+  @param length     DMA transfer length
+  @param direction  Exerciser DMA direction
+
+  @return ACS_STATUS_PASS when DMA completes, ACS_STATUS_FAIL when the
+          transaction is rejected, or ACS_STATUS_ERR for invalid input/setup.
+**/
+uint32_t
+val_exerciser_dma_with_atc_by_bdf(uint32_t bdf,
+                                  uint64_t iova,
+                                  uint32_t length,
+                                  EXERCISER_DMA_ATTR direction)
+{
+    uint32_t dma_status;
+
+    if ((iova == 0u) || (length == 0u))
+        return ACS_STATUS_ERR;
+
+    if ((val_exerciser_set_param_by_bdf(DMA_ATTRIBUTES,
+                                        iova,
+                                        length,
+                                        bdf) != 0u) ||
+        (val_exerciser_set_param_by_bdf(CFG_TXN_ATTRIBUTES,
+                                        TXN_ADDR_TYPE,
+                                        AT_UNTRANSLATED,
+                                        bdf) != 0u) ||
+        (val_exerciser_set_param_by_bdf(CFG_TXN_ATTRIBUTES,
+                                        TXN_ATC_ENTRY,
+                                        ATC_ENTRY_ENABLE,
+                                        bdf) != 0u))
+        return ACS_STATUS_ERR;
+
+    dma_status = val_exerciser_ops_by_bdf(START_DMA, direction, bdf);
+    return (dma_status == 0u) ? ACS_STATUS_PASS : ACS_STATUS_FAIL;
+}
+
+uint32_t
+val_cxl_exerciser_execute_cmd(uint32_t bdf, uint32_t opcode,
+                              uint64_t address, uint64_t data,
+                              uint64_t *readback)
+{
+    if (val_exerciser_set_param_by_bdf(EXERCISER_CXL_CMD_OP,
+                                       opcode,
+                                       0u,
+                                       bdf) != 0u)
+        return ACS_STATUS_FAIL;
+
+    if (val_exerciser_set_param_by_bdf(EXERCISER_CXL_CMD_ADDR,
+                                       address,
+                                       0u,
+                                       bdf) != 0u)
+        return ACS_STATUS_FAIL;
+
+    if ((opcode != CXL_CMD_OP_BACKDOOR_READ64) &&
+        (val_exerciser_set_param_by_bdf(EXERCISER_CXL_CMD_DATA0,
+                                        data,
+                                        0u,
+                                        bdf) != 0u))
+        return ACS_STATUS_FAIL;
+
+    if (val_exerciser_ops_by_bdf(CXL_CMD_START, 0u, bdf) != 0u)
+        return ACS_STATUS_FAIL;
+
+    if ((readback != NULL) &&
+        (val_exerciser_get_param_by_bdf(EXERCISER_CXL_CMD_DATA0,
+                                        readback,
+                                        NULL,
+                                        bdf) != 0u))
+        return ACS_STATUS_FAIL;
+
+    return ACS_STATUS_PASS;
+}
+
+/**
+  @brief  Enable or disable an exerciser override for snoop-response MECID.
+
+  This is an implementation-defined coherent exerciser stimulus. It permits a
+  host test to generate both permitted and unpermitted response MECIDs without
+  exposing any private host-port decision state.
+**/
+uint32_t
+val_cxl_exerciser_set_snoop_response_mecid(uint32_t bdf,
+                                            uint16_t mecid,
+                                            uint32_t enable)
+{
+    uint64_t control;
+
+    control = (enable != 0u) ?
+              (CXL_SNOOP_RESPONSE_MECID_VALID | (uint64_t)mecid) : 0u;
+    return val_cxl_exerciser_execute_cmd(bdf,
+                                         CXL_CMD_OP_SNOOP_RESPONSE_MECID,
+                                         0u,
+                                         control,
+                                         NULL);
+}
+
+uint32_t
+val_cxl_exerciser_backdoor_read64(uint32_t bdf, uint64_t dpa, uint64_t *readback)
+{
+    return val_cxl_exerciser_execute_cmd(bdf,
+                                         CXL_CMD_OP_BACKDOOR_READ64,
+                                         dpa,
+                                         0u,
+                                         readback);
+}
+
+uint32_t
+val_cxl_exerciser_backdoor_write64(uint32_t bdf, uint64_t dpa, uint64_t data)
+{
+    return val_cxl_exerciser_execute_cmd(bdf,
+                                         CXL_CMD_OP_BACKDOOR_WRITE64,
+                                         dpa,
+                                         data,
+                                         NULL);
 }
 
 /**

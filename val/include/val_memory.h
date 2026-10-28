@@ -41,6 +41,45 @@ void *val_memory_alloc_pages(uint32_t num_pages);
 void val_memory_free_pages(void *page_base, uint32_t num_pages);
 void *val_aligned_alloc(uint32_t alignment, uint32_t size);
 void val_memory_free_aligned(void *addr);
+void val_memory_clear_el3_access_state(void);
+uint32_t val_memory_read_el3(uint64_t address, uint32_t *value);
+uint32_t val_memory_write_el3(uint64_t address, uint32_t value);
+uint32_t val_memory_map_realm_cacheable_alias(uint64_t phys,
+                                               volatile uint64_t **virt_out);
+uint32_t val_memory_map_realm_noncacheable_alias(uint64_t phys,
+                                                  volatile uint64_t **virt_out);
+uint32_t val_memory_map_device_alias(uint64_t phys, uint32_t pas,
+                                     volatile uint64_t **virt_out);
+uint32_t val_memory_read64_el3_protected(volatile uint64_t *address,
+                                         uint64_t *value_out,
+                                         uint32_t *fault_seen_out);
+uint32_t val_memory_read64_el3_protected_with_esr(volatile uint64_t *address,
+                                                  uint64_t *value_out,
+                                                  uint32_t *fault_seen_out,
+                                                  uint64_t *esr_out);
+uint32_t val_memory_map_el3_data(uint64_t va, uint32_t size, uint32_t pas);
+uint32_t val_memory_map_dma_buffer_el3(void *buffer_va,
+                                       uint64_t buffer_pa,
+                                       uint32_t length,
+                                       uint32_t pas);
+uint32_t val_memory_map_dma_buffers_el3(void *buffer_va,
+                                         uint64_t buffer_pa,
+                                         uint32_t length,
+                                         uint32_t pas);
+uint32_t val_memory_prepare_dma_buffers_el3(void *buffer_src,
+                                            void *buffer_dst,
+                                            uint32_t length,
+                                            uint32_t src_pattern,
+                                            uint32_t dst_pattern);
+uint32_t val_memory_cache_clean_invalidate_range_el3(uint64_t address,
+                                                      uint32_t length);
+uint32_t val_memory_cache_invalidate_range_el3(uint64_t address,
+                                                uint32_t length);
+uint32_t val_memory_cache_clean_invalidate_pe_el3(void);
+uint32_t val_memory_has_byte_pattern_el3(uint64_t buffer_va,
+                                         uint32_t length,
+                                         uint32_t byte_pattern);
+uint32_t val_memory_compare_el3(uint64_t src_va, uint64_t dst_va, uint32_t size);
 uint32_t val_memory_compare_src_el3(uint32_t *src, uint32_t *dest, uint32_t size);
 uint32_t val_strnlen(const char8_t *str);
 // NSEL2 MMU mem map APIs

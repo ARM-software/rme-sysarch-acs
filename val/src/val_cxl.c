@@ -25,11 +25,13 @@
 #include "include/val_el32.h"
 #include "include/val_memory.h"
 #include "include/val_iovirt.h"
+#include "include/val_pcie.h"
 
 #define VAL_CXL_TSP_MAX_IB_ENTRIES 8u
 #define CXL_HDM_ALIGNMENT_SHIFT     28u
 #define CXL_HDM_ALIGNMENT_MASK      ((1ULL << CXL_HDM_ALIGNMENT_SHIFT) - 1ULL)
 #define CXL_HDM_ERROR_BIT           (1u << 11)
+#define CXL_HDM_TARGET_PORT_ID_MASK 0xFFu
 #define CXL_HDM_LOCK_ON_COMMIT_BIT  (1u << 8)
 #define CXL_HDM_CONTROL_WORD        4u
 
@@ -331,7 +333,6 @@ val_cxl_get_or_create_component(uint32_t bdf)
   entry->device_reg_length    = 0;
   entry->hdm_decoder_count    = 0;
   entry->chi_c2c_supported    = 0;
-  entry->chi_c2c_dvsec_offset = 0;
 
   return entry;
 }
@@ -640,31 +641,47 @@ val_cxl_ide_disable_link(uint32_t root_index,
     return stop_status;
 
   status = val_cxl_ide_get_status(endpoint_index, &endpoint_ide_status);
-  if (status != ACS_STATUS_PASS)
-    return status;
-
-  rx_state = endpoint_ide_status & CXL_IDE_STATUS_FIELD_MASK;
-  tx_state = (endpoint_ide_status >> CXL_IDE_STATUS_TX_SHIFT) & CXL_IDE_STATUS_FIELD_MASK;
-  if ((rx_state != CXL_IDE_STATE_INSECURE) || (tx_state != CXL_IDE_STATE_INSECURE))
+  if (status == ACS_STATUS_SKIP)
   {
-    val_print(ACS_PRINT_ERR, " CXL: EP IDE status after stop 0x%x",
-              (uint64_t)endpoint_ide_status);
-    val_print(ACS_PRINT_ERR, " CXL: EP BDF 0x%x", (uint64_t)endpoint->bdf);
-    return ACS_STATUS_FAIL;
+    val_print(ACS_PRINT_DEBUG,
+              " Endpoint lacks IDE capability - skipping post-stop status check (BDF 0x%x)",
+              (uint64_t)endpoint->bdf);
+  }
+  else if (status != ACS_STATUS_PASS)
+    return status;
+  else
+  {
+    rx_state = endpoint_ide_status & CXL_IDE_STATUS_FIELD_MASK;
+    tx_state = (endpoint_ide_status >> CXL_IDE_STATUS_TX_SHIFT) & CXL_IDE_STATUS_FIELD_MASK;
+    if ((rx_state != CXL_IDE_STATE_INSECURE) || (tx_state != CXL_IDE_STATE_INSECURE))
+    {
+      val_print(ACS_PRINT_ERR, " CXL: EP IDE status after stop 0x%x",
+                (uint64_t)endpoint_ide_status);
+      val_print(ACS_PRINT_ERR, " CXL: EP BDF 0x%x", (uint64_t)endpoint->bdf);
+      return ACS_STATUS_FAIL;
+    }
   }
 
   status = val_cxl_ide_get_status(root_index, &root_ide_status);
-  if (status != ACS_STATUS_PASS)
-    return status;
-
-  rx_state = root_ide_status & CXL_IDE_STATUS_FIELD_MASK;
-  tx_state = (root_ide_status >> CXL_IDE_STATUS_TX_SHIFT) & CXL_IDE_STATUS_FIELD_MASK;
-  if ((rx_state != CXL_IDE_STATE_INSECURE) || (tx_state != CXL_IDE_STATE_INSECURE))
+  if (status == ACS_STATUS_SKIP)
   {
-    val_print(ACS_PRINT_ERR, " CXL: RP IDE status after stop 0x%x",
-              (uint64_t)root_ide_status);
-    val_print(ACS_PRINT_ERR, " CXL: RP BDF 0x%x", (uint64_t)root_port->bdf);
-    return ACS_STATUS_FAIL;
+    val_print(ACS_PRINT_DEBUG,
+              " Root port lacks IDE capability - skipping post-stop status check (BDF 0x%x)",
+              (uint64_t)root_port->bdf);
+  }
+  else if (status != ACS_STATUS_PASS)
+    return status;
+  else
+  {
+    rx_state = root_ide_status & CXL_IDE_STATUS_FIELD_MASK;
+    tx_state = (root_ide_status >> CXL_IDE_STATUS_TX_SHIFT) & CXL_IDE_STATUS_FIELD_MASK;
+    if ((rx_state != CXL_IDE_STATE_INSECURE) || (tx_state != CXL_IDE_STATE_INSECURE))
+    {
+      val_print(ACS_PRINT_ERR, " CXL: RP IDE status after stop 0x%x",
+                (uint64_t)root_ide_status);
+      val_print(ACS_PRINT_ERR, " CXL: RP BDF 0x%x", (uint64_t)root_port->bdf);
+      return ACS_STATUS_FAIL;
+    }
   }
 
   return ACS_STATUS_PASS;
@@ -690,6 +707,36 @@ CXL_COMPONENT_TABLE *
 val_cxl_component_table_ptr(void)
 {
   return g_cxl_component_table;
+}
+
+/**
+  @brief   Find a CXL component table index by BDF.
+
+  @param  bdf        Segment/Bus/Device/Function identifier.
+  @param  index_out  Output pointer for the matching component index.
+
+  @return ACS_STATUS_PASS if found, ACS_STATUS_SKIP if absent, ACS_STATUS_ERR
+          for invalid inputs or missing discovery data.
+**/
+uint32_t
+val_cxl_find_component_index_by_bdf(uint32_t bdf, uint32_t *index_out)
+{
+  if (index_out == NULL)
+    return ACS_STATUS_ERR;
+
+  *index_out = CXL_COMPONENT_INVALID_INDEX;
+
+  if (g_cxl_component_table == NULL)
+    return ACS_STATUS_ERR;
+
+  for (uint32_t idx = 0u; idx < g_cxl_component_table->num_entries; ++idx) {
+    if (g_cxl_component_table->component[idx].bdf == bdf) {
+      *index_out = idx;
+      return ACS_STATUS_PASS;
+    }
+  }
+
+  return ACS_STATUS_SKIP;
 }
 
 /**
@@ -738,8 +785,6 @@ val_cxl_get_component_info(CXL_COMPONENT_INFO_e type, uint32_t index)
     return entry->hdm_decoder_count;
   case CXL_COMPONENT_INFO_CHI_C2C_SUPPORTED:
     return entry->chi_c2c_supported;
-  case CXL_COMPONENT_INFO_CHI_C2C_DVSEC_OFFSET:
-    return entry->chi_c2c_dvsec_offset;
   default:
     val_print(ACS_PRINT_ERR, " GET_CXL_COMPONENT_INFO: Unsupported type %u", type);
     break;
@@ -2086,7 +2131,10 @@ static uint32_t
 val_cxl_program_decoder_common(uint64_t cap_base,
                                uint32_t decoder_index,
                                uint64_t base,
-                               uint64_t size)
+                               uint64_t size,
+                               uint32_t target_valid,
+                               uint32_t target_low,
+                               uint32_t target_high)
 {
   uint32_t cap_reg;
   uint32_t dec_count_encoded;
@@ -2099,9 +2147,13 @@ val_cxl_program_decoder_common(uint64_t cap_base,
   uint64_t base_high_addr;
   uint64_t size_low_addr;
   uint64_t size_high_addr;
+  uint64_t target_low_addr;
+  uint64_t target_high_addr;
   uint64_t ctrl_addr;
   uint32_t ctrl;
   uint32_t attempt;
+  uint32_t readback_low;
+  uint32_t readback_high;
 
   if ((cap_base == 0) || (size == 0)) {
     val_print(ACS_PRINT_ERR, " CXL_HDM: invalid parameters for decoder prog", 0);
@@ -2141,6 +2193,8 @@ val_cxl_program_decoder_common(uint64_t cap_base,
   base_high_addr = cap_base + CXL_HDM_DECODER_BASE_HIGH(decoder_index);
   size_low_addr = cap_base + CXL_HDM_DECODER_SIZE_LOW(decoder_index);
   size_high_addr = cap_base + CXL_HDM_DECODER_SIZE_HIGH(decoder_index);
+  target_low_addr = cap_base + CXL_HDM_DECODER_TARGET_LOW(decoder_index);
+  target_high_addr = cap_base + CXL_HDM_DECODER_TARGET_HIGH(decoder_index);
   ctrl_addr = cap_base + CXL_HDM_DECODER_CTRL(decoder_index);
 
   ctrl = val_mmio_read(ctrl_addr);
@@ -2157,7 +2211,8 @@ val_cxl_program_decoder_common(uint64_t cap_base,
 
     ctrl = val_mmio_read(ctrl_addr);
     if ((ctrl & CXL_HDM_COMMITTED_BIT) != 0u) {
-      val_print(ACS_PRINT_ERR,
+      /* Protected decoders may reject this write; the caller determines the test result. */
+      val_print(ACS_PRINT_DEBUG,
                 " CXL_HDM: commit bit stuck for decoder %u",
                 decoder_index);
       return ACS_STATUS_ERR;
@@ -2168,6 +2223,26 @@ val_cxl_program_decoder_common(uint64_t cap_base,
   val_mmio_write(base_high_addr, base_high);
   val_mmio_write(size_low_addr, size_low);
   val_mmio_write(size_high_addr, size_high);
+
+  if (target_valid != 0u) {
+    val_mmio_write(target_low_addr, target_low);
+    val_mmio_write(target_high_addr, target_high);
+
+    readback_low = val_mmio_read(target_low_addr);
+    readback_high = val_mmio_read(target_high_addr);
+    if ((readback_low != target_low) || (readback_high != target_high)) {
+      val_print(ACS_PRINT_ERR,
+                " CXL_HDM: target list readback mismatch for decoder %u",
+                decoder_index);
+      val_print(ACS_PRINT_ERR,
+                " CXL_HDM: target low readback 0x%x",
+                readback_low);
+      val_print(ACS_PRINT_ERR,
+                " CXL_HDM: target high readback 0x%x",
+                readback_high);
+      return ACS_STATUS_ERR;
+    }
+  }
 
   ctrl |= CXL_HDM_COMMIT_BIT;
   val_mmio_write(ctrl_addr, ctrl);
@@ -2317,6 +2392,7 @@ val_cxl_find_component_register_base(uint32_t bdf, uint64_t *component_base)
 
     if (val_pcie_read_cfg(bdf, entry_offset + CXL_RL_ENTRY_DW0_OFF, &dw0))
       continue;
+
     if (val_pcie_read_cfg(bdf, entry_offset + CXL_RL_ENTRY_DW1_OFF, &dw1))
       continue;
 
@@ -2331,6 +2407,7 @@ val_cxl_find_component_register_base(uint32_t bdf, uint64_t *component_base)
       *component_base = bar_pa + reg_off + CXL_CACHEMEM_PRIMARY_OFFSET;
       return ACS_STATUS_PASS;
     }
+
   }
 
   return ACS_STATUS_SKIP;
@@ -2557,7 +2634,7 @@ static void val_cxl_parse_register_locator(uint32_t bdf,
     uint32_t dvsec_hdr1;
     uint16_t dvsec_vendor;
     uint32_t dvsec_rev, dvsec_len, num_entries, ent_off_cfg, i;
-    uint32_t reg0, dw1;
+    uint32_t dw0, dw1;
     uint16_t block_id;
     uint8_t  bir;
     uint8_t  bar_num;
@@ -2599,17 +2676,18 @@ static void val_cxl_parse_register_locator(uint32_t bdf,
 
     ent_off_cfg = ecap_off + CXL_RL_HDR_OFFSET_ENTRIES;
     for (i = 0; i < num_entries; i++, ent_off_cfg += CXL_RL_ENTRY_SIZE) {
-        if (val_pcie_read_cfg(bdf, ent_off_cfg + CXL_RL_ENTRY_DW0_OFF, &reg0) ||
+        if (val_pcie_read_cfg(bdf, ent_off_cfg + CXL_RL_ENTRY_DW0_OFF, &dw0) ||
             val_pcie_read_cfg(bdf, ent_off_cfg + CXL_RL_ENTRY_DW1_OFF, &dw1)) {
             val_print(ACS_PRINT_INFO, " ERROR in CXL Summary :: RL[%ld]: entry read failed",
                         (uint64_t)i);
             continue;
         }
 
-        bir      = (uint8_t)((reg0 >> CXL_RL_ENTRY_BIR_SHIFT)    & CXL_RL_ENTRY_BIR_MASK);
-        block_id = (uint8_t)((reg0 >> CXL_RL_ENTRY_BLOCKID_SHIFT) & CXL_RL_ENTRY_BLOCKID_MASK);
+        /* The BAR-relative offset spans DW0[31:16] and DW1[31:0]. */
+        bir      = (uint8_t)((dw0 >> CXL_RL_ENTRY_BIR_SHIFT)    & CXL_RL_ENTRY_BIR_MASK);
+        block_id = (uint8_t)((dw0 >> CXL_RL_ENTRY_BLOCKID_SHIFT) & CXL_RL_ENTRY_BLOCKID_MASK);
         bar_num = (uint8_t)CXL_RL_BAR_NUM(bir);
-        reg_off = val_cxl_register_locator_offset(reg0, dw1);
+        reg_off = val_cxl_register_locator_offset(dw0, dw1);
         {
             bar_st = val_cxl_get_mmio_bar_host_pa(bdf, bar_num, &bar_base, &bar_is64);
             if (bar_st != PCIE_SUCCESS) {
@@ -2634,10 +2712,11 @@ static void val_cxl_parse_register_locator(uint32_t bdf,
                 }
                 continue;
             }
+
         }
         block_pa = bar_base + reg_off;
-        val_print(ACS_PRINT_INFO, "  \tRL reg0=0x%lx ", (uint64_t)reg0);
-        val_print(ACS_PRINT_INFO, "  \tRL dw1=0x%lx", (uint64_t)dw1);
+        val_print(ACS_PRINT_INFO, "  \tRL dw0=0x%lx ", (uint64_t)dw0);
+        val_print(ACS_PRINT_INFO, "  \tdw1=0x%lx", (uint64_t)dw1);
         val_print(ACS_PRINT_INFO, "  \tBlockID=0x%x ", (uint64_t)block_id);
         val_print(ACS_PRINT_INFO, "  \tBIR=%d", (uint64_t)CXL_RL_BAR_NUM(bir));
 
@@ -2765,6 +2844,110 @@ val_cxl_enable_mem(uint32_t bdf)
   return ACS_STATUS_PASS;
 }
 
+static uint32_t
+val_cxl_get_cache_control(uint32_t bdf,
+                          uint32_t *dvsec_offset_out,
+                          uint32_t *control_out)
+{
+  uint32_t dvsec_offset;
+  uint32_t hdr2;
+  uint32_t status;
+  uint16_t cxl_cap;
+
+  if ((dvsec_offset_out == NULL) || (control_out == NULL))
+    return ACS_STATUS_ERR;
+
+  status = val_pcie_find_vendor_dvsec(bdf,
+                                      CXL_DVSEC_VENDOR_ID,
+                                      CXL_DVSEC_ID_DEVICE,
+                                      &dvsec_offset);
+  if (status != ACS_STATUS_PASS) {
+    val_print(ACS_PRINT_ERR, " CXL: CXL Device DVSEC missing", 0);
+    return status;
+  }
+
+  if (val_pcie_read_cfg(bdf, dvsec_offset + CXL_DVSEC_HDR2_OFFSET, &hdr2))
+    return ACS_STATUS_ERR;
+
+  cxl_cap = (uint16_t)((hdr2 >> CXL_DVSEC_CXL_CAPABILITY_SHIFT) &
+                       CXL_DVSEC_CXL_CAPABILITY_MASK);
+  if ((cxl_cap & CXL_DVSEC_CXL_CAP_CACHE_CAPABLE) == 0u)
+    return ACS_STATUS_SKIP;
+
+  if (val_pcie_read_cfg(bdf,
+                        dvsec_offset + CXL_DVSEC_CTRL_OFFSET,
+                        control_out))
+    return ACS_STATUS_ERR;
+
+  *dvsec_offset_out = dvsec_offset;
+  return ACS_STATUS_PASS;
+}
+
+/**
+  @brief  Read the CXL.cache enable state from the CXL Device DVSEC.
+**/
+uint32_t
+val_cxl_get_cache_enable(uint32_t bdf, uint32_t *enable_out)
+{
+  uint32_t control;
+  uint32_t dvsec_offset;
+  uint32_t status;
+
+  if (enable_out == NULL)
+    return ACS_STATUS_ERR;
+
+  status = val_cxl_get_cache_control(bdf, &dvsec_offset, &control);
+  if (status != ACS_STATUS_PASS)
+    return status;
+
+  *enable_out = ((control & CXL_DVSEC_CACHE_ENABLE) != 0u) ? 1u : 0u;
+  return ACS_STATUS_PASS;
+}
+
+/**
+  @brief  Set or clear CXL.cache enable and verify the resulting state.
+**/
+uint32_t
+val_cxl_set_cache_enable(uint32_t bdf, uint32_t enable)
+{
+  uint32_t control;
+  uint32_t dvsec_offset;
+  uint32_t expected;
+  uint32_t status;
+
+  status = val_cxl_get_cache_control(bdf, &dvsec_offset, &control);
+  if (status != ACS_STATUS_PASS)
+    return status;
+
+  expected = (enable != 0u) ? CXL_DVSEC_CACHE_ENABLE : 0u;
+  control = (control & ~CXL_DVSEC_CACHE_ENABLE) | expected;
+  val_pcie_write_cfg(bdf, dvsec_offset + CXL_DVSEC_CTRL_OFFSET, control);
+
+  if (val_pcie_read_cfg(bdf,
+                        dvsec_offset + CXL_DVSEC_CTRL_OFFSET,
+                        &control))
+    return ACS_STATUS_ERR;
+
+  return ((control & CXL_DVSEC_CACHE_ENABLE) == expected) ?
+         ACS_STATUS_PASS : ACS_STATUS_FAIL;
+}
+
+/**
+  @brief   Enable CXL.cache in the CXL Device DVSEC control register.
+
+  @param  bdf  PCIe identifier of the device to program.
+
+  @return ACS_STATUS_PASS when enabled or already set.
+          ACS_STATUS_SKIP when the device does not advertise CXL.cache.
+          ACS_STATUS_FAIL when enable is not set after programming.
+          ACS_STATUS_ERR on config space access failures.
+**/
+uint32_t
+val_cxl_enable_cache(uint32_t bdf)
+{
+  return val_cxl_set_cache_enable(bdf, 1u);
+}
+
 /**
   @brief   Best-effort reset to clear CXL TSP configuration lock state.
 
@@ -2865,6 +3048,7 @@ val_cxl_component_add(uint32_t bdf)
   uint32_t next_cap_offset;
   uint32_t prev_off;
   uint32_t hdr0;
+  uint32_t vendor_id;
   uint32_t dp_type;
   uint32_t found = 0;
 
@@ -2905,15 +3089,17 @@ val_cxl_component_add(uint32_t bdf)
     if (val_pcie_read_cfg(bdf, next_cap_offset + CXL_DVSEC_HDR1_OFFSET, &hdr1))
       return ACS_STATUS_ERR;
 
-    if ((hdr1 & CXL_DVSEC_HDR1_VENDOR_ID_MASK) != CXL_DVSEC_VENDOR_ID) {
+    if (val_pcie_read_cfg(bdf, next_cap_offset + CXL_DVSEC_HDR2_OFFSET, &hdr2))
+      return ACS_STATUS_ERR;
+
+    vendor_id = (hdr1 & CXL_DVSEC_HDR1_VENDOR_ID_MASK);
+    dvsec_id = (uint16_t)(hdr2 & CXL_DVSEC_HDR2_ID_MASK);
+
+    if (vendor_id != CXL_DVSEC_VENDOR_ID) {
       next_cap_offset = next_ptr;
       continue;
     }
 
-    if (val_pcie_read_cfg(bdf, next_cap_offset + CXL_DVSEC_HDR2_OFFSET, &hdr2))
-      return ACS_STATUS_ERR;
-
-    dvsec_id = (uint16_t)(hdr2 & CXL_DVSEC_HDR2_ID_MASK);
     found = 1;
 
     if (val_cxl_get_or_create_component(bdf) == NULL)
@@ -2940,11 +3126,16 @@ val_cxl_component_add(uint32_t bdf)
   if (!found)
     return ACS_STATUS_SKIP;
 
+  /*
+   * CHI-C2C classification is platform knowledge.  Do not infer it by parsing
+   * unpublished implementation-specific DVSECs here; rely on the PAL override.
+   */
   if (pal_cxl_is_chi_c2c_supported(bdf) != 0u) {
     CXL_COMPONENT_ENTRY *component = val_cxl_get_or_create_component(bdf);
     if (component == NULL)
       return ACS_STATUS_ERR;
 
+    /* Preserve the PAL-provided CHI-C2C classification on the component entry. */
     component->chi_c2c_supported = 1u;
     val_cxl_assign_component_role(component, dp_type);
   }
@@ -3217,6 +3408,53 @@ val_cxl_get_decoder(uint32_t index,
 }
 
 /**
+  @brief  Fetch a host HDM decoder target-list entry.
+
+  @param  host_index     Host bridge index within the info table.
+  @param  decoder_index  Decoder slot to query.
+  @param  target_low     Pointer to receive target list low register.
+  @param  target_high    Pointer to receive target list high register.
+
+  @return 0 on success, non-zero on failure.
+**/
+uint32_t
+val_cxl_get_host_decoder_target(uint32_t host_index,
+                                uint32_t decoder_index,
+                                uint32_t *target_low,
+                                uint32_t *target_high)
+{
+  uint64_t cap_base;
+  CXL_INFO_BLOCK *entry;
+  uint32_t status;
+
+  if (target_low != NULL)
+    *target_low = 0u;
+  if (target_high != NULL)
+    *target_high = 0u;
+
+  if ((g_cxl_info_table == NULL) || (target_low == NULL) || (target_high == NULL))
+    return 1;
+
+  if (host_index >= g_cxl_info_table->num_entries)
+    return 1;
+
+  entry = &g_cxl_info_table->device[host_index];
+  if ((entry->component_reg_base == 0) ||
+      (decoder_index >= entry->hdm_decoder_count))
+    return 1;
+
+  status = val_cxl_find_capability(entry->component_reg_base,
+                                   CXL_CAPID_HDM_DECODER,
+                                   &cap_base);
+  if (status != ACS_STATUS_PASS)
+    return 1;
+
+  *target_low = val_mmio_read(cap_base + CXL_HDM_DECODER_TARGET_LOW(decoder_index));
+  *target_high = val_mmio_read(cap_base + CXL_HDM_DECODER_TARGET_HIGH(decoder_index));
+  return 0;
+}
+
+/**
   @brief  Fetch a component HDM decoder range.
 
   @param  component_index  Index within the CXL component table.
@@ -3269,6 +3507,171 @@ val_cxl_get_component_decoder(uint32_t component_index,
   *base = val_cxl_decode_hdm_value(base_low, base_high);
   *length = val_cxl_decode_hdm_value(size_low, size_high);
   return 0;
+}
+
+static uint32_t
+val_cxl_hdm_interleave_ways(uint32_t iw, uint32_t *ways)
+{
+  if (ways == NULL)
+    return ACS_STATUS_ERR;
+
+  if (iw <= 4u) {
+    *ways = 1u << iw;
+    return ACS_STATUS_PASS;
+  }
+
+  if ((iw >= 8u) && (iw <= 10u)) {
+    *ways = 3u << (iw - 8u);
+    return ACS_STATUS_PASS;
+  }
+
+  return ACS_STATUS_ERR;
+}
+
+static uint32_t
+val_cxl_hdm_remove_interleave(uint64_t hpa_offset,
+                              uint32_t ig,
+                              uint32_t iw,
+                              uint64_t *dpa_offset)
+{
+  uint32_t low_bits;
+  uint64_t low_mask;
+  uint64_t upper;
+
+  if ((dpa_offset == NULL) || (ig > 6u))
+    return ACS_STATUS_ERR;
+
+  low_bits = ig + 8u;
+  low_mask = (1ULL << low_bits) - 1ULL;
+
+  if (iw <= 4u) {
+    *dpa_offset = (hpa_offset & low_mask) |
+                  ((hpa_offset >> iw) & ~low_mask);
+    return ACS_STATUS_PASS;
+  }
+
+  if ((iw >= 8u) && (iw <= 10u)) {
+    upper = hpa_offset >> (low_bits + (iw - 8u));
+    upper /= 3u;
+    *dpa_offset = (hpa_offset & low_mask) | (upper << low_bits);
+    return ACS_STATUS_PASS;
+  }
+
+  return ACS_STATUS_ERR;
+}
+
+/**
+  @brief  Translate an HPA through a CXL.mem endpoint HDM decoder to DPA.
+
+  The endpoint decoder removes its interleave selection bits and accumulates
+  the DPA consumed by earlier committed decoders, including each decoder's
+  DPA Skip. This helper is intended for direct device-media test operations;
+  normal host accesses must continue to use the original HPA.
+
+  @param  component_index  Endpoint index in the CXL component table.
+  @param  hpa              Host physical address covered by an endpoint decoder.
+  @param  dpa              Receives the corresponding device physical address.
+
+  @return ACS_STATUS_PASS on success, ACS_STATUS_FAIL when no active decoder
+          claims the HPA, or ACS_STATUS_ERR for malformed decoder programming.
+**/
+uint32_t
+val_cxl_hpa_to_dpa(uint32_t component_index,
+                   uint64_t hpa,
+                   uint64_t *dpa)
+{
+  const CXL_COMPONENT_ENTRY *component;
+  uint64_t cap_base;
+  uint64_t dpa_base;
+  uint32_t decoder_index;
+  uint32_t status;
+
+  if (dpa == NULL)
+    return ACS_STATUS_ERR;
+
+  *dpa = 0u;
+  component = val_cxl_get_component_entry(component_index);
+  if ((component == NULL) ||
+      (component->role != CXL_COMPONENT_ROLE_ENDPOINT) ||
+      (component->component_reg_base == 0u) ||
+      (component->hdm_decoder_count == 0u))
+    return ACS_STATUS_ERR;
+
+  status = val_cxl_find_capability(component->component_reg_base,
+                                   CXL_CAPID_HDM_DECODER,
+                                   &cap_base);
+  if (status != ACS_STATUS_PASS)
+    return status;
+
+  dpa_base = 0u;
+  for (decoder_index = 0u;
+       decoder_index < component->hdm_decoder_count;
+       ++decoder_index) {
+    uint32_t base_low;
+    uint32_t base_high;
+    uint32_t size_low;
+    uint32_t size_high;
+    uint32_t skip_low;
+    uint32_t skip_high;
+    uint32_t ctrl;
+    uint32_t ig;
+    uint32_t iw;
+    uint32_t ways;
+    uint64_t base;
+    uint64_t size;
+    uint64_t skip;
+    uint64_t decoded_length;
+
+    ctrl = val_mmio_read(cap_base + CXL_HDM_DECODER_CTRL(decoder_index));
+    if ((ctrl & CXL_HDM_COMMITTED_BIT) == 0u)
+      continue;
+
+    base_low = val_mmio_read(cap_base + CXL_HDM_DECODER_BASE_LOW(decoder_index));
+    base_high = val_mmio_read(cap_base + CXL_HDM_DECODER_BASE_HIGH(decoder_index));
+    size_low = val_mmio_read(cap_base + CXL_HDM_DECODER_SIZE_LOW(decoder_index));
+    size_high = val_mmio_read(cap_base + CXL_HDM_DECODER_SIZE_HIGH(decoder_index));
+    skip_low = val_mmio_read(cap_base + CXL_HDM_DECODER_TARGET_LOW(decoder_index));
+    skip_high = val_mmio_read(cap_base + CXL_HDM_DECODER_TARGET_HIGH(decoder_index));
+
+    base = val_cxl_decode_hdm_value(base_low, base_high);
+    size = val_cxl_decode_hdm_value(size_low, size_high);
+    skip = ((uint64_t)skip_high << 32) |
+           ((uint64_t)skip_low & CXL_HDM_DPA_SKIP_LOW_MASK);
+    ig = (ctrl >> CXL_HDM_DECODER_IG_SHIFT) & CXL_HDM_DECODER_IG_MASK;
+    iw = (ctrl >> CXL_HDM_DECODER_IW_SHIFT) & CXL_HDM_DECODER_IW_MASK;
+
+    if ((size == 0u) ||
+        (val_cxl_hdm_interleave_ways(iw, &ways) != ACS_STATUS_PASS) ||
+        ((size % ways) != 0u) ||
+        (dpa_base > (~0ULL - skip)))
+      return ACS_STATUS_ERR;
+
+    dpa_base += skip;
+    decoded_length = size / ways;
+
+    if ((hpa >= base) && ((hpa - base) < size)) {
+      uint64_t dpa_offset;
+
+      if (val_cxl_hdm_remove_interleave(hpa - base,
+                                        ig,
+                                        iw,
+                                        &dpa_offset) != ACS_STATUS_PASS)
+        return ACS_STATUS_ERR;
+
+      if ((dpa_offset >= decoded_length) ||
+          (dpa_base > (~0ULL - dpa_offset)))
+        return ACS_STATUS_ERR;
+
+      *dpa = dpa_base + dpa_offset;
+      return ACS_STATUS_PASS;
+    }
+
+    if (dpa_base > (~0ULL - decoded_length))
+      return ACS_STATUS_ERR;
+    dpa_base += decoded_length;
+  }
+
+  return ACS_STATUS_FAIL;
 }
 
 /**
@@ -3501,7 +3904,10 @@ val_cxl_program_saved_decoder(CXL_DECODER_STATE *saved, uint64_t base, uint64_t 
     return ACS_STATUS_ERR;
   if (val_cxl_disable_decoder(saved) != ACS_STATUS_PASS)
     return ACS_STATUS_ERR;
-  return val_cxl_program_decoder_common(saved->cap_base, saved->decoder_index, base, size);
+
+  /* Preserve the target registers configured during decoder setup. */
+  return val_cxl_program_decoder_common(saved->cap_base, saved->decoder_index,
+                                         base, size, 0u, 0u, 0u);
 }
 
 /* Attempt both restores even when one fails. */
@@ -3564,7 +3970,13 @@ val_cxl_program_host_decoder(uint32_t host_index,
     return status;
   }
 
-  status = val_cxl_program_decoder_common(cap_base, decoder_index, base, size);
+  status = val_cxl_program_decoder_common(cap_base,
+                                          decoder_index,
+                                          base,
+                                          size,
+                                          0u,
+                                          0u,
+                                          0u);
   if (status != ACS_STATUS_PASS) {
     val_print(ACS_PRINT_ERR,
               " CXL_HDM: decoder programming failed for host %u",
@@ -3582,6 +3994,129 @@ val_cxl_program_host_decoder(uint32_t host_index,
     entry->hdm_decoder_count = decoder_index + 1u;
 
   return status;
+}
+
+/**
+  @brief   Program a host HDM decoder and target-list entry.
+
+  @param  host_index     Index within the firmware CXL info table.
+  @param  decoder_index  Decoder slot to configure.
+  @param  base           HPA base aligned to 256MB.
+  @param  size           Window length aligned to 256MB.
+  @param  target_low     Target list low register value.
+  @param  target_high    Target list high register value.
+
+  @return Status code propagated from the programming helper.
+**/
+uint32_t
+val_cxl_program_host_decoder_target(uint32_t host_index,
+                                    uint32_t decoder_index,
+                                    uint64_t base,
+                                    uint64_t size,
+                                    uint32_t target_low,
+                                    uint32_t target_high)
+{
+  uint64_t cap_base;
+  CXL_INFO_BLOCK *entry;
+  uint32_t status;
+
+  if (g_cxl_info_table == NULL)
+    return ACS_STATUS_ERR;
+
+  if (host_index >= g_cxl_info_table->num_entries)
+    return ACS_STATUS_ERR;
+
+  entry = &g_cxl_info_table->device[host_index];
+  if (entry->component_reg_base == 0)
+    return ACS_STATUS_ERR;
+
+  status = val_cxl_find_capability(entry->component_reg_base,
+                                   CXL_CAPID_HDM_DECODER,
+                                   &cap_base);
+  if (status != ACS_STATUS_PASS)
+    return status;
+
+  status = val_cxl_program_decoder_common(cap_base,
+                                          decoder_index,
+                                          base,
+                                          size,
+                                          1u,
+                                          target_low,
+                                          target_high);
+
+  if ((status == ACS_STATUS_PASS) &&
+      (entry->hdm_decoder_count <= decoder_index))
+    entry->hdm_decoder_count = decoder_index + 1u;
+
+  return status;
+}
+
+/**
+  @brief   Restore a host HDM decoder, preserving a target-list entry when one
+           was captured by the caller.
+
+  @param  host_index     Index within the firmware CXL info table.
+  @param  decoder_index  Decoder slot to restore.
+  @param  base           HPA base aligned to 256MB.
+  @param  size           Window length aligned to 256MB.
+  @param  target_valid   Nonzero if target_low/target_high should be restored.
+  @param  target_low     Target list low register value.
+  @param  target_high    Target list high register value.
+
+  @return ACS_STATUS_PASS if no restore is needed or the decoder is restored.
+**/
+uint32_t
+val_cxl_restore_host_decoder(uint32_t host_index,
+                             uint32_t decoder_index,
+                             uint64_t base,
+                             uint64_t size,
+                             uint32_t target_valid,
+                             uint32_t target_low,
+                             uint32_t target_high)
+{
+  if ((host_index == CXL_COMPONENT_INVALID_INDEX) || (size == 0u))
+    return ACS_STATUS_PASS;
+
+  if (target_valid == 0u)
+    return val_cxl_program_host_decoder(host_index, decoder_index, base, size);
+
+  return val_cxl_program_host_decoder_target(host_index,
+                                             decoder_index,
+                                             base,
+                                             size,
+                                             target_low,
+                                             target_high);
+}
+
+/**
+  @brief   Program a host HDM decoder target-list entry to a root port.
+
+  @param  root_bdf       Root port BDF used to derive the target port ID.
+  @param  host_index     Index within the firmware CXL info table.
+  @param  decoder_index  Decoder slot to configure.
+  @param  base           HPA base aligned to 256MB.
+  @param  size           Window length aligned to 256MB.
+
+  @return Status code propagated from the programming helper.
+**/
+uint32_t
+val_cxl_program_host_decoder_for_root(uint32_t root_bdf,
+                                      uint32_t host_index,
+                                      uint32_t decoder_index,
+                                      uint64_t base,
+                                      uint64_t size)
+{
+  uint32_t port_id;
+
+  if (val_pcie_get_root_port_id(root_bdf, &port_id) != PCIE_SUCCESS)
+    return ACS_STATUS_ERR;
+
+  return val_cxl_program_host_decoder_target(host_index,
+                                             decoder_index,
+                                             base,
+                                             size,
+                                             port_id & CXL_HDM_TARGET_PORT_ID_MASK,
+                                             0u);
 }
 
 /**
@@ -3614,12 +4149,68 @@ val_cxl_program_component_decoder(uint32_t component_index,
   if (status != ACS_STATUS_PASS)
     return status;
 
-  status = val_cxl_program_decoder_common(cap_base, decoder_index, base, size);
+  status = val_cxl_program_decoder_common(cap_base,
+                                          decoder_index,
+                                          base,
+                                          size,
+                                          0u,
+                                          0u,
+                                          0u);
 
   if ((status == ACS_STATUS_PASS) && (component->hdm_decoder_count <= decoder_index))
     component->hdm_decoder_count = decoder_index + 1u;
 
   return status;
+}
+
+/**
+  @brief   Disable and clear an HDM decoder for a discovered CXL component.
+
+  @param  component_index  Index within the CXL component table.
+  @param  decoder_index    Decoder slot to disable.
+
+  @return ACS_STATUS_PASS when the decoder is disabled and cleared.
+**/
+uint32_t
+val_cxl_disable_component_decoder(uint32_t component_index,
+                                  uint32_t decoder_index)
+{
+  CXL_COMPONENT_ENTRY *component;
+  uint64_t cap_base;
+  uint64_t ctrl_addr;
+  uint32_t ctrl;
+  uint32_t attempt;
+
+  component = val_cxl_get_component_entry(component_index);
+  if ((component == NULL) ||
+      (decoder_index >= component->hdm_decoder_count))
+    return ACS_STATUS_ERR;
+
+  if (val_cxl_find_capability(component->component_reg_base,
+                              CXL_CAPID_HDM_DECODER,
+                              &cap_base) != ACS_STATUS_PASS)
+    return ACS_STATUS_ERR;
+
+  ctrl_addr = cap_base + CXL_HDM_DECODER_CTRL(decoder_index);
+  ctrl = val_mmio_read(ctrl_addr);
+  val_mmio_write(ctrl_addr, ctrl & ~CXL_HDM_COMMIT_BIT);
+
+  for (attempt = 0u; attempt < CXL_HDM_COMMIT_TIMEOUT_US; ++attempt)
+  {
+    if ((val_mmio_read(ctrl_addr) & CXL_HDM_COMMITTED_BIT) == 0u)
+      break;
+    (void)val_time_delay_ms(1u);
+  }
+
+  if ((val_mmio_read(ctrl_addr) & CXL_HDM_COMMITTED_BIT) != 0u)
+    return ACS_STATUS_FAIL;
+
+  val_mmio_write(cap_base + CXL_HDM_DECODER_BASE_LOW(decoder_index), 0u);
+  val_mmio_write(cap_base + CXL_HDM_DECODER_BASE_HIGH(decoder_index), 0u);
+  val_mmio_write(cap_base + CXL_HDM_DECODER_SIZE_LOW(decoder_index), 0u);
+  val_mmio_write(cap_base + CXL_HDM_DECODER_SIZE_HIGH(decoder_index), 0u);
+
+  return ACS_STATUS_PASS;
 }
 
 /**
