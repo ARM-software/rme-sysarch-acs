@@ -41,6 +41,9 @@
 #define TEST_DATA_PATTERN 0xA5A5A5A5u
 #define RJXPZP_CKID_MAX 0x2000u
 
+#define SPECIFIC_KEY_CKID_TYPE_TVM 0u
+#define SPECIFIC_KEY_CKID_TYPE_OS 1u
+
 #define RMECDA_CTL1_TDISP_EN_MASK 0x1u
 #define RMECDA_CTL1_LINK_STR_LOCK_MASK (1u << 1)
 #define RMECDA_CTL1_FIRST_TEE_CKID_SHIFT 16u
@@ -387,40 +390,126 @@ derive_ckid(uint32_t pas,
   return ACS_STATUS_PASS;
 }
 
-static uint32_t
-set_target_ckid_random_key(val_spdm_context_t *context,
-                             uint32_t session_id,
-                             uint32_t ckid,
-                             uint8_t ckid_type)
+typedef union {
+  cxl_tsp_set_target_ckid_random_key_rsp_t random;
+  cxl_tsp_set_target_ckid_specific_key_rsp_t specific;
+  cxl_tsp_error_rsp_t error;
+} CKID_KEY_RESPONSE;
+
+typedef enum {
+  CKID_KEY_OK,
+  CKID_KEY_UNSUPPORTED,
+  CKID_KEY_FAILED
+} CKID_KEY_RESULT;
+
+/* Decode either key command's success or full TSP error response. */
+static CKID_KEY_RESULT
+check_ckid_key_response(libspdm_return_t status,
+                        const CKID_KEY_RESPONSE *response,
+                        size_t response_size,
+                        uint8_t expected_opcode)
 {
-  cxl_tsp_set_target_ckid_random_key_req_t request;
-  cxl_tsp_set_target_ckid_random_key_rsp_t response;
+  size_t success_size = (expected_opcode == CXL_TSP_OPCODE_SET_TARGET_CKID_RANDOM_KEY_RSP) ?
+                       sizeof(response->random) : sizeof(response->specific);
+
+  if (LIBSPDM_STATUS_IS_ERROR(status))
+  {
+    val_print(ACS_PRINT_ERR, " RJXPZP: CKID key provisioning failed (0x%x)", (uint64_t)status);
+    return CKID_KEY_FAILED;
+  }
+
+  if ((response_size < sizeof(cxl_tsp_header_t)) ||
+      (response->random.header.tsp_version != CXL_TSP_MESSAGE_VERSION))
+    goto invalid_response;
+
+  if (response->random.header.op_code == CXL_TSP_OPCODE_ERROR_RSP)
+  {
+    if (response_size < sizeof(response->error))
+      goto invalid_response;
+
+    if (response->error.error_code == CXL_TSP_ERROR_CODE_UNSUPPORTED_REQUEST)
+      return CKID_KEY_UNSUPPORTED;
+
+    val_print(ACS_PRINT_ERR, " RJXPZP: CKID key provisioning: TSP error 0x%x",
+              (uint64_t)response->error.error_code);
+    val_print(ACS_PRINT_ERR, " RJXPZP: TSP error data 0x%x",
+              (uint64_t)response->error.error_data);
+    return CKID_KEY_FAILED;
+  }
+
+  if ((response_size == success_size) &&
+      (response->random.header.op_code == expected_opcode))
+    return CKID_KEY_OK;
+
+invalid_response:
+  val_print(ACS_PRINT_ERR, " RJXPZP: CKID key provisioning invalid response", 0);
+  return CKID_KEY_FAILED;
+}
+
+static uint32_t
+set_target_ckid_key(val_spdm_context_t *context,
+                   uint32_t session_id,
+                   uint32_t ckid,
+                   uint8_t ckid_type)
+{
+  cxl_tsp_set_target_ckid_random_key_req_t random_request;
+  cxl_tsp_set_target_ckid_specific_key_req_t specific_request;
+  CKID_KEY_RESPONSE response;
+  CKID_KEY_RESULT result;
   size_t response_size = sizeof(response);
   libspdm_return_t status;
 
-  /* Leave entropy validity flags clear as the target supplies its own entropy. */
-  val_memory_set(&request, sizeof(request), 0);
-  request.header.tsp_version = CXL_TSP_MESSAGE_VERSION;
-  request.header.op_code = CXL_TSP_OPCODE_SET_TARGET_CKID_RANDOM_KEY;
-  request.ckid = ckid;
-  request.attributes = ckid_type;
+  /* Try target-generated keys without supplying initiator entropy. */
+  val_memory_set(&random_request, sizeof(random_request), 0);
+  random_request.header.tsp_version = CXL_TSP_MESSAGE_VERSION;
+  random_request.header.op_code = CXL_TSP_OPCODE_SET_TARGET_CKID_RANDOM_KEY;
+  random_request.ckid = ckid;
+  random_request.attributes = ckid_type;
   val_memory_set(&response, sizeof(response), 0);
-  status = cxl_tsp_send_receive_data(context->spdm_context,
-                                     &session_id,
-                                     &request,
-                                     sizeof(request),
-                                     &response,
-                                     &response_size);
-  if (LIBSPDM_STATUS_IS_ERROR(status) || (response_size != sizeof(response)) ||
-      (response.header.tsp_version != CXL_TSP_MESSAGE_VERSION) ||
-      (response.header.op_code != CXL_TSP_OPCODE_SET_TARGET_CKID_RANDOM_KEY_RSP))
+  status = cxl_tsp_send_receive_data(context->spdm_context, &session_id,
+                                    &random_request, sizeof(random_request),
+                                    &response, &response_size);
+  result = check_ckid_key_response(status, &response, response_size,
+                                   CXL_TSP_OPCODE_SET_TARGET_CKID_RANDOM_KEY_RSP);
+  if (result == CKID_KEY_OK)
+    return ACS_STATUS_PASS;
+
+  if (result != CKID_KEY_UNSUPPORTED)
+    return ACS_STATUS_ERR;
+
+  /* Only Unsupported Request permits fallback to fresh host-provided keys. */
+  val_print(ACS_PRINT_INFO, " RJXPZP: Random Key unsupported; trying host keys", 0);
+  val_memory_set(&specific_request, sizeof(specific_request), 0);
+  specific_request.header.tsp_version = CXL_TSP_MESSAGE_VERSION;
+  specific_request.header.op_code = CXL_TSP_OPCODE_SET_TARGET_CKID_SPECIFIC_KEY;
+  specific_request.ckid = ckid;
+  specific_request.ckid_type =
+      (ckid_type == CXL_TSP_SET_CKID_RANDOM_KEY_ATTRIBUTES_CKID_TYPE_TVM_CKID) ?
+      SPECIFIC_KEY_CKID_TYPE_TVM : SPECIFIC_KEY_CKID_TYPE_OS;
+  specific_request.validity_flags = CXL_TSP_KEY_VALIDITY_FLAGS_DATA_ENC_KEY |
+                                    CXL_TSP_KEY_VALIDITY_FLAGS_TWEAK_KEY;
+  if ((val_spdm_get_random(sizeof(specific_request.data_encryption_key),
+                          specific_request.data_encryption_key) != ACS_STATUS_PASS) ||
+      (val_spdm_get_random(sizeof(specific_request.tweak_key),
+                          specific_request.tweak_key) != ACS_STATUS_PASS))
   {
-    val_print(ACS_PRINT_ERR, " RJXPZP: SET_TARGET_CKID_RANDOM_KEY failed (0x%x)",
-              (uint64_t)status);
+    val_memory_set(&specific_request, sizeof(specific_request), 0);
+    val_print(ACS_PRINT_ERR, " RJXPZP: Unable to generate host CKID keys", 0);
     return ACS_STATUS_ERR;
   }
 
-  return ACS_STATUS_PASS;
+  val_memory_set(&response, sizeof(response), 0);
+  response_size = sizeof(response);
+  status = cxl_tsp_send_receive_data(context->spdm_context, &session_id,
+                                    &specific_request, sizeof(specific_request),
+                                    &response, &response_size);
+  val_memory_set(&specific_request, sizeof(specific_request), 0);
+  result = check_ckid_key_response(status, &response, response_size,
+                                   CXL_TSP_OPCODE_SET_TARGET_CKID_SPECIFIC_KEY_RSP);
+  if (result == CKID_KEY_UNSUPPORTED)
+    val_print(ACS_PRINT_ERR, " RJXPZP: Specific Key unsupported", 0);
+
+  return (result == CKID_KEY_OK) ? ACS_STATUS_PASS : ACS_STATUS_ERR;
 }
 
 static uint32_t
@@ -473,8 +562,8 @@ check_realm_mecid_isolation(val_spdm_context_t *context,
   uint32_t readback;
   uint32_t result = ACS_STATUS_PASS;
 
-  /* Keep the original TVM key installed and ask the target for a second key. */
-  if (set_target_ckid_random_key(context, session_id, alternate_ckid,
+  /* Keep the original TVM key installed and provision a second key. */
+  if (set_target_ckid_key(context, session_id, alternate_ckid,
           CXL_TSP_SET_CKID_RANDOM_KEY_ATTRIBUTES_CKID_TYPE_TVM_CKID) != ACS_STATUS_PASS)
     return ACS_STATUS_FAIL;
 
@@ -939,7 +1028,7 @@ exercise_root_port(const CXL_COMPONENT_TABLE *table,
       ckid_type = (vector->pas == NONSECURE_PAS) ?
           CXL_TSP_SET_CKID_RANDOM_KEY_ATTRIBUTES_CKID_TYPE_OS_CKID :
           CXL_TSP_SET_CKID_RANDOM_KEY_ATTRIBUTES_CKID_TYPE_TVM_CKID;
-      if (set_target_ckid_random_key(&ctx, session_id, ckid, ckid_type) != ACS_STATUS_PASS)
+      if (set_target_ckid_key(&ctx, session_id, ckid, ckid_type) != ACS_STATUS_PASS)
       {
         failures++;
         break;
