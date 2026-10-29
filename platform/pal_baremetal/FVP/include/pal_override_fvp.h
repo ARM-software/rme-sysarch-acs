@@ -592,9 +592,9 @@
 
 #define REGISTER_INFO_TABLE_ENTRIES(_)
 
-#define EXPAND_REGISTER_INFO(reg_type, reg_bdf, reg_addr, reg_prop, reg_mask, valid_addr) \
+#define EXPAND_REGISTER_INFO(reg_type, reg_bdf, reg_addr, reg_prop, reg_mask, valid_addr, reg_access) \
     { .type = reg_type, .bdf = reg_bdf, .address = reg_addr, .property = reg_prop, \
-      .write_mask = reg_mask, .valid_address = valid_addr },
+      .write_mask = reg_mask, .valid_address = valid_addr, .access = reg_access },
 
 /* Defines related to System memory */
 #define PLAT_MTE_PROTECTED_REGION_BASE      0xFFC00000ULL
