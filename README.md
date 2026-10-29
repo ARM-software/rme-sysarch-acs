@@ -66,6 +66,19 @@ Before starting the ACS build, ensure that the following requirements are met.
 - Partners need to provide their platform inputs in the following files:
    - [pal_override_fvp.h](platform/pal_baremetal/FVP/include/pal_override_fvp.h) for the FVP bare-metal platform.
    - [pal_override.h](platform/pal_uefi/include/pal_override.h) for the UEFI platform.
+- Fill each register entry with `type` (`PCIE_RP` or `INTERCONNECT`), `bdf`
+  (for RP), `address`, `property`, and `access` (`REGISTER_ACCESS_RW` = 0,
+  `REGISTER_ACCESS_RO` = 1, `REGISTER_ACCESS_WO` = 2). Use
+  `RMSD_WRITE_PROTECT` or `RMSD_FULL_PROTECT` for RP entries and `RMSD_PROTECT`
+  for interconnect entries. Set `write_mask` to safe writable bits for RW
+  registers; use `0` when not applicable. Set `valid_address` to the
+  interconnect routing-valid register address when present, otherwise `0`.
+- For UEFI, set `RP_REG_CNT` and `RP_REG_<index>_TYPE`, `_BDF`, `_ADDR`, `_PROPERTY`,
+  `_WRITE_MASK`, `_VALID_ADDR`, and `_ACCESS` in the platform configuration.
+  For bare-metal, set `PLATFORM_OVERRIDE_RP_REG_NUM_ENTRIES` and fill
+  `REGISTER_INFO_TABLE_ENTRIES` in
+  [pal_override_fvp.h](platform/pal_baremetal/FVP/include/pal_override_fvp.h)
+  using `EXPAND_REGISTER_INFO(type, bdf, address, property, mask, valid_address, access)`.
 - Any mainstream Linux based OS distribution running on a x86 or aarch64 machine.
 - git clone --branch edk2-stable202505 --depth 1 https://github.com/tianocore/edk2
 - git clone https://github.com/tianocore/edk2-libc [ Checkout SHA: 61687168fe02ac4d933a36c9145fdd242ac424d1]

@@ -179,6 +179,9 @@ uint32_t val_pcie_bar_mem_write(uint32_t bdf, uint64_t address, uint32_t data);
 uint32_t val_pcie_enable_tdisp(uint32_t bdf);
 uint32_t val_pcie_disable_tdisp(uint32_t bdf);
 void *val_register_table_ptr(void);
+/* RP protection cannot be determined from the available observations. */
+#define VAL_PCIE_RP_CHECK_INDETERMINATE 2u
+
 uint32_t val_pcie_rp_sec_prpty_check(uint64_t *register_entry_info);
 /* PCIE VAL APIs */
 void val_pcie_enumerate(void);
