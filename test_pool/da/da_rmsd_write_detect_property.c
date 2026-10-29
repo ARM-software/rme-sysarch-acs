@@ -23,6 +23,7 @@
 #include "val/include/val_pcie.h"
 #include "val/include/val_memory.h"
 #include "val/include/val_pcie_enumeration.h"
+#include "val/include/val_exerciser.h"
 #include "val/include/val_pe.h"
 #include "val/include/val_da.h"
 
@@ -37,9 +38,7 @@ void
 payload(void)
 {
   uint32_t pe_index;
-  pcie_device_bdf_table *bdf_tbl_ptr;
-  uint32_t tbl_index;
-  uint32_t bdf, dp_type;
+  uint32_t instance, num_exercisers;
   uint32_t reg_value;
   uint32_t da_cap_base;
   uint32_t ide_cap_base;
@@ -52,82 +51,54 @@ payload(void)
   uint32_t count;
   uint32_t status;
   uint32_t table_entries;
-  uint32_t rp_bdf, ep_index, ep_bdf, index;
-  uint32_t ep_found;
+  uint32_t rp_bdf, ep_bdf, index;
   pcie_cfgreg_bitfield_entry *bf_entry;
   uint32_t ep_locked = 0;
 
-  tbl_index = 0;
   pe_index = val_pe_get_index_mpid(val_pe_get_mpid());
-  bdf_tbl_ptr = val_pcie_bdf_table_ptr();
-  if ((bdf_tbl_ptr == NULL) || (bdf_tbl_ptr->num_entries == 0))
+  num_exercisers = val_exerciser_get_info(EXERCISER_NUM_CARDS);
+  if (num_exercisers == 0)
   {
-      val_print(ACS_PRINT_WARN, " No PCIe BDF entries discovered", 0);
+      val_print(ACS_PRINT_WARN, " No exerciser cards discovered", 0);
       val_set_status(pe_index, "SKIP", 01);
       return;
   }
 
   table_entries = sizeof(bf_info_table18)/sizeof(bf_info_table18[0]);
-  rp_bdf = 0;
-  ep_bdf = 0;
-  index = 0;
-  ep_index = 0;
-
-  while (tbl_index < bdf_tbl_ptr->num_entries)
+  for (instance = 0; instance < num_exercisers; ++instance)
   {
-      bdf = bdf_tbl_ptr->device[tbl_index++].bdf;
-      dp_type = val_pcie_device_port_type(bdf);
-
-      if (dp_type != RP)
+      if (val_exerciser_init(instance))
           continue;
 
-      val_print(ACS_PRINT_TEST, " Checking BDF: 0x%x", bdf);
+      ep_bdf = val_exerciser_get_bdf(instance);
+      if (val_pcie_get_rootport(ep_bdf, &rp_bdf))
+          continue;
+
+      val_print(ACS_PRINT_TEST, " Exerciser BDF: 0x%x", ep_bdf);
+      val_print(ACS_PRINT_TEST, " Checking RP BDF: 0x%x", rp_bdf);
 
       /* Get the PCIE DVSEC Capability register */
-      if (val_pcie_find_da_capability(bdf, &da_cap_base) != PCIE_SUCCESS)
+      if (val_pcie_find_da_capability(rp_bdf, &da_cap_base) != PCIE_SUCCESS)
       {
            val_print(ACS_PRINT_ERR,
-                           " PCIe DA DVSEC capability not present,bdf 0x%x", bdf);
+                           " PCIe DA DVSEC capability not present,bdf 0x%x", rp_bdf);
            continue;
       }
 
       /* Check IDE Extended Capability register is present */
-      if (val_pcie_find_capability(bdf, PCIE_ECAP, ECID_IDE, &ide_cap_base) != PCIE_SUCCESS)
+      if (val_pcie_find_capability(rp_bdf, PCIE_ECAP, ECID_IDE, &ide_cap_base) != PCIE_SUCCESS)
       {
           val_print(ACS_PRINT_ERR,
-                        " PCIe IDE Capability not present for RP BDF: 0x%x", bdf);
+                        " PCIe IDE Capability not present for RP BDF: 0x%x", rp_bdf);
           continue;
       }
 
       /* Check if Selective IDE Stream is supported */
-      val_pcie_read_cfg(bdf, ide_cap_base + IDE_CAP_REG, &reg_value);
+      val_pcie_read_cfg(rp_bdf, ide_cap_base + IDE_CAP_REG, &reg_value);
       sel_ide_str_supported = (reg_value & SEL_IDE_STR_MASK) >> SEL_IDE_STR_SHIFT;
       if (!sel_ide_str_supported)
       {
-          val_print(ACS_PRINT_ERR, " Selective IDE str not supported for BDF: %x", bdf);
-          continue;
-      }
-
-      ep_index = 0;
-      ep_found = 0;
-      while (ep_index < bdf_tbl_ptr->num_entries)
-      {
-          ep_bdf = bdf_tbl_ptr->device[ep_index++].bdf;
-          dp_type = val_pcie_device_port_type(ep_bdf);
-          if (dp_type != EP)
-              continue;
-
-          val_pcie_get_rootport(ep_bdf, &rp_bdf);
-          if (bdf == rp_bdf)
-          {
-              ep_found = 1;
-              break;
-          }
-      }
-
-      if (!ep_found)
-      {
-          val_print(ACS_PRINT_WARN, " No endpoint found for RP BDF: 0x%x", bdf);
+          val_print(ACS_PRINT_ERR, " Selective IDE str not supported for BDF: %x", rp_bdf);
           continue;
       }
 
@@ -147,7 +118,7 @@ payload(void)
 
       if (val_pcie_enable_tdisp(rp_bdf))
       {
-          val_print(ACS_PRINT_ERR, " Unable to set tdisp_en for BDF: 0x%x", bdf);
+          val_print(ACS_PRINT_ERR, " Unable to set tdisp_en for BDF: 0x%x", rp_bdf);
           test_fail++;
           continue;
       }
@@ -190,7 +161,7 @@ payload(void)
           }
           if (status)
           {
-              val_print(ACS_PRINT_ERR, " Failed to establish stream for bdf: 0x%x", bdf);
+              val_print(ACS_PRINT_ERR, " Failed to establish stream for bdf: 0x%x", rp_bdf);
               test_fail++;
               continue;
           }
@@ -198,7 +169,7 @@ payload(void)
           status = val_device_lock(ep_bdf);
           if (status)
           {
-              val_print(ACS_PRINT_ERR, " TDISP RUN state fail for bdf: 0x%x", bdf);
+              val_print(ACS_PRINT_ERR, " TDISP RUN state fail for bdf: 0x%x", rp_bdf);
               test_fail++;
               if (val_ide_set_sel_stream(rp_bdf, count, 0))
                   test_fail++;
@@ -212,7 +183,7 @@ payload(void)
           status = val_pcie_write_detect_bitfield_check(rp_bdf, (void *)bf_entry, count);
           if (status && (status != PCIE_CAP_NOT_FOUND))
           {
-              val_print(ACS_PRINT_ERR, " Write detect failed for BDF: 0x%x", bdf);
+              val_print(ACS_PRINT_ERR, " Write detect failed for BDF: 0x%x", rp_bdf);
               test_fail++;
               /* Fall through to unlock before next iteration */
           }
