@@ -475,6 +475,10 @@ MODULE_TEST_DISPATCHER_s g_module_test_table[MODULE_SENTINEL] = {
         .entry_fn = rme_memory_associated_with_pas_till_popa_entry,
         .test_text = "rme_memory_associated_with_pas_till_popa",
       },
+      [RME_ENTRY_RME_PA_COMPARE_OPERATION_INCLUDES_PAS_ENTRY] = {
+        .entry_fn = rme_pa_compare_operation_includes_pas_entry,
+        .test_text = "rme_pa_compare_operation_includes_pas",
+      },
       [RME_ENTRY_RME_MSD_SAVE_RESTORE_MEM_IN_ROOT_PAS_ENTRY] = {
         .entry_fn = rme_msd_save_restore_mem_in_root_pas_entry,
         .test_text = "rme_msd_save_restore_mem_in_root_pas",
@@ -550,10 +554,6 @@ MODULE_TEST_DISPATCHER_s g_module_test_table[MODULE_SENTINEL] = {
       [RME_ENTRY_RME_SMMU_BLOCKS_REQUEST_AT_REGISTERS_RESET_ENTRY] = {
         .entry_fn = rme_smmu_blocks_request_at_registers_reset_entry,
         .test_text = "rme_smmu_blocks_request_at_registers_reset",
-      },
-      [RME_ENTRY_RME_SNOOP_FILTER_CONSIDERS_PAS_ENTRY] = {
-        .entry_fn = rme_snoop_filter_considers_pas_entry,
-        .test_text = "rme_snoop_filter_considers_pas",
       },
       [RME_ENTRY_RME_SUPPORT_IN_PE_ENTRY] = {
         .entry_fn = rme_support_in_pe_entry,

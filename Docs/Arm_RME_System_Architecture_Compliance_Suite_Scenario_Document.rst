@@ -262,28 +262,51 @@ notes for each rule, see the separate
 
   * -
 
-      `rme_snoop_filter_considers_pas <../test_pool/rme/rme_snoop_filter_considers_pas.c>`_ & `rme_memory_associated_with_pas_till_popa <../test_pool/rme/rme_memory_associated_with_pas_till_popa.c>`_
+      `rme_memory_associated_with_pas_till_popa <../test_pool/rme/rme_memory_associated_with_pas_till_popa.c>`_
 
     -
 
       RWFQKD: A PA that targets memory that can be cached is associated with a PAS until reaching the PoPA.
 
+    -
+
+      1. Iterate Root, Realm, Non-secure and Secure as the source PAS.
+      2. Allocate a fresh PA for each iteration and mark it “All Access Permitted”
+         in GPT. Map that PA through four cacheable aliases, one for each PAS.
+      3. Initialize through the source PAS and issue a source-PAS CMO to PoPA.
+      4. Read through the source alias to populate the cache, then write new data.
+      5. Without another CMO, read through the other three PAS aliases. Each read
+         must differ from the source PAS's newly written data.
+      6. All four source-PAS iterations must pass, covering 12 directed comparisons.
+
+      This checks software-visible cross-PAS cached-data isolation on one PE
+      for all four source PAS values.
+
+  * -
+
+      `rme_pa_compare_operation_includes_pas <../test_pool/rme/rme_pa_compare_operation_includes_pas.c>`_
+
+    -
+
       RFRMJJ: Where a PA is associated with a PAS, any PA compared operation includes the PAS.
 
     -
 
-      *Test rme_memory_associated_with_pas_till_popa:*
+      1. Skip the test if fewer than two PEs are available.
+      2. Mark PA1 as “All Access Permitted” in GPT and map it through cacheable
+         Non-secure, Realm, Root and Secure aliases on PE0.
+      3. Initialize PA1 through Non-secure PAS and issue a Non-secure CMO to PoPA.
+         Write new data through the Non-secure alias, then read the other three
+         PAS aliases without another CMO. None must return the newly written data.
+      4. Mark a second PA as “All Access Permitted” in GPT and map it cacheable
+         and shareable using Root PAS on PE0 and Realm PAS on PE1.
+      5. Write initial data through PE0's Root alias and issue a Root CMO to PoPA.
+         Read the Root alias to populate the cache, then write a new value.
+      6. Read through PE1's Realm alias without another CMO. It must not return
+         PE0's newly written Root PAS value. Both subtests must pass.
 
-      1. A location PA1 is marked as “All Access Permitted” in GPT.
-      2. Cacheable store to PA1_NS is not visible to PA1_RL, PA1_RT, PA1_S.
-
-      *Test rme_snoop_filter_considers_pas:*
-
-      1. PA1 is marked as Shareable in both PE0 & PE1.
-      2. PE0: PA1 marked as Root PAS.
-      3. PE1: PA1 marked as Realm PAS.
-      4. PE1 must not generate snoop access to PE0.
-      5. As a result, update to PE0.
+      This checks Non-secure cached-data isolation from Root, Realm and Secure
+      aliases on one PE, and Root-to-Realm cached-data isolation across two PEs.
 
   * -
 
