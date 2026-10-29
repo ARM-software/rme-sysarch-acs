@@ -43,6 +43,7 @@ payload(void)
   uint32_t reg_value;
   uint32_t da_cap_base;
   uint32_t ide_cap_base;
+  uint32_t cap_base, cap_id;
   uint32_t sel_ide_str_supported;
   uint32_t test_fail = 0;
   uint32_t test_skip = 1;
@@ -155,6 +156,29 @@ payload(void)
       {
           bf_entry = (pcie_cfgreg_bitfield_entry *)&(bf_info_table18[index]);
           val_print(ACS_PRINT_TEST, " Write-detect table entry: %d", index);
+
+          /* Skip absent capabilities before establishing IDE and locking the TDI. */
+          if (bf_entry->reg_type == PCIE_CAP || bf_entry->reg_type == PCIE_ECAP)
+          {
+              cap_id = (bf_entry->reg_type == PCIE_CAP) ? bf_entry->cap_id :
+                                                        bf_entry->ecap_id;
+              if (bf_entry->reg_type == PCIE_ECAP && cap_id == ECID_DVSEC)
+                  status = val_pcie_find_da_capability(rp_bdf, &cap_base);
+              else
+                  status = val_pcie_find_capability(rp_bdf, bf_entry->reg_type,
+                                                    cap_id, &cap_base);
+              if (status == PCIE_CAP_NOT_FOUND)
+              {
+                  val_print(ACS_PRINT_WARN, " Skipping absent PCIe capability 0x%x", cap_id);
+                  continue;
+              }
+              if (status != PCIE_SUCCESS)
+              {
+                  val_print(ACS_PRINT_ERR, " Capability lookup failed for BDF: 0x%x", rp_bdf);
+                  test_fail++;
+                  continue;
+              }
+          }
 
           /* Establish SPDM and matching EP/RP keys before enabling IDE. */
           status = val_pcie_ide_establish(ep_bdf, rp_bdf, count, stream_id,
