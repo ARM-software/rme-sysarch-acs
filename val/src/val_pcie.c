@@ -2972,7 +2972,7 @@ pcie_rp_prepare_stimulus(uint64_t root_addr, uint32_t original,
       }
   }
 
-  return 1u;
+  return VAL_PCIE_RP_CHECK_INDETERMINATE;
 }
 
 uint32_t val_pcie_rp_sec_prpty_check(uint64_t *register_entry_info)
@@ -2983,6 +2983,7 @@ uint32_t val_pcie_rp_sec_prpty_check(uint64_t *register_entry_info)
   uint32_t bdf, org_data = 0u, baseline_request, baseline;
   uint32_t attempt_request, attempt, write_mask, readback;
   uint32_t ret = 0u;
+  uint32_t stimulus_status;
   uint32_t tdisp_enabled = 0u;
   uint32_t restore_required = 0u;
   uint32_t gpt_modified = 0u;
@@ -2994,12 +2995,27 @@ uint32_t val_pcie_rp_sec_prpty_check(uint64_t *register_entry_info)
   if (register_entry->property != RMSD_WRITE_PROTECT &&
       register_entry->property != RMSD_FULL_PROTECT)
       return 1u;
-  write_mask = register_entry->write_mask;
-  if (!write_mask)
+  if (register_entry->access > REGISTER_ACCESS_WO ||
+      (register_entry->access == REGISTER_ACCESS_RO &&
+       register_entry->property == RMSD_WRITE_PROTECT))
   {
-      val_print(ACS_PRINT_ERR, " Writable mask is not configured for address: 0x%llx",
+      val_print(ACS_PRINT_ERR, " Unsupported register access/property at 0x%llx",
                 register_entry->address);
       return 1u;
+  }
+  if (register_entry->access == REGISTER_ACCESS_WO)
+  {
+      val_print(ACS_PRINT_WARN,
+                " WO register protection cannot be determined at 0x%llx",
+                register_entry->address);
+      return VAL_PCIE_RP_CHECK_INDETERMINATE;
+  }
+  write_mask = register_entry->write_mask;
+  if (register_entry->access == REGISTER_ACCESS_RW && !write_mask)
+  {
+      val_print(ACS_PRINT_WARN, " Writable mask is not configured for address: 0x%llx",
+                register_entry->address);
+      return VAL_PCIE_RP_CHECK_INDETERMINATE;
   }
 
   bdf = register_entry->bdf;
@@ -3052,14 +3068,55 @@ uint32_t val_pcie_rp_sec_prpty_check(uint64_t *register_entry_info)
       ret = 1u;
       goto cleanup;
   }
-  restore_required = 1u;
+  restore_required = (register_entry->access == REGISTER_ACCESS_RW);
 
-  if (pcie_rp_prepare_stimulus(pas_addr[0], org_data,
-                               &baseline_request, &baseline,
-                               &attempt_request, &attempt, write_mask))
+  if (register_entry->access == REGISTER_ACCESS_RO)
   {
-      val_print(ACS_PRINT_ERR, " No safe distinguishable stimulus for BDF: 0x%x", bdf);
-      ret = 1u;
+      if (org_data == 0u || org_data == 0xffffffffu)
+      {
+          val_print(ACS_PRINT_WARN,
+                    " RO RP read protection indeterminate for value 0x%x", org_data);
+          ret = VAL_PCIE_RP_CHECK_INDETERMINATE;
+          goto cleanup;
+      }
+
+      /* Full protection of an RO register is a read-access property. */
+      if (pcie_rp_pas_access(pas_addr[3], READ_DATA, &readback) ||
+          readback != org_data)
+      {
+          val_print(ACS_PRINT_ERR, " Realm read failed for BDF: 0x%x", bdf);
+          ret = 1u;
+          goto cleanup;
+      }
+      for (uint32_t index = 1u; index <= 2u; ++index)
+      {
+          if (pcie_rp_pas_access(pas_addr[index], READ_DATA, &readback))
+          {
+              val_print(ACS_PRINT_WARN, " Read not fulfilled for PAS: 0x%llx",
+                        pas_list[index]);
+              ret = VAL_PCIE_RP_CHECK_INDETERMINATE;
+              continue;
+          }
+          if (readback == org_data)
+          {
+              val_print(ACS_PRINT_ERR, " Read exposed data for PAS: 0x%llx", pas_list[index]);
+              ret = 1u;
+              goto cleanup;
+          }
+      }
+      goto cleanup;
+  }
+
+  stimulus_status = pcie_rp_prepare_stimulus(pas_addr[0], org_data,
+                                             &baseline_request, &baseline,
+                                             &attempt_request, &attempt, write_mask);
+  if (stimulus_status)
+  {
+      if (stimulus_status == VAL_PCIE_RP_CHECK_INDETERMINATE)
+          val_print(ACS_PRINT_WARN, " No safe distinguishable stimulus for BDF: 0x%x", bdf);
+      else
+          val_print(ACS_PRINT_ERR, " Root stimulus access failed for BDF: 0x%x", bdf);
+      ret = stimulus_status;
       goto cleanup;
   }
   val_print(ACS_PRINT_TEST, " Root baseline 0x%x", baseline);
@@ -3138,8 +3195,13 @@ uint32_t val_pcie_rp_sec_prpty_check(uint64_t *register_entry_info)
       /* Non-secure and Secure reads and writes must be blocked by the RP filter. */
       for (uint32_t index = 1u; index <= 2u; ++index)
       {
-          if (pcie_rp_pas_access(pas_addr[index], READ_DATA, &readback) ||
-              readback == baseline)
+          if (pcie_rp_pas_access(pas_addr[index], READ_DATA, &readback))
+          {
+              val_print(ACS_PRINT_WARN, " Read not fulfilled for PAS: 0x%llx",
+                        pas_list[index]);
+              ret = VAL_PCIE_RP_CHECK_INDETERMINATE;
+          }
+          else if (readback == baseline)
           {
               val_print(ACS_PRINT_ERR, " Read exposed data for PAS: 0x%llx", pas_list[index]);
               ret = 1u;

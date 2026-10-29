@@ -1886,19 +1886,27 @@ uint32_t val_intercnt_sec_prpty_check(uint64_t *register_entry_info)
       return 1u;
   if (entry->type != INTERCONNECT)
       return 0u;
-  if (entry->property != RMSD_PROTECT || (entry->address & 3u))
+  if (entry->property != RMSD_PROTECT || (entry->address & 3u) ||
+      entry->access > REGISTER_ACCESS_WO)
       return 1u;
+  if (entry->access == REGISTER_ACCESS_WO)
+  {
+      val_print(ACS_PRINT_WARN,
+                " WO interconnect register protection cannot be determined at 0x%llx",
+                entry->address);
+      return VAL_INTERCONNECT_INDETERMINATE;
+  }
 
   val_print(ACS_PRINT_TEST, " Interconnect register 0x%llx", entry->address);
   mask = entry->write_mask;
   valid_pa = entry->valid_address;
-  has_valid_register = (valid_pa != 0u);
-  if (!mask)
+  has_valid_register = (entry->access == REGISTER_ACCESS_RW && valid_pa != 0u);
+  if (entry->access == REGISTER_ACCESS_RW && !mask)
   {
-      val_print(ACS_PRINT_ERR, " No safe interconnect stimulus for 0x%llx", entry->address);
-      return 1u;
+      val_print(ACS_PRINT_WARN, " No safe interconnect stimulus for 0x%llx", entry->address);
+      return VAL_INTERCONNECT_INDETERMINATE;
   }
-  if (!has_valid_register)
+  if (entry->access == REGISTER_ACCESS_RW && !has_valid_register)
   {
       val_print(ACS_PRINT_WARN,
                 " No routing-valid register for 0x%llx; testing with routing enabled",
@@ -1920,10 +1928,10 @@ uint32_t val_intercnt_sec_prpty_check(uint64_t *register_entry_info)
   /* The routing-valid bit is a control bit, not an address-field stimulus. */
   if (has_valid_register && (valid_pa == entry->address))
       mask &= ~1u;
-  if (!mask)
+  if (entry->access == REGISTER_ACCESS_RW && !mask)
   {
-      val_print(ACS_PRINT_ERR, " No non-valid writable bits for 0x%llx", entry->address);
-      return 1u;
+      val_print(ACS_PRINT_WARN, " No non-valid writable bits for 0x%llx", entry->address);
+      return VAL_INTERCONNECT_INDETERMINATE;
   }
 
   attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(OUTER_SHAREABLE) |
@@ -1937,6 +1945,111 @@ uint32_t val_intercnt_sec_prpty_check(uint64_t *register_entry_info)
           goto restore_gpt;
       va[index] += page_offset;
   }
+
+  if (entry->access == REGISTER_ACCESS_RO)
+  {
+      uint32_t requester_denied[4] = {0u};
+      uint32_t completer_denied[4] = {0u};
+      uint32_t completer_inconclusive[4] = {0u};
+      uint32_t inconclusive = 0u;
+
+      /* Without GPT_ROOT, test the completer under GPT_ANY before reading Root. */
+      if (original_gpi != GPT_ROOT)
+      {
+          if (val_add_gpt_entry_el3(page, GPT_ANY))
+          {
+              val_print(ACS_PRINT_ERR, " Failed to set GPT_ANY for page 0x%llx", page);
+              goto restore_gpt;
+          }
+          gpt_modified = (original_gpi != GPT_ANY);
+      }
+
+      if (interconnect_access(va[0], READ_DATA, &original))
+      {
+          val_print(ACS_PRINT_ERR, " Root read failed for RO register 0x%llx", entry->address);
+          goto restore_gpt;
+      }
+
+      if (original_gpi == GPT_ROOT)
+      {
+          for (uint32_t index = 1u; index < 4u; ++index)
+          {
+              readback = 0u;
+              if (interconnect_expect_gpf(va[index], READ_DATA, &readback))
+              {
+                  val_print(ACS_PRINT_WARN, " RO requester read not denied: PAS 0x%llx",
+                            pas_list[index]);
+              }
+              else
+              {
+                  requester_denied[index] = 1u;
+                  val_print(ACS_PRINT_TEST, " RO requester read GPF: PAS 0x%llx",
+                            pas_list[index]);
+              }
+          }
+
+          /* Bypass the requester GPC to test every PAS at the completer. */
+          if (val_add_gpt_entry_el3(page, GPT_ANY))
+          {
+              val_print(ACS_PRINT_ERR, " Failed to set GPT_ANY for page 0x%llx", page);
+              goto restore_gpt;
+          }
+          gpt_modified = 1u;
+      }
+
+      for (uint32_t index = 1u; index < 4u; ++index)
+      {
+          uint32_t root_after = 0u;
+
+          readback = 0u;
+          if (interconnect_access(va[index], READ_DATA, &readback))
+          {
+              val_print(ACS_PRINT_ERR, " RO completer read failed for PAS: 0x%llx",
+                        pas_list[index]);
+              status = 1u;
+              goto restore_gpt;
+          }
+          if (interconnect_access(va[0], READ_DATA, &root_after) || root_after != original)
+          {
+              val_print(ACS_PRINT_WARN, " RO Root read changed during PAS 0x%llx probe",
+                        pas_list[index]);
+              completer_inconclusive[index] = 1u;
+              continue;
+          }
+
+          if (readback != original)
+              completer_denied[index] = 1u;
+          else if (original == 0u || original == 0xffffffffu)
+              completer_inconclusive[index] = 1u;
+
+          if (completer_inconclusive[index])
+              val_print(ACS_PRINT_WARN, " RO completer read indistinguishable: PAS 0x%llx",
+                        pas_list[index]);
+          else
+              val_print(completer_denied[index] ? ACS_PRINT_TEST : ACS_PRINT_WARN,
+                        completer_denied[index] ? " RO completer read denied: PAS 0x%llx" :
+                                                  " RO completer read not denied: PAS 0x%llx",
+                        pas_list[index]);
+      }
+
+      for (uint32_t index = 1u; index < 4u; ++index)
+      {
+          if (requester_denied[index] || completer_denied[index])
+              continue;
+          if (completer_inconclusive[index])
+              inconclusive++;
+          else
+          {
+              val_print(ACS_PRINT_ERR, " RO read not denied by either path: PAS 0x%llx",
+                        pas_list[index]);
+              failures++;
+          }
+      }
+
+      status = failures ? 1u : (inconclusive ? VAL_INTERCONNECT_INDETERMINATE : 0u);
+      goto restore_gpt;
+  }
+
   if (has_valid_register)
       valid_va = va[0] - page_offset + (valid_pa - page);
 
