@@ -21,6 +21,7 @@
 #include "val/include/val_el32.h"
 #include "val/include/val_pcie.h"
 #include "val/include/val_memory.h"
+#include "val/include/val_pgt.h"
 #include "val/include/val_pcie_enumeration.h"
 #include "val/include/val_exerciser.h"
 #include "val/include/val_smmu.h"
@@ -38,6 +39,126 @@
 
 /* The peers are on different Root Ports, so each uses stream block 1. */
 #define P2P_IDE_STREAM 1u
+
+typedef struct {
+    smmu_master_attributes_t master;
+    pgt_descriptor_t pgt_desc;
+    VAL_DPT_GPT_STATE bar_gpt;
+    uint32_t mapped;
+} p2p_realm_mapping_t;
+
+static uint32_t
+prepare_p2p_mapping(uint32_t req_bdf, uint64_t bar_base, p2p_realm_mapping_t *mapping)
+{
+    static const uint32_t pa_bits[] = {32u, 36u, 40u, 42u, 44u, 48u};
+    memory_region_descriptor_t mem_desc[2] = {0};
+    smmu_master_attributes_t *master = &mapping->master;
+    pgt_descriptor_t *pgt_desc = &mapping->pgt_desc;
+    uint32_t device_id, its_id, ps;
+    uint64_t bar_page = bar_base & ~((uint64_t)PAGE_SIZE_4K - 1u);
+
+    master->smmu_index = val_iovirt_get_rc_smmu_index(PCIE_EXTRACT_BDF_SEG(req_bdf),
+                                                     PCIE_CREATE_BDF_PACKED(req_bdf));
+    if (master->smmu_index == ACS_INVALID_INDEX ||
+        val_iovirt_get_smmu_info(SMMU_CTRL_ARCH_MAJOR_REV, master->smmu_index) != 3u)
+    {
+        val_print(ACS_PRINT_WARN, " No SMMUv3 path for requester BDF: 0x%x", req_bdf);
+        return ACS_STATUS_SKIP;
+    }
+
+    /* The SMMU SID comes from IOVIRT, independently of the PCIe IDE Stream ID. */
+    if (val_iovirt_get_device_info(PCIE_CREATE_BDF_PACKED(req_bdf),
+                                   PCIE_EXTRACT_BDF_SEG(req_bdf),
+                                   &device_id, &master->streamid, &its_id))
+        return ACS_STATUS_ERR;
+    master->stage2 = 1u;
+
+    pgt_desc->ias = val_smmu_get_info(SMMU_IN_ADDR_SIZE, master->smmu_index);
+    pgt_desc->oas = val_smmu_get_info(SMMU_OUT_ADDR_SIZE, master->smmu_index);
+    if (pgt_desc->ias < 32u || pgt_desc->oas < 32u)
+        return ACS_STATUS_ERR;
+
+    /* The EL3 page-table builder uses 4-KiB granules and up to four levels. */
+    if (pgt_desc->ias > 48u)
+        pgt_desc->ias = 48u;
+    if (pgt_desc->oas > 48u)
+        pgt_desc->oas = 48u;
+    if (bar_base >= (1ull << pgt_desc->ias) || bar_base >= (1ull << pgt_desc->oas))
+    {
+        val_print(ACS_PRINT_ERR, " Peer BAR exceeds SMMU mapping range: 0x%lx", bar_base);
+        return ACS_STATUS_ERR;
+    }
+
+    for (ps = 0u; ps < sizeof(pa_bits) / sizeof(pa_bits[0]); ++ps)
+        if (pa_bits[ps] == pgt_desc->oas)
+            break;
+    if (ps == sizeof(pa_bits) / sizeof(pa_bits[0]))
+        return ACS_STATUS_ERR;
+
+    /* Configure the SMMU's stage 2 without changing the PE's VTCR or VTTBR. */
+    pgt_desc->stage = PGT_STAGE2;
+    pgt_desc->vtcr.ps = ps;
+    pgt_desc->vtcr.tg = 0u;
+    pgt_desc->vtcr.tg_size_log2 = 12u;
+    pgt_desc->vtcr.tsz = 64u - pgt_desc->ias;
+    pgt_desc->vtcr.sl = pgt_desc->ias > 39u ? 2u : 1u;
+    pgt_desc->vtcr.sh = 3u;
+    pgt_desc->vtcr.irgn = 1u;
+    pgt_desc->vtcr.orgn = 1u;
+
+    /* DMA uses the BAR address directly. Map its entire page, even for a byte read.
+     * S2 MemAttr=0 selects Device-nGnRnE; NS=0 keeps the output in Realm PAS.
+     * mem_desc[1] remains the zero-length terminator required by the EL3 builder.
+     */
+    mem_desc[0].virtual_address = bar_page;
+    mem_desc[0].physical_address = bar_page;
+    mem_desc[0].length = PAGE_SIZE_4K;
+    mem_desc[0].attributes = PGT_STAGE2_AP_RO;
+
+    if (val_memory_map_el3_data((uint64_t)mem_desc, sizeof(mem_desc), NONSECURE_PAS) ||
+        val_memory_map_el3_data((uint64_t)master, sizeof(*master), NONSECURE_PAS) ||
+        val_memory_map_el3_data((uint64_t)pgt_desc, sizeof(*pgt_desc), NONSECURE_PAS))
+        return ACS_STATUS_ERR;
+
+    /* Preserve NS access to the exerciser's BAR while permitting Realm DMA. */
+    if (val_dpt_allow_gpt(bar_page, &mapping->bar_gpt) ||
+        val_smmu_gpt_invalidate_el3(master))
+        return ACS_STATUS_ERR;
+
+    if (val_rlm_pgt_create(mem_desc, pgt_desc) || val_smmu_rlm_map_el3(master, pgt_desc))
+        return ACS_STATUS_ERR;
+    mapping->mapped = 1u;
+    return ACS_STATUS_PASS;
+}
+
+static uint32_t
+release_p2p_mapping(p2p_realm_mapping_t *mapping)
+{
+    uint32_t status = ACS_STATUS_PASS;
+
+    if (mapping->mapped)
+    {
+        if (val_smmu_rlm_unmap_el3(&mapping->master))
+        {
+            /* Retain tables and GPT permission if the SMMU might still use them. */
+            val_print(ACS_PRINT_ERR, " Failed to unmap requester SID: 0x%x",
+                      mapping->master.streamid);
+            return ACS_STATUS_ERR;
+        }
+
+        mapping->mapped = 0u;
+    }
+
+    if (mapping->pgt_desc.pgt_base &&
+        val_rlm_pgt_destroy(&mapping->pgt_desc))
+        status = ACS_STATUS_ERR;
+
+    /* After unmapping, restore GPT permissions even if table destruction failed. */
+    if (val_dpt_restore_gpt(&mapping->bar_gpt, &mapping->master))
+        status = ACS_STATUS_ERR;
+
+    return status;
+}
 
 uint32_t
 get_target_exer_bdf(uint32_t req_rp_bdf, uint32_t *tgt_e_bdf,
@@ -116,7 +237,12 @@ test_fail:
 uint32_t
 check_p2p_transaction(uint32_t req_instance, uint64_t bar_base)
 {
-  if (val_exerciser_set_param(DMA_ATTRIBUTES, bar_base, 1, req_instance) != ACS_STATUS_PASS)
+  /* This test uses stage-2 translation, without ATS or a cached ATC entry. */
+  if (val_exerciser_set_param(CFG_TXN_ATTRIBUTES, TXN_ADDR_TYPE,
+                              AT_UNTRANSLATED, req_instance) != ACS_STATUS_PASS ||
+      val_exerciser_set_param(CFG_TXN_ATTRIBUTES, TXN_ATC_ENTRY,
+                              ATC_ENTRY_DISABLE, req_instance) != ACS_STATUS_PASS ||
+      val_exerciser_set_param(DMA_ATTRIBUTES, bar_base, 1, req_instance) != ACS_STATUS_PASS)
   {
       val_print(ACS_PRINT_ERR, " Failed to configure P2P DMA for exerciser %u", req_instance);
       return ACS_STATUS_ERR;
@@ -152,6 +278,7 @@ payload(void)
   uint32_t dma_failed = 0;
   uint32_t req_tdisp_attempted = 0;
   uint32_t tgt_tdisp_attempted = 0;
+  p2p_realm_mapping_t mapping;
 
   test_skip = 1;
   test_fails = 0;
@@ -171,6 +298,8 @@ payload(void)
       dma_failed = 0;
       req_tdisp_attempted = 0;
       tgt_tdisp_attempted = 0;
+      val_memory_set(&mapping, sizeof(mapping), 0);
+      mapping.master.smmu_index = ACS_INVALID_INDEX;
 
       /* if init fail moves to next exerciser */
       if (val_exerciser_init(instance))
@@ -178,6 +307,11 @@ payload(void)
 
       req_e_bdf = val_exerciser_get_bdf(instance);
       val_print(ACS_PRINT_TEST, " Requester exerciser BDF - 0x%x", req_e_bdf);
+      if (val_dpt_wait_for_dma(instance) != ACS_STATUS_PASS)
+      {
+          val_set_status(index, "FAIL", 01);
+          return;
+      }
 
       /* Get RP of the exerciser */
       if (val_pcie_get_rootport(req_e_bdf, &req_rp_bdf))
@@ -187,6 +321,16 @@ payload(void)
          Skip the current exerciser if no such exerciser if found */
       if (get_target_exer_bdf(req_rp_bdf, &tgt_e_bdf, &tgt_rp_bdf, &bar_base))
           continue;
+
+      status = prepare_p2p_mapping(req_e_bdf, bar_base, &mapping);
+      if (status == ACS_STATUS_SKIP)
+          continue;
+      if (status != ACS_STATUS_PASS)
+      {
+          val_print(ACS_PRINT_ERR, " Failed to map requester for P2P DMA, BDF: 0x%x", req_e_bdf);
+          test_fails++;
+          goto test_clean;
+      }
 
       test_skip = 0;
 
@@ -216,6 +360,7 @@ payload(void)
           ide_unsupported = 1;
           goto test_clean;
       }
+
       if (status != ACS_STATUS_PASS)
       {
           val_print(ACS_PRINT_ERR, " Failed to establish requester IDE, BDF: 0x%x", req_e_bdf);
@@ -241,6 +386,7 @@ payload(void)
           ide_unsupported = 1;
           goto test_clean;
       }
+
       if (status != ACS_STATUS_PASS)
       {
           val_print(ACS_PRINT_ERR, " Failed to establish target IDE, BDF: 0x%x", tgt_e_bdf);
@@ -264,6 +410,21 @@ payload(void)
       }
 
 test_clean:
+      /* A timeout can leave DMA outstanding. Retain all state until it is idle. */
+      if (val_dpt_wait_for_dma(instance) != ACS_STATUS_PASS)
+      {
+          val_set_status(index, "FAIL", ++test_fails);
+          return;
+      }
+
+      if (release_p2p_mapping(&mapping) != ACS_STATUS_PASS)
+      {
+          val_print(ACS_PRINT_ERR, " Failed to release P2P mapping, BDF: 0x%x", req_e_bdf);
+          val_pcie_disable_bme(req_e_bdf);
+          val_set_status(index, "FAIL", ++test_fails);
+          return;
+      }
+
       val_print(ACS_PRINT_DEBUG, " Putting the devices back into unlocked state", 0);
       if (req_ide_active &&
           val_dpt_ide_stop(req_e_bdf, req_rp_bdf, P2P_IDE_STREAM, req_ide_active))
