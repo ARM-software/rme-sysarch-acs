@@ -681,11 +681,13 @@ Testcase checklist
 
       Peer-to-Peer transaction between two TDISP devices must be handled correctly.
 
-      1. Get two Exerciser EPs under two different RPs.
-      2. Enable TDISP on both RPs and establish matching EP/RP IDE keys and Secure Selective IDE streams for both peers.
-      3. Program the target RP's address association for the peer BAR read, recheck Secure state at both ends, and lock each RP's stream register block through Root PAS.
-      4. The shared VAL target setup transitions the target exerciser into TDISP RUN state. Transition the requester into RUN and perform a Peer-to-Peer read, checking the DMA result.
-      5. Use shared VAL teardown to unlock the RP stream blocks, stop TDISP and IDE, close the sessions, and clear the address associations. Disable TDISP on both RPs, including on setup and transfer failures.
+      1. Check that requester DMA is quiescent and get two Exerciser EPs under two different RPs.
+      2. Resolve the requester's SMMUv3 index and StreamID through IOVIRT. Save the peer BAR's original GPI, set it to GPT_ANY and invalidate cached GPT information. Install a Realm stage-2 identity mapping for the 4-KiB page containing the peer BAR, with Device memory attributes and read permission. Derive translation controls from the SMMU address sizes without changing PE translation registers.
+      3. Enable TDISP on both RPs and establish matching EP/RP IDE keys and Secure Selective IDE streams for both peers.
+      4. Program the target RP's address association for the peer BAR read, recheck Secure state at both ends, and lock each RP's stream register block through Root PAS.
+      5. The shared VAL target setup transitions the target exerciser into TDISP RUN state. Transition the requester into RUN and perform an untranslated Peer-to-Peer read with ATC use disabled, checking the DMA result.
+      6. After DMA is quiescent, unmap the requester, destroy its page tables and restore the original peer BAR GPI with GPT invalidation. After successful unmapping, attempt GPT restoration even if page-table destruction fails. If DMA remains active, disable requester bus mastering and retain the mapping, GPT permission and IDE/TDISP state for platform recovery. Stop cleanup and disable requester bus mastering if mapping cleanup or GPT restoration fails.
+      7. After successful mapping cleanup, use shared VAL teardown to unlock the RP stream blocks, stop TDISP and IDE, close the sessions, and clear the address associations. Disable TDISP on both RPs, including after safely recovered setup and transfer failures.
 
       The DMA result checks successful transfer only; rejection of completions from an unintended peer requires additional exerciser support and is not verified by this test.
 
