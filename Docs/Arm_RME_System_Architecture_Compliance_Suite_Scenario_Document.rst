@@ -61,6 +61,29 @@ Testcase checklist
 
       RXTSXB: An RME coherent interconnect supports cache maintenance operations to the PoPA.
 
+    -
+
+      Coherent interconnect support for CMO to PoPA is checked using
+      Secure and Non-secure cacheable aliases of the same PA.
+
+      1. PA1 is marked as All Access Permitted.
+      2. VA1 is mapped to PA1 as Secure PAS with cacheable attributes.
+      3. VA2 is mapped to PA1 as Non-secure PAS with cacheable attributes.
+      4. A known initial value is written through VA2, then CMO to PoPA is
+         issued for PA1 with Non-secure PAS.
+      5. VA1 and VA2 are read to capture the Secure and Non-secure views.
+      6. New data is written through VA1.
+      7. CMO to PoPA is issued for PA1 with Secure PAS, followed by
+         Non-secure PAS, waiting for completion of each operation.
+      8. VA2 is read again and must return a value different from the previous
+         Non-secure value and different from the Secure plaintext value.
+
+  * -
+
+      `rme_popa_cmo_completion_guarantees <../test_pool/rme/rme_popa_cmo_completion_guarantees.c>`_
+
+    -
+
       RLCXDB: Completion of a PoPA CMO for a given PA guarantees that both:
 
       - Any dirty cached or transient state associated with the PA before the PoPA has been cleaned to after the PoPA.
@@ -68,18 +91,32 @@ Testcase checklist
 
     -
 
-      Coherent interconnect supports CMO to PoPA.
+      PoPA CMO completion clean and invalidation behavior is checked using
+      Secure and Non-secure cacheable aliases of the same PA.
 
-      1. CMO to PoPA cleans dirty copy till PoPA and invalidates all cached copies.
-      2. PA1 is marked as All Access Permitted.
-      3. PA1 is initialized with random data.
-      4. VA1 is mapped to PA1 as secure PAS in MMU with cacheable attribute.
-      5. VA2 is mapped to PA1 as nonsecure in MMU with cacheable attribute.
-      6. Read VA1 returns data1.
-      7. Read VA2 returns data2.
-      8. Store data3 in VA1.
-      9. Issue CMO to PoPA for PA1 secure and nonsecure.
-      10. Read of VA2 must return data4 (! = data2) (ciphertext of data3).
+      1. PA1 is marked as All Access Permitted.
+      2. VA1 is mapped to PA1 as Secure PAS with cacheable attributes.
+      3. VA2 is mapped to PA1 as Non-secure PAS with cacheable attributes.
+      4. A known initial value is written through VA2, then CMO to PoPA is
+         issued for PA1 with Non-secure PAS.
+      5. VA1 and VA2 are read to capture the Secure and Non-secure views.
+         The Non-secure read must match the initialized value.
+      6. data3 is written through VA1.
+      7. CMO to PoPA is issued for PA1 with Secure PAS, followed by
+         Non-secure PAS, waiting for completion of each operation.
+      8. VA2 is read and must return data4, where data4 differs from the
+         previous Non-secure value and from the Secure plaintext value.
+      9. data5, distinct from data4 and data3, is written through VA2.
+      10. CMO to PoPA is issued for PA1 with Non-secure PAS.
+      11. VA1 is read without issuing another Secure CMO and must return data6,
+          where data6 differs from data3. There are no intervening Secure reads
+          after step 7, preserving the observation of the earlier Secure CMO's
+          invalidation effect.
+      12. VA2 is read and must return data5, verifying Non-secure readback after
+          the final Non-secure CMO.
+      13. This provides best-effort software-visible validation; direct
+          observation of internal cached or transient state requires
+          implementation-level visibility.
 
   * -
 
