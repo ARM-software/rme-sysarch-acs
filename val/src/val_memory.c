@@ -324,6 +324,55 @@ val_memory_read_el3(uint64_t address, uint32_t *value)
 }
 
 /**
+  @brief  Map a small data structure for EL3 access under the requested PAS.
+
+  @param  va    Virtual address of the structure.
+  @param  size  Size of the structure in bytes.
+  @param  pas   PAS_ATTR value to use for the EL3 mapping.
+
+  @return ACS_STATUS_PASS on success, ACS_STATUS_ERR on failure.
+**/
+uint32_t
+val_memory_map_el3_data(uint64_t va, uint32_t size, uint32_t pas)
+{
+  uint32_t attr;
+  uint64_t pa;
+  uint64_t page_size;
+  uint64_t page_mask;
+  uint64_t map_va;
+  uint64_t end_va;
+
+  if ((va == 0u) || (size == 0u))
+    return ACS_STATUS_ERR;
+
+  page_size = val_memory_page_size();
+  if ((page_size == 0u) || ((page_size & (page_size - 1u)) != 0u))
+    return ACS_STATUS_ERR;
+
+  page_mask = ~(page_size - 1u);
+  attr = LOWER_ATTRS(PGT_ENTRY_ACCESS |
+                     SHAREABLE_ATTR(OUTER_SHAREABLE) |
+                     PGT_ENTRY_AP_RW |
+                     PAS_ATTR(pas));
+
+  map_va = va & page_mask;
+  end_va = (va + size - 1u) & page_mask;
+  while (map_va <= end_va)
+  {
+    pa = (uint64_t)val_memory_virt_to_phys((void *)map_va);
+    if (pa == 0u)
+      return ACS_STATUS_ERR;
+
+    if (val_add_mmu_entry_el3(map_va, pa & page_mask, attr))
+      return ACS_STATUS_ERR;
+
+    map_va += page_size;
+  }
+
+  return ACS_STATUS_PASS;
+}
+
+/**
   @brief  Check that an EL3-accessible buffer contains one repeated byte.
 
   @param  buffer_va     Buffer virtual address.
