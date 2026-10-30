@@ -138,7 +138,9 @@ payload(void)
   smmu_master_attributes_t master;
   memory_region_descriptor_t mem_desc_array[3], *mem_desc;
   pgt_descriptor_t pgt_desc;
-  uint32_t rlm_mapped;
+  uint32_t rlm_mapped, cleanup_failed;
+  VAL_DPT_GPT_STATE dram_gpt;
+  VAL_DPT_GPT_STATE bar_gpt;
   uint64_t translated_addr, m_vir_addr, bar_buf_in_phys, dram_buf_in_phys;
   uint32_t tgt_e_bdf, tgt_rp_bdf, tgt_instance;
   uint64_t tgt_bar_base, tgt_bar_size;
@@ -191,6 +193,8 @@ payload(void)
       pgt_desc.pgt_base = 0;
       ats_changed = 0;
       rlm_mapped = 0;
+      dram_gpt.saved = 0;
+      bar_gpt.saved = 0;
       dram_buf_in_virt = NULL;
       ide_active = 0;
       target_ide_count = 0;
@@ -200,6 +204,11 @@ payload(void)
 
       bdf = val_exerciser_get_bdf(instance);
       val_print(ACS_PRINT_TEST, " Exerciser BDF - 0x%x", bdf);
+      if (val_dpt_wait_for_dma(instance) != ACS_STATUS_PASS)
+      {
+          val_set_status(pe_index, "FAIL", 06);
+          return;
+      }
 
       /* Get the RP of the exerciser */
       if (val_pcie_get_rootport(bdf, &rp_bdf))
@@ -247,6 +256,13 @@ payload(void)
       /* Clear only the target range used by this iteration. */
       dma_len = (tgt_bar_size < test_data_blk_size / 2u) ?
                   (uint32_t)tgt_bar_size : test_data_blk_size / 2u;
+      if (!dma_len || (dma_len % sizeof(uint32_t)))
+      {
+          val_print(ACS_PRINT_ERR, " Invalid peer BAR transfer length %u", dma_len);
+          test_fail++;
+          continue;
+      }
+
       val_memory_set((void *)tgt_bar_base, dma_len, 0);
 
       test_skip = 0;
@@ -279,6 +295,7 @@ payload(void)
           ide_unsupported = 1;
           goto ide_cleanup;
       }
+
       if (status)
       {
           val_print(ACS_PRINT_ERR, " Failed to establish stream for bdf: 0x%x", bdf);
@@ -339,6 +356,7 @@ payload(void)
           ide_unsupported = 1;
           goto ide_cleanup;
       }
+
       if (status)
       {
           val_print(ACS_PRINT_ERR, " Failed to establish target IDE, BDF: 0x%x", tgt_e_bdf);
@@ -353,10 +371,29 @@ payload(void)
           test_fail++;
           goto ide_cleanup;
       }
+
       ats_changed = 1;
       val_pcie_write_cfg(bdf, ats_capability + ATS_CTRL,
                          saved_ats_control | ATS_CACHING_EN);
 
+
+      /* Resolve the requester before GPT updates so failure cleanup can
+       * restore both the GPT and this SMMU's cached view.
+       */
+      master.smmu_index = val_iovirt_get_rc_smmu_index(PCIE_EXTRACT_BDF_SEG(bdf),
+                                                     PCIE_CREATE_BDF_PACKED(bdf));
+      if (master.smmu_index == ACS_INVALID_INDEX ||
+          val_smmu_enable(master.smmu_index) ||
+          val_iovirt_get_device_info(PCIE_CREATE_BDF_PACKED(bdf),
+                                     PCIE_EXTRACT_BDF_SEG(bdf), &device_id,
+                                     &master.streamid, &its_id))
+      {
+          val_print(ACS_PRINT_ERR, " Failed to configure requester SMMU, BDF 0x%x", bdf);
+          test_fail++;
+          goto ide_cleanup;
+      }
+
+      bar_buf_in_phys = (uint64_t)val_memory_virt_to_phys((void *)tgt_bar_base);
 
       /* Create a buffer of size TEST_DMA_SIZE in DRAM */
       dram_buf_in_virt = val_memory_alloc_pages(TEST_DATA_NUM_PAGES);
@@ -366,12 +403,11 @@ payload(void)
           test_fail++;
           goto free_mem;
       }
+
       dram_buf_in_phys = (uint64_t)val_memory_virt_to_phys(dram_buf_in_virt);
 
-      bar_buf_in_phys = (uint64_t)val_memory_virt_to_phys((void *)tgt_bar_base);
-
-      /* Change the AccessPAS of the buffer to Realm PAS */
-      if (val_add_gpt_entry_el3(dram_buf_in_phys, GPT_ANY))
+      /* Save the GPI before allowing the Realm DMA prerequisite. */
+      if (val_dpt_allow_gpt(dram_buf_in_phys, &dram_gpt))
       {
           val_print(ACS_PRINT_ERR,
             " Failed to add GPT entry for PA 0x%llx", dram_buf_in_phys);
@@ -379,18 +415,19 @@ payload(void)
           goto free_mem;
       }
 
-      if (val_add_gpt_entry_el3(bar_buf_in_phys, GPT_ANY))
+      if (val_dpt_allow_gpt(bar_buf_in_phys, &bar_gpt))
       {
           val_print(ACS_PRINT_ERR,
             " Failed to add GPT entry for PA 0x%llx", bar_buf_in_phys);
           test_fail++;
           goto free_mem;
       }
+
       pgt_attr_el3 = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(OUTER_SHAREABLE)
                         | GET_ATTR_INDEX(DEV_MEM_nGnRnE) | PGT_ENTRY_AP_RW | PAS_ATTR(REALM_PAS));
 
       if (val_add_mmu_entry_el3((uint64_t)dram_buf_in_virt,
-                                (uint64_t)dram_buf_in_virt, pgt_attr_el3))
+                                dram_buf_in_phys, pgt_attr_el3))
       {
           val_print(ACS_PRINT_ERR, " Failed to add MMU entry for dram_buf_in_virt: 0x%llx",
                     (uint64_t)dram_buf_in_virt);
@@ -398,7 +435,7 @@ payload(void)
           goto free_mem;
       }
 
-      if (val_add_mmu_entry_el3((uint64_t)tgt_bar_base, (uint64_t)tgt_bar_base, pgt_attr_el3))
+      if (val_add_mmu_entry_el3(tgt_bar_base, bar_buf_in_phys, pgt_attr_el3))
       {
           val_print(ACS_PRINT_ERR,
             " Failed to add MMU entry for tgt_bar_base: 0x%llx", (uint64_t)tgt_bar_base);
@@ -413,6 +450,7 @@ payload(void)
           test_fail++;
           goto free_mem;
       }
+
       val_pe_cache_clean_invalidate_range((uint64_t)dram_buf_in_virt, (uint64_t)(dma_len));
 
       /* Set the input buffer with the Test Data */
@@ -423,6 +461,7 @@ payload(void)
           test_fail++;
           goto free_mem;
       }
+
       val_pe_cache_clean_invalidate_range((uint64_t)dram_buf_in_virt, (uint64_t)(dma_len));
 
       mem_desc->virtual_address = (uint64_t)dram_buf_in_virt;
@@ -435,26 +474,7 @@ payload(void)
       mem_desc[1].length = tgt_bar_size;
       mem_desc[1].attributes = PGT_STAGE2_AP_RW;
 
-      /* Find SMMU node index for this exerciser instance */
-      master.smmu_index = val_iovirt_get_rc_smmu_index(PCIE_EXTRACT_BDF_SEG(bdf),
-                          PCIE_CREATE_BDF_PACKED(bdf));
 
-      /* Enable SMMU globally so that the transaction passes
-       * through the SMMU.
-       */
-      if (master.smmu_index != ACS_INVALID_INDEX) {
-          if (val_smmu_enable(master.smmu_index)) {
-                val_print(ACS_PRINT_ERR, " Exerciser %x smmu disable error", instance);
-                val_set_status(pe_index, "FAIL", 04);
-                test_fail++;
-                goto free_mem;
-          }
-      }
-
-      val_iovirt_get_device_info(PCIE_CREATE_BDF_PACKED(bdf),
-                                     PCIE_EXTRACT_BDF_SEG(bdf),
-                                     &device_id, &master.streamid,
-                                     &its_id);
       /* Invalidate SMMU GPT cache entries after GPT updates for this stream. */
       if (val_smmu_gpt_invalidate_el3(&master))
       {
@@ -515,10 +535,17 @@ payload(void)
           test_fail++;
           goto free_mem;
       }
+
       rlm_mapped = 1;
 
       /* Send an ATS Translation Request for the VA */
-      val_exerciser_set_param(DMA_ATTRIBUTES, (uint64_t)tgt_bar_base, dma_len, instance);
+      if (val_exerciser_set_param(DMA_ATTRIBUTES, (uint64_t)tgt_bar_base, dma_len, instance))
+      {
+          val_print(ACS_PRINT_ERR, " ATS DMA attributes setting failure %4x", instance);
+          test_fail++;
+          goto free_mem;
+      }
+
       if (val_exerciser_ops(ATS_TXN_REQ, (uint64_t)tgt_bar_base, instance))
       {
           val_print(ACS_PRINT_ERR, " ATS Translation Req Failed exerciser %4x", instance);
@@ -548,6 +575,18 @@ payload(void)
           goto free_mem;
       }
 
+      /* The source transfer is untranslated and must not inherit ATC state
+       * from a previous test or exerciser iteration.
+       */
+      if (val_exerciser_set_param(CFG_TXN_ATTRIBUTES, TXN_ADDR_TYPE,
+                                  AT_UNTRANSLATED, instance) ||
+          val_exerciser_set_param(CFG_TXN_ATTRIBUTES, TXN_ATC_ENTRY,
+                                  ATC_ENTRY_DISABLE, instance))
+      {
+          test_fail++;
+          goto free_mem;
+      }
+
       /* Trigger DMA from input buffer to exerciser memory */
       if (val_exerciser_ops(START_DMA, EDMA_TO_DEVICE, instance) != EXERCISER_DMA_SUCCESS) {
           val_print(ACS_PRINT_ERR, " DMA did not complete with a usable result", 0);
@@ -556,7 +595,7 @@ payload(void)
       }
 
       /* Add DPT entry for the PA with Read Write Access */
-      if (val_dpt_add_entry((uint64_t)tgt_bar_base,
+      if (val_dpt_add_entry(bar_buf_in_phys,
                        ((((uint64_t)(master.smmu_index)) << 32) | DPT_RDWR_ACCESS_ENTRY)))
       {
           val_print(ACS_PRINT_ERR, " DPT entry add failure %4x", instance);
@@ -572,7 +611,13 @@ payload(void)
       }
 
       /* Configure Exerciser to issue subsequent DMA transactions with Address Translated bit Set */
-      val_exerciser_set_param(CFG_TXN_ATTRIBUTES, TXN_ADDR_TYPE, AT_TRANSLATED, instance);
+      if (val_exerciser_set_param(CFG_TXN_ATTRIBUTES, TXN_ADDR_TYPE,
+                                  AT_TRANSLATED, instance))
+      {
+          test_fail++;
+          goto free_mem;
+      }
+
       if (val_exerciser_set_param(DMA_ATTRIBUTES, bar_buf_in_phys, dma_len, instance))
       {
           val_print(ACS_PRINT_ERR, " DMA attributes setting failure %4x", instance);
@@ -587,9 +632,9 @@ payload(void)
           goto free_mem;
       }
 
-      /* Compare memory regions, here source is read from EL3 and the destination buffer fom NS */
-      if (val_memory_compare_src_el3((uint32_t *)dram_buf_in_virt, (uint32_t *)tgt_bar_base,
-                                                                                     dma_len))
+      /* Observe both buffers through their EL3 mappings. */
+      if (val_memory_compare_el3((uint64_t)dram_buf_in_virt, tgt_bar_base,
+                                 dma_len) != ACS_STATUS_PASS)
       {
           val_print(ACS_PRINT_ERR,
           " DPT entry was set to RDRW Access, but access was not granted for %4x", instance);
@@ -598,6 +643,20 @@ payload(void)
       }
 
 free_mem:
+      if (val_dpt_wait_for_dma(instance) != ACS_STATUS_PASS)
+      {
+          val_set_status(pe_index, "FAIL", 06);
+          return;
+      }
+
+      if (val_exerciser_set_param(CFG_TXN_ATTRIBUTES, TXN_ADDR_TYPE,
+                                  AT_UNTRANSLATED, instance))
+          test_fail++;
+
+      if (val_exerciser_set_param(CFG_TXN_ATTRIBUTES, TXN_ATC_ENTRY,
+                                  ATC_ENTRY_DISABLE, instance))
+          test_fail++;
+
       val_exerciser_ops(ATS_INV_CACHE, 0, instance);
 
       if (val_pcie_find_capability(bdf, PCIE_ECAP, ECID_ATS, &cap_base) == PCIE_SUCCESS)
@@ -621,24 +680,44 @@ free_mem:
       /* Restore the target BAR mapping independently of buffer allocation. */
       pgt_attr_el3 = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(OUTER_SHAREABLE)
                      | GET_ATTR_INDEX(DEV_MEM_nGnRnE) | PGT_ENTRY_AP_RW | PAS_ATTR(NONSECURE_PAS));
-      if (val_add_mmu_entry_el3(tgt_bar_base, tgt_bar_base, pgt_attr_el3))
+      if (val_add_mmu_entry_el3(tgt_bar_base, bar_buf_in_phys, pgt_attr_el3))
           test_fail++;
+
+      if (val_dpt_restore_gpt(&bar_gpt, &master) != ACS_STATUS_PASS)
+      {
+          val_print(ACS_PRINT_ERR, " Failed to restore peer BAR GPT, instance %4x", instance);
+          test_fail++;
+      }
 
       /* A failed setup may reach cleanup before the DMA buffer is allocated. */
       if (dram_buf_in_virt != NULL)
       {
+          cleanup_failed = 0;
           if (val_add_mmu_entry_el3((uint64_t)dram_buf_in_virt,
                                    dram_buf_in_phys, pgt_attr_el3))
-              test_fail++;
+              cleanup_failed = 1;
           else
           {
-              if (val_memory_set_el3((uint64_t *)dram_buf_in_virt, test_data_blk_size, 0))
-                  test_fail++;
+              if (val_memory_set_el3(dram_buf_in_virt, test_data_blk_size, 0))
+                  cleanup_failed = 1;
+
               val_pe_cache_clean_invalidate_range((uint64_t)dram_buf_in_virt,
                                                   test_data_blk_size);
           }
-          val_memory_free_pages(dram_buf_in_virt, TEST_DATA_NUM_PAGES);
-          dram_buf_in_virt = NULL;
+
+          if (val_dpt_restore_gpt(&dram_gpt, &master) != ACS_STATUS_PASS)
+              cleanup_failed = 1;
+
+          if (cleanup_failed)
+          {
+              val_print(ACS_PRINT_ERR, " DMA buffer cleanup failed; keeping buffer reserved", 0);
+              test_fail++;
+          }
+          else
+          {
+              val_memory_free_pages(dram_buf_in_virt, TEST_DATA_NUM_PAGES);
+              dram_buf_in_virt = NULL;
+          }
       }
 
 ide_cleanup:
@@ -648,23 +727,25 @@ ide_cleanup:
           val_exerciser_ops(ATS_INV_CACHE, 0, instance);
           val_pcie_write_cfg(bdf, ats_capability + ATS_CTRL, saved_ats_control);
       }
+
       if (target_ide_count && val_dpt_ide_stop(tgt_e_bdf, tgt_rp_bdf, 1u, target_ide_count))
           test_fail++;
+
       if (ide_active && val_dpt_ide_stop(bdf, rp_bdf, count, count))
           test_fail++;
+
       if (val_pcie_disable_tdisp(rp_bdf))
           test_fail++;
+
       if (tgt_rp_bdf != rp_bdf && val_pcie_disable_tdisp(tgt_rp_bdf))
           test_fail++;
 
   }
 
-  if (ide_unsupported && !test_fail)
-      val_set_status(pe_index, "SKIP", 01);
-  else if (test_skip)
-      val_set_status(pe_index, "SKIP", 01);
-  else if (test_fail)
+  if (test_fail)
       val_set_status(pe_index, "FAIL", 05);
+  else if (ide_unsupported || test_skip)
+      val_set_status(pe_index, "SKIP", 01);
   else
       val_set_status(pe_index, "PASS", 01);
 
