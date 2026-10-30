@@ -39,6 +39,7 @@ uint32_t rme_realm_smem_in_realm_pas_entry(uint32_t num_pe);
 uint32_t rme_cmo_popa_for_cacheability_shareability_entry(uint32_t num_pe);
 uint32_t rme_memory_associated_with_pas_till_popa_entry(uint32_t num_pe);
 uint32_t rme_pa_compare_operation_includes_pas_entry(uint32_t num_pe);
+uint32_t rme_popa_cmo_completion_guarantees_entry(uint32_t num_pe);
 uint32_t rme_interconnect_supports_tlbi_pa_entry(uint32_t num_pe);
 uint32_t rme_ns_encryption_is_immutable_entry(uint32_t num_pe);
 uint32_t rme_pe_context_after_exit_wfi_entry(uint32_t num_pe);

@@ -143,6 +143,7 @@
   ../test_pool/rme/rme_pe_context_after_exit_wfi.c
   ../test_pool/rme/rme_pe_context_after_pe_suspend.c
   ../test_pool/rme/rme_pe_do_not_have_arch_diff.c
+  ../test_pool/rme/rme_popa_cmo_completion_guarantees.c
   ../test_pool/rme/rme_realm_smem_behaviour_after_reset.c
   ../test_pool/rme/rme_realm_smem_in_realm_pas.c
   ../test_pool/rme/rme_resources_aligned_to_granularity.c
