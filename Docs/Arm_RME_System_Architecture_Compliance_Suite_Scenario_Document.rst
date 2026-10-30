@@ -1669,12 +1669,12 @@ Testcase checklist
 
       IDE-tagged transactions from Exerciser Endpoint must undergo DPT enforcement through R_SMMU.
 
-      1. Validate that IDE-tagged transactions from the Exerciser Endpoint undergo proper DPT enforcement through the R_SMMU.
-      2. Establish an IDE stream between the Root Port and Exerciser, configure secure EL3 memory for DMA, and evaluate both successful and failed flows based on whether a DPT Invalidate command is issued.
-
-      The test ensures that transactions with stale or missing DPT entries are blocked and those with valid, updated entries are allowed.
-
-      Observations: The transaction initiated by the Exerciser passed through the R_SMMU and was subjected to DPT checks as expected.
+      1. Establish the requester IDE stream and, for P2P, the peer target IDE stream and BAR association. Configure the Realm SMMU stage-2 mappings.
+      2. Save the original GPT GPI for the DMA buffer and, for P2P, the peer BAR. Set these entries to GPT_ANY and invalidate the requester SMMU's cached GPT information using its supported broadcast or register maintenance mechanism before issuing ATS.
+      3. Require a successful ATS response matching the mapped physical address. Exercise the system-resource read/write cases with and without explicit DPT invalidation, and the no-access case with invalidation.
+      4. For each no-access test, require a successful source transfer with explicit address type and ATC use disabled. Use untranslated source DMA for P2P and translated source DMA with read/write DPT permission for system resources. Prove a permitted translated destination write and verify its full data pattern through EL3. Clear the destination, install DPT no-access permission, invalidate DPT state, and repeat that write. Require every destination byte to remain unchanged; a partial write or failed EL3 read is a test failure. The positive tests require successful transfers and compare both buffers through EL3.
+      5. In the system-resource no-access test, also check read denial independently. Keep the DPT block denied, change the host source pattern, and attempt a translated source read. After that command completes, restore read/write DPT permission and read back the exerciser contents through a permitted destination DMA. Every byte must contain the original seed or zero; any byte of the new source pattern fails the test.
+      6. Wait for DMA completion before changing transaction attributes or releasing resources. If DMA cannot be quiesced, fail the test, disable requester bus mastering, and retain its buffers, mappings and policy for platform recovery. Otherwise reset transaction attributes, invalidate ATS state, and remove the Realm SMMU mappings. Restore read/write DPT permission after no-access tests, restore the original GPT GPIs with SMMU maintenance, and release DMA buffers only after successful cleanup. Restore PCIe controls and stop IDE streams on normal and failure exits. Setup or cleanup failures take precedence over SKIP.
 
   * -
 

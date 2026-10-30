@@ -22,6 +22,38 @@
 #define DPT_READ_ONLY_ACCESS_ENTRY 1
 #define DPT_RDWR_ACCESS_ENTRY      17
 
+typedef struct {
+  uint64_t pa;
+  uint64_t original_gpi;
+  uint32_t saved;
+} VAL_DPT_GPT_STATE;
+
+/* Initialize state to zero before use. Save the original GPI before allowing
+ * access to the granule. A failed update may still require restoration.
+ * Callers invalidate the requester SMMU after all setup GPT changes.
+ */
+uint32_t val_dpt_allow_gpt(uint64_t pa, VAL_DPT_GPT_STATE *state);
+
+/* Quiesce/unmap the requester before restoring. Failure leaves state saved;
+ * keep the affected memory reserved until restoration and maintenance succeed.
+ */
+uint32_t val_dpt_restore_gpt(VAL_DPT_GPT_STATE *state,
+                           smmu_master_attributes_t *master);
+
+/* The exerciser must already contain byte_pattern. Prove a permitted write,
+ * clear the destination, then deny the same write and check every byte.
+ * The destination must be accessible through EL3. The caller must restore
+ * DPT permission on every return, including partial setup failures.
+ */
+uint32_t val_dpt_check_denied_write(uint32_t instance, uint32_t smmu_index,
+                                  uint64_t destination_va, uint64_t destination_pa,
+                                  uint32_t length, uint8_t byte_pattern);
+
+/* On failure, bus mastering is disabled. Stop the test and retain its mappings,
+ * policy and buffers: an outstanding DMA cannot safely be aborted by this API.
+ */
+uint32_t val_dpt_wait_for_dma(uint32_t instance);
+
 uint32_t
 dpt_system_resource_valid_without_dpti_entry(uint32_t num_pe);
 

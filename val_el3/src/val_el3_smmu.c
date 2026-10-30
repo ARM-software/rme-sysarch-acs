@@ -395,6 +395,15 @@ uint32_t val_el3_smmu_gpt_invalidate(smmu_master_attributes_t master_attr)
     g_sid = master_attr.streamid;
     val_el3_mem_barrier();
     idr0 = val_el3_mmio_read(smmu->base + SMMU_ROOT_IDRO);
+    /* BGPTM guarantees that Outer Shareable GPT invalidations reach this
+     * SMMU. Issue our own broadcast so this API also works independently of
+     * val_add_gpt_entry_el3(); the helper includes the completing DSB.
+     */
+    if (idr0 & SMMU_ROOT_IDR0_BGPTM_MASK) {
+        val_el3_tlbi_paallos();
+        return 0;
+    }
+
     if ((idr0 & SMMU_ROOT_IDR0_RGPTM_MASK) == 0u)
         return 1;
 
