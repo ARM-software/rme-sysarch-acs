@@ -48,6 +48,8 @@ val_dpt_allow_gpt(uint64_t pa, VAL_DPT_GPT_STATE *state)
 uint32_t
 val_dpt_restore_gpt(VAL_DPT_GPT_STATE *state, smmu_master_attributes_t *master)
 {
+  uint32_t status;
+
   if (state == NULL)
     return ACS_STATUS_ERR;
 
@@ -57,8 +59,9 @@ val_dpt_restore_gpt(VAL_DPT_GPT_STATE *state, smmu_master_attributes_t *master)
   if (master == NULL || master->smmu_index == ACS_INVALID_INDEX)
     return ACS_STATUS_ERR;
 
-  if (val_add_gpt_entry_el3(state->pa, state->original_gpi) ||
-      val_smmu_gpt_invalidate_el3(master))
+  status = val_add_gpt_entry_el3(state->pa, state->original_gpi);
+  /* An update can fail after changing the GPT. Invalidate on either result. */
+  if (val_smmu_gpt_invalidate_el3(master) || status)
     return ACS_STATUS_ERR;
 
   state->saved = 0u;
