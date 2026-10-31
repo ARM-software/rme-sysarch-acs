@@ -52,9 +52,11 @@ static uint32_t g_rmsd_alias_page_count;
 #if ENABLE_SPDM
 
 /* Maintain a small registry of active SPDM sessions keyed by BDF. */
-typedef struct {
+typedef struct spdm_session_slot {
+  struct spdm_session_slot *owner;
   uint32_t             in_use;
   uint32_t             bdf;
+  uint32_t             ide_bdf;
   uint32_t             session_id;
   uint32_t             tdi_locked;
   uint32_t             ide_configured;
@@ -62,6 +64,7 @@ typedef struct {
   uint32_t             ep_count;
   uint32_t             rp_count;
   uint32_t             rp_key_cleanup_required;
+  uint32_t             rp_address_configured;
   uint8_t              stream_id;
   val_spdm_context_t   ctx;
 } spdm_session_slot_t;
@@ -88,12 +91,15 @@ static spdm_session_slot_t *spdm_alloc_slot(uint32_t bdf)
     return s;
   for (uint32_t i = 0; i < MAX_SPDM_SESSION_SLOTS; ++i) {
     if (!g_spdm_sessions[i].in_use) {
+      g_spdm_sessions[i].owner = &g_spdm_sessions[i];
       g_spdm_sessions[i].in_use = 1u;
       g_spdm_sessions[i].bdf = bdf;
+      g_spdm_sessions[i].ide_bdf = 0u;
       g_spdm_sessions[i].session_id = 0u;
       g_spdm_sessions[i].tdi_locked = 0u;
       g_spdm_sessions[i].ide_configured = 0u;
       g_spdm_sessions[i].rp_key_cleanup_required = 0u;
+      g_spdm_sessions[i].rp_address_configured = 0u;
       /* ctx will be initialised when session is opened. */
       return &g_spdm_sessions[i];
     }
@@ -107,6 +113,7 @@ static void spdm_free_slot(spdm_session_slot_t *slot)
     return;
   slot->in_use = 0u;
   slot->bdf = 0u;
+  slot->ide_bdf = 0u;
   slot->session_id = 0u;
   /* ctx is left zeroed by deinit path */
 }
@@ -677,7 +684,26 @@ val_device_session_open(uint32_t bdf)
   if (slot->session_id != 0u)
     return ACS_STATUS_PASS;
 
-  status = val_spdm_session_open(bdf, &slot->ctx, &slot->session_id);
+  /* Clear the function field: Function 0 owns endpoint IDE (PCIe 6.33.3). */
+  slot->ide_bdf = bdf & ~0xffu;
+  /* Shared default-stream keys and both TDI locks must use the same session
+   * (PCIe 11.4.5). Keep separate per-function TDISP state in each slot.
+   */
+  for (uint32_t i = 0; i < MAX_SPDM_SESSION_SLOTS; ++i) {
+    spdm_session_slot_t *owner = &g_spdm_sessions[i];
+
+    if (owner != slot && owner->in_use && owner->owner == owner &&
+        owner->ide_bdf == slot->ide_bdf && owner->ide_configured) {
+      slot->owner = owner;
+      slot->session_id = owner->session_id;
+      slot->rp_bdf = owner->rp_bdf;
+      slot->ep_count = owner->ep_count;
+      slot->rp_count = owner->rp_count;
+      slot->stream_id = owner->stream_id;
+      return ACS_STATUS_PASS;
+    }
+  }
+  status = val_spdm_session_open(slot->ide_bdf, &slot->ctx, &slot->session_id);
   if (status != ACS_STATUS_PASS) {
     val_spdm_context_deinit(&slot->ctx);
     spdm_free_slot(slot);
@@ -717,6 +743,11 @@ val_pcie_ide_establish_streams(uint32_t bdf, uint32_t rp_bdf,
   uint32_t regs[PCIE_CFG_SIZE / sizeof(uint32_t)];
   uint32_t reg_count = PCIE_CFG_SIZE / sizeof(uint32_t);
   uint32_t i, j, state_ep, state_rp, result = ACS_STATUS_ERR;
+  /* Clear the function field to select Function 0's shared IDE resources. */
+  uint32_t ide_bdf = bdf & ~0xffu;
+  uint32_t rid_base = rid, rid_limit = rid;
+  uint64_t bar_base = ~(uint64_t)0, bar_limit = 0;
+  pcie_device_bdf_table *bdf_table = val_pcie_bdf_table_ptr();
   uint8_t dev_func, bus, segment, max_port, ack, sub;
   libspdm_return_t status = ACS_STATUS_ERR;
   char8_t *stage = " PCIe IDE setup: configure stream associations";
@@ -727,17 +758,69 @@ val_pcie_ide_establish_streams(uint32_t bdf, uint32_t rp_bdf,
 
   /* Record RP and Stream ID in the EP session slot for setup and cleanup */
   slot = spdm_find_slot(bdf);
+  /* Another function of this endpoint reuses the established F0 stream.
+   * Keep its own TDISP identity, but never replace the owner's keys or ID.
+   */
+  if (slot->owner->ide_configured)
+    return slot->owner->rp_bdf == rp_bdf ? ACS_STATUS_PASS : ACS_STATUS_ERR;
   slot->rp_bdf = rp_bdf;
   slot->ep_count = ep_count;
   slot->rp_count = rp_count;
   slot->stream_id = (uint8_t)stream_id;
   selector.stream_id = (uint8_t)stream_id;
 
+  /* The endpoint's default stream covers its enumerated function RIDs. */
+  if (rid == (PCIE_CREATE_BDF_PACKED(bdf))) {
+    for (i = 0; i < bdf_table->num_entries; ++i) {
+      uint32_t peer_bdf = bdf_table->device[i].bdf;
+      uint32_t peer_rid;
+
+      /* Ignore the function field when matching functions of the same device. */
+      if ((peer_bdf & ~0xffu) != ide_bdf)
+        continue;
+      peer_rid = PCIE_CREATE_BDF_PACKED(peer_bdf);
+      if (peer_rid < rid_base)
+        rid_base = peer_rid;
+      if (peer_rid > rid_limit)
+        rid_limit = peer_rid;
+    }
+  }
+
+  /* Prepare one address range for the shared endpoint's exerciser BARs.
+   * This includes the selected P2P target without requiring test-specific setup.
+   * Probe while the functions are unlocked and before enabling the stream.
+  */
+  if (rid_base != rid_limit) {
+    stage = " PCIe IDE setup: shared endpoint BAR range";
+    for (i = 0; i < bdf_table->num_entries; ++i) {
+      uint32_t peer_bdf = bdf_table->device[i].bdf;
+      uint32_t bar_index;
+      uint64_t base, size, limit;
+
+      /* Ignore the function field when matching functions of the same device. */
+      if ((peer_bdf & ~0xffu) != ide_bdf)
+        continue;
+      val_pcie_get_mmio_bar(peer_bdf, &base);
+      base &= ~(uint64_t)0xfu;
+      if (!base)
+        continue;
+      if (val_pcie_get_bar_index(peer_bdf, base, &bar_index) ||
+          val_pcie_get_memory_bar_size(peer_bdf, bar_index, &size) ||
+          !size || base > ~(uint64_t)0 - (size - 1u))
+        goto cleanup;
+      limit = base + size - 1u;
+      if (base < bar_base)
+        bar_base = base;
+      if (limit > bar_limit)
+        bar_limit = limit;
+    }
+  }
+
   /* Disable the selected stream at both ports, then program RID and Stream ID */
   for (i = 0; i < 2; ++i) {
-    uint32_t port = i ? rp_bdf : bdf;
+    uint32_t port = i ? rp_bdf : ide_bdf;
     uint32_t count = i ? rp_count : ep_count;
-    uint32_t partner_rid = i ? rid : (PCIE_CREATE_BDF_PACKED(rp_bdf));
+    uint32_t partner_rid = i ? rid_base : (PCIE_CREATE_BDF_PACKED(rp_bdf));
 
     stage = i ? " PCIe IDE setup: RP stream configuration" :
                 " PCIe IDE setup: EP stream configuration";
@@ -745,8 +828,16 @@ val_pcie_ide_establish_streams(uint32_t bdf, uint32_t rp_bdf,
     if (status != ACS_STATUS_PASS)
       goto cleanup;
 
+    if (i && bar_base <= bar_limit) {
+      slot->rp_address_configured = 1u;
+      status = val_ide_program_address_range(port, count, bar_base, bar_limit, 1);
+      if (status != ACS_STATUS_PASS)
+        goto cleanup;
+    }
+
     /* Each port's RID association identifies its IDE partner. */
-    status = val_ide_program_rid_base_limit_valid(port, count, partner_rid, partner_rid, 1);
+    status = val_ide_program_rid_base_limit_valid(port, count,
+                       partner_rid, i ? rid_limit : partner_rid, 1);
     if (status != ACS_STATUS_PASS)
       goto cleanup;
 
@@ -765,10 +856,11 @@ val_pcie_ide_establish_streams(uint32_t bdf, uint32_t rp_bdf,
     goto cleanup;
   }
 
-  /* Confirm the responder identifies the EP function selected by the test */
-  if (bus != PCIE_EXTRACT_BDF_BUS(bdf) ||
-      dev_func != ((PCIE_EXTRACT_BDF_DEV(bdf) << 3) | PCIE_EXTRACT_BDF_FUNC(bdf)) ||
-      segment != PCIE_EXTRACT_BDF_SEG(bdf)) {
+  /* Confirm the responder identifies the IDE management function. */
+  if (bus != PCIE_EXTRACT_BDF_BUS(ide_bdf) ||
+      dev_func != ((PCIE_EXTRACT_BDF_DEV(ide_bdf) << 3) |
+                   PCIE_EXTRACT_BDF_FUNC(ide_bdf)) ||
+      segment != PCIE_EXTRACT_BDF_SEG(ide_bdf)) {
     status = ACS_STATUS_ERR;
     stage = " PCIe IDE setup: EP QUERY identity validation";
     val_print(ACS_PRINT_ERR, " PCIe IDE_KM QUERY identity mismatch for EP: 0x%x", bdf);
@@ -852,7 +944,7 @@ val_pcie_ide_establish_streams(uint32_t bdf, uint32_t rp_bdf,
 
   /* Enable the selected EP and RP streams after all keys have been programmed */
   stage = " PCIe IDE setup: EP stream enable";
-  status = val_ide_set_sel_stream(bdf, ep_count, 1);
+  status = val_ide_set_sel_stream(ide_bdf, ep_count, 1);
   if (status != ACS_STATUS_PASS)
     goto cleanup;
 
@@ -890,7 +982,7 @@ val_pcie_ide_establish_streams(uint32_t bdf, uint32_t rp_bdf,
   /* Poll both ports; enabling the streams alone does not establish Secure */
   for (i = 0; i <= 10; ++i) {
     stage = " PCIe IDE setup: read EP/RP stream state";
-    status = val_get_sel_str_status(bdf, ep_count, &state_ep);
+    status = val_get_sel_str_status(ide_bdf, ep_count, &state_ep);
     if (status != ACS_STATUS_PASS)
       goto cleanup;
 
@@ -947,6 +1039,35 @@ cleanup:
 }
 
 /**
+ * @brief Check whether another function uses the endpoint's shared IDE stream.
+ *
+ * A sibling TDI keeps the owner's stream/session alive during teardown.
+ * This also recognizes a target whose failed lock already freed its slot.
+ *
+ * @param bdf Endpoint BDF whose shared stream is being checked.
+ * @return 1 if another function has the shared stream configured, otherwise 0.
+ */
+uint32_t
+val_pcie_ide_stream_shared(uint32_t bdf)
+{
+#if ENABLE_SPDM
+  /* Clear the function field to select Function 0's shared IDE resources. */
+  uint32_t ide_bdf = bdf & ~0xffu;
+
+  for (uint32_t i = 0; i < MAX_SPDM_SESSION_SLOTS; ++i) {
+    spdm_session_slot_t *slot = &g_spdm_sessions[i];
+
+    if (slot->in_use && slot->bdf != bdf && slot->ide_bdf == ide_bdf &&
+        slot->owner->ide_configured)
+      return 1u;
+  }
+#else
+  (void)bdf;
+#endif
+  return 0u;
+}
+
+/**
  * @brief Establish PCIe IDE using the same block number at both ports.
  *
  * @param bdf Endpoint BDF.
@@ -985,7 +1106,7 @@ val_device_lock(uint32_t bdf)
   if (val_device_session_open(bdf) != ACS_STATUS_PASS)
     return ACS_STATUS_ERR;
   slot = spdm_find_slot(bdf);
-  ctx = &slot->ctx;
+  ctx = &slot->owner->ctx;
   session_id = slot->session_id;
 
   val_memory_set(&req_caps, sizeof(req_caps), 0);
@@ -1023,7 +1144,7 @@ val_device_lock(uint32_t bdf)
 
   /* flags, reporting offset and P2P mask are zero */
   lock_param.flags                 = 0;
-  lock_param.default_stream_id     = slot->ide_configured ? slot->stream_id : 0;
+  lock_param.default_stream_id     = slot->owner->ide_configured ? slot->stream_id : 0;
   lock_param.reserved              = 0;
   lock_param.mmio_reporting_offset = 0ull;
   lock_param.bind_p2p_address_mask = 0ull;
@@ -1134,12 +1255,12 @@ val_device_unlock(uint32_t bdf)
   if (slot->tdi_locked) {
     uint8_t tdi_state;
 
-    status = val_spdm_send_pci_tdisp_stop_interface(&slot->ctx, slot->session_id,
+    status = val_spdm_send_pci_tdisp_stop_interface(&slot->owner->ctx, slot->session_id,
                                                   &interface_id);
     if (status != ACS_STATUS_PASS)
       cleanup_failed = 1u;
     else {
-      status = val_spdm_send_pci_tdisp_get_interface_state(&slot->ctx, slot->session_id,
+      status = val_spdm_send_pci_tdisp_get_interface_state(&slot->owner->ctx, slot->session_id,
                                                           &interface_id, &tdi_state);
       if (status != ACS_STATUS_PASS || tdi_state != PCI_TDISP_INTERFACE_STATE_CONFIG_UNLOCKED)
         cleanup_failed = 1u;
@@ -1147,6 +1268,18 @@ val_device_unlock(uint32_t bdf)
         slot->tdi_locked = 0u;
     }
   }
+  /* Do not stop shared keys or close their session while a sibling is active.
+   * Keep a failed TDI stop registered so the owner also preserves its resources.
+   */
+  if (slot->owner != slot) {
+    if (cleanup_failed)
+      return ACS_STATUS_ERR;
+    spdm_free_slot(slot);
+    return ACS_STATUS_PASS;
+  }
+  if (val_pcie_ide_stream_shared(bdf))
+    return ACS_STATUS_ERR;
+
   if (slot->ide_configured) {
     PCIE_IDE_SELECTOR selector = {0};
 
@@ -1174,11 +1307,15 @@ val_device_unlock(uint32_t bdf)
     }
 
     /* ACS also leaves both stream blocks disabled for the next test. */
-    if (val_ide_set_sel_stream(bdf, slot->ep_count, 0) != ACS_STATUS_PASS)
+    if (val_ide_set_sel_stream(slot->ide_bdf, slot->ep_count, 0) != ACS_STATUS_PASS)
       cleanup_failed = 1u;
     if (val_ide_set_sel_stream(slot->rp_bdf, slot->rp_count, 0) != ACS_STATUS_PASS)
       cleanup_failed = 1u;
   }
+
+  if (slot->rp_address_configured &&
+      val_ide_program_address_range(slot->rp_bdf, slot->rp_count, 0, 0, 0))
+    cleanup_failed = 1u;
 
   status = val_spdm_session_close(&slot->ctx, slot->session_id);
   if (status == ACS_STATUS_PASS)
