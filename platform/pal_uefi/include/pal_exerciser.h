@@ -67,6 +67,7 @@
 
 #define PASID_VAL     0x020
 #define ATSCTL        0x024
+#define DMA_USE_ATC_ENTRY_MASK (1u << 9)
 #define ATS_ADDR      0x028
 #define TXN_TRACE     0x40
 #define TXN_CTRL_BASE 0x44
@@ -206,7 +207,13 @@ typedef enum {
     TXN_REQ_ID     = 0x0,
     TXN_ADDR_TYPE  = 0x1,
     TXN_REQ_ID_VALID    = 0x2,
+    TXN_ATC_ENTRY       = 0x3,
 } EXERCISER_TXN_ATTR;
+
+typedef enum {
+    ATC_ENTRY_DISABLE = 0x0,
+    ATC_ENTRY_ENABLE  = 0x1
+} EXERCISER_TXN_ATC_ENTRY;
 
 typedef enum {
     AT_UNTRANSLATED = 0x0,

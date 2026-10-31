@@ -366,6 +366,7 @@
 #define PCI_MAX_DEVICE  31
 #define PASID_VAL       0x020
 #define ATSCTL          0x024
+#define DMA_USE_ATC_ENTRY_MASK (1u << 9)
 #define SEC_SID_VALUE_REG 0x94
 #define TXN_TRACE       0x40
 #define TXN_CTRL_BASE   0x44

@@ -192,6 +192,16 @@ uint32_t pal_exerciser_set_param(EXERCISER_PARAM_TYPE Type, uint64_t Value1, uin
                 }
                 pal_mmio_write(Base + DMACTL1, Data);
                 return 0;
+            case TXN_ATC_ENTRY:
+                Data = pal_mmio_read(Base + DMACTL1);
+                if (Value2 == ATC_ENTRY_ENABLE)
+                    Data |= DMA_USE_ATC_ENTRY_MASK;
+                else if (Value2 == ATC_ENTRY_DISABLE)
+                    Data &= ~DMA_USE_ATC_ENTRY_MASK;
+                else
+                    return 1;
+                pal_mmio_write(Base + DMACTL1, Data);
+                return 0;
             default:
                 return 1;
           }

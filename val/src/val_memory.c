@@ -280,6 +280,121 @@ uint32_t val_enable_mmu(void)
 }
 #endif  // TARGET_BM_BOOT
 
+void
+val_memory_clear_el3_access_state(void)
+{
+  shared_data->exception_expected = CLEAR;
+  shared_data->exception_generated = CLEAR;
+  shared_data->access_mut = CLEAR;
+  shared_data->esr_value = 0u;
+  shared_data->pas_filter_flag = CLEAR;
+  shared_data->arg1 = 0u;
+  shared_data->num_access = 0u;
+}
+
+/**
+  @brief  Read a 32-bit value through the EL3 MUT access path.
+
+  @param  address  Address to read.
+  @param  value    Output pointer that receives the read value.
+
+  @return ACS_STATUS_PASS on success, ACS_STATUS_ERR on failure.
+**/
+uint32_t
+val_memory_read_el3(uint64_t address, uint32_t *value)
+{
+  if (value == NULL)
+    return ACS_STATUS_ERR;
+
+  val_memory_clear_el3_access_state();
+  shared_data->num_access = 1;
+  shared_data->shared_data_access[0].addr = address;
+  shared_data->shared_data_access[0].access_type = READ_DATA;
+
+  if (val_pe_access_mut_el3())
+  {
+    val_memory_clear_el3_access_state();
+    val_print(ACS_PRINT_ERR, " EL3: MUT read failed for 0x%llx", address);
+    return ACS_STATUS_ERR;
+  }
+
+  *value = (uint32_t)shared_data->shared_data_access[0].data;
+  val_memory_clear_el3_access_state();
+  return ACS_STATUS_PASS;
+}
+
+/**
+  @brief  Check that an EL3-accessible buffer contains one repeated byte.
+
+  @param  buffer_va     Buffer virtual address.
+  @param  length        Number of bytes to check. Must be 32-bit aligned.
+  @param  byte_pattern  Byte value expected throughout the buffer.
+
+  @return ACS_STATUS_PASS when the pattern matches, ACS_STATUS_FAIL on a
+          mismatch, or ACS_STATUS_ERR on invalid input or an EL3 read failure.
+**/
+uint32_t
+val_memory_has_byte_pattern_el3(uint64_t buffer_va,
+                                uint32_t length,
+                                uint32_t byte_pattern)
+{
+  uint32_t expected;
+  uint32_t value;
+
+  if ((buffer_va == 0u) || (length == 0u) ||
+      ((length % sizeof(uint32_t)) != 0u))
+    return ACS_STATUS_ERR;
+
+  expected = (byte_pattern & 0xFFu) * 0x01010101u;
+  for (uint32_t offset = 0u; offset < length; offset += sizeof(uint32_t))
+  {
+    if (val_memory_read_el3(buffer_va + offset, &value) != ACS_STATUS_PASS)
+      return ACS_STATUS_ERR;
+    if (value != expected)
+      return ACS_STATUS_FAIL;
+  }
+
+  return ACS_STATUS_PASS;
+}
+
+/**
+  @brief  Compare two buffers through EL3 MUT reads.
+
+  @param  src_va  Source buffer VA.
+  @param  dst_va  Destination buffer VA.
+  @param  size    Number of bytes to compare. Must be 32-bit aligned.
+
+  @return 0 if the buffers match, 1 if they differ, ACS_STATUS_ERR on access
+          failure.
+**/
+uint32_t
+val_memory_compare_el3(uint64_t src_va, uint64_t dst_va, uint32_t size)
+{
+  uint32_t src_data;
+  uint32_t dst_data;
+
+  if ((src_va == 0u) || (dst_va == 0u) || ((size % sizeof(uint32_t)) != 0u))
+    return ACS_STATUS_ERR;
+
+  while (size > 0u)
+  {
+    if (val_memory_read_el3(src_va, &src_data) != ACS_STATUS_PASS)
+      return ACS_STATUS_ERR;
+
+    if (val_memory_read_el3(dst_va, &dst_data) != ACS_STATUS_PASS)
+      return ACS_STATUS_ERR;
+
+    if (src_data != dst_data)
+      return 1u;
+
+    src_va += sizeof(uint32_t);
+    dst_va += sizeof(uint32_t);
+    size -= sizeof(uint32_t);
+  }
+
+  return 0u;
+}
+
 /**
  * @brief Compare two memory regions word-by-word with source bffer read from EL3.
  *
