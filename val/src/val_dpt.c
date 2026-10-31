@@ -204,6 +204,10 @@ val_dpt_ide_stop(uint32_t ep_bdf, uint32_t rp_bdf, uint32_t ep_count,
 
   if (!count)
     return status;
+  /* Stop the target TDI without changing the requester's shared stream. */
+  if (val_pcie_ide_stream_shared(ep_bdf))
+    return val_device_unlock(ep_bdf);
+
   /* Unlock the RP block, then use shared TDISP/IDE/session teardown. */
   if (val_ide_set_sel_stream_lock(rp_bdf, count, 0))
     status = ACS_STATUS_ERR;
@@ -214,7 +218,8 @@ val_dpt_ide_stop(uint32_t ep_bdf, uint32_t rp_bdf, uint32_t ep_count,
   /* A failed TDISP lock may already have closed the session. Ensure both
    * streams are disabled, and continue cleanup after a teardown error.
    */
-  if (val_ide_set_sel_stream(ep_bdf, ep_count, 0))
+  /* Clear the function field to disable the shared stream through Function 0. */
+  if (val_ide_set_sel_stream(ep_bdf & ~0xffu, ep_count, 0))
     status = ACS_STATUS_ERR;
   if (val_ide_set_sel_stream(rp_bdf, count, 0))
     status = ACS_STATUS_ERR;
@@ -228,14 +233,23 @@ val_dpt_ide_setup_target(uint32_t ep_bdf, uint32_t rp_bdf, uint32_t req_rp_bdf,
                       uint64_t bar, uint64_t size, uint32_t *active_count)
 {
   uint32_t ep_streams, rp_streams, status, ep_state, rp_state, retry;
+  /* Clear the function field to select Function 0's shared IDE resources. */
+  uint32_t ide_bdf = ep_bdf & ~0xffu;
   uint32_t count = rp_bdf == req_rp_bdf ? 2u : 1u;
 
   if (active_count == NULL)
     return ACS_STATUS_ERR;
 
   *active_count = 0;
+  if (rp_bdf == req_rp_bdf && val_pcie_ide_stream_shared(ep_bdf)) {
+    /* Requester setup already associated this BAR and both function RIDs.
+     * val_device_lock reuses that stream's session, retaining this TDI's ID.
+     */
+    *active_count = 1u;
+    return val_device_lock(ep_bdf);
+  }
   if (!size || bar > ~(uint64_t)0 - (size - 1u) ||
-      val_ide_get_num_sel_str(ep_bdf, &ep_streams) || ep_streams < 1u ||
+      val_ide_get_num_sel_str(ide_bdf, &ep_streams) || ep_streams < 1u ||
       val_ide_get_num_sel_str(rp_bdf, &rp_streams) || rp_streams < count)
     return ACS_STATUS_ERR;
 
@@ -258,7 +272,7 @@ val_dpt_ide_setup_target(uint32_t ep_bdf, uint32_t rp_bdf, uint32_t req_rp_bdf,
 
   /* Confirm both ends are Secure before locking the target. */
   for (retry = 0; retry <= 10u; ++retry) {
-    if (val_get_sel_str_status(ep_bdf, 1u, &ep_state) ||
+    if (val_get_sel_str_status(ide_bdf, 1u, &ep_state) ||
         val_get_sel_str_status(rp_bdf, count, &rp_state))
       return ACS_STATUS_ERR;
 
