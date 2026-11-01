@@ -424,18 +424,22 @@ payload(void)
     goto restore;
   }
 
-  shared_data->exception_expected = CLEAR;
   shared_data->num_access = 1;
   shared_data->shared_data_access[0].addr = (uint64_t)realm_ptr;
   shared_data->shared_data_access[0].data = realm_pattern;
   shared_data->shared_data_access[0].access_type = WRITE_DATA;
+  shared_data->access_mut = CLEAR;
+  shared_data->esr_value = SERROR_ESR_WRITE;
+  shared_data->exception_expected = SET;
 
-  if (val_pe_access_mut_el3())
+  status = val_pe_access_mut_el3();
+  shared_data->exception_expected = CLEAR;
+  shared_data->esr_value = 0u;
+  if (status)
   {
     val_set_status(pe_index, "FAIL", 12);
     goto restore;
   }
-
   /* Reopen the Realm path to verify data using its original PAS and MECID. */
   if (write_from_root(cfg_va + rmecda_cap_base + RMECDA_CTL1_OFFSET,
                       rmecda_ctl1_unlocked | LINK_STR_LOCK_MASK) != ACS_STATUS_PASS)
@@ -549,7 +553,7 @@ restore:
     result = ACS_STATUS_FAIL;
   }
 
-  if (result == ACS_STATUS_PASS)
+  if (result == ACS_STATUS_PASS && !IS_TEST_FAIL(val_get_status(pe_index)))
     val_set_status(pe_index, "PASS", 01);
 }
 

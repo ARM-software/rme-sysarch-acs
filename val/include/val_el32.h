@@ -59,6 +59,7 @@
 #define RANDOM_DATA_4        0x33
 /* ESR selector for an expected synchronous external read abort at EL3. */
 #define SEA_ESR_READ         0x96000010ULL
+#define SERROR_ESR_WRITE     0xBC000000ULL
 #define READ_DATA            0
 #define WRITE_DATA           1
 #define READ_DATA_BYTE       2
@@ -100,7 +101,7 @@
 #define DISABLE_MEC  0x3
 
 /* Defines related to PGT attrinutes of an address */
-#define MAIR_REG_VAL_EL3 0x00000000004400ff
+#define MAIR_REG_VAL_EL3 0x00000000004400ffULL
 
 #define GPT_SECURE      0x8
 #define GPT_NONSECURE   0x9
