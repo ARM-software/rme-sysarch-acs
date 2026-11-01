@@ -59,6 +59,17 @@ void val_el3_ack_handler(void)
    * re-enters with exception_expected SET, selecting recovery here.
    */
   if (shared_data->exception_expected == SET && shared_data->access_mut == CLEAR) {
+    if (shared_data->esr_value == SERROR_ESR_WRITE) {
+        esr = val_el3_read_esr_el3();
+        if ((esr >> 26) == 0x2fu) {
+            /* Resume an expected SError without advancing the return address. */
+            val_el3_asm_eret_smc();
+        } else {
+            val_el3_branch_asm(*(armtf_handler + 1));
+        }
+        return;
+    }
+
     /* These markers identify a fault from the inactive PAS-filter load.
      * Let PAL verify its platform-specific denial syndrome before accepting it.
      */
