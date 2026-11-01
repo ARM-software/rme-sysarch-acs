@@ -21,6 +21,8 @@
 #include <val_el3_pe.h>
 #include <val_el3_pgt.h>
 
+#define SCR_EL3_EA (1ULL << 3)
+
 struct_sh_data *shared_data = (struct_sh_data *) PLAT_SHARED_ADDRESS;
 
 static MemoryPool mem_pool = {
@@ -218,7 +220,16 @@ void val_el3_split_block(BlockHeader *block, size_t size)
 void val_el3_access_mut(void)
 {
   uint8_t type, num = shared_data->num_access;
-  uint64_t data;
+  uint64_t data, saved_scr = 0;
+  uint8_t expected_serror = shared_data->exception_expected == SET &&
+                            shared_data->esr_value == SERROR_ESR_WRITE;
+
+  if (expected_serror) {
+    /* Keep optional write errors in the EL3 ACK handler. */
+    saved_scr = val_el3_read_scr_el3();
+    val_el3_write_scr_el3(saved_scr | SCR_EL3_EA);
+    val_el3_isb();
+  }
 
   for (int acc_cnt = 0; acc_cnt < num; ++acc_cnt)
   {
@@ -235,6 +246,11 @@ void val_el3_access_mut(void)
         case WRITE_DATA:
           data = shared_data->shared_data_access[acc_cnt].data;
           *(volatile uint32_t *)shared_data->shared_data_access[acc_cnt].addr = data;
+          if (shared_data->exception_expected == SET &&
+              shared_data->esr_value == SERROR_ESR_WRITE) {
+            val_el3_mem_barrier();
+            __asm__ volatile("esb" ::: "memory");
+          }
           VERBOSE("Data requested for VA, 0x%lx is 0x%x\n",
                 shared_data->shared_data_access[acc_cnt].addr,
                 (uint32_t)data);
@@ -257,6 +273,11 @@ void val_el3_access_mut(void)
           ERROR("INVALID TYPE OF ACCESS");
           break;
     }
+  }
+
+  if (expected_serror) {
+    val_el3_write_scr_el3(saved_scr);
+    val_el3_isb();
   }
 }
 
