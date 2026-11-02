@@ -662,23 +662,6 @@ notes for each rule, see the separate
 
   * -
 
-      `da_dvsec_register_config <../test_pool/da/da_dvsec_register_config.c>`_
-
-    -
-
-      RDVJRV: The RME-DA DVSEC is implemented in compliance with PCIe and has the following format
-
-      RNWSJB: All Root Ports in an RME-DA system must implement the RME-DA DVSEC
-
-    -
-
-      1. For each function, read the RMEDA registers (DA Capability) and check the corresponding values and its attribute matches the `RME_System_Architecture_Spec` specification.
-      2. No mismatch in both values and attribute properties of the registers
-
-      Note: The test checks DVSEC presence as part of register validation and reports RDVJRV.
-
-  * -
-
       `da_smmu_implementation <../test_pool/da/da_smmu_implementation.c>`_
 
     -
@@ -731,8 +714,22 @@ notes for each rule, see the separate
 
     -
 
-      1. Check the attribute of the RMEDA_CTRL register.
-      2. The RSVDP fields and RW fields should behave as expected.
+      1. For each Root Port, read the RME-DA DVSEC registers and check that the required values and attributes match the `RME_System_Architecture_Spec` specification.
+      2. Check the attributes of the RMEDA_CTL registers.
+      3. The RSVDP fields and RW fields should behave as expected.
+
+  * -
+
+      `da_rootport_implements_rmeda_dvsec <../test_pool/da/da_rootport_implements_rmeda_dvsec.c>`_
+
+    -
+
+      RNWSJB: All Root Ports in an RME-DA system must implement the RME-DA DVSEC.
+
+    -
+
+      1. For each discovered Root Port, search for the RME-DA DVSEC capability.
+      2. The test fails if any Root Port does not implement the RME-DA DVSEC.
 
   * -
 
