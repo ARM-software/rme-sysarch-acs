@@ -286,10 +286,6 @@ MODULE_TEST_DISPATCHER_s g_module_test_table[MODULE_SENTINEL] = {
         .entry_fn = da_ctl_regs_rmsd_write_protect_property_entry,
         .test_text = "da_ctl_regs_rmsd_write_protect_property",
       },
-      [DA_ENTRY_DA_DVSEC_REGISTER_CONFIG_ENTRY] = {
-        .entry_fn = da_dvsec_register_config_entry,
-        .test_text = "da_dvsec_register_config",
-      },
       [DA_ENTRY_DA_IDE_STATE_TDISP_DISABLE_ENTRY] = {
         .entry_fn = da_ide_state_tdisp_disable_entry,
         .test_text = "da_ide_state_tdisp_disable",
@@ -325,6 +321,10 @@ MODULE_TEST_DISPATCHER_s g_module_test_table[MODULE_SENTINEL] = {
       [DA_ENTRY_DA_RMSD_WRITE_DETECT_PROPERTY_ENTRY] = {
         .entry_fn = da_rmsd_write_detect_property_entry,
         .test_text = "da_rmsd_write_detect_property",
+      },
+      [DA_ENTRY_DA_ROOTPORT_IMPLEMENTS_RMEDA_DVSEC_ENTRY] = {
+        .entry_fn = da_rootport_implements_rmeda_dvsec_entry,
+        .test_text = "da_rootport_implements_rmeda_dvsec",
       },
       [DA_ENTRY_DA_ROOTPORT_IDE_FEATURES_ENTRY] = {
         .entry_fn = da_rootport_ide_features_entry,

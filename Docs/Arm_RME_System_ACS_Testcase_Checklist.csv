@@ -92,14 +92,14 @@ Sl No,Rule ID,Rule Description,Coverage,Notes,Exerciser PAL APIs Used
 91,RVCRRM,An RME-DA RP must support IDE key refresh operations in compliance with [4].,Not covered,IDE key refresh requires implementation-specific software support.,
 92,RFSFST,RP IDE logic detects when an IDE key set requires refresh and either signals Trusted firmware or makes the stream Insecure.,Not covered,IDE key refresh detection is implementation-defined and not software-observable.,
 93,RBWFTS,RMSD ensures that Selective IDE Streams are configured such that different streams are assigned RID ranges and address ranges that do not overlap.,Not covered,"IDE stream range allocation is RMSD/RMM policy, not generic ACS behavior.",
-94,RDVJRV,The RME-DA DVSEC implements the required PCIe register layout.,"da_attribute_rmeda_ctl_registers, da_dvsec_register_config",,
+94,RDVJRV,The RME-DA DVSEC implements the required PCIe register layout.,da_attribute_rmeda_ctl_registers,,
 95,RXHMDQ,"When TDISP is enabled, security-sensitive RP registers are RMSD write-protect.",da_rootport_write_protect_full_protect_property,,
 96,RNXJKQ,"When TDISP is enabled, IDE keys, confidential state, and protected payload registers are RMSD full-protect.",da_rootport_write_protect_full_protect_property,,
 97,RPCRFM,"When TDISP is enabled, protected RP configuration registers are RMSD write-detect.",da_rmsd_write_detect_property,,
 98,RHCMWC,"When RMEDA_CTL1.TDISP_EN transitions from 1 to 0, all hosted IDE Streams transition to IDE Insecure state.",da_ide_state_tdisp_disable,,
 99,RRNQNM,"When TDISP is disabled, Root Ports clear both T-bit and XT-bit or reject incoming protected requests, and reject with error outgoing requests requiring either bit to be set.",da_rootport_tdisp_disabled,PCIe exerciser VIP required,"pal_exerciser_set_param (DMA_ATTRIBUTES); pal_exerciser_ops (START_DMA)"
 100,RNPGJV,The RMEDA_CTL registers are RMSD write-protect by hardware default.,da_ctl_regs_rmsd_write_protect_property,,
-101,RNWSJB,All RPs in an RME-DA system must implement the RME-DA DVSEC.,da_dvsec_register_config,DVSEC presence is checked with register validation; the test reports RDVJRV.,None
+101,RNWSJB,All RPs in an RME-DA system must implement the RME-DA DVSEC.,da_rootport_implements_rmeda_dvsec,,
 102,RYHQQL,Selective IDE register-block lock state controls register protection and stream lock state.,da_selective_ide_register_property,,
 103,RGKHSZ,RME-DA Root Ports associate outgoing TLPs with IDE streams and set T-bit/XT-bit correctly.,"da_incoming_request_ide_sec_locked, da_rootport_tdisp_disabled",PCIe exerciser VIP required,"pal_exerciser_set_param (DMA_ATTRIBUTES); pal_exerciser_ops (START_DMA)"
 104,RCFQBW,An RME-DA RP sets the IDE T-bit for an outgoing PCIe Memory Request or Configuration Request based on the request PAS.,"da_ide_tbit_0_for_root_request, da_outgoing_realm_rqst_ide_tbit_1",,

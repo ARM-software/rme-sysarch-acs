@@ -116,7 +116,6 @@ val_rmsd_write_protect_check_byte(uint64_t pa,
                                   uint8_t new_value,
                                   uint8_t original_value);
 
-uint32_t da_dvsec_register_config_entry(uint32_t num_pe);
 uint32_t da_smmu_implementation_entry(uint32_t num_pe);
 uint32_t da_tee_io_capability_entry(uint32_t num_pe);
 uint32_t da_rootport_ide_features_entry(uint32_t num_pe);
@@ -133,6 +132,7 @@ uint32_t da_incoming_request_ide_non_sec_unlocked_entry(uint32_t num_pe);
 uint32_t da_outgoing_realm_rqst_ide_tbit_1_entry(uint32_t num_pe);
 uint32_t da_ide_tbit_0_for_root_request_entry(uint32_t num_pe);
 uint32_t da_rmsd_write_detect_property_entry(uint32_t num_pe);
+uint32_t da_rootport_implements_rmeda_dvsec_entry(uint32_t num_pe);
 uint32_t da_rootport_write_protect_full_protect_property_entry(uint32_t num_pe);
 uint32_t da_interconnect_regs_rmsd_protected_entry(uint32_t num_pe);
 
