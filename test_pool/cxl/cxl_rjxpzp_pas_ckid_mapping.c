@@ -270,9 +270,18 @@ resolve_vector_from_caps(const TEST_VECTOR *vector,
       *skip_case = 1u;
       break;
     }
-    *mecid_out = (mecid_max < 0xA0u) ? mecid_max : 0xA0u;
-    if (*mecid_out >= first_tee_ckid)
-      *mecid_out = first_tee_ckid - 1u;
+    /* Non-secure PE accesses always use MECID 0. */
+    *mecid_out = 0u;
+    break;
+  case CASE_NS_EDGE:
+    if (first_tee_ckid == 0u)
+    {
+      *skip_case = 1u;
+      break;
+    }
+    /* Lowest positive threshold: NS MECID 0 remains valid. */
+    *first_tee_ckid_out = 1u;
+    *mecid_out = 0u;
     break;
   case CASE_RL_LOW:
     realm_limit = max_ckid - first_tee_ckid;
@@ -310,16 +319,6 @@ resolve_vector_from_caps(const TEST_VECTOR *vector,
     break;
   case CASE_SC_BASE:
     *mecid_out = 0u;
-    break;
-  case CASE_NS_EDGE:
-    if (first_tee_ckid == 0u)
-    {
-      *skip_case = 1u;
-      break;
-    }
-    *mecid_out = first_tee_ckid - 1u;
-    if (*mecid_out > mecid_max)
-      *mecid_out = mecid_max;
     break;
   case CASE_RL_EDGE0:
     *mecid_out = 0u;
@@ -1000,7 +999,7 @@ exercise_root_port(const CXL_COMPONENT_TABLE *table,
       continue;
     }
 
-    /* Program MECID for the current access context. */
+    /* Program the Realm alternate MECID; Non-secure accesses still use MECID 0. */
     if (val_rlm_configure_mecid(mecid))
     {
       failures++;
