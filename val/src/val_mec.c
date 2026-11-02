@@ -148,8 +148,9 @@ uint32_t val_is_mec_supported(void)
  * @param mecid2 The second MECID used for the read access.
  * @param PoX    Operation to perform after write: PoPA or PoE.
  *
- * @return 1 (TRUE) if the read value differs from the written value, indicating
- *         MECID validation failure; 0 (FALSE) otherwise.
+ * @return ACS_STATUS_PASS if the read value differs, as expected for different
+ *         MECIDs; ACS_STATUS_FAIL if the values match; ACS_STATUS_ERR if
+ *         setup, cache maintenance or a memory access fails.
  */
 uint32_t val_mec_validate_mecid(uint32_t mecid1, uint32_t mecid2, uint8_t PoX)
 {
@@ -195,7 +196,7 @@ uint32_t val_mec_validate_mecid(uint32_t mecid1, uint32_t mecid2, uint8_t PoX)
   if (PoX == PoPA) {
     if (val_data_cache_ops_by_pa_el3(PA, REALM_PAS))
     {
-      val_print(ACS_STATUS_ERR, " CMO till PoPA failed for PA: 0x%llx", PA);
+      val_print(ACS_PRINT_ERR, " CMO till PoPA failed for PA: 0x%llx", PA);
       return ACS_STATUS_ERR;
     }
   }
@@ -203,6 +204,7 @@ uint32_t val_mec_validate_mecid(uint32_t mecid1, uint32_t mecid2, uint8_t PoX)
     if (val_cmo_to_poe(PA))
     {
       val_print(ACS_PRINT_ERR, " CMO till POE failed for PA: 0x%llx", PA);
+      return ACS_STATUS_ERR;
     }
   }
 
@@ -224,7 +226,7 @@ uint32_t val_mec_validate_mecid(uint32_t mecid1, uint32_t mecid2, uint8_t PoX)
   data_rd_rl = shared_data->shared_data_access[0].data;
 
   if (data_rd_rl != data_wt_rl)
-    return TRUE;
+    return ACS_STATUS_PASS;
   else
-    return FALSE;
+    return ACS_STATUS_FAIL;
 }

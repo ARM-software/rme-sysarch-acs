@@ -106,14 +106,14 @@ payload(void)
   }
 
   /* Validate MECID1 and MECI2 */
-  if (!val_mec_validate_mecid(MECID1, MECID2, PoE))
+  if (val_mec_validate_mecid(MECID1, MECID2, PoE) != ACS_STATUS_PASS)
   {
       val_print(ACS_PRINT_ERR, " Invalid MECID behaviour", 0);
       val_set_status(pe_index, "FAIL", 02);
       return;
   }
 
-  if (!val_mec_validate_mecid(MECID1, MECID2, PoPA))
+  if (val_mec_validate_mecid(MECID1, MECID2, PoPA) != ACS_STATUS_PASS)
   {
       val_print(ACS_PRINT_ERR, " Invalid MECID behaviour", 0);
       val_set_status(pe_index, "FAIL", 03);
@@ -257,7 +257,11 @@ payload(void)
       /* Map the MMIO bar to REALM PAS */
       val_pcie_get_mmio_bar(bdf, &bar_base);
       if (bar_base == 0)
+      {
+          val_print(ACS_PRINT_ERR, " MMIO BAR unavailable for BDF: 0x%x", bdf);
+          test_fail++;
           goto ide_cleanup;
+      }
 
       va2 = val_get_free_va(val_get_min_tg());
       pgt_attr_el3 = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(OUTER_SHAREABLE)
@@ -359,7 +363,13 @@ payload(void)
           test_fail++;
           goto free_mem;
       }
-      val_pe_cache_clean_invalidate_range((uint64_t)dram_buf_in_virt, (uint64_t)(dma_len * 2));
+      if (val_memory_cache_clean_invalidate_range_el3((uint64_t)dram_buf_in_virt,
+                                                       dma_len * 2))
+      {
+          val_print(ACS_PRINT_ERR, " EL3 buffer cache maintenance failed", 0);
+          test_fail++;
+          goto free_mem;
+      }
       dram_buf_in_virt2 = dram_buf_in_virt + dma_len;
 
       if (val_memory_set_el3(dram_buf_in_virt, dma_len, TEST_DATA))
@@ -368,7 +378,13 @@ payload(void)
           test_fail++;
           goto free_mem;
       }
-      val_pe_cache_clean_invalidate_range((uint64_t)dram_buf_in_virt, (uint64_t)dma_len);
+      if (val_memory_cache_clean_invalidate_range_el3((uint64_t)dram_buf_in_virt,
+                                                       dma_len))
+      {
+          val_print(ACS_PRINT_ERR, " EL3 buffer cache maintenance failed", 0);
+          test_fail++;
+          goto free_mem;
+      }
 
       /* Get the VTTBR_EL2 and VTCR_EL2, populate them if they aren't already */
       if (val_pe_get_vtcr(&pgt_desc.vtcr))
@@ -445,9 +461,28 @@ payload(void)
           goto free_mem;
       }
 
-      val_pe_cache_invalidate_range((uint64_t)dram_buf_in_virt, (uint64_t)(dma_len * 2));
-      /* Memory buffers must be same */
-      if (val_memory_compare(dram_buf_in_virt, dram_buf_in_virt2, dma_len))
+      /* Observe both buffers through the Realm context used for initialization. */
+      if (val_rlm_configure_mecid(MECID1))
+      {
+          val_print(ACS_PRINT_ERR, " Failed to configure MECID1 for comparison", 0);
+          test_fail++;
+          goto free_mem;
+      }
+      if (val_memory_cache_invalidate_range_el3((uint64_t)dram_buf_in_virt, dma_len * 2))
+      {
+          val_print(ACS_PRINT_ERR, " EL3 buffer invalidation failed", 0);
+          test_fail++;
+          goto free_mem;
+      }
+      status = val_memory_compare_el3((uint64_t)dram_buf_in_virt,
+                                     (uint64_t)dram_buf_in_virt2, dma_len);
+      if (status == ACS_STATUS_ERR)
+      {
+          val_print(ACS_PRINT_ERR, " EL3 buffer comparison failed", 0);
+          test_fail++;
+          goto free_mem;
+      }
+      if (status != 0u)
       {
           val_print(ACS_PRINT_ERR,
                     " Buffer mismatch for excerciser %4x", instance);
@@ -528,15 +563,7 @@ payload(void)
       }
       rlm_mapped = 1u;
 
-      /* DMA from DRAM -> DEVICE followed by DEVICE -> DRAM using MECID1 */
-      val_exerciser_set_param(DMA_ATTRIBUTES, (uint64_t)dram_buf_in_virt, dma_len, instance);
-      if (val_exerciser_ops(START_DMA, EDMA_TO_DEVICE, instance))
-      {
-          val_print(ACS_PRINT_ERR, " DMA write failure to exerciser %4x", instance);
-          test_fail++;
-          goto free_mem;
-      }
-
+      /* Retain the known device payload; only change the destination write context. */
       val_exerciser_set_param(DMA_ATTRIBUTES, (uint64_t)dram_buf_in_virt2, dma_len, instance);
       if (val_exerciser_ops(START_DMA, EDMA_FROM_DEVICE, instance))
       {
@@ -545,12 +572,34 @@ payload(void)
           goto free_mem;
       }
 
-      val_pe_cache_invalidate_range((uint64_t)dram_buf_in_virt, (uint64_t)(dma_len * 2));
-      /* Memory buffers must not be same */
-      if (!val_memory_compare(dram_buf_in_virt, dram_buf_in_virt2, dma_len))
+      if (val_rlm_configure_mecid(MECID1))
+      {
+          val_print(ACS_PRINT_ERR, " Failed to configure MECID1 for comparison", 0);
+          test_fail++;
+          goto free_mem;
+      }
+      if (val_memory_cache_invalidate_range_el3((uint64_t)dram_buf_in_virt2, dma_len))
+      {
+          val_print(ACS_PRINT_ERR, " EL3 destination invalidation failed", 0);
+          test_fail++;
+          goto free_mem;
+      }
+
+      /* A different-context write can also affect the source's encryption block.
+       * Check against the known payload, not the potentially modified source.
+       */
+      status = val_memory_has_byte_pattern_el3((uint64_t)dram_buf_in_virt2,
+                                              dma_len, TEST_DATA);
+      if (status == ACS_STATUS_ERR)
+      {
+          val_print(ACS_PRINT_ERR, " EL3 destination read failed", 0);
+          test_fail++;
+          goto free_mem;
+      }
+      if (status == ACS_STATUS_PASS)
       {
           val_print(ACS_PRINT_ERR,
-                    " Buffer match for excerciser %4x", instance);
+                    " MECID2 payload readable with MECID1 for exerciser %4x", instance);
           test_fail++;
           goto free_mem;
       }
