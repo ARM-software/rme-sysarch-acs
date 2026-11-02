@@ -76,8 +76,8 @@ uint32_t
 dpt_p2p_same_rootport_invalid_entry(uint32_t num_pe);
 /* Establish a P2P target link and BAR association, lock its RP stream,
  * and transition the target TDI to RUN.
- * active_count is zero until keys are established; clean up a nonzero count
- * with val_dpt_ide_stop(), including when setup subsequently fails.
+ * active_count is set before configuring the RP stream; clean up a nonzero
+ * count with val_dpt_ide_stop(), including when setup subsequently fails.
  */
 uint32_t
 val_dpt_ide_setup_target(uint32_t ep_bdf, uint32_t rp_bdf, uint32_t req_rp_bdf,

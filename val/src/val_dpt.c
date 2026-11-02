@@ -233,21 +233,24 @@ val_dpt_ide_setup_target(uint32_t ep_bdf, uint32_t rp_bdf, uint32_t req_rp_bdf,
       val_ide_get_num_sel_str(rp_bdf, &rp_streams) || rp_streams < count)
     return ACS_STATUS_ERR;
 
+  /* Track the selected block so caller cleanup covers partial setup failures. */
+  *active_count = count;
+
+  /* Configure address routing before establishing keys. Disabling a Secure
+   * stream afterwards invalidates its active keys and IVs (PCIe 6.33.8).
+   * Stream establishment preserves this association while configuring the RID.
+   */
+  if (val_ide_set_sel_stream(rp_bdf, count, 0) ||
+      val_ide_program_address_range(rp_bdf, count, bar, bar + size - 1u, 1))
+    return ACS_STATUS_ERR;
+
   /* Provision target keys in a separate RP block when the RP is shared. */
   status = val_pcie_ide_establish_streams(ep_bdf, rp_bdf, 1u, count,
                     val_generate_stream_id(), PCIE_CREATE_BDF_PACKED(ep_bdf));
   if (status != ACS_STATUS_PASS)
     return status;
 
-  *active_count = count;
-
-  /* Address-routed traffic selects the target stream through its BAR range. */
-  if (val_ide_set_sel_stream(rp_bdf, count, 0) ||
-      val_ide_program_address_range(rp_bdf, count, bar, bar + size - 1u, 1) ||
-      val_ide_set_sel_stream(rp_bdf, count, 1))
-    return ACS_STATUS_ERR;
-
-  /* Recheck both ends after changing the address association and re-enabling. */
+  /* Confirm both ends are Secure before locking the target. */
   for (retry = 0; retry <= 10u; ++retry) {
     if (val_get_sel_str_status(ep_bdf, 1u, &ep_state) ||
         val_get_sel_str_status(rp_bdf, count, &rp_state))
