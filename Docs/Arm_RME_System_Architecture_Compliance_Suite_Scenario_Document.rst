@@ -994,7 +994,7 @@ notes for each rule, see the separate
 
   * -
 
-      `da_rootport_write_protect_full_protect_property <../test_pool/da/da_rootport_write_protect_full_protect_property.c>`_
+      `da_rootport_write_protect_property <../test_pool/da/da_rootport_write_protect_property.c>`_
 
     -
 
@@ -1009,6 +1009,20 @@ notes for each rule, see the separate
       - A register that controls the Root Port ID or the PCIe Segment Number of the Root Port.
       - Registers that may affect the correctness of IDE functionality, for example error injection controls.
 
+    -
+
+      1. Verify that the implementation-defined root port registers identified as RMSD write-protect are writable when the RMEDA_CTL1.TDISP_EN register is disabled.
+      2. When TDISP_EN is enabled, validate that these registers are protected against write access from NS.
+      3. When RMEDA_CTL1.TDISP_EN is enabled, any attempt to write to these RMSD write-protect registers from NS must fail with an appropriate fault or error.
+
+      Note: The addresses of these registers are retrieved from the PAL, and their write-protect behavior is tested by attempting write operations.
+
+  * -
+
+      `da_rootport_write_full_protect_property <../test_pool/da/da_rootport_write_full_protect_property.c>`_
+
+    -
+
       RNXJKQ: When RMEDA_CTL1.TDISP_EN==1 the following registers are RMSD full-protect:
 
       - IDE key programming registers.
@@ -1017,11 +1031,11 @@ notes for each rule, see the separate
 
     -
 
-      1. Verify that the implementation-defined root port registers identified as RMSD write/full-protect are writable when the RMEDA_CTL1.TDISP_EN register is disabled.
-      2. When TDISP_EN is enabled, validate that these registers are protected against write access from NS.
-      3. When RMEDA_CTL1.TDISP_EN is enabled, any attempt to write to these RMSD write/full-protect registers from NS must fail with an appropriate fault or error.
+      1. Verify that the implementation-defined root port registers identified as RMSD full-protect are writable when the RMEDA_CTL1.TDISP_EN register is disabled.
+      2. When TDISP_EN is enabled, validate that these registers are protected against NS read and write access.
+      3. When RMEDA_CTL1.TDISP_EN is enabled, any attempt to access these RMSD full-protect registers from NS must fail with an appropriate fault or error.
 
-      Note: The addresses of these registers are retrieved from the PAL, and their write-protect/full-protect behavior is tested by attempting write operations.
+      Note: The addresses of these registers are retrieved from the PAL, and their full-protect behavior is tested by attempting access operations.
 
   * -
 
