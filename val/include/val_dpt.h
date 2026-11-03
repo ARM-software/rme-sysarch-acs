@@ -18,6 +18,8 @@
 #ifndef __RME_ACS_DPT_H__
 #define __RME_ACS_DPT_H__
 
+#include <stdbool.h>
+
 #define DPT_NO_ACCESS_ENTRY        0
 #define DPT_READ_ONLY_ACCESS_ENTRY 1
 #define DPT_RDWR_ACCESS_ENTRY      17
@@ -44,10 +46,12 @@ uint32_t val_dpt_restore_gpt(VAL_DPT_GPT_STATE *state,
  * clear the destination, then deny the same write and check every byte.
  * The destination must be accessible through EL3. The caller must restore
  * DPT permission on every return, including partial setup failures.
+ * Set destination_is_mmio for a peer BAR to skip data-cache maintenance.
  */
 uint32_t val_dpt_check_denied_write(uint32_t instance, uint32_t smmu_index,
                                   uint64_t destination_va, uint64_t destination_pa,
-                                  uint32_t length, uint8_t byte_pattern);
+                                  uint32_t length, uint8_t byte_pattern,
+                                  bool destination_is_mmio);
 
 /* On failure, bus mastering is disabled. Stop the test and retain its mappings,
  * policy and buffers: an outstanding DMA cannot safely be aborted by this API.

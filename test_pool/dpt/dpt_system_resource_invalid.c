@@ -470,7 +470,7 @@ payload(void)
       /* The permitted write also proves that the source supplied TEST_DATA. */
       if (val_dpt_check_denied_write(instance, master.smmu_index,
                                     (uint64_t)dram_buf_in_virt2, dram_buf_in_phys + dma_len,
-                                    dma_len, TEST_DATA) != ACS_STATUS_PASS)
+                                    dma_len, TEST_DATA, false) != ACS_STATUS_PASS)
       {
           test_fail++;
           goto free_mem;
