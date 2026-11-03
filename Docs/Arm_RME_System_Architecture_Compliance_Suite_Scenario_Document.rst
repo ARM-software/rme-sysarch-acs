@@ -125,7 +125,7 @@ notes for each rule, see the separate
 
   * -
 
-      `rme_resources_aligned_to_granularity <../test_pool/rme/rme_resources_aligned_to_granularity.c>`_ & `rme_resources_are_not_physically_aliased <../test_pool/rme/rme_resources_are_not_physically_aliased.c>`_
+      `rme_resources_aligned_to_granularity <../test_pool/rme/rme_resources_aligned_to_granularity.c>`_
 
     -
 
@@ -136,9 +136,10 @@ notes for each rule, see the separate
 
     -
 
-      *rme_resources_aligned_to_granularity:* Check that the address range of resources (that need to be protected by GPT) are aligned to page granularity.
-
-      *rme_resources_are_not_physically_aliased:* Check that the address range of resources (that need to be protected by GPT) are aligned to one another.
+      1. Check that the address range of resources that need to be protected
+         by GPT are aligned to page granularity.
+      2. Check that the address ranges of those resources do not physically
+         alias or overlap one another.
 
   * -
 
