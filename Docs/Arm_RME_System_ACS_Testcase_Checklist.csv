@@ -93,8 +93,8 @@ Sl No,Rule ID,Rule Description,Coverage,Notes,Exerciser PAL APIs Used
 92,RFSFST,RP IDE logic detects when an IDE key set requires refresh and either signals Trusted firmware or makes the stream Insecure.,Not covered,IDE key refresh detection is implementation-defined and not software-observable.,
 93,RBWFTS,RMSD ensures that Selective IDE Streams are configured such that different streams are assigned RID ranges and address ranges that do not overlap.,Not covered,"IDE stream range allocation is RMSD/RMM policy, not generic ACS behavior.",
 94,RDVJRV,The RME-DA DVSEC implements the required PCIe register layout.,da_attribute_rmeda_ctl_registers,,
-95,RXHMDQ,"When TDISP is enabled, security-sensitive RP registers are RMSD write-protect.",da_rootport_write_protect_full_protect_property,,
-96,RNXJKQ,"When TDISP is enabled, IDE keys, confidential state, and protected payload registers are RMSD full-protect.",da_rootport_write_protect_full_protect_property,,
+95,RXHMDQ,"When TDISP is enabled, security-sensitive RP registers are RMSD write-protect.",da_rootport_write_protect_property,,
+96,RNXJKQ,"When TDISP is enabled, IDE keys, confidential state, and protected payload registers are RMSD full-protect.",da_rootport_write_full_protect_property,,
 97,RPCRFM,"When TDISP is enabled, protected RP configuration registers are RMSD write-detect.",da_rmsd_write_detect_property,,
 98,RHCMWC,"When RMEDA_CTL1.TDISP_EN transitions from 1 to 0, all hosted IDE Streams transition to IDE Insecure state.",da_ide_state_tdisp_disable,,
 99,RRNQNM,"When TDISP is disabled, Root Ports clear both T-bit and XT-bit or reject incoming protected requests, and reject with error outgoing requests requiring either bit to be set.",da_rootport_tdisp_disabled,PCIe exerciser VIP required,"pal_exerciser_set_param (DMA_ATTRIBUTES); pal_exerciser_ops (START_DMA)"

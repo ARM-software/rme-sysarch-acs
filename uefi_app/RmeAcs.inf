@@ -91,10 +91,11 @@
   ../test_pool/da/da_outgoing_request_with_ide_tbit.c
   ../test_pool/da/da_p2p_btw_2_tdisp_devices.c
   ../test_pool/da/da_rmsd_write_detect_property.c
+  ../test_pool/da/da_rootport_write_full_protect_property.c
   ../test_pool/da/da_rootport_implements_rmeda_dvsec.c
   ../test_pool/da/da_rootport_ide_features.c
   ../test_pool/da/da_rootport_tdisp_disabled.c
-  ../test_pool/da/da_rootport_write_protect_full_protect_property.c
+  ../test_pool/da/da_rootport_write_protect_property.c
   ../test_pool/da/da_selective_ide_register_property.c
   ../test_pool/tdisp/tdisp_rfpymv_vdm_response_check.c
   ../test_pool/tdisp/tdisp_rpxlfy_get_version_req.c

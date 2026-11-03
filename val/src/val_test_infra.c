@@ -334,9 +334,13 @@ MODULE_TEST_DISPATCHER_s g_module_test_table[MODULE_SENTINEL] = {
         .entry_fn = da_rootport_tdisp_disabled_entry,
         .test_text = "da_rootport_tdisp_disabled",
       },
-      [DA_ENTRY_DA_ROOTPORT_WRITE_PROTECT_FULL_PROTECT_PROPERTY_ENTRY] = {
-        .entry_fn = da_rootport_write_protect_full_protect_property_entry,
-        .test_text = "da_rootport_write_protect_full_protect_property",
+      [DA_ENTRY_DA_ROOTPORT_WRITE_FULL_PROTECT_PROPERTY_ENTRY] = {
+        .entry_fn = da_rootport_write_full_protect_property_entry,
+        .test_text = "da_rootport_write_full_protect_property",
+      },
+      [DA_ENTRY_DA_ROOTPORT_WRITE_PROTECT_PROPERTY_ENTRY] = {
+        .entry_fn = da_rootport_write_protect_property_entry,
+        .test_text = "da_rootport_write_protect_property",
       },
       [DA_ENTRY_DA_SELECTIVE_IDE_REGISTER_PROPERTY_ENTRY] = {
         .entry_fn = da_selective_ide_register_property_entry,
