@@ -413,7 +413,7 @@ notes for each rule, see the separate
 
   * -
 
-      `rme_pe_context_after_exit_wfi <../test_pool/rme/rme_pe_context_after_exit_wfi.c>`_ & `rme_pe_context_after_pe_suspend <../test_pool/rme/rme_pe_context_after_pe_suspend.c>`_
+      `rme_pe_context_after_exit_wfi <../test_pool/rme/rme_pe_context_after_exit_wfi.c>`_
 
     -
 
@@ -421,19 +421,22 @@ notes for each rule, see the separate
 
     -
 
-      PE context must be preserved after exit from WFI or suspend.
+      PE context must be preserved after exit from low power state.
 
-      1. Install the ISR for PE timer interrupt ID.
-      2. Save all the RME related PE registers before going to low power mode or CPU suspend.
-      3. Start the PE timer that is set to pe_timer_ticks.
-      4. Initiate the low power state entry:
+      1. Save seven selected RME-related PE registers before going to low power mode.
+      2. Enter low power using WFI and wake using the PE physical timer interrupt.
+      3. Check that the saved PE register values are preserved after WFI exit.
+      4. If a non-secure system timer and PSCI suspend are supported, repeat
+         the same context preservation check across PSCI_CPU_SUSPEND.
 
-      - For rme_pe_context_after_exit_wfi (low power state entry), initiate using WFI instruction.
-      - For rme_pe_context_after_pe_suspend (CPU suspend state entry), initiate using PSCI_CPU_SUSPEND smc call.
+      5. The test expects the register values to be unchanged after each
+         applicable low-power exit.
+      6. Report the CPU suspend check as skipped when no non-secure system timer
+         is available or PSCI_CPU_SUSPEND returns a nonzero status.
+         If WFI passes and CPU suspend is skipped, the overall test passes
+         with an explicit warning that only WFI coverage was attempted.
 
-      5. PE interrupt wakes up the PE before the timeout and is handled.
-      6. The same PE registers are checked against the saved values.
-      7. The test expects the values to be similar and if so, test will PASS, otherwise will FAIL.
+      Coverage is limited to the seven selected PE registers.
 
   * -
 

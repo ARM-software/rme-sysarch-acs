@@ -42,7 +42,6 @@ uint32_t rme_popa_cmo_completion_guarantees_entry(uint32_t num_pe);
 uint32_t rme_interconnect_supports_tlbi_pa_entry(uint32_t num_pe);
 uint32_t rme_ns_encryption_is_immutable_entry(uint32_t num_pe);
 uint32_t rme_pe_context_after_exit_wfi_entry(uint32_t num_pe);
-uint32_t rme_pe_context_after_pe_suspend_entry(uint32_t num_pe);
 uint32_t rme_msd_save_restore_mem_in_root_pas_entry(uint32_t num_pe);
 uint32_t rme_rnvs_in_root_pas_entry(uint32_t num_pe);
 uint32_t rme_root_wdog_from_root_pas_entry(uint32_t num_pe);
