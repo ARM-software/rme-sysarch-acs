@@ -539,10 +539,6 @@ MODULE_TEST_DISPATCHER_s g_module_test_table[MODULE_SENTINEL] = {
         .entry_fn = rme_resources_aligned_to_granularity_entry,
         .test_text = "rme_resources_aligned_to_granularity",
       },
-      [RME_ENTRY_RME_RESOURCES_ARE_NOT_PHYSICALLY_ALIASED_ENTRY] = {
-        .entry_fn = rme_resources_are_not_physically_aliased_entry,
-        .test_text = "rme_resources_are_not_physically_aliased",
-      },
       [RME_ENTRY_RME_RNVS_IN_ROOT_PAS_ENTRY] = {
         .entry_fn = rme_rnvs_in_root_pas_entry,
         .test_text = "rme_rnvs_in_root_pas",

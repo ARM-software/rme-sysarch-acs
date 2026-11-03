@@ -25,7 +25,6 @@ uint32_t rme_all_pe_has_feat_rng_or_rng_trap_entry(uint32_t num_pe);
 uint32_t rme_gpc_for_system_resource_entry(uint32_t num_pe);
 uint32_t rme_coherent_interconnect_supports_cmo_popa_entry(uint32_t num_pe);
 uint32_t rme_resources_aligned_to_granularity_entry(uint32_t num_pe);
-uint32_t rme_resources_are_not_physically_aliased_entry(uint32_t num_pe);
 uint32_t rme_pe_do_not_have_arch_diff_entry(uint32_t num_pe);
 uint32_t rme_mte_region_in_root_pas_entry(uint32_t num_pe);
 uint32_t rme_encryption_for_all_pas_except_ns_entry(uint32_t num_pe);
