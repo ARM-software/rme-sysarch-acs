@@ -201,7 +201,7 @@
 #define ECID_PASID     0x001B
 #define ECID_DPC       0x001D
 #define ECID_DVSEC     0x0023
-#define ECID_DCAP3     0x0027
+#define ECID_DCAP3     0x002F
 #define ECID_IDE       0x0030
 
 /* MSI/MSI-X capability struct offsets */

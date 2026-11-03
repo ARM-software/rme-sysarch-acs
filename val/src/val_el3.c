@@ -604,7 +604,8 @@ uint32_t val_smmu_rlm_unmap_el3(smmu_master_attributes_t *smmu_attr)
 }
 
 /**
- *  @brief  This API requests SMMU config/TLB invalidation after GPT updates.
+ *  @brief  This API invalidates SMMU GPT information using broadcast or
+ *          register maintenance, according to the SMMU capabilities.
  *          Returns 1 on error, 0 on success.
  *  @return 1 on error, 0 on success
  */
@@ -619,7 +620,7 @@ uint32_t val_smmu_gpt_invalidate_el3(smmu_master_attributes_t *smmu_attr)
     return 1;
   }
   else {
-    val_print(ACS_PRINT_INFO, " EL3: SMMU config invalidated successfully", 0);
+    val_print(ACS_PRINT_INFO, " EL3: SMMU GPT information invalidated successfully", 0);
     return 0;
   }
 }

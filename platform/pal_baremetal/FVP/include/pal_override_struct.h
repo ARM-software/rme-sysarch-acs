@@ -271,7 +271,14 @@ typedef struct {
   uint32_t property;
   uint32_t write_mask;
   uint64_t valid_address;
+  uint32_t access;
 } REGISTER_INFO_TABLE;
+
+typedef enum {
+  REGISTER_ACCESS_RW = 0,
+  REGISTER_ACCESS_RO = 1,
+  REGISTER_ACCESS_WO = 2
+} REGISTER_ACCESS;
 
 typedef enum {
   RMSD_WRITE_PROTECT = 0,

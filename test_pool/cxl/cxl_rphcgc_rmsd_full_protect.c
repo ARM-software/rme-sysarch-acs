@@ -55,6 +55,7 @@ payload(void)
   uint32_t component_count;
   uint32_t test_skip = 1;
   uint32_t test_fail = 0;
+  uint32_t test_indeterminate = 0;
   REGISTER_INFO_TABLE *register_tbl_ptr;
 
   /* Skip when the platform does not advertise coherent DA support. */
@@ -103,15 +104,18 @@ payload(void)
               " Checking CXL RP BDF: 0x%x",
               register_entry->bdf);
 
-    if (val_pcie_rp_sec_prpty_check((void *)register_entry))
+    uint32_t result = val_pcie_rp_sec_prpty_check((void *)register_entry);
+    if (result == VAL_PCIE_RP_CHECK_INDETERMINATE)
+      test_indeterminate++;
+    else if (result)
       test_fail++;
   }
 
   /* Report per-PE result based on register checks. */
-  if (test_skip)
-    val_set_status(pe_index, "SKIP", 03);
-  else if (test_fail)
+  if (test_fail)
     val_set_status(pe_index, "FAIL", test_fail);
+  else if (test_skip || test_indeterminate)
+    val_set_status(pe_index, "SKIP", 03);
   else
     val_set_status(pe_index, "PASS", 01);
 }

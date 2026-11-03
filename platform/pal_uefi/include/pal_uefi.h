@@ -72,7 +72,14 @@ typedef struct
   UINT32 property;
   UINT32 write_mask;
   UINT64 valid_address;
+  UINT32 access;
 } REGISTER_INFO_TABLE;
+
+typedef enum {
+  REGISTER_ACCESS_RW = 0,
+  REGISTER_ACCESS_RO = 1,
+  REGISTER_ACCESS_WO = 2
+} REGISTER_ACCESS;
 
 typedef enum
 {

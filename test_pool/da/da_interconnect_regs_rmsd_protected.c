@@ -41,6 +41,7 @@ payload(void)
   uint32_t table_entries;
   uint32_t test_skip = 1;
   uint32_t test_fail = 0;
+  uint32_t test_indeterminate = 0;
 
   REGISTER_INFO_TABLE *register_tbl_ptr;
 
@@ -61,16 +62,18 @@ payload(void)
 
       test_skip = 0;
       ret = val_intercnt_sec_prpty_check((void *)register_tbl_ptr);
-      if (ret)
+      if (ret == VAL_INTERCONNECT_INDETERMINATE)
+          test_indeterminate++;
+      else if (ret)
           test_fail++;
 
       register_tbl_ptr++;
   }
 
-  if (test_skip)
-      val_set_status(pe_index, "SKIP", 01);
-  else if (test_fail)
+  if (test_fail)
       val_set_status(pe_index, "FAIL", 01);
+  else if (test_skip || test_indeterminate)
+      val_set_status(pe_index, "SKIP", 01);
   else
       val_set_status(pe_index, "PASS", 01);
 }

@@ -742,11 +742,13 @@ Testcase checklist
 
       Peer-to-Peer transaction between two TDISP devices must be handled correctly.
 
-      1. Get two Exerciser EPs under two different RPs.
-      2. Enable TDISP on both RPs and establish matching EP/RP IDE keys and Secure Selective IDE streams for both peers.
-      3. Program the target RP's address association for the peer BAR read, recheck Secure state at both ends, and lock each RP's stream register block through Root PAS.
-      4. The shared VAL target setup transitions the target exerciser into TDISP RUN state. Transition the requester into RUN and perform a Peer-to-Peer read, checking the DMA result.
-      5. Use shared VAL teardown to unlock the RP stream blocks, stop TDISP and IDE, close the sessions, and clear the address associations. Disable TDISP on both RPs, including on setup and transfer failures.
+      1. Check that requester DMA is quiescent and get two Exerciser EPs under two different RPs.
+      2. Resolve the requester's SMMUv3 index and StreamID through IOVIRT. Save the peer BAR's original GPI, set it to GPT_ANY and invalidate cached GPT information. Install a Realm stage-2 identity mapping for the 4-KiB page containing the peer BAR, with Device memory attributes and read permission. Derive translation controls from the SMMU address sizes without changing PE translation registers.
+      3. Enable TDISP on both RPs and establish matching EP/RP IDE keys and Secure Selective IDE streams for both peers.
+      4. Program the target RP's address association for the peer BAR read, recheck Secure state at both ends, and lock each RP's stream register block through Root PAS.
+      5. The shared VAL target setup transitions the target exerciser into TDISP RUN state. Transition the requester into RUN and perform an untranslated Peer-to-Peer read with ATC use disabled, checking the DMA result.
+      6. After DMA is quiescent, unmap the requester, destroy its page tables and restore the original peer BAR GPI with GPT invalidation. After successful unmapping, attempt GPT restoration even if page-table destruction fails. If DMA remains active, disable requester bus mastering and retain the mapping, GPT permission and IDE/TDISP state for platform recovery. Stop cleanup and disable requester bus mastering if mapping cleanup or GPT restoration fails.
+      7. After successful mapping cleanup, use shared VAL teardown to unlock the RP stream blocks, stop TDISP and IDE, close the sessions, and clear the address associations. Disable TDISP on both RPs, including after safely recovered setup and transfer failures.
 
       The DMA result checks successful transfer only; rejection of completions from an unintended peer requires additional exerciser support and is not verified by this test.
 
@@ -2202,12 +2204,12 @@ Testcase checklist
 
       IDE-tagged transactions from Exerciser Endpoint must undergo DPT enforcement through R_SMMU.
 
-      1. Validate that IDE-tagged transactions from the Exerciser Endpoint undergo proper DPT enforcement through the R_SMMU.
-      2. Establish an IDE stream between the Root Port and Exerciser, configure secure EL3 memory for DMA, and evaluate both successful and failed flows based on whether a DPT Invalidate command is issued.
-
-      The test ensures that transactions with stale or missing DPT entries are blocked and those with valid, updated entries are allowed.
-
-      Observations: The transaction initiated by the Exerciser passed through the R_SMMU and was subjected to DPT checks as expected.
+      1. Establish the requester IDE stream and, for P2P, the peer target IDE stream and BAR association. Configure the Realm SMMU stage-2 mappings.
+      2. Save the original GPT GPI for the DMA buffer and, for P2P, the peer BAR. Set these entries to GPT_ANY and invalidate the requester SMMU's cached GPT information using its supported broadcast or register maintenance mechanism before issuing ATS.
+      3. Require a successful ATS response matching the mapped physical address. Exercise the system-resource read/write cases with and without explicit DPT invalidation, and the no-access case with invalidation.
+      4. For each no-access test, require a successful source transfer with explicit address type and ATC use disabled. Use untranslated source DMA for P2P and translated source DMA with read/write DPT permission for system resources. Prove a permitted translated destination write and verify its full data pattern through EL3. Clear the destination, install DPT no-access permission, invalidate DPT state, and repeat that write. Require every destination byte to remain unchanged; a partial write or failed EL3 read is a test failure. The positive tests require successful transfers and compare both buffers through EL3.
+      5. In the system-resource no-access test, also check read denial independently. Keep the DPT block denied, change the host source pattern, and attempt a translated source read. After that command completes, restore read/write DPT permission and read back the exerciser contents through a permitted destination DMA. Every byte must contain the original seed or zero; any byte of the new source pattern fails the test.
+      6. Wait for DMA completion before changing transaction attributes or releasing resources. If DMA cannot be quiesced, fail the test, disable requester bus mastering, and retain its buffers, mappings and policy for platform recovery. Otherwise reset transaction attributes, invalidate ATS state, and remove the Realm SMMU mappings. Restore read/write DPT permission after no-access tests, restore the original GPT GPIs with SMMU maintenance, and release DMA buffers only after successful cleanup. Restore PCIe controls and stop IDE streams on normal and failure exits. Setup or cleanup failures take precedence over SKIP.
 
   * -
 

@@ -187,15 +187,15 @@ pcie_cfgreg_bitfield_entry bf_info_table18[] = {
        "WARNING",                   // Warning message
        "ERROR Write-detect failed for 10-Bit Tag Requester Enable" // Error message
     },
-    // Device Control 3 Register - 14-Bit Tag Requester Enable bit (bit 6)
+    // Device Control 3 Register - 14-Bit Tag Requester Enable bit (bit 2)
     {
-       PCIE_ECAP,                    // Part of PCIe capability register
-       0,                            // Capability ID for Device Control 3
-       ECID_DCAP3,                   // Extended Capability ID (not applicable for Device Control 3)
+       PCIE_ECAP,                    // Part of PCIe extended capability register
+       0,                            // Capability ID (not applicable for extended capabilities)
+       ECID_DCAP3,                    // Extended Capability ID for Device 3
        0x08,                         // 4-byte aligned offset for Device Control 3 Register
        RP,                           // Root Port (RP)
-       6,                            // Start bit position (14-Bit Tag Requester Enable)
-       6,                            // End bit position (14-Bit Tag Requester Enable)
+       2,                            // Start bit position (14-Bit Tag Requester Enable)
+       2,                            // End bit position (14-Bit Tag Requester Enable)
        0,                            // Bit value
        WRITE_DETECT,                // Access type: WRITE_DETECT
        "WARNING",                   // Warning message

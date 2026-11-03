@@ -94,6 +94,7 @@ uint32_t
 val_intercnt_sec_prpty_check(uint64_t *register_entry_info);
 
 #define VAL_INTERCONNECT_RESTORE_FAILED 2u
+#define VAL_INTERCONNECT_INDETERMINATE  3u
 
 uint32_t
 val_rmsd_write_protect_check(uint64_t pa,
