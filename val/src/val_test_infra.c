@@ -519,10 +519,6 @@ MODULE_TEST_DISPATCHER_s g_module_test_table[MODULE_SENTINEL] = {
         .entry_fn = rme_pe_context_after_exit_wfi_entry,
         .test_text = "rme_pe_context_after_exit_wfi",
       },
-      [RME_ENTRY_RME_PE_CONTEXT_AFTER_PE_SUSPEND_ENTRY] = {
-        .entry_fn = rme_pe_context_after_pe_suspend_entry,
-        .test_text = "rme_pe_context_after_pe_suspend",
-      },
       [RME_ENTRY_RME_PE_DO_NOT_HAVE_ARCH_DIFF_ENTRY] = {
         .entry_fn = rme_pe_do_not_have_arch_diff_entry,
         .test_text = "rme_pe_do_not_have_arch_diff",

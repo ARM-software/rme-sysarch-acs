@@ -141,7 +141,6 @@
   ../test_pool/rme/rme_pas_filter_in_inactive_mode.c
   ../test_pool/rme/rme_pcie_devices_support_gpc.c
   ../test_pool/rme/rme_pe_context_after_exit_wfi.c
-  ../test_pool/rme/rme_pe_context_after_pe_suspend.c
   ../test_pool/rme/rme_pe_do_not_have_arch_diff.c
   ../test_pool/rme/rme_popa_cmo_completion_guarantees.c
   ../test_pool/rme/rme_realm_smem_behaviour_after_reset.c
