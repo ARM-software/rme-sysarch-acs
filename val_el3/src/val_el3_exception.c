@@ -49,6 +49,8 @@ void val_el3_ack_handler(void)
 {
   uint64_t *elr_ptr;
   uint64_t *spsr_ptr;
+  uint64_t esr;
+  uint64_t far;
 
   elr_ptr = (uint64_t *) SHARED_OFFSET_ELR;
   spsr_ptr = (uint64_t *) SHARED_OFFSET_SPSR;
@@ -75,8 +77,8 @@ void val_el3_ack_handler(void)
      */
     if (shared_data->pas_filter_flag == SET &&
         shared_data->generic_flag == PAS_FILTER_INACTIVE_PROBE) {
-        uint64_t esr = val_el3_read_esr_el3();
-        uint64_t far = val_el3_read_far();
+        esr = val_el3_read_esr_el3();
+        far = val_el3_read_far();
 
         shared_data->esr_value = esr;
         shared_data->exception_generated =
@@ -91,11 +93,13 @@ void val_el3_ack_handler(void)
 
     /* A caller may arm a specific external read abort. Do not consume other faults. */
     if (shared_data->esr_value == SEA_ESR_READ) {
-        uint64_t esr = val_el3_read_esr_el3();
+        esr = val_el3_read_esr_el3();
+        /* FnV permits an invalid FAR for this external abort. */
         if (((esr >> 26) == 0x25u) && ((esr & 0x3fu) == 0x10u) &&
-            ((esr & ((1u << 6) | (1u << 10))) == 0u) &&
+            ((esr & (1u << 6)) == 0u) &&
             (val_el3_read_elr_el3() == (uint64_t)&val_el3_mmio_read_load) &&
-            (val_el3_read_far() == shared_data->shared_data_access[0].addr)) {
+            (((esr & (1u << 10)) != 0u) ||
+             (val_el3_read_far() == shared_data->shared_data_access[0].addr))) {
             shared_data->exception_generated = SET;
             shared_data->exception_expected = CLEAR;
             INFO("Expected external read abort observed\n");
