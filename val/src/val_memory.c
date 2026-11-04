@@ -373,6 +373,55 @@ val_memory_map_el3_data(uint64_t va, uint32_t size, uint32_t pas)
 }
 
 /**
+  @brief  Clean and invalidate every EL3 data-cache line in an address range.
+
+  @param  address  Start virtual address.
+  @param  length   Number of bytes covered by the operation.
+
+  @return ACS_STATUS_PASS on success, ACS_STATUS_ERR on invalid input or CMO failure.
+**/
+static uint32_t
+val_memory_cache_maint_range_el3(uint64_t address,
+                                 uint32_t length,
+                                 uint32_t operation)
+{
+  uint64_t aligned_address;
+  uint64_t end_address;
+  uint64_t line_length;
+
+  if ((address == 0u) || (length == 0u) ||
+      (address > (~0ull - (uint64_t)length)))
+    return ACS_STATUS_ERR;
+
+  line_length = 2ull << ((val_pe_reg_read(CTR_EL0) >> 16) & 0xFu);
+  aligned_address = address & ~(line_length - 1u);
+  end_address = address + length;
+
+  while (aligned_address < end_address)
+  {
+    if (val_data_cache_ops_by_va_el3(aligned_address, operation) != 0u)
+      return ACS_STATUS_ERR;
+    aligned_address += line_length;
+  }
+
+  return ACS_STATUS_PASS;
+}
+
+uint32_t
+val_memory_cache_clean_invalidate_range_el3(uint64_t address, uint32_t length)
+{
+  return val_memory_cache_maint_range_el3(address,
+                                          length,
+                                          CLEAN_AND_INVALIDATE);
+}
+
+uint32_t
+val_memory_cache_invalidate_range_el3(uint64_t address, uint32_t length)
+{
+  return val_memory_cache_maint_range_el3(address, length, INVALIDATE);
+}
+
+/**
   @brief  Check that an EL3-accessible buffer contains one repeated byte.
 
   @param  buffer_va     Buffer virtual address.
