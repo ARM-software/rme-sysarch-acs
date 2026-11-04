@@ -547,9 +547,9 @@ MODULE_TEST_DISPATCHER_s g_module_test_table[MODULE_SENTINEL] = {
         .entry_fn = rme_root_wdog_fails_in_non_root_state_entry,
         .test_text = "rme_root_wdog_fails_in_non_root_state",
       },
-      [RME_ENTRY_RME_ROOT_WDOG_FROM_ROOT_PAS_ENTRY] = {
-        .entry_fn = rme_root_wdog_from_root_pas_entry,
-        .test_text = "rme_root_wdog_from_root_pas",
+      [RME_ENTRY_RME_ROOT_WDOG_EXPIRATION_FROM_ROOT_ENTRY] = {
+        .entry_fn = rme_root_wdog_expiration_from_root_entry,
+        .test_text = "rme_root_wdog_expiration_from_root",
       },
       [RME_ENTRY_RME_SMMU_BLOCKS_REQUEST_AT_REGISTERS_RESET_ENTRY] = {
         .entry_fn = rme_smmu_blocks_request_at_registers_reset_entry,

@@ -25,112 +25,282 @@
 #include "val/include/val_el32.h"
 #include "val/include/val_pgt.h"
 #include "val/include/val_memory.h"
+#include "val/sys_arch_src/gic/val_sys_arch_gic.h"
 
 #define TEST_NAME  "rme_root_wdog_fails_in_non_root_state"
-#define TEST_DESC  "Check Root Watchdog programming fails in Non-Root state"
-#define TEST_RULE  "RZHBBL/RVXGBP"
+#define TEST_DESC  "Check Root Watchdog registers are accessible only in Root"
+#define TEST_RULE  "RZHBBL"
 
 static uint32_t int_id;
 static uint64_t counter_freq;
 static uint64_t VA_RT_WDOG;
+static volatile uint32_t wdog_irq_received;
+static volatile uint32_t wdog_isr_failed;
 
-static void isr(void)
+/**
+ * @brief  The test validates that Root watchdog registers are in the Root PAS.
+ * 1. Get the INT_ID for Root watchdog and install the ISR using the same.
+ * 2. Map the Root watchdog control base register with VA_RT_WDOG as Root PAS.
+ * 3. Program the watchdog from Root PAS and expect the interrupt.
+ * 4. Map the Root watchdog control base register as Non-secure PAS.
+ * 5. Access the watchdog register through the Non-secure PAS mapping and
+ *    expect the access to be blocked.
+ */
+
+static void root_wdog_isr(void)
 {
-  uint32_t index = val_pe_get_index_mpid(val_pe_get_mpid());
-  // Disable the root watchdog timer
   if (val_wd_set_ws0_el3(VA_RT_WDOG, CLEAR, counter_freq))
   {
     val_print(ACS_PRINT_ERR, " Failed to program the WDOG", 0);
-    val_set_status(index, "FAIL", 4);
-    return;
+    wdog_isr_failed = 1;
+  } else {
+    val_print(ACS_PRINT_DEBUG, "  Received WS0 interrupt", 0);
+    wdog_irq_received = 1;
   }
-  val_print(ACS_PRINT_DEBUG, " Received WS0 interrupt", 0);
-  val_set_status(index, "FAIL", 5);
+
   val_gic_end_of_interrupt(int_id);
 }
 
-/**
- * @brief  The test validates that the programming of root watchdog from non-Root state
- *         will successfully generate an interrupt.
- * 1. Get the INT_ID for Root watchdog and install the ISR using the same.
- * 2. Map the root watchdog control base register with VA_RT_WDOG as Non-secure access PAS.
- * 3. Set the interrupt type and set the timer in EL3 by writing counter timer to WOR
- *    offset of the VA_RT_WDOG.
- * 4. The inerrupt will not be generated within the given timeout, making the test PASS
- *    otherwise FAIL.
- */
-static void payload(void)
+static uint32_t get_root_wdog_info(uint64_t *rt_wdog_ctl)
 {
-
-  uint64_t timeout_ticks, start_cnt;
-  uint64_t timer_expire_ticks = 1;
-  uint64_t size, rt_wdog_ctl;
-  uint32_t index                 = val_pe_get_index_mpid(val_pe_get_mpid()), attr;
   uint64_t rt_wdog_ctl_available = val_get_rt_wdog_ctrl();
 
-  size = val_get_min_tg();
-
-  if (rt_wdog_ctl_available) {
-    rt_wdog_ctl = rt_wdog_ctl_available;
-    /* INT_ID for RT_WDOG is 114 */
+  if (rt_wdog_ctl_available)
+  {
+    *rt_wdog_ctl = rt_wdog_ctl_available;
     int_id = val_get_rt_wdog_int_id();
-  } else {
-    val_print(ACS_PRINT_ERR, " ROOT Watchdog not available in the platform", 0);
+    return ACS_STATUS_PASS;
+  }
+
+  val_print(ACS_PRINT_WARN, " ROOT Watchdog not available in the platform", 0);
+  return ACS_STATUS_SKIP;
+}
+
+static uint32_t root_wdog_cleanup(uint32_t wdog_mapped, uint32_t isr_installed)
+{
+  uint32_t status = ACS_STATUS_PASS;
+
+  if (wdog_mapped)
+  {
+    if (val_wd_set_ws0_el3(VA_RT_WDOG, CLEAR, counter_freq))
+    {
+      val_print(ACS_PRINT_ERR, " Failed to disable Root Watchdog during cleanup", 0);
+      status = ACS_STATUS_FAIL;
+    }
+  }
+
+  if (isr_installed)
+  {
+    val_gic_clear_interrupt(int_id);
+    val_gic_disableInterruptSource(int_id);
+  }
+
+  wdog_irq_received = 0;
+  wdog_isr_failed = 0;
+  return status;
+}
+
+static uint32_t run_root_pas_access_check(void)
+{
+  uint64_t timer_expire_ticks = 1;
+  uint64_t timeout_ticks, start_cnt;
+  uint32_t attr, status, wdog_mapped = 0, isr_installed = 0;
+  uint64_t size, rt_wdog_ctl_reg;
+
+  size = val_get_min_tg();
+  status = get_root_wdog_info(&rt_wdog_ctl_reg);
+  if (status != ACS_STATUS_PASS)
+    return status;
+
+  VA_RT_WDOG = val_get_free_va(size);
+  if (!VA_RT_WDOG)
+  {
+    val_print(ACS_PRINT_ERR, " Failed to allocate Root Watchdog VA", 0);
+    return ACS_STATUS_FAIL;
+  }
+
+  counter_freq = val_get_counter_frequency();
+  if (!counter_freq)
+  {
+    val_print(ACS_PRINT_ERR, " Invalid counter frequency", 0);
+    return ACS_STATUS_FAIL;
+  }
+  timeout_ticks = counter_freq * 2;
+  val_print(ACS_PRINT_DEBUG, " Timer value = 0x%lx  ", timeout_ticks);
+  val_print(ACS_PRINT_DEBUG, " Root watchdog Interrupt id  %d", int_id);
+
+  if (val_gic_install_isr(int_id, root_wdog_isr))
+  {
+    val_print(ACS_PRINT_ERR, " GIC Install Handler Failed...", 0);
+    return ACS_STATUS_FAIL;
+  }
+  isr_installed = 1;
+
+  val_gic_set_intr_trigger(int_id, INTR_TRIGGER_INFO_LEVEL_HIGH);
+
+  shared_data->generic_flag = CLEAR;
+  attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(NON_SHAREABLE) | PGT_ENTRY_AP_RW
+                     | GET_ATTR_INDEX(DEV_MEM_nGnRnE));
+  if (val_add_mmu_entry_el3(VA_RT_WDOG, rt_wdog_ctl_reg,
+                            (attr | LOWER_ATTRS(PAS_ATTR(ROOT_PAS)))))
+  {
+    val_print(ACS_PRINT_ERR, " Failed to map RT_WDOG_CTRL register in MMU", 0);
+    status = ACS_STATUS_FAIL;
+    goto root_wdog_exit;
+  }
+  wdog_mapped = 1;
+
+  wdog_irq_received = 0;
+  wdog_isr_failed = 0;
+  val_print(ACS_PRINT_TEST, " Programming the Root Watchdog register from Root PAS", 0);
+  if (val_wd_set_ws0_el3(VA_RT_WDOG, timer_expire_ticks, counter_freq))
+  {
+    val_print(ACS_PRINT_ERR, " Failed to program  the WDOG", 0);
+    status = ACS_STATUS_FAIL;
+    goto root_wdog_exit;
+  }
+
+  start_cnt = val_timer_ArmArchTimerReadReg(CntPct);
+  while (((val_timer_ArmArchTimerReadReg(CntPct) - start_cnt) < timeout_ticks) &&
+         (wdog_irq_received == 0) && (wdog_isr_failed == 0)) {
+  }
+
+  if (wdog_isr_failed)
+  {
+    status = ACS_STATUS_FAIL;
+    goto root_wdog_exit;
+  }
+
+  if (wdog_irq_received == 0)
+  {
+    val_print(ACS_PRINT_ERR, " WS0 Interrupt not received on %d", int_id);
+    status = ACS_STATUS_FAIL;
+    goto root_wdog_exit;
+  }
+
+  status = ACS_STATUS_PASS;
+
+root_wdog_exit:
+  if (root_wdog_cleanup(wdog_mapped, isr_installed) != ACS_STATUS_PASS)
+    status = ACS_STATUS_FAIL;
+  return status;
+}
+
+static uint32_t run_non_root_pas_access_check(void)
+{
+  uint64_t size, rt_wdog_ctl, esr;
+  uint32_t attr, status;
+
+  size = val_get_min_tg();
+  status = get_root_wdog_info(&rt_wdog_ctl);
+  if (status != ACS_STATUS_PASS)
+    return status;
+
+  val_print(ACS_PRINT_DEBUG, " Root watchdog Interrupt id  %d", int_id);
+
+  VA_RT_WDOG = val_get_free_va(size);
+  if (!VA_RT_WDOG)
+  {
+    val_print(ACS_PRINT_ERR, " Failed to allocate Root Watchdog VA", 0);
+    return ACS_STATUS_FAIL;
+  }
+  attr = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(NON_SHAREABLE) | PGT_ENTRY_AP_RW
+                     | GET_ATTR_INDEX(DEV_MEM_nGnRnE));
+  if (val_add_mmu_entry_el3(VA_RT_WDOG, rt_wdog_ctl,
+                            (attr | LOWER_ATTRS(PAS_ATTR(NONSECURE_PAS)))))
+  {
+    val_print(ACS_PRINT_ERR, " Failed to map RT_WDOG_CTRL register in MMU", 0);
+    return ACS_STATUS_FAIL;
+  }
+
+  shared_data->num_access = 1;
+  shared_data->arg1 = VA_RT_WDOG;
+  shared_data->shared_data_access[0].addr = VA_RT_WDOG;
+  shared_data->shared_data_access[0].data = INIT_DATA;
+  shared_data->shared_data_access[0].access_type = READ_DATA;
+  shared_data->exception_expected = SET;
+  shared_data->exception_generated = CLEAR;
+  shared_data->access_mut = SET;
+  shared_data->pas_filter_flag = SET;
+
+  val_print(ACS_PRINT_DEBUG, " Accessing Root Watchdog register from NS PAS", 0);
+  if (val_pe_access_mut_el3())
+  {
+    val_print(ACS_PRINT_ERR, " Failed to access RT_WDOG_CTRL register", 0);
+    return ACS_STATUS_FAIL;
+  }
+
+  shared_data->access_mut = CLEAR;
+  shared_data->pas_filter_flag = CLEAR;
+  shared_data->exception_expected = CLEAR;
+
+  if (shared_data->exception_generated == CLEAR)
+  {
+    val_print(ACS_PRINT_ERR, " Root Watchdog register access succeeded from NS PAS", 0);
+    return ACS_STATUS_FAIL;
+  }
+
+  val_print(ACS_PRINT_DEBUG, " Non-secure PAS access generated an exception", 0);
+  shared_data->exception_generated = CLEAR;
+
+  esr = shared_data->esr_value;
+
+  /*
+   * Require a same-EL data read abort: GPF or synchronous external abort.
+   * Reject translation/alignment faults, table walks and cache maintenance faults;
+   * these do not demonstrate denial of the watchdog register read.
+   */
+  if (VAL_EXTRACT_BITS(esr, 26, 31) != 0x25 ||
+      (esr & ((1U << 6) | (1U << 7) | (1U << 8) | (1U << 10))) ||
+      ((esr & 0x3F) != 0x28 && (esr & 0x3F) != 0x10))
+  {
+    val_print(ACS_PRINT_ERR, " Unexpected NS watchdog access ESR: 0x%lx", esr);
+    return ACS_STATUS_FAIL;
+  }
+
+  val_print(ACS_PRINT_DEBUG, " Non-secure PAS watchdog read was blocked", 0);
+
+  return ACS_STATUS_PASS;
+}
+
+
+static void payload(void)
+{
+  uint32_t index = val_pe_get_index_mpid(val_pe_get_mpid());
+  uint32_t status;
+
+  if (!shared_data)
+  {
+    val_print(ACS_PRINT_ERR, " Shared data is unavailable", 0);
     val_set_status(index, "FAIL", 1);
     return;
   }
 
-  timeout_ticks = val_get_counter_frequency() * 2;
-  counter_freq = val_get_counter_frequency();
-
-  val_print(ACS_PRINT_DEBUG, " Root watchdog Interrupt id  %d", int_id);
-  val_print(ACS_PRINT_DEBUG, " timeout  %lx", timeout_ticks);
-  val_print(ACS_PRINT_DEBUG, " counter_freq  %d", counter_freq);
-
-  if (val_gic_install_isr(int_id, isr))
+  status = run_root_pas_access_check();
+  if (status == ACS_STATUS_SKIP)
   {
-    val_print(ACS_PRINT_ERR, " GIC Install Handler Failed...", 0);
+    val_set_status(index, "SKIP", 1);
+    return;
+  }
+  if (status != ACS_STATUS_PASS)
+  {
+    val_set_status(index, "FAIL", 1);
+    return;
+  }
+
+  status = run_non_root_pas_access_check();
+  if (status == ACS_STATUS_SKIP)
+  {
+    val_set_status(index, "SKIP", 2);
+    return;
+  }
+  if (status != ACS_STATUS_PASS)
+  {
     val_set_status(index, "FAIL", 2);
     return;
   }
 
-  /* Set Interrupt Type Edge/Level Trigger */
-  val_gic_set_intr_trigger(int_id, INTR_TRIGGER_INFO_LEVEL_HIGH);
-
-  VA_RT_WDOG  = val_get_free_va(size);
-  rt_wdog_ctl = val_get_rt_wdog_ctrl();
-  attr        = LOWER_ATTRS(PGT_ENTRY_ACCESS | SHAREABLE_ATTR(NON_SHAREABLE) |
-                            PGT_ENTRY_AP_RW | GET_ATTR_INDEX(DEV_MEM_nGnRnE));
-  if (val_add_mmu_entry_el3(VA_RT_WDOG, rt_wdog_ctl, (attr | LOWER_ATTRS(PAS_ATTR(NONSECURE_PAS)))))
-  {
-    val_print(ACS_PRINT_ERR, " Failed to map RT_WDOG_CTRL register in MMU", 0);
-    val_set_status(index, "FAIL", 3);
-    return;
-  }
-  // Generic flag will be set to ensure the disabling of I.A.F bit in PSTATE in el3
-  val_print(ACS_PRINT_DEBUG, " Programming the Root Watchdog register from NS PAS", 0);
-  shared_data->generic_flag = SET;
-  if (val_wd_set_ws0_el3(VA_RT_WDOG, timer_expire_ticks, counter_freq))
-  {
-    val_print(ACS_PRINT_ERR, "\n    Failed to program  the WDOG", 0);
-    val_set_status(index, "FAIL", 3);
-    return;
-  }
-
-  val_print(ACS_PRINT_DEBUG, " Waiting at NS-EL2 for interrupt", 0);
-  start_cnt = val_timer_ArmArchTimerReadReg(CntPct);
-  while (((val_timer_ArmArchTimerReadReg(CntPct) - start_cnt) < timeout_ticks) &&
-         (IS_RESULT_PENDING(val_get_status(index))));
-
-  if (IS_RESULT_PENDING(val_get_status(index)))
-  {
-    val_print(ACS_PRINT_DEBUG, " WS0 Interrupt not received on %d", int_id);
-    shared_data->generic_flag = CLEAR;
-    shared_data->exception_expected = CLEAR;
-    shared_data->exception_generated = CLEAR;
-    val_set_status(index, "PASS", 3);
-    return;
-  }
+  val_set_status(index, "PASS", 1);
 }
 
 uint32_t rme_root_wdog_fails_in_non_root_state_entry(uint32_t num_pe)

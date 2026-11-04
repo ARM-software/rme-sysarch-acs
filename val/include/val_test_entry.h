@@ -44,7 +44,7 @@ uint32_t rme_ns_encryption_is_immutable_entry(uint32_t num_pe);
 uint32_t rme_pe_context_after_exit_wfi_entry(uint32_t num_pe);
 uint32_t rme_msd_save_restore_mem_in_root_pas_entry(uint32_t num_pe);
 uint32_t rme_rnvs_in_root_pas_entry(uint32_t num_pe);
-uint32_t rme_root_wdog_from_root_pas_entry(uint32_t num_pe);
+uint32_t rme_root_wdog_expiration_from_root_entry(uint32_t num_pe);
 uint32_t rme_root_wdog_fails_in_non_root_state_entry(uint32_t num_pe);
 uint32_t rme_pas_filter_in_inactive_mode_entry(uint32_t num_pe);
 uint32_t rme_smmu_blocks_request_at_registers_reset_entry(uint32_t num_pe);
