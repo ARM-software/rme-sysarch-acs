@@ -211,6 +211,7 @@
 /* PCI Express capability struct offsets */
 #define CIDR_OFFSET    0x0
 #define PCIECR_OFFSET  0x2
+#define PCIECR_FLIT_MODE_SUPPORTED              (1u << 15)
 #define DCAPR_OFFSET   0x4
 #define ACSCR_OFFSET   0x4
 #define ACSP2PRR_SHIFT 18
@@ -224,6 +225,7 @@
 #define DCTL2R_MASK    0xFFFF
 #define LCAP2R_OFFSET  0x2C
 #define LCTL2R_OFFSET  0x30
+#define LSTS2R_FLIT_MODE_STATUS                 (1u << 10)
 #define DCTL2R_MASK    0xFFFF
 #define DSTS_SHIFT     16
 #define DS_UNCORR_MASK 0x6
