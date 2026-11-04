@@ -461,21 +461,34 @@ Testcase checklist
 
   * -
 
-      `rme_root_wdog_from_root_pas <../test_pool/rme/rme_root_wdog_from_root_pas.c>`_ & `rme_root_wdog_fails_in_non_root_state <../test_pool/rme/rme_root_wdog_fails_in_non_root_state.c>`_
+      `rme_root_wdog_fails_in_non_root_state <../test_pool/rme/rme_root_wdog_fails_in_non_root_state.c>`_
 
     -
 
       RZHBBL: The memory-mapped registers of a Root watchdog are in the Root PAS.
 
+    -
+
+      1. Program Root watchdog registers from Root PAS and verify that the
+         watchdog interrupt is generated.
+      2. Map the Root watchdog control register using Non-secure PAS.
+      3. Access the Non-secure PAS mapping and verify that the access is
+         blocked by the PAS protection path.
+      4. This validates that the Root watchdog registers are in the Root PAS.
+
+  * -
+
+      `rme_root_wdog_expiration_from_root <../test_pool/rme/rme_root_wdog_expiration_from_root.c>`_
+
+    -
+
       RVXGBP: A Root watchdog can trigger an RME system reset when predefined expiration conditions are met.
 
     -
 
-      Programming of Root watchdog, RT_WDOG_CTRL register, from ROOT state only will generate an interrupt.
-
-      The rme_root_wdog_from_root_pas will generate a watchdog interrupt when the Root watchdog is programmed from the Root PAS.
-
-      The rme_root_wdog_fails_in_non_root_state won't generate a watchdog interrupt when the Root watchdog is programmed from the non-Root PAS, in this case, from Non-Secure PAS.
+      1. Program the Root watchdog from Root state.
+      2. Configure the watchdog expiration condition.
+      3. Verify that watchdog expiration causes an RME system reset and resume the testcase.
 
   * -
 
