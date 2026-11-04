@@ -1,0 +1,112 @@
+# Copyright (c) 2026, Arm Limited or its affiliates. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+name: Release builds
+
+on:
+  pull_request:
+    branches: [release/rme/vC.a_CXL.EAC_TDISP.BETA]
+
+defaults:
+  run:
+    shell: bash
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-builds-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - component: bm
+            name: ACS bare-metal (FVP, SPDM)
+          - component: el3
+            name: EL3 (FVP BL31)
+    env:
+      CROSS_COMPILE: aarch64-linux-gnu-
+    steps:
+      - name: Check out ACS and pinned submodules
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+          persist-credentials: false
+
+      - name: Apply release SPDM patches
+        if: matrix.component == 'bm'
+        run: git -C ext/spdm-emu apply "$GITHUB_WORKSPACE"/tools/patches/aemfvp-a/spdm-emu/*.patch
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y \
+            build-essential gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu \
+            python3 libssl-dev device-tree-compiler cmake curl xz-utils
+
+      - name: Install bare-metal toolchain
+        if: matrix.component == 'bm'
+        run: |
+          archive=arm-gnu-toolchain-13.2.rel1-x86_64-aarch64-none-elf.tar.xz
+          curl --fail --location --retry 3 \
+            "https://developer.arm.com/-/media/Files/downloads/gnu/13.2.Rel1/binrel/$archive" \
+            -o "$RUNNER_TEMP/$archive"
+          echo "7fe7b8548258f079d6ce9be9144d2a10bd2bf93b551dafbf20fe7f2e44e014b8  $RUNNER_TEMP/$archive" | sha256sum --check
+          tar -xf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP"
+          echo "CROSS_COMPILE=$RUNNER_TEMP/arm-gnu-toolchain-13.2.Rel1-x86_64-aarch64-none-elf/bin/aarch64-none-elf-" >> "$GITHUB_ENV"
+
+      - name: Build bare-metal ACS with SPDM
+        if: matrix.component == 'bm'
+        run: |
+          build_root="$RUNNER_TEMP/rme-build"
+          export TMPDIR="$build_root/tmp"
+          mkdir -p "$TMPDIR" "$build_root/artifacts" "$build_root/logs"
+          exec > >(tee "$build_root/logs/build.log") 2>&1
+          jobs=$(nproc)
+          (( jobs <= 8 )) || jobs=8
+          # Configure from the checkout: this release resolves ROOT_DIR from ".".
+          cmake -S . -B "$build_root/bm" -G "Unix Makefiles" \
+            -DCROSS_COMPILE="$CROSS_COMPILE" -DTARGET=FVP -DENABLE_SPDM=ON
+          cmake --build "$build_root/bm" --parallel "$jobs"
+          test -s "$build_root/bm/output/rme.bin"
+          cp "$build_root/bm/output/"rme.{bin,elf,map} "$build_root/artifacts/"
+
+      - name: Build EL3 BL31
+        if: matrix.component == 'el3'
+        run: |
+          build_root="$RUNNER_TEMP/rme-build"
+          export TMPDIR="$build_root/tmp"
+          mkdir -p "$TMPDIR" "$build_root/artifacts" "$build_root/logs"
+          exec > >(tee "$build_root/logs/build.log") 2>&1
+          jobs=$(nproc)
+          (( jobs <= 8 )) || jobs=8
+          tfa="$build_root/tfa"
+          git init "$tfa"
+          git -C "$tfa" remote add origin https://github.com/ARM-software/arm-trusted-firmware.git
+          git -C "$tfa" fetch --depth 1 origin v2.13.0
+          git -C "$tfa" checkout --detach FETCH_HEAD
+          # Compile the checkout's ACS EL3 sources directly into TF-A BL31.
+          git -C "$tfa" apply "$GITHUB_WORKSPACE"/tools/patches/aemfvp-a/tfa/*.patch
+          make -C "$tfa" -j"$jobs" PLAT=fvp DEBUG=1 ENABLE_RME=1 \
+            BRANCH_PROTECTION=1 FVP_TRUSTED_SRAM_SIZE=512 \
+            ACS_HOME="$GITHUB_WORKSPACE" BUILD_BASE="$build_root/tfa-build" bl31
+          test -s "$build_root/tfa-build/fvp/debug/bl31.bin"
+          cp "$build_root/tfa-build/fvp/debug/bl31.bin" "$build_root/artifacts/"
+          cp "$build_root/tfa-build/fvp/debug/bl31/"bl31.{elf,map} "$build_root/artifacts/"
+
+      - name: Upload binaries and build logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.component }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/rme-build/artifacts/
+            ${{ runner.temp }}/rme-build/logs/
+          if-no-files-found: warn
+          retention-days: 14
