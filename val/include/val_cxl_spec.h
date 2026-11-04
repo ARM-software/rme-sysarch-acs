@@ -239,8 +239,16 @@
 /* ---- CXL IDE Capability registers ---- */
 #define CXL_IDE_REG_CAPABILITY                  0x00u
 #define CXL_IDE_REG_CONTROL                     0x04u
+#define CXL_IDE_CONTROL_PCRC_DISABLE            (1u << 0)
 #define CXL_IDE_REG_STATUS                      0x08u
 #define CXL_IDE_REG_ERROR_STATUS                0x0Cu
+#define CXL_IDE_REG_KEY_REFRESH_CAPABILITY      0x10u
+#define CXL_IDE_REG_KEY_REFRESH_CONTROL         0x18u
+#define CXL_IDE_REG_KEY_REFRESH_CAPABILITY2     0x20u
+#define CXL_IDE_REG_TRUNCATION_CAPABILITY       0x14u
+#define CXL_IDE_REG_TRUNCATION_CONTROL          0x1Cu
+#define CXL_IDE_TRUNCATION_DELAY_MASK           0xFFu
+#define CXL_IDE_TRUNCATION_DELAY2_SHIFT         8u
 
 #define CXL_IDE_CAP_CAPABLE                     (1u << 0)
 #define CXL_IDE_CAP_MODE_SKID                   (1u << 1)
