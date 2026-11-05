@@ -61,6 +61,17 @@ void val_el3_ack_handler(void)
    * re-enters with exception_expected SET, selecting recovery here.
    */
   if (shared_data->exception_expected == SET && shared_data->access_mut == CLEAR) {
+    if (shared_data->esr_value == SERROR_ESR_WRITE) {
+        esr = val_el3_read_esr_el3();
+        if ((esr >> 26) == 0x2fu) {
+            /* Resume an expected SError without advancing the return address. */
+            val_el3_asm_eret_smc();
+        } else {
+            val_el3_branch_asm(*(armtf_handler + 1));
+        }
+        return;
+    }
+
     /* These markers identify a fault from the inactive PAS-filter load.
      * Let PAL verify its platform-specific denial syndrome before accepting it.
      */
@@ -83,10 +94,12 @@ void val_el3_ack_handler(void)
     /* A caller may arm a specific external read abort. Do not consume other faults. */
     if (shared_data->esr_value == SEA_ESR_READ) {
         esr = val_el3_read_esr_el3();
+        /* FnV permits an invalid FAR for this external abort. */
         if (((esr >> 26) == 0x25u) && ((esr & 0x3fu) == 0x10u) &&
-            ((esr & ((1u << 6) | (1u << 10))) == 0u) &&
+            ((esr & (1u << 6)) == 0u) &&
             (val_el3_read_elr_el3() == (uint64_t)&val_el3_mmio_read_load) &&
-            (val_el3_read_far() == shared_data->shared_data_access[0].addr)) {
+            (((esr & (1u << 10)) != 0u) ||
+             (val_el3_read_far() == shared_data->shared_data_access[0].addr))) {
             shared_data->exception_generated = SET;
             shared_data->exception_expected = CLEAR;
             INFO("Expected external read abort observed\n");

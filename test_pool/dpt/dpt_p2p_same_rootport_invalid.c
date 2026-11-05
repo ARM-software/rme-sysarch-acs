@@ -607,7 +607,7 @@ payload(void)
       dpt_entry_active = 1;
       if (val_dpt_check_denied_write(instance, master.smmu_index,
                                     tgt_bar_base, bar_buf_in_phys, dma_len,
-                                    TEST_DATA) != ACS_STATUS_PASS)
+                                    TEST_DATA, true) != ACS_STATUS_PASS)
       {
           test_fail++;
           goto free_mem;

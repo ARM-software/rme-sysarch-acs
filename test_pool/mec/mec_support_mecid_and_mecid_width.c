@@ -132,14 +132,14 @@ payload2(void)
   max_mecid = (1 << common_mecidw) - 1;
 
   /* Validate MECIDs */
-  if (!val_mec_validate_mecid(max_mecid, max_mecid - 1, PoE))
+  if (val_mec_validate_mecid(max_mecid, max_mecid - 1, PoE) != ACS_STATUS_PASS)
   {
       val_print(ACS_PRINT_ERR, " Invalid MECID behaviour", 0);
       val_set_status(pe_index, "FAIL", 05);
       return;
   }
 
-  if (!val_mec_validate_mecid(max_mecid, max_mecid - 1, PoPA))
+  if (val_mec_validate_mecid(max_mecid, max_mecid - 1, PoPA) != ACS_STATUS_PASS)
   {
       val_print(ACS_PRINT_ERR, " Invalid MECID behaviour", 0);
       val_set_status(pe_index, "FAIL", 06);

@@ -84,7 +84,8 @@ val_dpt_wait_for_dma(uint32_t instance)
 uint32_t
 val_dpt_check_denied_write(uint32_t instance, uint32_t smmu_index,
                           uint64_t destination_va, uint64_t destination_pa,
-                          uint32_t length, uint8_t byte_pattern)
+                          uint32_t length, uint8_t byte_pattern,
+                          bool destination_is_mmio)
 {
   uint64_t smmu_info = (uint64_t)smmu_index << 32;
 
@@ -107,7 +108,12 @@ val_dpt_check_denied_write(uint32_t instance, uint32_t smmu_index,
   if (val_memory_set_el3((void *)destination_va, length, 0))
     return ACS_STATUS_ERR;
 
-  val_pe_cache_clean_invalidate_range(destination_va, length);
+  /* Peer BARs are Device memory: do not issue address-based CMOs to MMIO. */
+  if (!destination_is_mmio)
+    val_pe_cache_clean_invalidate_range(destination_va, length);
+
+  /* Complete the destination reset before issuing the denied DMA write. */
+  __asm__ volatile("dsb sy" ::: "memory");
 
   /* The exerciser can clear transaction attributes after each completed DMA. */
   if (val_dpt_add_entry(destination_pa, smmu_info | DPT_NO_ACCESS_ENTRY) ||
