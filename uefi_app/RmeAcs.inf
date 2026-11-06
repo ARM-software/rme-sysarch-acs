@@ -125,6 +125,7 @@
   ../test_pool/mec/mec_support_mecid_and_mecid_width.c
   ../test_pool/rme/rme_all_pe_has_feat_rng_or_rng_trap.c
   ../test_pool/rme/rme_cmo_popa_for_cacheability_shareability.c
+  ../test_pool/rme/rme_popa_cmo_applies_to_pas_pa_cached_copy.c
   ../test_pool/rme/rme_coherent_interconnect_supports_cmo_popa.c
   ../test_pool/rme/rme_data_encryption_beyond_popa.c
   ../test_pool/rme/rme_data_encryption_with_different_tweak.c

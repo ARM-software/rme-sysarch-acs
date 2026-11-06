@@ -771,6 +771,26 @@ uint32_t val_rlm_get_mec_state(uint32_t *enabled_out)
 }
 
 /**
+ *  @brief  Read the calling PE's MECID_RL_A_EL3 through the EL3 service.
+ *  @param  mecid_out  Receives the original Realm MECID, including when MEC is disabled.
+ *  @return 0 on success, 1 on error; the output is unchanged on error.
+ */
+uint32_t val_rlm_get_mecid(uint32_t *mecid_out)
+{
+  if (mecid_out == NULL)
+      return 1;
+
+  UserCallSMC(ARM_ACS_SMC_FID, MEC_SERVICE, GET_MECID, 0, 0);
+  if (shared_data->status_code != 0) {
+    val_print(ACS_PRINT_ERR, " Failed to read MECID_RL_A_EL3", 0);
+    return 1;
+  }
+
+  *mecid_out = (uint32_t)shared_data->shared_data_access[0].data;
+  return 0;
+}
+
+/**
  *  @brief  This API is used to check if SMMU implements MEC.
  *          Returns 1 on error, 0 on success.
  *  @return 1 on error, 0 on success

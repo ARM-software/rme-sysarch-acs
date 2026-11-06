@@ -451,6 +451,10 @@ MODULE_TEST_DISPATCHER_s g_module_test_table[MODULE_SENTINEL] = {
         .entry_fn = rme_cmo_popa_for_cacheability_shareability_entry,
         .test_text = "rme_cmo_popa_for_cacheability_shareability",
       },
+      [RME_ENTRY_RME_POPA_CMO_APPLIES_TO_PAS_PA_CACHED_COPY_ENTRY] = {
+        .entry_fn = rme_popa_cmo_applies_to_pas_pa_cached_copy_entry,
+        .test_text = "rme_popa_cmo_applies_to_pas_pa_cached_copy",
+      },
       [RME_ENTRY_RME_COHERENT_INTERCONNECT_SUPPORTS_CMO_POPA_ENTRY] = {
         .entry_fn = rme_coherent_interconnect_supports_cmo_popa_entry,
         .test_text = "rme_coherent_interconnect_supports_cmo_popa",

@@ -164,6 +164,15 @@ void val_el3_mec_service(uint64_t arg0, uint64_t arg1, uint64_t arg2)
       shared_data->shared_data_access[0].data = val_el3_is_mec_enabled();
       break;
 
+    case GET_MECID:
+      if (!val_el3_is_mec_supported()) {
+        ERROR("Cannot read MECID_RL_A_EL3 without FEAT_MEC\n");
+        shared_data->status_code = 1;
+        break;
+      }
+      shared_data->shared_data_access[0].data = val_el3_read_mecid_rl_a_el3();
+      break;
+
     default:
       INFO("Invalid MEC service\n");
       break;
