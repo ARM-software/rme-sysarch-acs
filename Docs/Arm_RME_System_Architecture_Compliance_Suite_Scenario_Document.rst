@@ -349,22 +349,68 @@ Testcase checklist
 
       RFXQCD: A PoPA CMO applies to any cache before the PoPA, including system caches that are located beyond the Point of Coherency.
 
-      RQBNJF: A PoPA CMO applies to any cached copy in the system with the specified {PAS, PA} regardless of both:
-
-      - The shareability domain it was cached with.
-      - Whether the system supports a single or multiple Outer Shareable shareability domains
-
     -
 
       1. PA1 is marked as All Access Permitted.
-      2. PA1 is initialized with random data.
-      3. VA1 is mapped to PA1 as secure PAS in MMU with Non-cacheable attribute.
-      4. VA2 is mapped to PA1 as nonsecure in MMU with Non-cacheable attribute.
-      5. Read VA1 returns data1.
-      6. Read VA2 returns data2.
-      7. Store data3 in VA1.
-      8. Issue CMO to PoPA for PA1 secure and nonsecure.
-      9. Read of VA2 must return data4 (! = data2) (ciphertext of data3).
+      2. VA1 is mapped to PA1 as Secure PAS with Write-Back cacheable attributes.
+      3. VA2 is mapped to PA1 as Non-secure PAS with Non-cacheable attributes.
+      4. CMO to PoPA is issued for PA1 with the Non-secure PAS.
+      5. VA1 and VA2 are read to capture the Secure and Non-secure views.
+      6. Test data is written through VA1 using the Secure PAS.
+      7. CMO to PoPA is issued for PA1 with the Secure PAS. VA1 must then return
+         the written test data before any further cache maintenance.
+      8. CMO to PoPA is issued for PA1 with the Non-secure PAS.
+      9. VA2 is read again. The final combined comparison requires this value to
+         differ from both initial reads and the Secure write pattern, while the
+         Secure readback captured after its CMO must equal the written pattern.
+
+  * -
+
+      `rme_popa_cmo_applies_to_pas_pa_cached_copy <../test_pool/rme/rme_popa_cmo_applies_to_pas_pa_cached_copy.c>`_
+
+    -
+
+      RQBNJF: A PoPA CMO affects all cached copies for the specified {PAS, PA},
+      independent of shareability domain or MECID.
+
+    -
+
+      1. Use the caller as coordinator. With one selected PE, issue CMOs locally.
+         With two or more selected PEs, prefer a CMO issuer in a different MPIDR
+         affinity group when one is available. Log when cross-PE coverage is absent.
+      2. For Non-shareable, Inner Shareable and Outer Shareable attributes,
+         allocate a separate PA and map Secure and Non-secure cacheable aliases.
+         Check allocations before creating GPT or MMU entries.
+      3. Clear previous cached state with Secure and Non-secure PoPA CMOs, then
+         read the initial Secure and Non-secure values on the coordinator.
+      4. Write a known pattern through the Secure alias and order the write before
+         issuing Secure and Non-secure PoPA CMOs on the selected local or remote PE.
+      5. After CMO completion, read the Secure alias without additional cache
+         maintenance and require the written pattern to be preserved.
+         Read the Non-secure alias and log its comparisons for diagnostics only.
+      6. After the shareability checks, use val_is_mec_supported() to determine
+         whether to add the MECID check on the coordinator. If MEC or IDs 1 and 2
+         are unsupported, log that the MEC sub-check is skipped.
+         Write the first Realm pattern through a cacheable mapping
+         under M1, select M2 and issue the Realm PoPA CMO. Remap as Non-cacheable,
+         restore M1 and verify the first pattern. Write a second pattern through
+         the Non-cacheable mapping, remap as cacheable and verify the second pattern.
+         The MEC sub-check does not dispatch a secondary PE or use an NS alias.
+      7. Save the coordinator's original MECID_RL_A_EL3 and MEC enable state
+         before the MEC sub-check. Clean cached test state and restore the saved
+         MEC context, including on failure. Retain the test GPT entries because
+         scratch PA/VA allocations remain reserved for the current test-suite run.
+      8. Report allocation, access (including Non-secure reads), CMO, preservation,
+         cleanup or secondary timeout errors as FAIL. Poll the secondary status
+         up to TIMEOUT_LARGE iterations, then mark FAIL and attempt cleanup before
+         returning on timeout. This does not cancel the secondary; cleanup can race
+         with unfinished remote operations.
+         Shareability checks run regardless of MEC support, including with one
+         selected PE. Any executed sub-check failure produces FAIL; a skipped
+         MEC sub-check preserves the successful shareability result.
+
+      This is partial software-visible data-preservation coverage. Single-PE
+      execution does not exercise cross-PE behavior.
 
   * -
 

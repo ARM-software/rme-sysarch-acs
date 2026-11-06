@@ -36,6 +36,7 @@ uint32_t rme_data_encryption_with_different_tweak_entry(uint32_t num_pe);
 uint32_t rme_msd_smem_in_root_pas_entry(uint32_t num_pe);
 uint32_t rme_realm_smem_in_realm_pas_entry(uint32_t num_pe);
 uint32_t rme_cmo_popa_for_cacheability_shareability_entry(uint32_t num_pe);
+uint32_t rme_popa_cmo_applies_to_pas_pa_cached_copy_entry(uint32_t num_pe);
 uint32_t rme_memory_associated_with_pas_till_popa_entry(uint32_t num_pe);
 uint32_t rme_pa_compare_operation_includes_pas_entry(uint32_t num_pe);
 uint32_t rme_popa_cmo_completion_guarantees_entry(uint32_t num_pe);
