@@ -794,10 +794,11 @@ val_pcie_ide_establish_streams(uint32_t bdf, uint32_t rp_bdf,
   }
 
   /* Confirm the responder identifies the IDE management function. */
+  /* IDE-KM QUERY responses from non-Root Ports must report Segment zero. */
   if (bus != PCIE_EXTRACT_BDF_BUS(ide_bdf) ||
       dev_func != ((PCIE_EXTRACT_BDF_DEV(ide_bdf) << 3) |
                    PCIE_EXTRACT_BDF_FUNC(ide_bdf)) ||
-      segment != PCIE_EXTRACT_BDF_SEG(ide_bdf)) {
+      segment != 0u) {
     status = ACS_STATUS_ERR;
     stage = " PCIe IDE setup: EP QUERY identity validation";
     val_print(ACS_PRINT_ERR, " PCIe IDE_KM QUERY identity mismatch for EP: 0x%x", bdf);
