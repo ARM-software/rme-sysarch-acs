@@ -36,6 +36,7 @@ void val_da_get_next_rid_values(uint32_t *current_base_offset,
                     uint32_t *next_rid_base);
 
 uint32_t val_device_session_open(uint32_t bdf);
+uint32_t val_pcie_ide_stream_shared(uint32_t bdf);
 /* Stream block numbers are local to each port; Stream ID is shared. */
 /* IDE setup returns PASS, ERR, or SKIP when the RP backend is unsupported. */
 uint32_t val_pcie_ide_establish_streams(uint32_t bdf, uint32_t rp_bdf,

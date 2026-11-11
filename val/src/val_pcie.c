@@ -950,14 +950,18 @@ val_pcie_dev_p2p_support(uint32_t bdf)
   @brief   This API checks the PCIe device multifunction support
            1. Caller       -  Test Suite
   @param   bdf      - PCIe BUS/Device/Function
-  @return  1 - Multifunction not supported 0 - Multifunction supported
+  @return  0 - Multifunction supported, 1 - bit clear,
+           PCIE_NO_MAPPING - config header unavailable
 **/
 uint32_t
 val_pcie_multifunction_support(uint32_t bdf)
 {
   uint32_t reg_data;
 
-  val_pcie_read_cfg(bdf, TYPE01_CLSR, &reg_data);
+  if (val_pcie_read_cfg(bdf, TYPE01_CLSR, &reg_data) != PCIE_SUCCESS ||
+      reg_data == PCIE_UNKNOWN_RESPONSE)
+    return PCIE_NO_MAPPING;
+
   reg_data = ((reg_data >> TYPE01_HTR_SHIFT) & TYPE01_HTR_MASK);
 
   return !((reg_data >> HTR_MFD_SHIFT) & HTR_MFD_MASK);

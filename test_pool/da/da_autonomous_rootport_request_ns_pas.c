@@ -90,7 +90,8 @@ payload(void)
   uint32_t use_msix;
   uint64_t itt_base, itt_entry_pa, itt_entry_offset;
   uint32_t itt_size, itt_entry_size;
-  uint32_t timeout, rp_aer_offset, value;
+  uint32_t timeout, rp_aer_offset, ep_aer_offset, value;
+  uint32_t aer_status;
 
   pe_index = val_pe_get_index_mpid(val_pe_get_mpid());
   instance = val_exerciser_get_info(EXERCISER_NUM_CARDS);
@@ -125,6 +126,12 @@ payload(void)
       if (val_pcie_find_capability(erp_bdf, PCIE_ECAP, ECID_AER, &rp_aer_offset) != PCIE_SUCCESS) {
           val_print(ACS_PRINT_ERR, " AER Capability not supported for RP : 0x%x", erp_bdf);
           val_set_status(pe_index, "FAIL", 1);
+          return;
+      }
+
+      if (val_pcie_find_capability(e_bdf, PCIE_ECAP, ECID_AER, &ep_aer_offset) != PCIE_SUCCESS) {
+          val_print(ACS_PRINT_ERR, " AER Capability not supported for EP : 0x%x", e_bdf);
+          val_set_status(pe_index, "FAIL", 24);
           return;
       }
 
@@ -281,6 +288,17 @@ payload(void)
       }
 
       val_pcie_clear_urd(erp_bdf);
+
+      /* Clear the injected correctable error before starting the positive phase. */
+      val_pcie_read_cfg(e_bdf, ep_aer_offset + AER_CORR_STATUS_OFFSET, &aer_status);
+      if (aer_status != 0U)
+          val_pcie_write_cfg(e_bdf, ep_aer_offset + AER_CORR_STATUS_OFFSET, aer_status);
+
+      /* Clear Root Port AER status so a fresh error can trigger another MSI. */
+      val_pcie_read_cfg(erp_bdf, rp_aer_offset + AER_ROOT_ERR_OFFSET, &aer_status);
+      if (aer_status != 0U)
+          val_pcie_write_cfg(erp_bdf, rp_aer_offset + AER_ROOT_ERR_OFFSET, aer_status);
+
       /* Restore the Root entry before discarding its mapping and ITT. */
       if (val_add_gpt_entry_el3(itt_entry_pa, GPT_NONSECURE))
       {

@@ -904,7 +904,7 @@ exercise_root_port(const CXL_COMPONENT_TABLE *table,
   /* Enable MEC so MECID programming affects CXL.mem transactions. */
   if (val_is_mec_supported() == 0u)
   {
-    (void)val_cxl_ide_disable_link(root_index, endpoint_index, &ctx, session_id);
+    /* Locked TSP uses session close and reset, not IDE KEY_SET_STOP. */
     (void)val_spdm_session_close(&ctx, session_id);
     (void)val_cxl_unlock_tsp_best_effort(root_bdf, endpoint->bdf, &endpoint_cfg);
     if (restore_decoders(&context) != ACS_STATUS_PASS)
@@ -914,7 +914,6 @@ exercise_root_port(const CXL_COMPONENT_TABLE *table,
 
   if (val_rlm_enable_mec())
   {
-    (void)val_cxl_ide_disable_link(root_index, endpoint_index, &ctx, session_id);
     (void)val_spdm_session_close(&ctx, session_id);
     (void)val_cxl_unlock_tsp_best_effort(root_bdf, endpoint->bdf, &endpoint_cfg);
     (void)restore_decoders(&context);
@@ -1060,11 +1059,23 @@ exercise_root_port(const CXL_COMPONENT_TABLE *table,
 
     if (vector->expectation == EXPECT_UE)
     {
-      /* Rejected writes complete without an in-band error. Probe separately so
-       * a write fault cannot be mistaken for the expected read abort.
+      /* Handle a rejected write's optional SError before arming the read SEA.
+       * The EL3 write path synchronizes the error before returning.
        */
+      shared_data->access_mut = CLEAR;
+      shared_data->exception_generated = CLEAR;
+      shared_data->exception_expected = SET;
+      shared_data->esr_value = SERROR_ESR_WRITE;
+      shared_data->num_access = 1;
+      shared_data->shared_data_access[0].addr = (uint64_t)mapped;
+      shared_data->shared_data_access[0].data = pattern;
+      shared_data->shared_data_access[0].access_type = WRITE_DATA;
+
+      status = val_pe_access_mut_el3();
       shared_data->exception_expected = CLEAR;
-      if (write_from_root((uint64_t)mapped, pattern) != ACS_STATUS_PASS)
+      shared_data->esr_value = 0u;
+      shared_data->exception_generated = CLEAR;
+      if (status != ACS_STATUS_PASS)
       {
         val_print(ACS_PRINT_ERR, " RJXPZP: rejected write did not complete for %a",
                   (uint64_t)vector->name);
@@ -1200,7 +1211,8 @@ cleanup:
     (void)val_rlm_disable_mec();
   }
 
-  if ((ide_active != 0u) &&
+  /* Stopping IDE while TSP is locked can terminate the SPDM session. */
+  if ((ide_active != 0u) && (tsp_locked == 0u) &&
       (val_cxl_ide_disable_link(root_index, endpoint_index, &ctx, session_id) !=
        ACS_STATUS_PASS))
     failures++;

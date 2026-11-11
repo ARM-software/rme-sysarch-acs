@@ -1367,6 +1367,17 @@ val_cxl_ide_establish_link(uint32_t root_index,
   uint32_t endpoint_ide_reg_count = CXL_IDE_KM_IDE_CAP_REG_BLOCK_MAX_COUNT;
   uint32_t endpoint_capability = 0u;
   uint32_t root_capability;
+  uint32_t pcie_cap_offset;
+  uint32_t pcie_cap_header;
+  uint32_t link_control_status2;
+  uint32_t refresh_cap_offset = CXL_IDE_REG_KEY_REFRESH_CAPABILITY;
+  uint64_t ide_bases[2]; /* RP, EP */
+  uint32_t rx_min[2];
+  uint32_t tx_time[2];
+  uint32_t truncation_cap[2];
+  uint32_t truncation_control[2];
+  uint32_t truncation_shift;
+  uint32_t ide_control[2];
 
   if ((context == NULL) || (session_id == 0u))
     return ACS_STATUS_ERR;
@@ -1479,6 +1490,126 @@ val_cxl_ide_establish_link(uint32_t root_index,
   }
   val_print(ACS_PRINT_DEBUG, " Using IDE key mode containment", 0);
 
+  /* CXL 3.1 section 6.2.3: negotiated PCIe Flit mode selects 256B CXL flits.
+   * Config accesses are DWORD aligned; both PCIe fields are in the upper WORD. */
+  if ((val_pcie_find_capability(root_port->bdf, PCIE_CAP, CID_PCIECS,
+                                &pcie_cap_offset) != PCIE_SUCCESS) ||
+      (val_pcie_read_cfg(root_port->bdf, pcie_cap_offset, &pcie_cap_header) !=
+       PCIE_SUCCESS) || (pcie_cap_header == PCIE_UNKNOWN_RESPONSE)) {
+    val_print(ACS_PRINT_ERR, " Cannot determine CXL IDE Flit mode", 0);
+    return ACS_STATUS_FAIL;
+  }
+
+  if ((pcie_cap_header >> 16) & PCIECR_FLIT_MODE_SUPPORTED) {
+    if ((val_pcie_read_cfg(root_port->bdf, pcie_cap_offset + LCTL2R_OFFSET,
+                           &link_control_status2) != PCIE_SUCCESS) ||
+        (link_control_status2 == PCIE_UNKNOWN_RESPONSE)) {
+      val_print(ACS_PRINT_ERR, " Cannot read PCIe Flit Mode Status", 0);
+      return ACS_STATUS_FAIL;
+    }
+    if ((link_control_status2 >> 16) & LSTS2R_FLIT_MODE_STATUS)
+      refresh_cap_offset = CXL_IDE_REG_KEY_REFRESH_CAPABILITY2;
+  }
+  val_print(ACS_PRINT_DEBUG, " IDE timing RP BDF: 0x%x", (uint64_t)root_port->bdf);
+  val_print(ACS_PRINT_DEBUG, " EP BDF: 0x%x", (uint64_t)endpoint_bdf);
+  val_print(ACS_PRINT_DEBUG, " CXL Flit size in bytes: %d",
+            refresh_cap_offset == CXL_IDE_REG_KEY_REFRESH_CAPABILITY2 ? 256u : 68u);
+  truncation_shift = refresh_cap_offset == CXL_IDE_REG_KEY_REFRESH_CAPABILITY2 ?
+                    CXL_IDE_TRUNCATION_DELAY2_SHIFT : 0u;
+
+  status = val_cxl_ide_capability_base(root_index, &ide_bases[0]);
+  if (status != ACS_STATUS_PASS)
+    return status;
+  status = val_cxl_ide_capability_base(endpoint_index, &ide_bases[1]);
+  if (status != ACS_STATUS_PASS)
+    return status;
+
+  /* PCRC participates in the MAC unless disabled. Both ends must agree
+   * before activation; preserve the platform's selected PCRC policy. */
+  for (uint32_t port = 0u; port < 2u; ++port) {
+    ide_control[port] = val_mmio_read(ide_bases[port] + CXL_IDE_REG_CONTROL);
+    if (ide_control[port] == PCIE_UNKNOWN_RESPONSE) {
+      val_print(ACS_PRINT_ERR, " Cannot read IDE Control (0=RP, 1=EP): %d", port);
+      return ACS_STATUS_FAIL;
+    }
+  }
+  val_print(ACS_PRINT_DEBUG, " RP PCRC Disable: %d",
+            ide_control[0] & CXL_IDE_CONTROL_PCRC_DISABLE);
+  val_print(ACS_PRINT_DEBUG, " EP PCRC Disable: %d",
+            ide_control[1] & CXL_IDE_CONTROL_PCRC_DISABLE);
+  if ((ide_control[0] ^ ide_control[1]) & CXL_IDE_CONTROL_PCRC_DISABLE) {
+    val_print(ACS_PRINT_ERR, " RP/EP PCRC Disable mismatch; IDE activation aborted", 0);
+    val_print(ACS_PRINT_ERR, " RP IDE Control: 0x%x", ide_control[0]);
+    val_print(ACS_PRINT_ERR, " EP IDE Control: 0x%x", ide_control[1]);
+    return ACS_STATUS_FAIL;
+  }
+
+  /* Read both receivers before changing either transmitter. */
+  for (uint32_t port = 0u; port < 2u; ++port) {
+    rx_min[port] = val_mmio_read(ide_bases[port] + refresh_cap_offset);
+    tx_time[port] = val_mmio_read(ide_bases[port] + CXL_IDE_REG_KEY_REFRESH_CONTROL);
+    truncation_cap[port] = val_mmio_read(ide_bases[port] + CXL_IDE_REG_TRUNCATION_CAPABILITY);
+    truncation_control[port] = val_mmio_read(ide_bases[port] + CXL_IDE_REG_TRUNCATION_CONTROL);
+    if ((rx_min[port] == PCIE_UNKNOWN_RESPONSE) ||
+        (tx_time[port] == PCIE_UNKNOWN_RESPONSE) ||
+        (truncation_cap[port] == PCIE_UNKNOWN_RESPONSE) ||
+        (truncation_control[port] == PCIE_UNKNOWN_RESPONSE)) {
+      val_print(ACS_PRINT_ERR, " Cannot read IDE timing registers (port %d)", port);
+      return ACS_STATUS_FAIL;
+    }
+  }
+
+  /* Section 11.3.7 requires TX time higher than the peer RX minimum.
+   * Keep larger platform settings. Timing remains configured for later starts. */
+  for (uint32_t port = 0u; port < 2u; ++port) {
+    uint32_t required_time = rx_min[1u - port] + 1u;
+    uint64_t control_addr = ide_bases[port] + CXL_IDE_REG_KEY_REFRESH_CONTROL;
+
+    val_print(ACS_PRINT_DEBUG, " IDE timing transmitter (0=RP, 1=EP): %d", port);
+    val_print(ACS_PRINT_DEBUG, " Peer RX minimum in flits: %d", rx_min[1u - port]);
+    val_print(ACS_PRINT_DEBUG, " TX delay before setup in flits: %d", tx_time[port]);
+    if (tx_time[port] < required_time) {
+      val_mmio_write(control_addr, required_time);
+      tx_time[port] = val_mmio_read(control_addr);
+      if ((tx_time[port] == PCIE_UNKNOWN_RESPONSE) || (tx_time[port] < required_time)) {
+        val_print(ACS_PRINT_ERR, " IDE key refresh timing write failed (port %d)", port);
+        val_print(ACS_PRINT_ERR, " Required TX delay in flits: %d", required_time);
+        val_print(ACS_PRINT_ERR, " TX delay readback: 0x%x", tx_time[port]);
+        return ACS_STATUS_FAIL;
+      }
+    }
+    val_print(ACS_PRINT_DEBUG, " TX delay after setup in flits: %d", tx_time[port]);
+  }
+
+  /* CXL 3.1 sections 8.2.4.22.6/.8: each TX truncation delay must cover
+   * the peer RX minimum. Hardware applies min(Remaining Flits, TX delay)
+   * after TMAC (Equation 11-1); software does not insert the idle flits. */
+  for (uint32_t port = 0u; port < 2u; ++port) {
+    uint32_t required_delay = (truncation_cap[1u - port] >> truncation_shift) &
+                              CXL_IDE_TRUNCATION_DELAY_MASK;
+    uint32_t tx_delay = truncation_control[port] & CXL_IDE_TRUNCATION_DELAY_MASK;
+    uint64_t control_addr = ide_bases[port] + CXL_IDE_REG_TRUNCATION_CONTROL;
+
+    val_print(ACS_PRINT_DEBUG, " IDE truncation transmitter (0=RP, 1=EP): %d", port);
+    val_print(ACS_PRINT_DEBUG, " Peer RX minimum truncation delay in flits: %d", required_delay);
+    val_print(ACS_PRINT_DEBUG, " TX truncation delay before setup in flits: %d", tx_delay);
+    if (tx_delay < required_delay) {
+      uint32_t control = (truncation_control[port] & ~CXL_IDE_TRUNCATION_DELAY_MASK) |
+                         required_delay;
+
+      val_mmio_write(control_addr, control);
+      control = val_mmio_read(control_addr);
+      tx_delay = control & CXL_IDE_TRUNCATION_DELAY_MASK;
+      if ((control == PCIE_UNKNOWN_RESPONSE) || (tx_delay < required_delay)) {
+        val_print(ACS_PRINT_ERR, " IDE truncation delay write failed (port %d)", port);
+        val_print(ACS_PRINT_ERR, " Required TX truncation delay in flits: %d", required_delay);
+        val_print(ACS_PRINT_ERR, " TX truncation control readback: 0x%x", control);
+        return ACS_STATUS_FAIL;
+      }
+    }
+    val_print(ACS_PRINT_DEBUG, " TX truncation delay after setup in flits: %d", tx_delay);
+  }
+
   status = val_spdm_send_cxl_ide_km_key_prog(context,
                                              session_id,
                                              (uint8_t)stream_id,
@@ -1587,11 +1718,9 @@ val_cxl_ide_establish_link(uint32_t root_index,
 
   rx_state = endpoint_ide_status & CXL_IDE_STATUS_FIELD_MASK;
   tx_state = (endpoint_ide_status >> CXL_IDE_STATUS_TX_SHIFT) & CXL_IDE_STATUS_FIELD_MASK;
-  if (((rx_state != CXL_IDE_STATE_ACTIVE_CONTAINMENT) &&
-       (rx_state != CXL_IDE_STATE_ACTIVE_SKID)) ||
-      ((tx_state != CXL_IDE_STATE_ACTIVE_CONTAINMENT) &&
-       (tx_state != CXL_IDE_STATE_ACTIVE_SKID))) {
-    val_print(ACS_PRINT_ERR, " Endpoint IDE not active (status 0x%x)",
+  if ((rx_state != CXL_IDE_STATE_ACTIVE_CONTAINMENT) ||
+      (tx_state != CXL_IDE_STATE_ACTIVE_CONTAINMENT)) {
+    val_print(ACS_PRINT_ERR, " Endpoint IDE not in Active Containment (status 0x%x)",
               (uint64_t)endpoint_ide_status);
     val_print(ACS_PRINT_ERR, " BDF 0x%x", (uint64_t)endpoint_bdf);
     status = ACS_STATUS_FAIL;
@@ -1636,11 +1765,9 @@ val_cxl_ide_establish_link(uint32_t root_index,
 
   rx_state = root_ide_status & CXL_IDE_STATUS_FIELD_MASK;
   tx_state = (root_ide_status >> CXL_IDE_STATUS_TX_SHIFT) & CXL_IDE_STATUS_FIELD_MASK;
-  if (((rx_state != CXL_IDE_STATE_ACTIVE_CONTAINMENT) &&
-       (rx_state != CXL_IDE_STATE_ACTIVE_SKID)) ||
-      ((tx_state != CXL_IDE_STATE_ACTIVE_CONTAINMENT) &&
-       (tx_state != CXL_IDE_STATE_ACTIVE_SKID))) {
-    val_print(ACS_PRINT_ERR, " Root port IDE not active (status 0x%x)",
+  if ((rx_state != CXL_IDE_STATE_ACTIVE_CONTAINMENT) ||
+      (tx_state != CXL_IDE_STATE_ACTIVE_CONTAINMENT)) {
+    val_print(ACS_PRINT_ERR, " Root port IDE not in Active Containment (status 0x%x)",
               (uint64_t)root_ide_status);
     val_print(ACS_PRINT_ERR, " BDF 0x%x", (uint64_t)root_port->bdf);
     status = ACS_STATUS_FAIL;

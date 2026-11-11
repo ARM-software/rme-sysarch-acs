@@ -82,8 +82,9 @@ uint32_t
 dpt_p2p_same_rootport_invalid_entry(uint32_t num_pe);
 /* Establish a P2P target link and BAR association, lock its RP stream,
  * and transition the target TDI to RUN.
- * active_count is set before configuring the RP stream; clean up a nonzero
- * count with val_dpt_ide_stop(), including when setup subsequently fails.
+ * A sibling sharing the requester stream reuses its session and Stream ID.
+ * active_count tracks setup attempts, clean up a nonzero count
+ * with val_dpt_ide_stop(), including when setup subsequently fails.
  */
 uint32_t
 val_dpt_ide_setup_target(uint32_t ep_bdf, uint32_t rp_bdf, uint32_t req_rp_bdf,
@@ -91,7 +92,8 @@ val_dpt_ide_setup_target(uint32_t ep_bdf, uint32_t rp_bdf, uint32_t req_rp_bdf,
 
 /* Unlock the RP stream, stop both partners and clear address associations
  * before disabling TDISP. Continue cleanup after errors and return ERR if
- * any step failed. A zero rp_count requires no cleanup.
+ * any step failed. Stop the target before the requester when sharing a stream.
+ * A zero rp_count requires no cleanup.
  */
 uint32_t
 val_dpt_ide_stop(uint32_t ep_bdf, uint32_t rp_bdf, uint32_t ep_count,
