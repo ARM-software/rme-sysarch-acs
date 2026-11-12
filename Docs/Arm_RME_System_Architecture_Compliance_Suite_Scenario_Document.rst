@@ -1001,27 +1001,39 @@ notes for each rule, see the separate
 
   * -
 
-      `da_outgoing_realm_rqst_ide_tbit_1 <../test_pool/da/da_outgoing_realm_rqst_ide_tbit_1.c>`_ & `da_ide_tbit_0_for_root_request <../test_pool/da/da_ide_tbit_0_for_root_request.c>`_
+      `da_rp_ide_tbit_from_pas <../test_pool/da/da_rp_ide_tbit_from_pas.c>`_
 
     -
 
       RCFQBW: IDE-Tbit for an outgoing PCIe Memory Request or Configuration Request is set based on the request PAS: If PAS is Realm or Root then IDE-Tbit is 1 and otherwise it is 0.
 
+    -
+
+      1. Select an initialized PCIe exerciser Endpoint with an MMIO BAR, identify its Root Port, and enable TDISP_EN. Skip if no applicable exerciser exists.
+      2. Save the BAR granule GPT entry, allow the test access, and map the BAR with each PAS: Non-secure, Secure, Root, and Realm.
+      3. For Root and Realm PAS, associate the full BAR range, provision matching EP/RP IDE keys using the shared helper, lock the RP stream, and transition the Endpoint to TDISP RUN.
+      4. Perform write/read operations at the BAR address from Root world for each PAS mapping.
+      5. After each protected PAS case, clear the RP stream lock, use shared IDE/TDISP teardown, and invalidate the BAR association. Restore the original GPT entry after every PAS case. Cleanup errors cause FAIL. Disable TDISP on exit.
+      6. The requests should be accepted by the RootPort where the path is software-observable, exercising the expected outgoing request IDE-Tbit derivation: IDE-Tbit 0 for Non-secure/Secure PAS and IDE-Tbit 1 for Root/Realm PAS.
+      7. Report SKIP if any required PAS case skips because its IDE backend is unsupported, or if no case executes. Any failure takes precedence; PASS requires all required PAS cases to succeed.
+      8. Limitation: This is software-visible Memory Request coverage. Generic ACS does not directly observe the PCIe IDE-Tbit on the wire, and Configuration Request coverage requires a separate observable path.
+
+  * -
+
+      `da_rciep_ide_tbit_from_pas <../test_pool/da/da_rciep_ide_tbit_from_pas.c>`_
+
+    -
+
       RGBVTS: As a completer of memory requests a TDISP-compliant RCiEP extracts the request IDE-Tbit from the request PAS: If PAS is Realm or Root then IDE-Tbit is 1, otherwise it is 0.
 
     -
 
-      1. Retrieve the BAR of the Endpoint (skipping this step if the Endpoint lacks an MMIO BAR), identify the RootPort for the Endpoint, and enable the TDISP_EN bit in the RME-DA DVSEC register.
-      2. Map the BAR address to Realm PAS, establish an IDE Stream between the RootPort and Endpoint, and transition the Endpoint to the TDISP RUN state.
-      3. Perform write and read operations at the BAR address from the Realm world.
-      4. For da_ide_tbit_0_for_root_request, iterate over Root Ports and select the first Endpoint beneath each Root Port that has an MMIO BAR. Skip a Root Port if no such Endpoint exists. Enable the TDISP_EN bit in the RME-DA DVSEC register and map the selected BAR address to Non-Secure PAS.
-      5. Perform write and read operations at the BAR address from the Root world.
-      6. The request should be accepted by the RootPort, confirming that the IDE-Tbit is set appropriately based on the PAS mapping.
-
-      da_outgoing_realm_rqst_ide_tbit_1: This test checks that an outgoing request with IDE-Tbit set to 1 is accepted by the RootPort when the BAR address is mapped to Realm PAS.
-      da_ide_tbit_0_for_root_request: This test checks once per eligible RootPort that an outgoing request with IDE-Tbit set to 0 is accepted when the selected Endpoint BAR address is mapped to Non-Secure PAS.
-
-      Similarly, the request should also be allowed by the RootPort when the BAR address is mapped to Non-Secure PAS.
+      1. Iterate and initialize PCIe exercisers, then select RCiEP exercisers with an MMIO BAR. Exerciser selection alone does not verify TDISP applicability or a safe test location.
+      2. Save the BAR granule GPT entry, allow the access, and map the RCiEP BAR with each PAS: Non-secure, Secure, Root, and Realm. Restore the original GPT entry after each case.
+      3. Perform write and read operations at the BAR address from Root world for each PAS mapping.
+      4. Do not require an RP IDE stream or RME-DA DVSEC for the RCiEP. The readback check assumes a documented, side-effect-free writable location that accepts all four PAS values. RGBVTS specifies T-bit derivation, not unconditional BAR accessibility; the current test does not verify these device prerequisites.
+      5. If no initialized RCiEP exerciser with an MMIO BAR is tested, report SKIP.
+      6. Limitation: This is software-visible PAS-matrix coverage. Generic ACS cannot directly observe the PCIe IDE-Tbit on the wire; direct proof requires packet visibility or a platform-specific mechanism where an incorrect IDE-Tbit produces an observable reject or detect event.
 
   * -
 
