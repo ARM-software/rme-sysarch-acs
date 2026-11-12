@@ -290,9 +290,9 @@ MODULE_TEST_DISPATCHER_s g_module_test_table[MODULE_SENTINEL] = {
         .entry_fn = da_ide_state_tdisp_disable_entry,
         .test_text = "da_ide_state_tdisp_disable",
       },
-      [DA_ENTRY_DA_IDE_TBIT_0_FOR_ROOT_REQUEST_ENTRY] = {
-        .entry_fn = da_ide_tbit_0_for_root_request_entry,
-        .test_text = "da_ide_tbit_0_for_root_request",
+      [DA_ENTRY_DA_RP_IDE_TBIT_FROM_PAS_ENTRY] = {
+        .entry_fn = da_rp_ide_tbit_from_pas_entry,
+        .test_text = "da_rp_ide_tbit_from_pas",
       },
       [DA_ENTRY_DA_INCOMING_REQUEST_IDE_NON_SEC_UNLOCKED_ENTRY] = {
         .entry_fn = da_incoming_request_ide_non_sec_unlocked_entry,
@@ -306,9 +306,9 @@ MODULE_TEST_DISPATCHER_s g_module_test_table[MODULE_SENTINEL] = {
         .entry_fn = da_interconnect_regs_rmsd_protected_entry,
         .test_text = "da_interconnect_regs_rmsd_protected",
       },
-      [DA_ENTRY_DA_OUTGOING_REALM_RQST_IDE_TBIT_1_ENTRY] = {
-        .entry_fn = da_outgoing_realm_rqst_ide_tbit_1_entry,
-        .test_text = "da_outgoing_realm_rqst_ide_tbit_1",
+      [DA_ENTRY_DA_RCIEP_IDE_TBIT_FROM_PAS_ENTRY] = {
+        .entry_fn = da_rciep_ide_tbit_from_pas_entry,
+        .test_text = "da_rciep_ide_tbit_from_pas",
       },
       [DA_ENTRY_DA_OUTGOING_REQUEST_WITH_IDE_TBIT_ENTRY] = {
         .entry_fn = da_outgoing_request_with_ide_tbit_entry,

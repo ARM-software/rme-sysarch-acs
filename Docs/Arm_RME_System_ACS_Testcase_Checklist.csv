@@ -102,7 +102,7 @@ Sl No,Rule ID,Rule Description,Coverage,Notes,Exerciser PAL APIs Used
 101,RNWSJB,All RPs in an RME-DA system must implement the RME-DA DVSEC.,da_rootport_implements_rmeda_dvsec,,
 102,RYHQQL,Selective IDE register-block lock state controls register protection and stream lock state.,da_selective_ide_register_property,,
 103,RGKHSZ,RME-DA Root Ports associate outgoing TLPs with IDE streams and set T-bit/XT-bit correctly.,"da_incoming_request_ide_sec_locked, da_rootport_tdisp_disabled",PCIe exerciser VIP required,"pal_exerciser_set_param (DMA_ATTRIBUTES); pal_exerciser_ops (START_DMA)"
-104,RCFQBW,An RME-DA RP sets the IDE T-bit for an outgoing PCIe Memory Request or Configuration Request based on the request PAS.,"da_ide_tbit_0_for_root_request, da_outgoing_realm_rqst_ide_tbit_1",,
+104,RCFQBW,An RME-DA RP sets the IDE T-bit for an outgoing PCIe Memory Request or Configuration Request based on the request PAS.,da_rp_ide_tbit_from_pas,Exerciser BAR PAS checks; partial T-bit coverage.,
 105,RSWBSV,"Root Ports set the IDE T-bit on PCIe messages according to DTI, VDM, and message type.",Not covered,PCIe message IDE T-bit requires packet visibility not available to ACS.,
 106,RCKJMN,PCIe completions set IDE T-bit according to IDE and TDISP rules.,Not covered,PCIe completion IDE T-bit is not software-observable in generic ACS.,
 107,RDVKPF,Protected outgoing T-bit/XT-bit requests are rejected unless bound to a locked Secure IDE stream.,da_outgoing_request_with_ide_tbit,,
@@ -115,7 +115,7 @@ Sl No,Rule ID,Rule Description,Coverage,Notes,Exerciser PAL APIs Used
 114,RPJGJK,Root Ports poison affected TLPs or transition associated IDE streams to Insecure on internal uncorrectable data integrity errors.,Not covered,Out of ACS scope; requires paper analysis.,
 115,RMJSFF,"An RME system must not include an SMMU that supports the XT extensions, unless all RPs either support the XT extensions or override the XT-bit to 0 for incoming requests.",Planned,Planned for the next release: correlate SMMU XT support with every Root Port's XT support or incoming XT override behavior.,TBD
 116,RJXRNG,TDISP XT-capable Root Ports set XT-bit behavior according to XT enablement and traffic type.,Planned,"Planned for the next release: validate request, message and completion XT/T behavior under XT enablement.",TBD
-117,RGBVTS,"As a completer of memory requests, a TDISP-compliant RCiEP extracts the request IDE T-bit from the request PAS.","da_ide_tbit_0_for_root_request, da_outgoing_realm_rqst_ide_tbit_1",,
+117,RGBVTS,"As a completer of memory requests, a TDISP-compliant RCiEP extracts the request IDE T-bit from the request PAS.",da_rciep_ide_tbit_from_pas,RCiEP BAR PAS checks; partial T-bit coverage.,
 118,RZJJMZ,"RCiEP requesters set SEC_SID, StreamID, and SubstreamID according to T-bit and requester identity.","da_incoming_request_ide_non_sec_unlocked, da_incoming_request_ide_sec_locked",PCIe exerciser VIP required,"pal_exerciser_set_param (DMA_ATTRIBUTES); pal_exerciser_ops (START_DMA)"
 119,RQNTYC,The PCIe segment and RIDs that are allocated to an RCiEP are either defined statically or configured using an RMSD write-protect register.,Not covered,PCIe segment/RID ownership is static or RMSD-protected and not generically modifiable.,
 120,RGBGQX,Exposed CTC coherent links support cryptographic encryption and integrity protection.,cxl_rgbgqx_ctc_link_ide,,
