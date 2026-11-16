@@ -140,6 +140,8 @@
   ../test_pool/rme/rme_mte_region_in_root_pas.c
   ../test_pool/rme/rme_ns_encryption_is_immutable.c
   ../test_pool/rme/rme_pas_filter_functionality.c
+  ../test_pool/rme/rme_access_pas_association.c
+  ../test_pool/rme/rme_peripheral_pas_association.c
   ../test_pool/rme/rme_pas_filter_in_inactive_mode.c
   ../test_pool/rme/rme_pcie_devices_support_gpc.c
   ../test_pool/rme/rme_pe_context_after_exit_wfi.c

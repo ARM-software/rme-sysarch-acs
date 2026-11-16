@@ -1,7 +1,7 @@
 Sl No,Rule ID,Rule Description,Coverage,Notes,Exerciser PAL APIs Used
 1,RDFYXL,"In an RME system, any access by a requester and any instruction executed by a PE is associated with a single Security state.",Not covered,Broad architectural invariant; ACS validates observable access behavior in other tests.,
 2,RQDWVC,Association of a Resource with a Resource PAS is controlled by either SSD or MSD.,Not covered,Resource ownership control is SSD/MSD policy and implementation-specific.,
-3,RBJVZS,Resource accesses carry an Access PAS and MECID as required by the architecture.,"mec_support_mecid_and_mecid_width, rme_pas_filter_functionality",,
+3,RBJVZS,Resource accesses carry an Access PAS and MECID as required by the architecture.,rme_access_pas_association,Partial Root EL3 PAS and PE MECID coverage; PE/SMMU capability and minimum-width checks when MEC is supported,
 4,RYXFMV,Requesters outside MMU/SMMU translation are SSD-tagged with an Access PAS.,Not covered,Requires DAP/debug-access support to generate and tag non-MMU/SMMU requests.,
 5,RSCDLL,"Once assigned, the value of an Access PAS cannot be altered.",Not covered,Access PAS tag mutation is internal behavior and not directly observable by ACS.,
 6,RYKVJK,A PAS filter enforces the PAS protection check by permitting access to a Resource only if the Access PAS matches a Resource PAS associated with that Resource.,"rme_gpc_for_system_resource, rme_pas_filter_functionality",Checks Access PAS against Resource PAS.,None
@@ -20,8 +20,8 @@ Sl No,Rule ID,Rule Description,Coverage,Notes,Exerciser PAL APIs Used
 19,RMYWVB,Data is encrypted before being written to external memory or to any shared cache that resides past the PoPA.,mec_mecid_assosiation_and_encryption,PCIe exerciser VIP required,"pal_exerciser_set_param (DMA_ATTRIBUTES); pal_exerciser_ops (START_DMA)"
 20,RRQZBK,"Memory-mapped data structures that store encryption contexts must reside in SMEM in the Root PAS, such as MSD SMEM.",Not covered,MEC encryption-context storage is not generically discoverable by ACS.,
 21,RBNSQB,ECC-scrubbing engines beyond PoPA must not leak confidential information.,Not covered,ECC scrubber behavior depends on implementation-specific RAS logic.,
-22,RGDVSZ,A PA of an access to a memory-mapped peripheral is associated with a PAS until reaching the PAS filter assigned to protect the peripheral.,rme_pas_filter_functionality,,
-23,RDVPGT,A private PAS filter allows access to a register only if the Access PAS matches a Resource PAS that the register is associated with.,rme_pas_filter_functionality,,
+22,RGDVSZ,A PA of an access to a memory-mapped peripheral is associated with a PAS until reaching the PAS filter assigned to protect the peripheral.,rme_peripheral_pas_association,Four-PAS functional coverage; propagation to the peripheral filter is not independently verified,
+23,RDVPGT,A private PAS filter allows access to a register only if the Access PAS matches a Resource PAS that the register is associated with.,rme_pas_filter_functionality,Four-PAS functional coverage; private-filter enforcement is not isolated from GPC,
 24,RRHBJN,Non-PE requesters use the permitted RME Security states.,Not covered,Non-PE requester security-state behavior is implementation-specific.,
 25,RMCMSH,"A fully coherent non-PE requester that is not part of the System Security Domain (SSD) will not observe coherency traffic for addresses in the Secure, Realm, or Root PAS.",Not covered,Generic ACS infrastructure does not support coherent-device traffic visibility.,
 26,RRGQRT,Programmable all-PAS completer filters keep controls in Root PAS and reset safely.,Not covered,Completer-side PAS filter controls are implementation-defined.,

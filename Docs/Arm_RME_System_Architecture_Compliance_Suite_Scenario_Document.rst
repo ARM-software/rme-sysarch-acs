@@ -182,23 +182,56 @@ Testcase checklist
 
   * -
 
-      `rme_pas_filter_functionality <../test_pool/rme/rme_pas_filter_functionality.c>`_
+      `rme_access_pas_association <../test_pool/rme/rme_access_pas_association.c>`_
 
     -
 
-      RBJVZS: An access to a Resource is associated with an Access PAS in accordance with the PAS Access Table
+      RBJVZS: Resource accesses are associated with an Access PAS and MECID as required by the architecture.
 
-      RYKVJK: A PAS filter enforces the PAS protection check by permitting access to a Resource only if the Access PAS matches a Resource PAS with which that the Resource is associated.
+    -
 
-      RGDVSZ: A PA of an access to a memory-mapped peripheral is associated with a PAS until reaching the PAS filter assigned to protect the peripheral
+      1. Initialize the test for all PEs. When the primary PE supports MEC, collect MECID widths in a separate all-PE dispatch. Require every PE to complete collection and provide a valid width, then record the minimum PE width. Publish the shared array and pointer with cache maintenance; free the array after completion or retain it if callbacks may still be pending.
+      2. Run validation on one PE. If RME is supported, save DAIF and mask exceptions. Allocate separate scratch memory for Root, Realm, Secure and Non-secure PAS, save each original GPI, and set GPT_ANY.
+      3. Create non-cacheable EL3 mappings with each selected PAS. Write a PAS-specific pattern and require successful readback with matching data. Restore each original GPI, including failure paths. Stop further PAS and MECID probes if restoration fails, and log the PA and saved GPI for recovery.
+      4. Restore DAIF before MECID validation. Skip the MECID sub-check when MEC is unsupported or no SMMUs are discovered. Otherwise save the PE MECID and enable state, enabling MEC only if necessary.
+      5. Read each SMMU's Realm MEC capability and MECID width using the existing register-access helper. Fail on unsupported MEC or register-read errors. Select MECIDs (2^W - 1) and (2^W - 2), where W is the minimum width across the collected PEs and all discovered SMMUs.
+      6. For each of PoE and PoPA, allocate Realm scratch memory, save its GPI, set GPT_ANY, and map it at EL3. Write RANDOM_DATA_4 using the first MECID, perform cache maintenance to the selected point, and read using the second MECID. Require the returned data to differ. Restore each scratch GPI and the saved PE MEC context; cleanup errors produce FAIL.
+      7. Report FAIL on collection, setup, access, comparison or restoration errors. Report SKIP if both PAS and MECID sub-checks are skipped; otherwise report PASS when at least one passes and neither fails. Thus a non-MEC system can pass through the PAS sub-check.
+      8. Coverage is limited to Root EL3 PAS mapping functionality and PE MECID behavior. GPT_ANY readback does not independently prove PAS tagging; other execution states and SMMU DMA MECID association are not exercised. Scratch allocations and mappings remain reserved for the run, and the platform must reserve the configured scratch pool for ACS.
+
+  * -
+
+      `rme_peripheral_pas_association <../test_pool/rme/rme_peripheral_pas_association.c>`_
+
+    -
+
+      RGDVSZ: A PA of an access to a memory-mapped peripheral is associated with a PAS until reaching the PAS filter assigned to protect the peripheral.
+
+    -
+
+      1. Read the platform PAS-filter resource table and skip if it is empty. Validate each resource's address, size and Resource PAS. Retain the platform GPT configuration, save DAIF and mask exceptions.
+      2. Exercise Root, Realm, Secure and Non-secure PAS for every resource. Allocate an EL3 mapping with non-shareable attributes and the selected PAS, preserving the resource's offset within its translation granule.
+      3. Clear shared access state and initialize the result to INIT_DATA. For matching PAS, use the ordinary val_pe_access_mut_el3() path and fail on a helper error or reported exception.
+      4. For each differing PAS, enable the expected-fault and PAS-filter flags before calling val_pe_access_mut_el3(). The current implementation accepts an exception or an unchanged INIT_DATA sentinel; a completed read returning a different value fails.
+      5. Clear shared access state after each case and restore DAIF before reporting. Report FAIL if any resource validation, mapping or access check fails; otherwise report PASS. These are the same functional access checks used by the split RDVPGT test.
+      6. This is partial functional coverage, not independent evidence that PAS reaches the protecting filter unchanged. GPT can reject accesses first, the unused ordinary matching load can be optimized out, and a completed read can equal INIT_DATA. The resource table does not establish exclusive PAS access or a documented rejection response.
+
+  * -
+
+      `rme_pas_filter_functionality <../test_pool/rme/rme_pas_filter_functionality.c>`_
+
+    -
 
       RDVPGT: A private PAS filter permits register access only if the Access PAS matches an associated Resource PAS.
 
     -
 
-      All protected memory regions are accessible only when resource PAS & access PAS are same.
-
-      Accesses with same resource PAS and access PAS are successful.
+      1. Read the platform PAS-filter resource table and skip if it is empty. Validate each resource's address, size and Resource PAS. Retain the platform GPT configuration, save DAIF and mask exceptions.
+      2. Exercise Root, Realm, Secure and Non-secure PAS for every resource through non-shareable EL3 mappings, preserving the resource's offset within its translation granule.
+      3. Clear shared access state and initialize the result to INIT_DATA. For matching PAS, use the ordinary val_pe_access_mut_el3() path and require no helper error or reported exception.
+      4. For differing PAS, use the expected-fault PAS-filter load path. The current implementation accepts an exception or an unchanged INIT_DATA sentinel; a completed read returning a different value fails.
+      5. Clear shared access state after each case and restore DAIF before reporting. Report FAIL if any resource validation, mapping or access check fails; otherwise report PASS.
+      6. PASS describes functional checks only.
 
   * -
 
