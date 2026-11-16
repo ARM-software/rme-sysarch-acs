@@ -5,8 +5,13 @@ Arm RME System Architecture Compliance Suite - Scenario Document
 .. contents:: Contents
   :depth: 2
 
-Testcase checklist
-==================
+Implemented Test Scenarios
+==========================
+
+The table below lists implemented ACS test scenarios, the architectural rules
+they validate, and their algorithms. For the coverage status and supporting
+notes for each rule, see the separate
+`RME System ACS Testcase Checklist (CSV) <Arm_RME_System_ACS_Testcase_Checklist.csv>`_.
 
 .. list-table::
   :header-rows: 1
@@ -2294,8 +2299,8 @@ Planned Test Scenarios
 
 Tests for the following rules are planned for the next release. These rules
 are not yet covered by an implemented scenario and are tracked as ``Planned``
-in the testcase checklist. Test algorithms and PAL dependencies will be
-documented when the tests are implemented.
+in the `RME System ACS Testcase Checklist (CSV)`_. Test algorithms and PAL
+dependencies will be documented when the tests are implemented.
 
 .. list-table::
     :header-rows: 1
@@ -2312,17 +2317,18 @@ documented when the tests are implemented.
     * - RJXRNG
       - XT-capable Root Ports handle outgoing and incoming TLPs according to XT enablement, T-bit, and traffic type.
 
-Rules Outside Current ACS Test Scope
-====================================
+Rules Not Covered by Current ACS Tests
+======================================
 
-The following rules have no implemented ACS scenario that validates the stated
-requirement. They are marked ``Not covered`` in the testcase checklist, whose
-Notes column gives the reason for each rule. Some require implementation-defined
-controls or observation; others do not yet have a dedicated test. Related
-access tests do not establish complete coverage of these requirements.
+The rules below are marked ``Not covered`` in the ``Coverage`` column of the
+`RME System ACS Testcase Checklist (CSV)`_. The checklist's ``Notes`` column
+explains the reason for each rule, such as the need for implementation-specific
+controls or visibility into internal hardware behavior. This status describes
+current ACS coverage. Further review may identify opportunities to add tests.
 
-Architectural requirements remain applicable independently of ACS test
-availability.
+An existing test that checks a related access behavior does not, by itself,
+validate all requirements of a rule. Platforms must comply with all applicable
+architectural requirements, including those without an ACS test.
 
 .. list-table::
     :header-rows: 1
