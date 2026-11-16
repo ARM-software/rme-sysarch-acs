@@ -511,6 +511,14 @@ MODULE_TEST_DISPATCHER_s g_module_test_table[MODULE_SENTINEL] = {
         .entry_fn = rme_ns_encryption_is_immutable_entry,
         .test_text = "rme_ns_encryption_is_immutable",
       },
+      [RME_ENTRY_RME_ACCESS_PAS_ASSOCIATION_ENTRY] = {
+        .entry_fn = rme_access_pas_association_entry,
+        .test_text = "rme_access_pas_association",
+      },
+      [RME_ENTRY_RME_PERIPHERAL_PAS_ASSOCIATION_ENTRY] = {
+        .entry_fn = rme_peripheral_pas_association_entry,
+        .test_text = "rme_peripheral_pas_association",
+      },
       [RME_ENTRY_RME_PAS_FILTER_FUNCTIONALITY_ENTRY] = {
         .entry_fn = rme_pas_filter_functionality_entry,
         .test_text = "rme_pas_filter_functionality",

@@ -29,6 +29,8 @@ uint32_t rme_pe_do_not_have_arch_diff_entry(uint32_t num_pe);
 uint32_t rme_mte_region_in_root_pas_entry(uint32_t num_pe);
 uint32_t rme_encryption_for_all_pas_except_ns_entry(uint32_t num_pe);
 uint32_t rme_pas_filter_functionality_entry(uint32_t num_pe);
+uint32_t rme_access_pas_association_entry(uint32_t num_pe);
+uint32_t rme_peripheral_pas_association_entry(uint32_t num_pe);
 uint32_t rme_realm_smem_behaviour_after_reset_entry(uint32_t num_pe);
 uint32_t rme_pcie_devices_support_gpc_entry(uint32_t num_pe);
 uint32_t rme_data_encryption_beyond_popa_entry(uint32_t num_pe);
