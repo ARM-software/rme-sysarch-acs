@@ -83,12 +83,21 @@ payload(void)
 
       /* Create a buffer of size TEST_DMA_SIZE in DRAM */
       dram_buf_in_virt = val_memory_alloc_pages(TEST_DATA_NUM_PAGES);
+      if (dram_buf_in_virt == NULL)
+      {
+          val_print(ACS_PRINT_ERR, " DMA buffer allocation failed for BDF: 0x%x", e_bdf);
+          test_fail++;
+          continue;
+      }
 
       /* Set the buffer to value 0 */
-      val_memory_set(dram_buf_in_virt, dma_len, 0);
+      val_memory_set(dram_buf_in_virt, test_data_blk_size, 0);
       dram_buf_in_virt2 = dram_buf_in_virt + dma_len;
 
       val_memory_set(dram_buf_in_virt, dma_len, TEST_DATA);
+
+      /* Publish the source and remove dirty destination lines before DMA. */
+      val_pe_cache_clean_invalidate_range((uint64_t)dram_buf_in_virt, test_data_blk_size);
 
       if (val_pcie_get_rootport(e_bdf, &rp_bdf))
       {
@@ -152,6 +161,11 @@ payload(void)
           test_fail++;
           goto cleanup_unlock;
       }
+
+      /* Observe DMA writes through the CPU mapping used by the comparison. */
+      __asm__ volatile ("dsb sy" ::: "memory");
+      val_pe_cache_invalidate_range((uint64_t)dram_buf_in_virt2, dma_len);
+      __asm__ volatile ("dsb sy" ::: "memory");
 
       if (!val_memory_compare(dram_buf_in_virt, dram_buf_in_virt2, dma_len))
       {

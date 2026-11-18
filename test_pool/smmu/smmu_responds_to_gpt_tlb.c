@@ -176,8 +176,8 @@ run_smmu_gpt_tlb_sequence(uint32_t instance, uint32_t e_bdf, uint32_t smmu_index
   }
 
   /* Clear the memory */
-  val_memory_set((uint64_t *)dram_buf_in_virt, dma_len, 0);
-  val_data_cache_ops_by_va((uint64_t)dram_buf_in_virt, CLEAN_AND_INVALIDATE);
+  val_memory_set((uint64_t *)dram_buf_in_virt, test_data_blk_size, 0);
+  val_pe_cache_clean_invalidate_range((uint64_t)dram_buf_in_virt, test_data_blk_size);
 
   /* Need to know input and output address sizes before creating page table */
   smmu_pgt_desc = cpu_pgt_desc;
@@ -211,7 +211,7 @@ run_smmu_gpt_tlb_sequence(uint32_t instance, uint32_t e_bdf, uint32_t smmu_index
 
   /* Initialize the sender buffer with test specific data */
   val_memory_set((uint64_t *)dram_buf_in_virt, dma_len, TEST_DATA);
-  val_data_cache_ops_by_va((uint64_t)dram_buf_in_virt, CLEAN_AND_INVALIDATE);
+  val_pe_cache_clean_invalidate_range((uint64_t)dram_buf_in_virt, dma_len);
 
   /* Configure each DMA as translated; the exerciser may clear Address Type on completion. */
   if (val_exerciser_set_param(CFG_TXN_ATTRIBUTES, TXN_ADDR_TYPE, AT_TRANSLATED, instance)) {
@@ -245,6 +245,11 @@ run_smmu_gpt_tlb_sequence(uint32_t instance, uint32_t e_bdf, uint32_t smmu_index
         val_print(ACS_PRINT_ERR, " DMA read failure from exerciser %4x", instance);
         goto test_clean;
   }
+
+  /* Discard stale destination lines before observing the DMA result. */
+  __asm__ volatile ("dsb sy" ::: "memory");
+  val_pe_cache_invalidate_range((uint64_t)dram_buf_out_virt, dma_len);
+  __asm__ volatile ("dsb sy" ::: "memory");
 
   if (val_memory_compare(dram_buf_in_virt, dram_buf_out_virt, dma_len)) {
         val_print(ACS_PRINT_ERR, " Data Comparasion failure for Exerciser %4x", instance);
