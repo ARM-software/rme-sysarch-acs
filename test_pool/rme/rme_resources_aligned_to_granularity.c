@@ -23,23 +23,25 @@
 #include "val/include/val_el32.h"
 
 #define TEST_NAME  "rme_resources_aligned_to_granularity"
-#define TEST_DESC  "To check if resources are aligned to page granularity  "
+#define TEST_DESC  "Check resources are page aligned and not aliased      "
 #define TEST_RULE  "RKGDVK"
 
 /*
- * @brief  The test validates that the address range of resources arealigned to the page
- *         granularity supported by the system.
- * 1. The alignment of the base addresses of the resources are checked against the
- *    page granularity of the system.
- * 2. The test expects the addresses to be aligned to the page granularity (4KB in this case).
+ * @brief  The test validates GPT Resource requirements for RKGDVK.
+ * 1. The base address, size and range end of each GPC protected Resource are
+ *    checked against the page granularity of the system.
+ * 2. The address range of each Resource is checked against every other
+ *    Resource to ensure there is no physical aliasing/overlap.
  */
 static
 void payload(void)
 {
 
   uint32_t index = val_pe_get_index_mpid(val_pe_get_mpid()), num_regn;
-  uint8_t status_fail_cnt, pgs, p[3] = {12 /*4KB*/, 16 /*64KB*/, 14 /*16KB*/};
-  uint64_t PA;
+  uint32_t regn_cnt, cmpr_regn_cnt, status_fail_cnt;
+  uint8_t pgs, p[3] = {12 /*4KB*/, 16 /*64KB*/, 14 /*16KB*/};
+  uint64_t base_addr, top_addr, region_size;
+  uint64_t base_addr_cmpr, top_addr_cmpr, region_size_cmpr;
   MEM_REGN_INFO_TABLE *mem_region_cfg;
 
   mem_region_cfg = val_mem_gpc_info_table();
@@ -51,21 +53,73 @@ void payload(void)
     return;
   }
 
-  for (uint32_t regn_cnt = 0; regn_cnt < num_regn; ++regn_cnt)
+  for (regn_cnt = 0; regn_cnt < num_regn; ++regn_cnt)
   {
 
-    PA = mem_region_cfg->regn_info[regn_cnt].base_addr;
-    val_print(ACS_PRINT_TEST, " Checking the page granularity for region 0x%llx", PA);
+    base_addr = mem_region_cfg->regn_info[regn_cnt].base_addr;
+    region_size = mem_region_cfg->regn_info[regn_cnt].regn_size;
+    val_print(ACS_PRINT_TEST, " Checking Resource range 0x%llx", base_addr);
 
     /* The page granularity is always assumed to be 4KB for the current resources*/
     pgs = p[0];
 
-    val_print(ACS_PRINT_DEBUG, " The PA is 0x%lx", PA);
-    val_print(ACS_PRINT_DEBUG, " The test expects Adress to be aligned to the", 0);
+    val_print(ACS_PRINT_DEBUG, " The PA is 0x%lx", base_addr);
+    val_print(ACS_PRINT_DEBUG, " The test expects address to be aligned to the", 0);
     val_print(ACS_PRINT_DEBUG, " page granularity, 4KB by default", 0);
-    if ((PA & ((0x1ull << pgs) - 1)))
+    if ((base_addr & ((0x1ull << pgs) - 1)))
     {
-      val_print(ACS_PRINT_ERR, " The address 0x%llx is not aligned to the page granularity", PA);
+      val_print(ACS_PRINT_ERR, " The address 0x%llx is not aligned to the page granularity",
+                base_addr);
+      status_fail_cnt++;
+    }
+
+    if (region_size == 0)
+    {
+      val_print(ACS_PRINT_ERR, " The resource at 0x%llx has zero size", base_addr);
+      status_fail_cnt++;
+      continue;
+    }
+
+    if ((region_size & ((0x1ull << pgs) - 1)))
+    {
+      val_print(ACS_PRINT_ERR, " The resource size 0x%llx is not page granular",
+                region_size);
+      status_fail_cnt++;
+    }
+
+    if ((region_size - 1) > (~0ULL - base_addr))
+    {
+      val_print(ACS_PRINT_ERR, " Resource range overflows physical address space", 0);
+      status_fail_cnt++;
+      continue;
+    }
+
+    top_addr = base_addr + region_size - 1;
+    if (((top_addr & ((0x1ull << pgs) - 1)) != ((0x1ull << pgs) - 1)))
+    {
+      val_print(ACS_PRINT_ERR, " The resource end 0x%llx is not page granular",
+                top_addr);
+      status_fail_cnt++;
+    }
+
+    for (cmpr_regn_cnt = regn_cnt + 1; cmpr_regn_cnt < num_regn; ++cmpr_regn_cnt)
+    {
+      base_addr_cmpr = mem_region_cfg->regn_info[cmpr_regn_cnt].base_addr;
+      region_size_cmpr = mem_region_cfg->regn_info[cmpr_regn_cnt].regn_size;
+      if (region_size_cmpr == 0)
+        continue;
+
+      /* The outer loop reports invalid comparison ranges on their own iteration. */
+      if ((region_size_cmpr - 1) > (~0ULL - base_addr_cmpr))
+        continue;
+
+      top_addr_cmpr = base_addr_cmpr + region_size_cmpr - 1;
+
+      if ((top_addr < base_addr_cmpr) || (base_addr > top_addr_cmpr))
+        continue;
+
+      val_print(ACS_PRINT_ERR, " Overlap found between 0x%lx and ", base_addr);
+      val_print(ACS_PRINT_ERR, "0x%lx ", base_addr_cmpr);
       status_fail_cnt++;
     }
 
@@ -96,4 +150,3 @@ rme_resources_aligned_to_granularity_entry(uint32_t num_pe)
 
   return status;
 }
-

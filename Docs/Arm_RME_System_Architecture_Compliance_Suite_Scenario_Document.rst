@@ -66,6 +66,29 @@ notes for each rule, see the separate
 
       RXTSXB: An RME coherent interconnect supports cache maintenance operations to the PoPA.
 
+    -
+
+      Coherent interconnect support for CMO to PoPA is checked using
+      Secure and Non-secure cacheable aliases of the same PA.
+
+      1. PA1 is marked as All Access Permitted.
+      2. VA1 is mapped to PA1 as Secure PAS with cacheable attributes.
+      3. VA2 is mapped to PA1 as Non-secure PAS with cacheable attributes.
+      4. A known initial value is written through VA2, then CMO to PoPA is
+         issued for PA1 with Non-secure PAS.
+      5. VA1 and VA2 are read to capture the Secure and Non-secure views.
+      6. New data is written through VA1.
+      7. CMO to PoPA is issued for PA1 with Secure PAS, followed by
+         Non-secure PAS, waiting for completion of each operation.
+      8. VA2 is read again and must return a value different from the previous
+         Non-secure value and different from the Secure plaintext value.
+
+  * -
+
+      `rme_popa_cmo_completion_guarantees <../test_pool/rme/rme_popa_cmo_completion_guarantees.c>`_
+
+    -
+
       RLCXDB: Completion of a PoPA CMO for a given PA guarantees that both:
 
       - Any dirty cached or transient state associated with the PA before the PoPA has been cleaned to after the PoPA.
@@ -73,22 +96,36 @@ notes for each rule, see the separate
 
     -
 
-      Coherent interconnect supports CMO to PoPA.
+      PoPA CMO completion clean and invalidation behavior is checked using
+      Secure and Non-secure cacheable aliases of the same PA.
 
-      1. CMO to PoPA cleans dirty copy till PoPA and invalidates all cached copies.
-      2. PA1 is marked as All Access Permitted.
-      3. PA1 is initialized with random data.
-      4. VA1 is mapped to PA1 as secure PAS in MMU with cacheable attribute.
-      5. VA2 is mapped to PA1 as nonsecure in MMU with cacheable attribute.
-      6. Read VA1 returns data1.
-      7. Read VA2 returns data2.
-      8. Store data3 in VA1.
-      9. Issue CMO to PoPA for PA1 secure and nonsecure.
-      10. Read of VA2 must return data4 (! = data2) (ciphertext of data3).
+      1. PA1 is marked as All Access Permitted.
+      2. VA1 is mapped to PA1 as Secure PAS with cacheable attributes.
+      3. VA2 is mapped to PA1 as Non-secure PAS with cacheable attributes.
+      4. A known initial value is written through VA2, then CMO to PoPA is
+         issued for PA1 with Non-secure PAS.
+      5. VA1 and VA2 are read to capture the Secure and Non-secure views.
+         The Non-secure read must match the initialized value.
+      6. data3 is written through VA1.
+      7. CMO to PoPA is issued for PA1 with Secure PAS, followed by
+         Non-secure PAS, waiting for completion of each operation.
+      8. VA2 is read and must return data4, where data4 differs from the
+         previous Non-secure value and from the Secure plaintext value.
+      9. data5, distinct from data4 and data3, is written through VA2.
+      10. CMO to PoPA is issued for PA1 with Non-secure PAS.
+      11. VA1 is read without issuing another Secure CMO and must return data6,
+          where data6 differs from data3. There are no intervening Secure reads
+          after step 7, preserving the observation of the earlier Secure CMO's
+          invalidation effect.
+      12. VA2 is read and must return data5, verifying Non-secure readback after
+          the final Non-secure CMO.
+      13. This provides best-effort software-visible validation; direct
+          observation of internal cached or transient state requires
+          implementation-level visibility.
 
   * -
 
-      `rme_resources_aligned_to_granularity <../test_pool/rme/rme_resources_aligned_to_granularity.c>`_ & `rme_resources_are_not_physically_aliased <../test_pool/rme/rme_resources_are_not_physically_aliased.c>`_
+      `rme_resources_aligned_to_granularity <../test_pool/rme/rme_resources_aligned_to_granularity.c>`_
 
     -
 
@@ -99,9 +136,10 @@ notes for each rule, see the separate
 
     -
 
-      *rme_resources_aligned_to_granularity:* Check that the address range of resources (that need to be protected by GPT) are aligned to page granularity.
-
-      *rme_resources_are_not_physically_aliased:* Check that the address range of resources (that need to be protected by GPT) are aligned to one another.
+      1. Check that the address range of resources that need to be protected
+         by GPT are aligned to page granularity.
+      2. Check that the address ranges of those resources do not physically
+         alias or overlap one another.
 
   * -
 
@@ -149,23 +187,56 @@ notes for each rule, see the separate
 
   * -
 
-      `rme_pas_filter_functionality <../test_pool/rme/rme_pas_filter_functionality.c>`_
+      `rme_access_pas_association <../test_pool/rme/rme_access_pas_association.c>`_
 
     -
 
-      RBJVZS: An access to a Resource is associated with an Access PAS in accordance with the PAS Access Table
+      RBJVZS: Resource accesses are associated with an Access PAS and MECID as required by the architecture.
 
-      RYKVJK: A PAS filter enforces the PAS protection check by permitting access to a Resource only if the Access PAS matches a Resource PAS with which that the Resource is associated.
+    -
 
-      RGDVSZ: A PA of an access to a memory-mapped peripheral is associated with a PAS until reaching the PAS filter assigned to protect the peripheral
+      1. Initialize the test for all PEs. When the primary PE supports MEC, collect MECID widths in a separate all-PE dispatch. Require every PE to complete collection and provide a valid width, then record the minimum PE width. Publish the shared array and pointer with cache maintenance; free the array after completion or retain it if callbacks may still be pending.
+      2. Run validation on one PE. If RME is supported, save DAIF and mask exceptions. Allocate separate scratch memory for Root, Realm, Secure and Non-secure PAS, save each original GPI, and set GPT_ANY.
+      3. Create non-cacheable EL3 mappings with each selected PAS. Write a PAS-specific pattern and require successful readback with matching data. Restore each original GPI, including failure paths. Stop further PAS and MECID probes if restoration fails, and log the PA and saved GPI for recovery.
+      4. Restore DAIF before MECID validation. Skip the MECID sub-check when MEC is unsupported or no SMMUs are discovered. Otherwise save the PE MECID and enable state, enabling MEC only if necessary.
+      5. Read each SMMU's Realm MEC capability and MECID width using the existing register-access helper. Fail on unsupported MEC or register-read errors. Select MECIDs (2^W - 1) and (2^W - 2), where W is the minimum width across the collected PEs and all discovered SMMUs.
+      6. For each of PoE and PoPA, allocate Realm scratch memory, save its GPI, set GPT_ANY, and map it at EL3. Write RANDOM_DATA_4 using the first MECID, perform cache maintenance to the selected point, and read using the second MECID. Require the returned data to differ. Restore each scratch GPI and the saved PE MEC context; cleanup errors produce FAIL.
+      7. Report FAIL on collection, setup, access, comparison or restoration errors. Report SKIP if both PAS and MECID sub-checks are skipped; otherwise report PASS when at least one passes and neither fails. Thus a non-MEC system can pass through the PAS sub-check.
+      8. Coverage is limited to Root EL3 PAS mapping functionality and PE MECID behavior. GPT_ANY readback does not independently prove PAS tagging; other execution states and SMMU DMA MECID association are not exercised. Scratch allocations and mappings remain reserved for the run, and the platform must reserve the configured scratch pool for ACS.
+
+  * -
+
+      `rme_peripheral_pas_association <../test_pool/rme/rme_peripheral_pas_association.c>`_
+
+    -
+
+      RGDVSZ: A PA of an access to a memory-mapped peripheral is associated with a PAS until reaching the PAS filter assigned to protect the peripheral.
+
+    -
+
+      1. Read the platform PAS-filter resource table and skip if it is empty. Validate each resource's address, size and Resource PAS. Retain the platform GPT configuration, save DAIF and mask exceptions.
+      2. Exercise Root, Realm, Secure and Non-secure PAS for every resource. Allocate an EL3 mapping with non-shareable attributes and the selected PAS, preserving the resource's offset within its translation granule.
+      3. Clear shared access state and initialize the result to INIT_DATA. For matching PAS, use the ordinary val_pe_access_mut_el3() path and fail on a helper error or reported exception.
+      4. For each differing PAS, enable the expected-fault and PAS-filter flags before calling val_pe_access_mut_el3(). The current implementation accepts an exception or an unchanged INIT_DATA sentinel; a completed read returning a different value fails.
+      5. Clear shared access state after each case and restore DAIF before reporting. Report FAIL if any resource validation, mapping or access check fails; otherwise report PASS. These are the same functional access checks used by the split RDVPGT test.
+      6. This is partial functional coverage, not independent evidence that PAS reaches the protecting filter unchanged. GPT can reject accesses first, the unused ordinary matching load can be optimized out, and a completed read can equal INIT_DATA. The resource table does not establish exclusive PAS access or a documented rejection response.
+
+  * -
+
+      `rme_pas_filter_functionality <../test_pool/rme/rme_pas_filter_functionality.c>`_
+
+    -
 
       RDVPGT: A private PAS filter permits register access only if the Access PAS matches an associated Resource PAS.
 
     -
 
-      All protected memory regions are accessible only when resource PAS & access PAS are same.
-
-      Accesses with same resource PAS and access PAS are successful.
+      1. Read the platform PAS-filter resource table and skip if it is empty. Validate each resource's address, size and Resource PAS. Retain the platform GPT configuration, save DAIF and mask exceptions.
+      2. Exercise Root, Realm, Secure and Non-secure PAS for every resource through non-shareable EL3 mappings, preserving the resource's offset within its translation granule.
+      3. Clear shared access state and initialize the result to INIT_DATA. For matching PAS, use the ordinary val_pe_access_mut_el3() path and require no helper error or reported exception.
+      4. For differing PAS, use the expected-fault PAS-filter load path. The current implementation accepts an exception or an unchanged INIT_DATA sentinel; a completed read returning a different value fails.
+      5. Clear shared access state after each case and restore DAIF before reporting. Report FAIL if any resource validation, mapping or access check fails; otherwise report PASS.
+      6. PASS describes functional checks only.
 
   * -
 
@@ -262,28 +333,51 @@ notes for each rule, see the separate
 
   * -
 
-      `rme_snoop_filter_considers_pas <../test_pool/rme/rme_snoop_filter_considers_pas.c>`_ & `rme_memory_associated_with_pas_till_popa <../test_pool/rme/rme_memory_associated_with_pas_till_popa.c>`_
+      `rme_memory_associated_with_pas_till_popa <../test_pool/rme/rme_memory_associated_with_pas_till_popa.c>`_
 
     -
 
       RWFQKD: A PA that targets memory that can be cached is associated with a PAS until reaching the PoPA.
 
+    -
+
+      1. Iterate Root, Realm, Non-secure and Secure as the source PAS.
+      2. Allocate a fresh PA for each iteration and mark it “All Access Permitted”
+         in GPT. Map that PA through four cacheable aliases, one for each PAS.
+      3. Initialize through the source PAS and issue a source-PAS CMO to PoPA.
+      4. Read through the source alias to populate the cache, then write new data.
+      5. Without another CMO, read through the other three PAS aliases. Each read
+         must differ from the source PAS's newly written data.
+      6. All four source-PAS iterations must pass, covering 12 directed comparisons.
+
+      This checks software-visible cross-PAS cached-data isolation on one PE
+      for all four source PAS values.
+
+  * -
+
+      `rme_pa_compare_operation_includes_pas <../test_pool/rme/rme_pa_compare_operation_includes_pas.c>`_
+
+    -
+
       RFRMJJ: Where a PA is associated with a PAS, any PA compared operation includes the PAS.
 
     -
 
-      *Test rme_memory_associated_with_pas_till_popa:*
+      1. Skip the test if fewer than two PEs are available.
+      2. Mark PA1 as “All Access Permitted” in GPT and map it through cacheable
+         Non-secure, Realm, Root and Secure aliases on PE0.
+      3. Initialize PA1 through Non-secure PAS and issue a Non-secure CMO to PoPA.
+         Write new data through the Non-secure alias, then read the other three
+         PAS aliases without another CMO. None must return the newly written data.
+      4. Mark a second PA as “All Access Permitted” in GPT and map it cacheable
+         and shareable using Root PAS on PE0 and Realm PAS on PE1.
+      5. Write initial data through PE0's Root alias and issue a Root CMO to PoPA.
+         Read the Root alias to populate the cache, then write a new value.
+      6. Read through PE1's Realm alias without another CMO. It must not return
+         PE0's newly written Root PAS value. Both subtests must pass.
 
-      1. A location PA1 is marked as “All Access Permitted” in GPT.
-      2. Cacheable store to PA1_NS is not visible to PA1_RL, PA1_RT, PA1_S.
-
-      *Test rme_snoop_filter_considers_pas:*
-
-      1. PA1 is marked as Shareable in both PE0 & PE1.
-      2. PE0: PA1 marked as Root PAS.
-      3. PE1: PA1 marked as Realm PAS.
-      4. PE1 must not generate snoop access to PE0.
-      5. As a result, update to PE0.
+      This checks Non-secure cached-data isolation from Root, Realm and Secure
+      aliases on one PE, and Root-to-Realm cached-data isolation across two PEs.
 
   * -
 
@@ -293,22 +387,68 @@ notes for each rule, see the separate
 
       RFXQCD: A PoPA CMO applies to any cache before the PoPA, including system caches that are located beyond the Point of Coherency.
 
-      RQBNJF: A PoPA CMO applies to any cached copy in the system with the specified {PAS, PA} regardless of both:
-
-      - The shareability domain it was cached with.
-      - Whether the system supports a single or multiple Outer Shareable shareability domains
-
     -
 
       1. PA1 is marked as All Access Permitted.
-      2. PA1 is initialized with random data.
-      3. VA1 is mapped to PA1 as secure PAS in MMU with Non-cacheable attribute.
-      4. VA2 is mapped to PA1 as nonsecure in MMU with Non-cacheable attribute.
-      5. Read VA1 returns data1.
-      6. Read VA2 returns data2.
-      7. Store data3 in VA1.
-      8. Issue CMO to PoPA for PA1 secure and nonsecure.
-      9. Read of VA2 must return data4 (! = data2) (ciphertext of data3).
+      2. VA1 is mapped to PA1 as Secure PAS with Write-Back cacheable attributes.
+      3. VA2 is mapped to PA1 as Non-secure PAS with Non-cacheable attributes.
+      4. CMO to PoPA is issued for PA1 with the Non-secure PAS.
+      5. VA1 and VA2 are read to capture the Secure and Non-secure views.
+      6. Test data is written through VA1 using the Secure PAS.
+      7. CMO to PoPA is issued for PA1 with the Secure PAS. VA1 must then return
+         the written test data before any further cache maintenance.
+      8. CMO to PoPA is issued for PA1 with the Non-secure PAS.
+      9. VA2 is read again. The final combined comparison requires this value to
+         differ from both initial reads and the Secure write pattern, while the
+         Secure readback captured after its CMO must equal the written pattern.
+
+  * -
+
+      `rme_popa_cmo_applies_to_pas_pa_cached_copy <../test_pool/rme/rme_popa_cmo_applies_to_pas_pa_cached_copy.c>`_
+
+    -
+
+      RQBNJF: A PoPA CMO affects all cached copies for the specified {PAS, PA},
+      independent of shareability domain or MECID.
+
+    -
+
+      1. Use the caller as coordinator. With one selected PE, issue CMOs locally.
+         With two or more selected PEs, prefer a CMO issuer in a different MPIDR
+         affinity group when one is available. Log when cross-PE coverage is absent.
+      2. For Non-shareable, Inner Shareable and Outer Shareable attributes,
+         allocate a separate PA and map Secure and Non-secure cacheable aliases.
+         Check allocations before creating GPT or MMU entries.
+      3. Clear previous cached state with Secure and Non-secure PoPA CMOs, then
+         read the initial Secure and Non-secure values on the coordinator.
+      4. Write a known pattern through the Secure alias and order the write before
+         issuing Secure and Non-secure PoPA CMOs on the selected local or remote PE.
+      5. After CMO completion, read the Secure alias without additional cache
+         maintenance and require the written pattern to be preserved.
+         Read the Non-secure alias and log its comparisons for diagnostics only.
+      6. After the shareability checks, use val_is_mec_supported() to determine
+         whether to add the MECID check on the coordinator. If MEC or IDs 1 and 2
+         are unsupported, log that the MEC sub-check is skipped.
+         Write the first Realm pattern through a cacheable mapping
+         under M1, select M2 and issue the Realm PoPA CMO. Remap as Non-cacheable,
+         restore M1 and verify the first pattern. Write a second pattern through
+         the Non-cacheable mapping, remap as cacheable and verify the second pattern.
+         The MEC sub-check does not dispatch a secondary PE or use an NS alias.
+      7. Save the coordinator's original MECID_RL_A_EL3 and MEC enable state
+         before the MEC sub-check. Clean cached test state and restore the saved
+         MEC context, including on failure. Retain the test GPT entries because
+         scratch PA/VA allocations remain reserved for the current test-suite run.
+      8. Report allocation, access (including Non-secure reads), CMO, preservation,
+         cleanup or secondary timeout errors as FAIL. Poll the secondary status
+         up to TIMEOUT_LARGE iterations, then mark FAIL and attempt cleanup before
+         returning on timeout. This does not cancel the secondary; cleanup can race
+         with unfinished remote operations.
+         Shareability checks run regardless of MEC support, including with one
+         selected PE. Any executed sub-check failure produces FAIL; a skipped
+         MEC sub-check preserves the successful shareability result.
+
+      This is partial software-visible data-preservation coverage. Single-PE
+      execution does not exercise cross-PE behavior.
 
   * -
 
@@ -352,7 +492,7 @@ notes for each rule, see the separate
 
   * -
 
-      `rme_pe_context_after_exit_wfi <../test_pool/rme/rme_pe_context_after_exit_wfi.c>`_ & `rme_pe_context_after_pe_suspend <../test_pool/rme/rme_pe_context_after_pe_suspend.c>`_
+      `rme_pe_context_after_exit_wfi <../test_pool/rme/rme_pe_context_after_exit_wfi.c>`_
 
     -
 
@@ -360,19 +500,22 @@ notes for each rule, see the separate
 
     -
 
-      PE context must be preserved after exit from WFI or suspend.
+      PE context must be preserved after exit from low power state.
 
-      1. Install the ISR for PE timer interrupt ID.
-      2. Save all the RME related PE registers before going to low power mode or CPU suspend.
-      3. Start the PE timer that is set to pe_timer_ticks.
-      4. Initiate the low power state entry:
+      1. Save seven selected RME-related PE registers before going to low power mode.
+      2. Enter low power using WFI and wake using the PE physical timer interrupt.
+      3. Check that the saved PE register values are preserved after WFI exit.
+      4. If a non-secure system timer and PSCI suspend are supported, repeat
+         the same context preservation check across PSCI_CPU_SUSPEND.
 
-      - For rme_pe_context_after_exit_wfi (low power state entry), initiate using WFI instruction.
-      - For rme_pe_context_after_pe_suspend (CPU suspend state entry), initiate using PSCI_CPU_SUSPEND smc call.
+      5. The test expects the register values to be unchanged after each
+         applicable low-power exit.
+      6. Report the CPU suspend check as skipped when no non-secure system timer
+         is available or PSCI_CPU_SUSPEND returns a nonzero status.
+         If WFI passes and CPU suspend is skipped, the overall test passes
+         with an explicit warning that only WFI coverage was attempted.
 
-      5. PE interrupt wakes up the PE before the timeout and is handled.
-      6. The same PE registers are checked against the saved values.
-      7. The test expects the values to be similar and if so, test will PASS, otherwise will FAIL.
+      Coverage is limited to the seven selected PE registers.
 
   * -
 
@@ -402,21 +545,34 @@ notes for each rule, see the separate
 
   * -
 
-      `rme_root_wdog_from_root_pas <../test_pool/rme/rme_root_wdog_from_root_pas.c>`_ & `rme_root_wdog_fails_in_non_root_state <../test_pool/rme/rme_root_wdog_fails_in_non_root_state.c>`_
+      `rme_root_wdog_fails_in_non_root_state <../test_pool/rme/rme_root_wdog_fails_in_non_root_state.c>`_
 
     -
 
       RZHBBL: The memory-mapped registers of a Root watchdog are in the Root PAS.
 
+    -
+
+      1. Program Root watchdog registers from Root PAS and verify that the
+         watchdog interrupt is generated.
+      2. Map the Root watchdog control register using Non-secure PAS.
+      3. Access the Non-secure PAS mapping and verify that the access is
+         blocked by the PAS protection path.
+      4. This validates that the Root watchdog registers are in the Root PAS.
+
+  * -
+
+      `rme_root_wdog_expiration_from_root <../test_pool/rme/rme_root_wdog_expiration_from_root.c>`_
+
+    -
+
       RVXGBP: A Root watchdog can trigger an RME system reset when predefined expiration conditions are met.
 
     -
 
-      Programming of Root watchdog, RT_WDOG_CTRL register, from ROOT state only will generate an interrupt.
-
-      The rme_root_wdog_from_root_pas will generate a watchdog interrupt when the Root watchdog is programmed from the Root PAS.
-
-      The rme_root_wdog_fails_in_non_root_state won't generate a watchdog interrupt when the Root watchdog is programmed from the non-Root PAS, in this case, from Non-Secure PAS.
+      1. Program the Root watchdog from Root state.
+      2. Configure the watchdog expiration condition.
+      3. Verify that watchdog expiration causes an RME system reset and resume the testcase.
 
   * -
 
@@ -602,23 +758,6 @@ notes for each rule, see the separate
 
   * -
 
-      `da_dvsec_register_config <../test_pool/da/da_dvsec_register_config.c>`_
-
-    -
-
-      RDVJRV: The RME-DA DVSEC is implemented in compliance with PCIe and has the following format
-
-      RNWSJB: All Root Ports in an RME-DA system must implement the RME-DA DVSEC
-
-    -
-
-      1. For each function, read the RMEDA registers (DA Capability) and check the corresponding values and its attribute matches the `RME_System_Architecture_Spec` specification.
-      2. No mismatch in both values and attribute properties of the registers
-
-      Note: The test checks DVSEC presence as part of register validation and reports RDVJRV.
-
-  * -
-
       `da_smmu_implementation <../test_pool/da/da_smmu_implementation.c>`_
 
     -
@@ -671,8 +810,22 @@ notes for each rule, see the separate
 
     -
 
-      1. Check the attribute of the RMEDA_CTRL register.
-      2. The RSVDP fields and RW fields should behave as expected.
+      1. For each Root Port, read the RME-DA DVSEC registers and check that the required values and attributes match the `RME_System_Architecture_Spec` specification.
+      2. Check the attributes of the RMEDA_CTL registers.
+      3. The RSVDP fields and RW fields should behave as expected.
+
+  * -
+
+      `da_rootport_implements_rmeda_dvsec <../test_pool/da/da_rootport_implements_rmeda_dvsec.c>`_
+
+    -
+
+      RNWSJB: All Root Ports in an RME-DA system must implement the RME-DA DVSEC.
+
+    -
+
+      1. For each discovered Root Port, search for the RME-DA DVSEC capability.
+      2. The test fails if any Root Port does not implement the RME-DA DVSEC.
 
   * -
 
@@ -881,27 +1034,39 @@ notes for each rule, see the separate
 
   * -
 
-      `da_outgoing_realm_rqst_ide_tbit_1 <../test_pool/da/da_outgoing_realm_rqst_ide_tbit_1.c>`_ & `da_ide_tbit_0_for_root_request <../test_pool/da/da_ide_tbit_0_for_root_request.c>`_
+      `da_rp_ide_tbit_from_pas <../test_pool/da/da_rp_ide_tbit_from_pas.c>`_
 
     -
 
       RCFQBW: IDE-Tbit for an outgoing PCIe Memory Request or Configuration Request is set based on the request PAS: If PAS is Realm or Root then IDE-Tbit is 1 and otherwise it is 0.
 
+    -
+
+      1. Select an initialized PCIe exerciser Endpoint with an MMIO BAR, identify its Root Port, and enable TDISP_EN. Skip if no applicable exerciser exists.
+      2. Save the BAR granule GPT entry, allow the test access, and map the BAR with each PAS: Non-secure, Secure, Root, and Realm.
+      3. For Root and Realm PAS, associate the full BAR range, provision matching EP/RP IDE keys using the shared helper, lock the RP stream, and transition the Endpoint to TDISP RUN.
+      4. Perform write/read operations at the BAR address from Root world for each PAS mapping.
+      5. After each protected PAS case, clear the RP stream lock, use shared IDE/TDISP teardown, and invalidate the BAR association. Restore the original GPT entry after every PAS case. Cleanup errors cause FAIL. Disable TDISP on exit.
+      6. The requests should be accepted by the RootPort where the path is software-observable, exercising the expected outgoing request IDE-Tbit derivation: IDE-Tbit 0 for Non-secure/Secure PAS and IDE-Tbit 1 for Root/Realm PAS.
+      7. Report SKIP if any required PAS case skips because its IDE backend is unsupported, or if no case executes. Any failure takes precedence; PASS requires all required PAS cases to succeed.
+      8. Limitation: This is software-visible Memory Request coverage. Generic ACS does not directly observe the PCIe IDE-Tbit on the wire, and Configuration Request coverage requires a separate observable path.
+
+  * -
+
+      `da_rciep_ide_tbit_from_pas <../test_pool/da/da_rciep_ide_tbit_from_pas.c>`_
+
+    -
+
       RGBVTS: As a completer of memory requests a TDISP-compliant RCiEP extracts the request IDE-Tbit from the request PAS: If PAS is Realm or Root then IDE-Tbit is 1, otherwise it is 0.
 
     -
 
-      1. Retrieve the BAR of the Endpoint (skipping this step if the Endpoint lacks an MMIO BAR), identify the RootPort for the Endpoint, and enable the TDISP_EN bit in the RME-DA DVSEC register.
-      2. Map the BAR address to Realm PAS, establish an IDE Stream between the RootPort and Endpoint, and transition the Endpoint to the TDISP RUN state.
-      3. Perform write and read operations at the BAR address from the Realm world.
-      4. For da_ide_tbit_0_for_root_request, iterate over Root Ports and select the first Endpoint beneath each Root Port that has an MMIO BAR. Skip a Root Port if no such Endpoint exists. Enable the TDISP_EN bit in the RME-DA DVSEC register and map the selected BAR address to Non-Secure PAS.
-      5. Perform write and read operations at the BAR address from the Root world.
-      6. The request should be accepted by the RootPort, confirming that the IDE-Tbit is set appropriately based on the PAS mapping.
-
-      da_outgoing_realm_rqst_ide_tbit_1: This test checks that an outgoing request with IDE-Tbit set to 1 is accepted by the RootPort when the BAR address is mapped to Realm PAS.
-      da_ide_tbit_0_for_root_request: This test checks once per eligible RootPort that an outgoing request with IDE-Tbit set to 0 is accepted when the selected Endpoint BAR address is mapped to Non-Secure PAS.
-
-      Similarly, the request should also be allowed by the RootPort when the BAR address is mapped to Non-Secure PAS.
+      1. Iterate and initialize PCIe exercisers, then select RCiEP exercisers with an MMIO BAR. Exerciser selection alone does not verify TDISP applicability or a safe test location.
+      2. Save the BAR granule GPT entry, allow the access, and map the RCiEP BAR with each PAS: Non-secure, Secure, Root, and Realm. Restore the original GPT entry after each case.
+      3. Perform write and read operations at the BAR address from Root world for each PAS mapping.
+      4. Do not require an RP IDE stream or RME-DA DVSEC for the RCiEP. The readback check assumes a documented, side-effect-free writable location that accepts all four PAS values. RGBVTS specifies T-bit derivation, not unconditional BAR accessibility; the current test does not verify these device prerequisites.
+      5. If no initialized RCiEP exerciser with an MMIO BAR is tested, report SKIP.
+      6. Limitation: This is software-visible PAS-matrix coverage. Generic ACS cannot directly observe the PCIe IDE-Tbit on the wire; direct proof requires packet visibility or a platform-specific mechanism where an incorrect IDE-Tbit produces an observable reject or detect event.
 
   * -
 
@@ -933,7 +1098,7 @@ notes for each rule, see the separate
 
   * -
 
-      `da_rootport_write_protect_full_protect_property <../test_pool/da/da_rootport_write_protect_full_protect_property.c>`_
+      `da_rootport_write_protect_property <../test_pool/da/da_rootport_write_protect_property.c>`_
 
     -
 
@@ -948,6 +1113,20 @@ notes for each rule, see the separate
       - A register that controls the Root Port ID or the PCIe Segment Number of the Root Port.
       - Registers that may affect the correctness of IDE functionality, for example error injection controls.
 
+    -
+
+      1. Verify that the implementation-defined root port registers identified as RMSD write-protect are writable when the RMEDA_CTL1.TDISP_EN register is disabled.
+      2. When TDISP_EN is enabled, validate that these registers are protected against write access from NS.
+      3. When RMEDA_CTL1.TDISP_EN is enabled, any attempt to write to these RMSD write-protect registers from NS must fail with an appropriate fault or error.
+
+      Note: The addresses of these registers are retrieved from the PAL, and their write-protect behavior is tested by attempting write operations.
+
+  * -
+
+      `da_rootport_write_full_protect_property <../test_pool/da/da_rootport_write_full_protect_property.c>`_
+
+    -
+
       RNXJKQ: When RMEDA_CTL1.TDISP_EN==1 the following registers are RMSD full-protect:
 
       - IDE key programming registers.
@@ -956,11 +1135,11 @@ notes for each rule, see the separate
 
     -
 
-      1. Verify that the implementation-defined root port registers identified as RMSD write/full-protect are writable when the RMEDA_CTL1.TDISP_EN register is disabled.
-      2. When TDISP_EN is enabled, validate that these registers are protected against write access from NS.
-      3. When RMEDA_CTL1.TDISP_EN is enabled, any attempt to write to these RMSD write/full-protect registers from NS must fail with an appropriate fault or error.
+      1. Verify that the implementation-defined root port registers identified as RMSD full-protect are writable when the RMEDA_CTL1.TDISP_EN register is disabled.
+      2. When TDISP_EN is enabled, validate that these registers are protected against NS read and write access.
+      3. When RMEDA_CTL1.TDISP_EN is enabled, any attempt to access these RMSD full-protect registers from NS must fail with an appropriate fault or error.
 
-      Note: The addresses of these registers are retrieved from the PAL, and their write-protect/full-protect behavior is tested by attempting write operations.
+      Note: The addresses of these registers are retrieved from the PAL, and their full-protect behavior is tested by attempting access operations.
 
   * -
 

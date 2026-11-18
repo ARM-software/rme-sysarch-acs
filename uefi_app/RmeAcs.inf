@@ -82,19 +82,20 @@
   ../test_pool/da/da_attribute_rmeda_ctl_registers.c
   ../test_pool/da/da_autonomous_rootport_request_ns_pas.c
   ../test_pool/da/da_ctl_regs_rmsd_write_protect_property.c
-  ../test_pool/da/da_dvsec_register_config.c
   ../test_pool/da/da_ide_state_tdisp_disable.c
-  ../test_pool/da/da_ide_tbit_0_for_root_request.c
+  ../test_pool/da/da_rp_ide_tbit_from_pas.c
   ../test_pool/da/da_incoming_request_ide_non_sec_unlocked.c
   ../test_pool/da/da_incoming_request_ide_sec_locked.c
   ../test_pool/da/da_interconnect_regs_rmsd_protected.c
-  ../test_pool/da/da_outgoing_realm_rqst_ide_tbit_1.c
+  ../test_pool/da/da_rciep_ide_tbit_from_pas.c
   ../test_pool/da/da_outgoing_request_with_ide_tbit.c
   ../test_pool/da/da_p2p_btw_2_tdisp_devices.c
   ../test_pool/da/da_rmsd_write_detect_property.c
+  ../test_pool/da/da_rootport_write_full_protect_property.c
+  ../test_pool/da/da_rootport_implements_rmeda_dvsec.c
   ../test_pool/da/da_rootport_ide_features.c
   ../test_pool/da/da_rootport_tdisp_disabled.c
-  ../test_pool/da/da_rootport_write_protect_full_protect_property.c
+  ../test_pool/da/da_rootport_write_protect_property.c
   ../test_pool/da/da_selective_ide_register_property.c
   ../test_pool/tdisp/tdisp_rfpymv_vdm_response_check.c
   ../test_pool/tdisp/tdisp_rpxlfy_get_version_req.c
@@ -124,6 +125,7 @@
   ../test_pool/mec/mec_support_mecid_and_mecid_width.c
   ../test_pool/rme/rme_all_pe_has_feat_rng_or_rng_trap.c
   ../test_pool/rme/rme_cmo_popa_for_cacheability_shareability.c
+  ../test_pool/rme/rme_popa_cmo_applies_to_pas_pa_cached_copy.c
   ../test_pool/rme/rme_coherent_interconnect_supports_cmo_popa.c
   ../test_pool/rme/rme_data_encryption_beyond_popa.c
   ../test_pool/rme/rme_data_encryption_with_different_tweak.c
@@ -131,26 +133,27 @@
   ../test_pool/rme/rme_gpc_for_system_resource.c
   ../test_pool/rme/rme_interconnect_supports_tlbi_pa.c
   ../test_pool/rme/rme_memory_associated_with_pas_till_popa.c
+  ../test_pool/rme/rme_pa_compare_operation_includes_pas.c
   ../test_pool/rme/rme_msd_save_restore_mem_in_root_pas.c
   ../test_pool/rme/rme_msd_smem_in_root_after_reset.c
   ../test_pool/rme/rme_msd_smem_in_root_pas.c
   ../test_pool/rme/rme_mte_region_in_root_pas.c
   ../test_pool/rme/rme_ns_encryption_is_immutable.c
   ../test_pool/rme/rme_pas_filter_functionality.c
+  ../test_pool/rme/rme_access_pas_association.c
+  ../test_pool/rme/rme_peripheral_pas_association.c
   ../test_pool/rme/rme_pas_filter_in_inactive_mode.c
   ../test_pool/rme/rme_pcie_devices_support_gpc.c
   ../test_pool/rme/rme_pe_context_after_exit_wfi.c
-  ../test_pool/rme/rme_pe_context_after_pe_suspend.c
   ../test_pool/rme/rme_pe_do_not_have_arch_diff.c
+  ../test_pool/rme/rme_popa_cmo_completion_guarantees.c
   ../test_pool/rme/rme_realm_smem_behaviour_after_reset.c
   ../test_pool/rme/rme_realm_smem_in_realm_pas.c
   ../test_pool/rme/rme_resources_aligned_to_granularity.c
-  ../test_pool/rme/rme_resources_are_not_physically_aliased.c
   ../test_pool/rme/rme_rnvs_in_root_pas.c
   ../test_pool/rme/rme_root_wdog_fails_in_non_root_state.c
-  ../test_pool/rme/rme_root_wdog_from_root_pas.c
+  ../test_pool/rme/rme_root_wdog_expiration_from_root.c
   ../test_pool/rme/rme_smmu_blocks_request_at_registers_reset.c
-  ../test_pool/rme/rme_snoop_filter_considers_pas.c
   ../test_pool/rme/rme_support_in_pe.c
   ../test_pool/rme/rme_system_reset_propagation_to_all_pe.c
   ../test_pool/smmu/smmu_implements_rme.c

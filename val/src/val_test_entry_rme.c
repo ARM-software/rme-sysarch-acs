@@ -43,6 +43,9 @@ rme_run_if_selected(uint32_t num_pe, uint32_t status, uint32_t reset_status)
   else if (reset_status == RESET_TST32_FLAG)
           goto reset_done_32;
 
+  else if (reset_status == RESET_RT_WDOG_FLAG)
+          goto reset_done_root_wdog;
+
   else if (reset_status == RESET_LS_DISBL_FLAG || reset_status == RESET_LS_TEST3_FLAG)
           goto reset_done_ls;
 
@@ -54,6 +57,13 @@ rme_run_if_selected(uint32_t num_pe, uint32_t status, uint32_t reset_status)
   reset_done_12:
   val_execute_module_tests(RME_MODULE_ID,
                            RME_ENTRY_RME_REALM_SMEM_BEHAVIOUR_AFTER_RESET_ENTRY - 1,
+                           RME_ENTRY_RME_ROOT_WDOG_EXPIRATION_FROM_ROOT_ENTRY,
+                           num_pe,
+                           status);
+  /* Resume at the watchdog after its reset; otherwise reach it once in sequence. */
+reset_done_root_wdog:
+  val_execute_module_tests(RME_MODULE_ID,
+                           RME_ENTRY_RME_ROOT_WDOG_EXPIRATION_FROM_ROOT_ENTRY - 1,
                            RME_ENTRY_RME_SYSTEM_RESET_PROPAGATION_TO_ALL_PE_ENTRY + 1,
                            num_pe,
                            status);

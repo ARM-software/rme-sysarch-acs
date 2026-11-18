@@ -1021,7 +1021,10 @@ cleanup:
               " Setup status: 0x%x", status);
     val_print(ACS_PRINT_ERR, " EP BDF: 0x%x", bdf);
     val_print(ACS_PRINT_ERR, " RP BDF: 0x%x", rp_bdf);
-    (void)val_device_unlock(bdf);
+    if (val_device_unlock(bdf) != ACS_STATUS_PASS) {
+      val_print(ACS_PRINT_ERR, " PCIe IDE setup cleanup failed for BDF: 0x%x", bdf);
+      return ACS_STATUS_ERR;
+    }
   }
   if (result != ACS_STATUS_PASS && status == ACS_STATUS_SKIP)
     return ACS_STATUS_SKIP;

@@ -18,11 +18,11 @@
 #include "val/include/val.h"
 #include "val/include/val_interface.h"
 
-#include "val/include/val_pcie.h"
 #include "val/include/val_el32.h"
 #include "val/include/val_da.h"
+#include "da_attribute_rmeda_ctl_registers.h"
 
-#define TEST_DESC "To Check the attribute of RMEDA_CTL registers          "
+#define TEST_DESC "To check RME-DA DVSEC layout and RMEDA_CTL attributes "
 #define TEST_NAME "da_attribute_rmeda_ctl_registers"
 #define TEST_RULE "RDVJRV"
 
@@ -62,7 +62,26 @@ payload()
   uint32_t dp_type;
   uint32_t da_cap_base, ide_cap_base;
   uint32_t num_sel_ide_stream_supp;
+  uint32_t dvsec_status;
+  uint32_t table_entries;
   pcie_device_bdf_table *bdf_tbl_ptr;
+
+  table_entries = sizeof(bf_info_table)/sizeof(bf_info_table[0]);
+  dvsec_status = val_pcie_register_bitfields_check((void *)&bf_info_table,
+                                                   table_entries,
+                                                   VAL_DVSEC_SELECT_RMEDA);
+  if (dvsec_status == ACS_STATUS_SKIP)
+  {
+      val_print(ACS_PRINT_TEST,
+                " No PCIe RME-DA DVSEC instances discovered, skipping", 0);
+      val_set_status(pe_index, "SKIP", 01);
+      return;
+  }
+  else if (dvsec_status != 0u)
+  {
+      val_set_status(pe_index, "FAIL", 01);
+      return;
+  }
 
   tbl_index = 0;
   bdf_tbl_ptr = val_pcie_bdf_table_ptr();

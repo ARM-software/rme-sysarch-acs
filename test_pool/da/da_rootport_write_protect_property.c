@@ -27,9 +27,9 @@
 #include "val/include/val_pe.h"
 #include "val/include/val_da.h"
 
-#define TEST_NAME "da_rootport_write_protect_full_protect_property"
-#define TEST_DESC "Check RP RMSD Write-protect & full-protect properties"
-#define TEST_RULE "RXHMDQ, RNXJKQ"
+#define TEST_NAME "da_rootport_write_protect_property"
+#define TEST_DESC "Check RP RMSD write-protect registers              "
+#define TEST_RULE "RXHMDQ"
 
 static
 void
@@ -51,24 +51,30 @@ payload(void)
   register_tbl_ptr = val_register_table_ptr();
   val_print(ACS_PRINT_TEST, " table entries: %d", table_entries);
 
+  /* A nonempty table must have backing storage before entries are accessed. */
+  if (table_entries && register_tbl_ptr == NULL)
+  {
+      val_print(ACS_PRINT_ERR, " Register information table is unavailable", 0);
+      val_set_status(pe_index, "FAIL", 01);
+      return;
+  }
+
   for (index = 0; index < table_entries; index++)
   {
-      if ((register_tbl_ptr->type != PCIE_RP) ||
-          ((register_tbl_ptr->property != RMSD_WRITE_PROTECT) &&
-           (register_tbl_ptr->property != RMSD_FULL_PROTECT)))
-      {
-          register_tbl_ptr++;
+      REGISTER_INFO_TABLE *register_entry = register_tbl_ptr + index;
+
+      if (register_entry->type != PCIE_RP)
           continue;
-      }
+
+      if (register_entry->property != RMSD_WRITE_PROTECT)
+          continue;
 
       test_skip = 0;
-      ret = val_pcie_rp_sec_prpty_check((void *)register_tbl_ptr);
+      ret = val_pcie_rp_sec_prpty_check((void *)register_entry);
       if (ret == VAL_PCIE_RP_CHECK_INDETERMINATE)
           test_indeterminate++;
       else if (ret)
           test_fail++;
-
-      register_tbl_ptr++;
   }
 
   if (test_fail)
@@ -80,7 +86,7 @@ payload(void)
 }
 
 uint32_t
-da_rootport_write_protect_full_protect_property_entry(uint32_t num_pe)
+da_rootport_write_protect_property_entry(uint32_t num_pe)
 {
 
   num_pe = 1;

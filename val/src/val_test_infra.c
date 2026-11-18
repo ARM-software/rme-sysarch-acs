@@ -286,17 +286,13 @@ MODULE_TEST_DISPATCHER_s g_module_test_table[MODULE_SENTINEL] = {
         .entry_fn = da_ctl_regs_rmsd_write_protect_property_entry,
         .test_text = "da_ctl_regs_rmsd_write_protect_property",
       },
-      [DA_ENTRY_DA_DVSEC_REGISTER_CONFIG_ENTRY] = {
-        .entry_fn = da_dvsec_register_config_entry,
-        .test_text = "da_dvsec_register_config",
-      },
       [DA_ENTRY_DA_IDE_STATE_TDISP_DISABLE_ENTRY] = {
         .entry_fn = da_ide_state_tdisp_disable_entry,
         .test_text = "da_ide_state_tdisp_disable",
       },
-      [DA_ENTRY_DA_IDE_TBIT_0_FOR_ROOT_REQUEST_ENTRY] = {
-        .entry_fn = da_ide_tbit_0_for_root_request_entry,
-        .test_text = "da_ide_tbit_0_for_root_request",
+      [DA_ENTRY_DA_RP_IDE_TBIT_FROM_PAS_ENTRY] = {
+        .entry_fn = da_rp_ide_tbit_from_pas_entry,
+        .test_text = "da_rp_ide_tbit_from_pas",
       },
       [DA_ENTRY_DA_INCOMING_REQUEST_IDE_NON_SEC_UNLOCKED_ENTRY] = {
         .entry_fn = da_incoming_request_ide_non_sec_unlocked_entry,
@@ -310,9 +306,9 @@ MODULE_TEST_DISPATCHER_s g_module_test_table[MODULE_SENTINEL] = {
         .entry_fn = da_interconnect_regs_rmsd_protected_entry,
         .test_text = "da_interconnect_regs_rmsd_protected",
       },
-      [DA_ENTRY_DA_OUTGOING_REALM_RQST_IDE_TBIT_1_ENTRY] = {
-        .entry_fn = da_outgoing_realm_rqst_ide_tbit_1_entry,
-        .test_text = "da_outgoing_realm_rqst_ide_tbit_1",
+      [DA_ENTRY_DA_RCIEP_IDE_TBIT_FROM_PAS_ENTRY] = {
+        .entry_fn = da_rciep_ide_tbit_from_pas_entry,
+        .test_text = "da_rciep_ide_tbit_from_pas",
       },
       [DA_ENTRY_DA_OUTGOING_REQUEST_WITH_IDE_TBIT_ENTRY] = {
         .entry_fn = da_outgoing_request_with_ide_tbit_entry,
@@ -326,6 +322,10 @@ MODULE_TEST_DISPATCHER_s g_module_test_table[MODULE_SENTINEL] = {
         .entry_fn = da_rmsd_write_detect_property_entry,
         .test_text = "da_rmsd_write_detect_property",
       },
+      [DA_ENTRY_DA_ROOTPORT_IMPLEMENTS_RMEDA_DVSEC_ENTRY] = {
+        .entry_fn = da_rootport_implements_rmeda_dvsec_entry,
+        .test_text = "da_rootport_implements_rmeda_dvsec",
+      },
       [DA_ENTRY_DA_ROOTPORT_IDE_FEATURES_ENTRY] = {
         .entry_fn = da_rootport_ide_features_entry,
         .test_text = "da_rootport_ide_features",
@@ -334,9 +334,13 @@ MODULE_TEST_DISPATCHER_s g_module_test_table[MODULE_SENTINEL] = {
         .entry_fn = da_rootport_tdisp_disabled_entry,
         .test_text = "da_rootport_tdisp_disabled",
       },
-      [DA_ENTRY_DA_ROOTPORT_WRITE_PROTECT_FULL_PROTECT_PROPERTY_ENTRY] = {
-        .entry_fn = da_rootport_write_protect_full_protect_property_entry,
-        .test_text = "da_rootport_write_protect_full_protect_property",
+      [DA_ENTRY_DA_ROOTPORT_WRITE_FULL_PROTECT_PROPERTY_ENTRY] = {
+        .entry_fn = da_rootport_write_full_protect_property_entry,
+        .test_text = "da_rootport_write_full_protect_property",
+      },
+      [DA_ENTRY_DA_ROOTPORT_WRITE_PROTECT_PROPERTY_ENTRY] = {
+        .entry_fn = da_rootport_write_protect_property_entry,
+        .test_text = "da_rootport_write_protect_property",
       },
       [DA_ENTRY_DA_SELECTIVE_IDE_REGISTER_PROPERTY_ENTRY] = {
         .entry_fn = da_selective_ide_register_property_entry,
@@ -447,9 +451,17 @@ MODULE_TEST_DISPATCHER_s g_module_test_table[MODULE_SENTINEL] = {
         .entry_fn = rme_cmo_popa_for_cacheability_shareability_entry,
         .test_text = "rme_cmo_popa_for_cacheability_shareability",
       },
+      [RME_ENTRY_RME_POPA_CMO_APPLIES_TO_PAS_PA_CACHED_COPY_ENTRY] = {
+        .entry_fn = rme_popa_cmo_applies_to_pas_pa_cached_copy_entry,
+        .test_text = "rme_popa_cmo_applies_to_pas_pa_cached_copy",
+      },
       [RME_ENTRY_RME_COHERENT_INTERCONNECT_SUPPORTS_CMO_POPA_ENTRY] = {
         .entry_fn = rme_coherent_interconnect_supports_cmo_popa_entry,
         .test_text = "rme_coherent_interconnect_supports_cmo_popa",
+      },
+      [RME_ENTRY_RME_POPA_CMO_COMPLETION_GUARANTEES_ENTRY] = {
+        .entry_fn = rme_popa_cmo_completion_guarantees_entry,
+        .test_text = "rme_popa_cmo_completion_guarantees",
       },
       [RME_ENTRY_RME_DATA_ENCRYPTION_BEYOND_POPA_ENTRY] = {
         .entry_fn = rme_data_encryption_beyond_popa_entry,
@@ -475,6 +487,10 @@ MODULE_TEST_DISPATCHER_s g_module_test_table[MODULE_SENTINEL] = {
         .entry_fn = rme_memory_associated_with_pas_till_popa_entry,
         .test_text = "rme_memory_associated_with_pas_till_popa",
       },
+      [RME_ENTRY_RME_PA_COMPARE_OPERATION_INCLUDES_PAS_ENTRY] = {
+        .entry_fn = rme_pa_compare_operation_includes_pas_entry,
+        .test_text = "rme_pa_compare_operation_includes_pas",
+      },
       [RME_ENTRY_RME_MSD_SAVE_RESTORE_MEM_IN_ROOT_PAS_ENTRY] = {
         .entry_fn = rme_msd_save_restore_mem_in_root_pas_entry,
         .test_text = "rme_msd_save_restore_mem_in_root_pas",
@@ -495,6 +511,14 @@ MODULE_TEST_DISPATCHER_s g_module_test_table[MODULE_SENTINEL] = {
         .entry_fn = rme_ns_encryption_is_immutable_entry,
         .test_text = "rme_ns_encryption_is_immutable",
       },
+      [RME_ENTRY_RME_ACCESS_PAS_ASSOCIATION_ENTRY] = {
+        .entry_fn = rme_access_pas_association_entry,
+        .test_text = "rme_access_pas_association",
+      },
+      [RME_ENTRY_RME_PERIPHERAL_PAS_ASSOCIATION_ENTRY] = {
+        .entry_fn = rme_peripheral_pas_association_entry,
+        .test_text = "rme_peripheral_pas_association",
+      },
       [RME_ENTRY_RME_PAS_FILTER_FUNCTIONALITY_ENTRY] = {
         .entry_fn = rme_pas_filter_functionality_entry,
         .test_text = "rme_pas_filter_functionality",
@@ -510,10 +534,6 @@ MODULE_TEST_DISPATCHER_s g_module_test_table[MODULE_SENTINEL] = {
       [RME_ENTRY_RME_PE_CONTEXT_AFTER_EXIT_WFI_ENTRY] = {
         .entry_fn = rme_pe_context_after_exit_wfi_entry,
         .test_text = "rme_pe_context_after_exit_wfi",
-      },
-      [RME_ENTRY_RME_PE_CONTEXT_AFTER_PE_SUSPEND_ENTRY] = {
-        .entry_fn = rme_pe_context_after_pe_suspend_entry,
-        .test_text = "rme_pe_context_after_pe_suspend",
       },
       [RME_ENTRY_RME_PE_DO_NOT_HAVE_ARCH_DIFF_ENTRY] = {
         .entry_fn = rme_pe_do_not_have_arch_diff_entry,
@@ -531,10 +551,6 @@ MODULE_TEST_DISPATCHER_s g_module_test_table[MODULE_SENTINEL] = {
         .entry_fn = rme_resources_aligned_to_granularity_entry,
         .test_text = "rme_resources_aligned_to_granularity",
       },
-      [RME_ENTRY_RME_RESOURCES_ARE_NOT_PHYSICALLY_ALIASED_ENTRY] = {
-        .entry_fn = rme_resources_are_not_physically_aliased_entry,
-        .test_text = "rme_resources_are_not_physically_aliased",
-      },
       [RME_ENTRY_RME_RNVS_IN_ROOT_PAS_ENTRY] = {
         .entry_fn = rme_rnvs_in_root_pas_entry,
         .test_text = "rme_rnvs_in_root_pas",
@@ -543,17 +559,13 @@ MODULE_TEST_DISPATCHER_s g_module_test_table[MODULE_SENTINEL] = {
         .entry_fn = rme_root_wdog_fails_in_non_root_state_entry,
         .test_text = "rme_root_wdog_fails_in_non_root_state",
       },
-      [RME_ENTRY_RME_ROOT_WDOG_FROM_ROOT_PAS_ENTRY] = {
-        .entry_fn = rme_root_wdog_from_root_pas_entry,
-        .test_text = "rme_root_wdog_from_root_pas",
+      [RME_ENTRY_RME_ROOT_WDOG_EXPIRATION_FROM_ROOT_ENTRY] = {
+        .entry_fn = rme_root_wdog_expiration_from_root_entry,
+        .test_text = "rme_root_wdog_expiration_from_root",
       },
       [RME_ENTRY_RME_SMMU_BLOCKS_REQUEST_AT_REGISTERS_RESET_ENTRY] = {
         .entry_fn = rme_smmu_blocks_request_at_registers_reset_entry,
         .test_text = "rme_smmu_blocks_request_at_registers_reset",
-      },
-      [RME_ENTRY_RME_SNOOP_FILTER_CONSIDERS_PAS_ENTRY] = {
-        .entry_fn = rme_snoop_filter_considers_pas_entry,
-        .test_text = "rme_snoop_filter_considers_pas",
       },
       [RME_ENTRY_RME_SUPPORT_IN_PE_ENTRY] = {
         .entry_fn = rme_support_in_pe_entry,
