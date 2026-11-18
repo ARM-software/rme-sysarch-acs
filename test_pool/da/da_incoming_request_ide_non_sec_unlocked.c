@@ -135,12 +135,13 @@ payload(void)
       }
 
       /* Set the buffer to value 0 */
-      val_memory_set(dram_buf_in_virt, dma_len, 0);
+      val_memory_set(dram_buf_in_virt, test_data_blk_size, 0);
       dram_buf_in_virt2 = dram_buf_in_virt + dma_len;
 
       /* Initialise the input buffer with test data */
       val_memory_set(dram_buf_in_virt, dma_len, TEST_DATA);
-      val_data_cache_ops_by_va((uint64_t)dram_buf_in_virt, CLEAN_AND_INVALIDATE);
+      /* Publish the source and remove dirty destination lines before DMA. */
+      val_pe_cache_clean_invalidate_range((uint64_t)dram_buf_in_virt, test_data_blk_size);
 
       /* Perform DMA using exerciser from source to target buffer */
       if (val_exerciser_set_param(DMA_ATTRIBUTES, (uint64_t)dram_buf_in_virt, dma_len, instance)) {
@@ -162,6 +163,11 @@ payload(void)
           test_fail++;
           goto instance_cleanup;
       }
+
+      /* Observe DMA writes through the CPU mapping used by the comparison. */
+      __asm__ volatile ("dsb sy" ::: "memory");
+      val_pe_cache_invalidate_range((uint64_t)dram_buf_in_virt2, dma_len);
+      __asm__ volatile ("dsb sy" ::: "memory");
 
       /* Check the src and dst buff values are not same indicating the request is rejected by RP */
       if (!(val_memory_compare(dram_buf_in_virt, dram_buf_in_virt2, dma_len)))

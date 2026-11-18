@@ -16,6 +16,7 @@
  **/
 
 #include "val/include/val.h"
+#include "val/include/val_pe.h"
 #include "val/include/val_interface.h"
 
 #include "val/include/val_el32.h"
@@ -214,8 +215,9 @@ run_dma_compare(uint32_t endpoint_bdf,
 
   val_memory_set(src_va, len, 0x5Au);
   val_memory_set(dst_va, len, 0xA5u);
-  (void)val_data_cache_ops_by_va_el3((uint64_t)src_va, CLEAN_AND_INVALIDATE);
-  (void)val_data_cache_ops_by_va_el3((uint64_t)dst_va, CLEAN_AND_INVALIDATE);
+  /* Maintain the full buffers through the CPU mappings used to fill them. */
+  val_pe_cache_clean_invalidate_range((uint64_t)src_va, len);
+  val_pe_cache_clean_invalidate_range((uint64_t)dst_va, len);
 
   val_pcie_clear_device_status_error(endpoint_bdf);
 
@@ -237,7 +239,10 @@ run_dma_compare(uint32_t endpoint_bdf,
     return ACS_STATUS_ERR;
   val_print(ACS_PRINT_DEBUG, " RXQHNG DBG: DMA FROM status 0x%x", dma_status);
 
-  (void)val_data_cache_ops_by_va_el3((uint64_t)dst_va, CLEAN_AND_INVALIDATE);
+  /* Order completion before discarding stale CPU copies of the destination. */
+  __asm__ volatile ("dsb sy" ::: "memory");
+  val_pe_cache_invalidate_range((uint64_t)dst_va, len);
+  __asm__ volatile ("dsb sy" ::: "memory");
   compare_match = (val_memory_compare(src_va, dst_va, len) == 0u) ? 1u : 0u;
 
   if (expect_match != 0u)

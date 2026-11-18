@@ -219,7 +219,16 @@ payload(void)
       }
       /* Create a buffer of size TEST_DMA_SIZE in DRAM */
       dram_buf_in_virt = val_memory_alloc_pages(TEST_DATA_NUM_PAGES);
+      if (dram_buf_in_virt == NULL)
+      {
+          val_print(ACS_PRINT_ERR, " DMA buffer allocation failed for BDF: 0x%x", bdf);
+          test_fail++;
+          goto cleanup_instance;
+      }
       dram_buf_in_phys = (uint64_t)val_memory_virt_to_phys(dram_buf_in_virt);
+
+      /* Remove dirty CPU aliases before initializing through Realm PAS at EL3. */
+      val_pe_cache_clean_invalidate_range((uint64_t)dram_buf_in_virt, test_data_blk_size);
 
       /* Change the AccessPAS of the buffer to Realm PAS */
       if (val_add_gpt_entry_el3(dram_buf_in_phys, GPT_ANY))
@@ -248,9 +257,6 @@ payload(void)
           goto cleanup_instance;
       }
 
-      val_pe_cache_clean_invalidate_range((uint64_t)dram_buf_in_virt,
-                                          (uint64_t)(test_data_blk_size));
-
       dram_buf_in_virt2 = dram_buf_in_virt + dma_len;
 
       if (val_memory_set_el3(dram_buf_in_virt, dma_len, TEST_DATA))
@@ -260,7 +266,8 @@ payload(void)
           goto cleanup_instance;
       }
 
-      val_pe_cache_clean_invalidate_range((uint64_t)dram_buf_in_virt, (uint64_t)(dma_len));
+      /* Complete the Realm Device-memory writes before setting up DMA. */
+      __asm__ volatile ("dsb sy" ::: "memory");
 
       mem_desc->virtual_address = (uint64_t)dram_buf_in_virt;
       mem_desc->physical_address = (uint64_t)dram_buf_in_phys;
@@ -361,7 +368,25 @@ payload(void)
           goto cleanup_instance;
       }
 
-      if (val_memory_compare(dram_buf_in_virt, dram_buf_in_virt2, dma_len))
+      /* Use the Realm PAS used for initialization and DMA when observing data. */
+      __asm__ volatile ("dsb sy" ::: "memory");
+      if (val_memory_cache_invalidate_range_el3((uint64_t)dram_buf_in_virt2, dma_len))
+      {
+          val_print(ACS_PRINT_ERR, " Realm buffer invalidation failed for instance %4x", instance);
+          test_fail++;
+          goto cleanup_instance;
+      }
+      __asm__ volatile ("dsb sy" ::: "memory");
+
+      status = val_memory_compare_el3((uint64_t)dram_buf_in_virt,
+                                       (uint64_t)dram_buf_in_virt2, dma_len);
+      if (status == ACS_STATUS_ERR)
+      {
+          val_print(ACS_PRINT_ERR, " Realm buffer comparison failed for instance %4x", instance);
+          test_fail++;
+          goto cleanup_instance;
+      }
+      if (status != ACS_STATUS_PASS)
       {
           val_print(ACS_PRINT_ERR,
                     " Incoming request is rejected when TDISP_EN=1 for instance %4x", instance);
